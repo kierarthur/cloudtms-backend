@@ -59,6 +59,7 @@ import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
+import { weeklySourceUnauthoriseRouting, weeklySourceUnauthoriseResultFields, weeklySourceUnauthorisePairPreflight } from './weekly-source/unauthorise-routing.mjs';
 // WP-23 / Gate 13 hostile finance review F2: the Weekly Source first-authorisation
 // routing decision for the real Office Authorise route (and, through it, Bulk
 // Authorise).  The decision is the database's; this import is the transport's
@@ -76439,6 +76440,20 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
     }
   });
 
+  // SP-04: native Source receipt replay precedes ordinary currentness/pair writes.
+  const sourceWithdrawal = await weeklySourceUnauthoriseRouting({
+    rpc: (name, args, options) => sbRpc(env, name, args, options),
+    ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+    readPhysicalTimesheet: (id) => sbGetOne(env,
+      env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id,booking_id'),
+    timesheetId: requestedTimesheetId,
+    expectedTimesheetId, expectedRowSignature, actorUserId: user.id
+  });
+  if (!sourceWithdrawal.ordinary) return withJson(sourceWithdrawal.status, {
+    ...sourceWithdrawal.body, timesheet_id: requestedTimesheetId,
+    expected_timesheet_id: expectedTimesheetId
+  });
+
   const guard = await guardCurrentTimesheetWrite(env, req, requestedTimesheetId, expectedTimesheetId);
   if (!guard.ok) {
     lifecycleSignatureLog('guard_failed', {
@@ -94019,6 +94034,17 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
   if (!preview?.valid || !group?.action_ready) {
     return { is_pair: true, blocked: true, preview, group };
   }
+  if (action === 'UNAUTHORISE') {
+    const members = Array.isArray(preview.groups)
+      ? preview.groups.flatMap(value => Array.isArray(value.members) ? value.members.map(member => member.timesheet_id) : [null]) : [null];
+    const sourceScope = await weeklySourceUnauthorisePairPreflight({
+      rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+      actorUserId: user.id, readPhysicalTimesheet: id => sbGetOne(env,
+        env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),
+      timesheetIds: [...new Set([timesheetId, ...members])]
+    });
+    if (!sourceScope.ordinary) return { is_pair: true, blocked: true, preview, group, mutation: sourceScope.body };
+  }
   const rpcName = action === 'AUTHORISE'
     ? 'timesheet_authorise_bulk_atomic'
     : 'timesheet_unauthorise_bulk_atomic';
@@ -94227,7 +94253,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
     requested_timesheet_id: item.requested_timesheet_id || timesheetId,
     expected_timesheet_id: expectedTimesheetId,
     row_key: item.row_key || `timesheet:${timesheetId}`,
-    stale: success ? false : lifecycleBulkIsStaleError(payload),
+    stale: success ? false : payload?.source_outcome ? payload.stale === true : lifecycleBulkIsStaleError(payload),
     error_code: success ? null : lifecycleBulkErrorCode(payload),
     ...(!success && action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(payload?.error_code, payload) ? {retryable: payload.retryable === true} : {}),
     ...(!success && action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(payload?.error_code, payload) || {} : {}),
@@ -94237,6 +94263,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
     row_signature: lifecycleBulkReadFirst(payload?.lifecycle_patch || {}, ['row_signature', 'backend_row_signature']) ||
       lifecycleBulkReadFirst(affectedRows[0] || {}, ['row_signature', 'backend_row_signature']) ||
       null,
+    ...(action === 'UNAUTHORISE' ? weeklySourceUnauthoriseResultFields(payload) : {}),
     raw_status: status,
     lifecycle_changed: success && !explicitNoChange,
   };
@@ -94449,6 +94476,7 @@ function summarizeTimesheetLifecycleBulkOperation(operation, items) {
       ...(operation.action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(result?.error_code, result) ? {retryable: result.retryable === true} : {}),
       ...(operation.action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(result?.error_code, result) ||
         bpayNextAuthoriseKnownRefusal(item.error_json?.error_code, item.error_json) || {} : {}),
+      ...(operation.action === 'UNAUTHORISE' ? weeklySourceUnauthoriseResultFields(result) : {}),
       affected_rows: itemAffected,
       row_signature: result?.row_signature || null,
     });
@@ -94633,6 +94661,18 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
         message: 'One or more linked correction pairs cannot be changed safely.',
         pair_lifecycle: pairPreview
       }));
+    }
+    if (action === 'UNAUTHORISE') {
+      const members = Array.isArray(pairPreview.groups)
+        ? pairPreview.groups.flatMap(group => Array.isArray(group.members) ? group.members.map(member => member.timesheet_id) : [null]) : [null];
+      const sourceScope = await weeklySourceUnauthorisePairPreflight({
+        rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+        actorUserId: user.id, readPhysicalTimesheet: id => sbGetOne(env,
+          env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),
+        timesheetIds: [...new Set([...selected.map(item => item.timesheet_id), ...members])]
+      });
+      if (!sourceScope.ordinary) return withCORS(env, req, lifecycleBulkJson(sourceScope.status,
+        { ...sourceScope.body, pair_lifecycle: pairPreview, atomic_pair_lifecycle: true }));
     }
     const rpcName = action === 'AUTHORISE'
       ? 'timesheet_authorise_bulk_atomic'
@@ -96192,7 +96232,8 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
   const subReq = new Request(req.url, {
     method: 'POST',
     headers: req.headers,
-    body: JSON.stringify({ expected_timesheet_id: rowTimesheetId })
+    body: JSON.stringify({ expected_timesheet_id: selection?.expected_timesheet_id || rowTimesheetId,
+      expected_row_signature: lifecycleBulkReadFirst(selection, ['expected_row_signature', 'backend_row_signature', 'mutation_row_signature', 'row_signature']) || null })
   });
 
   const res = await handleTimesheetUnauthorise(env, subReq, rowTimesheetId);
@@ -96204,7 +96245,8 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
       timesheet_id: rowTimesheetId,
       contract_week_id: rowContractWeekId || null,
       ok: true,
-      status: 'UNAUTHORISED',
+      ...weeklySourceUnauthoriseResultFields(payload.json),
+      status: payload.json?.source_outcome === 'WITHDRAWN' ? 'WITHDRAWN' : 'UNAUTHORISED',
       reason: null,
       warnings: []
     };

@@ -1,0 +1,102 @@
+{
+  "owner": {
+    "active_owner": "NEXT",
+    "owner_epoch": "1"
+  },
+  "items": [
+    {
+      "timesheet_id": "d2000000-0000-4000-8000-000000000001",
+      "expected_timesheet_id": "d2000000-0000-4000-8000-000000000001",
+      "expected_row_signature": "fixed-original-0",
+      "row_key": "original-0"
+    },
+    {
+      "timesheet_id": "d2000000-0000-4000-8000-000000000002",
+      "expected_timesheet_id": "d2000000-0000-4000-8000-000000000002",
+      "expected_row_signature": "fixed-original-1",
+      "row_key": "original-1"
+    },
+    {
+      "timesheet_id": "d2000000-0000-4000-8000-000000000003",
+      "expected_timesheet_id": "d2000000-0000-4000-8000-000000000003",
+      "expected_row_signature": "fixed-original-2",
+      "row_key": "original-2"
+    },
+    {
+      "timesheet_id": "d2000000-0000-4000-8000-000000000004",
+      "expected_timesheet_id": "d2000000-0000-4000-8000-000000000004",
+      "expected_row_signature": "fixed-original-3",
+      "row_key": "original-3"
+    }
+  ],
+  "rows": [
+    {
+      "candidate_display_name": "Bethany Clarke",
+      "candidate_reference": "TMS 10502",
+      "client_display_name": "St Anne’s Hospital",
+      "week_ending_date": "2026-10-04"
+    },
+    {
+      "candidate_display_name": "Amelia Hughes",
+      "candidate_reference": "TMS 10421",
+      "client_display_name": "Riverside Care Home",
+      "week_ending_date": "2026-10-04"
+    },
+    {
+      "candidate_display_name": "Chloe Davies",
+      "candidate_reference": "TMS 10233",
+      "client_display_name": "Riverside Care Home",
+      "week_ending_date": "2026-09-27"
+    },
+    {
+      "candidate_display_name": "Daniel O’Connor",
+      "candidate_reference": "TMS 10612",
+      "client_display_name": "St Anne’s Hospital",
+      "week_ending_date": "2026-10-04"
+    }
+  ],
+  "states": {
+    "normal": [
+      {
+        "success": true,
+        "ok": true,
+        "source_outcome": "WITHDRAWN",
+        "withdrawn": true
+      },
+      {
+        "success": true,
+        "ok": true,
+        "unauthorised": true
+      },
+      {
+        "success": true,
+        "ok": true,
+        "unauthorised": true
+      },
+      {
+        "success": false,
+        "ok": false,
+        "source_outcome": "REFUSED",
+        "error_code": "WEEKLY_SOURCE_UNAUTHORISE_PAID"
+      }
+    ],
+    "stale": [
+      {
+        "success": false,
+        "ok": false,
+        "source_outcome": "STALE",
+        "stale": true
+      }
+    ],
+    "unknown": [
+      {
+        "success": false,
+        "ok": false,
+        "source_outcome": "UNKNOWN",
+        "outcome_unknown": true
+      }
+    ],
+    "pending": []
+  },
+  "notice": "Small A4 read/display responses only. No financial command, database rows or joined application check."
+}
