@@ -14835,16 +14835,19 @@
     },
     {
       "signature": "private.bpay_next_pay_hold_control_trigger_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0611_banking_pay_next_pay_hold_missing_control_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0611_banking_pay_next_pay_hold_missing_control_guard_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+        "supabase/repeatable/12102026_0611_banking_pay_next_pay_hold_missing_control_guard_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql"
+        "supabase/repeatable/12102026_0611_banking_pay_next_pay_hold_missing_control_guard_v1.sql"
       ],
-      "owner": "WB-40 current native pay-hold control and original accepted choice"
+      "owner": "WB40 owner11Oct A9 BD136 missing-control early return only; native existing bindings retained."
     },
     {
       "signature": "private.bpay_next_begin_prepare_projection_v1(uuid,uuid,bigint,integer)",

@@ -1,0 +1,7 @@
+# WB40 A9 missing-control correction
+
+Owner11October A9 applied at DR13/DR17 boundary. BD136: a worker_control row is normally enrolled by ordinary/Source approval, but bpay_next_work's Candidate foreign key does not require worker_control and these existing public edit triggers can fire outside that enrolment. It is therefore not safe to assume control always exists. The new0611 successor returns NEW if its exact Candidate control lock finds no row, before any private Work/projection mutation. Existing native relation/event/currentness/owner checks, Candidate-before-Work lock order and complete normal refresh remain unchanged. No row is invented; no new public trigger/binding is added; financial command guards remain strict.
+
+Scope is exactly private.bpay_next_pay_hold_control_trigger_v1(), merging0426. Reused two Timesheet/financial trigger bindings. Allowed checks only; no missing-row business fixture or hosted edit. Metadata/source/compile/seal evidence recorded separately. This is a WB40 owner correction, not DR17 work.
+
+Permitted checks PASS: source12/12; db366/944; sole local PG17 one-repeatable compile; exact body/config/owner/ACL catalogue; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and Candidate isolation DO; export/seal e33f1e1d2ad966304ea529fb0907cc107ca99c462d75d3c871750d20619124dd; coupling. Independent reviews/WB-40-A9-review.md SOURCE PASS. Public SECURITY DEFINER membership delta0. No JavaScript change in this correction. Business/hosted acceptance AUTHORED_NOT_RUN.
