@@ -15,3 +15,5 @@ Allowed checks PASS: db:check376 migrations/960 repeatables; source gates1512 SQ
 All single/list/bulk/Contract Week, paid/refused/history/retention/frozen/replay/queue application journeys are AUTHORED_NOT_RUN. No hosted installation, fixture, testing programme, timing, payment/provider/bank/email/drain, push or switch. Timing moved to TEST after installation (owner10/10/2026).
 
 FE implementation commit80bb4f4363cd34e5645bd6d8bb325c6fb1c5a437. BE implementation identity is recorded after its local commit in the checklist/provenance. Whole108/288 BUILT/REVIEWED after closure; next WB-45 seq139.
+
+Actual BE implementation commit 236393ebf36308c1ae3a22cda79b19471f61125d; FE 80bb4f4363cd34e5645bd6d8bb325c6fb1c5a437. ITEM and five delivery rows ticked with those exact identities.

@@ -75,5 +75,6 @@
   },
   "joinedAcceptance": "AUTHORED_NOT_RUN",
   "timing": "Moved to TEST after installation (owner10/10/2026)",
-  "blocked": []
+  "blocked": [],
+  "implementationCommit": "236393ebf36308c1ae3a22cda79b19471f61125d"
 }
