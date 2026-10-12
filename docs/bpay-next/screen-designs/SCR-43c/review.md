@@ -185,3 +185,7 @@ Supplied pack is read-only at `C:\Users\KierArthur\OneDrive - Arthur Rai\Documen
 | DR05-unknown-phone-dark.png | `9b628f6cc68c7ac17535191eebb085b5163c40c39e1aeda541bf47c0474f365e` |
 
 Dark and device-light hashes match for every corresponding state, consistent with actual side-by-side inspection. Fixed replies establish the input of local rendered states, not database/business truth or joined/runtime acceptance. No screenshots beyond this manifest are scored as performed.
+
+## DR-15 current diagnostic slice — 12 October 2026
+
+The original receipt above is preserved. Current DR-15 A4 is APPROVED within its diagnostic scope; see [the full DR15 receipt](DR15-review.md) and [consolidated review](../../reviews/DR-15-screen-review.md) for all 42 policy results, actual final PNG/source hashes and every visible difference/control purpose. Later DR14/DR16 composition is deferred; joined/native-child/action/queue/large-list acceptance remains NOT_RUN.

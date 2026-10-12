@@ -1,0 +1,225 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PREPARE_ISSUES",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PREPARE_ISSUES",
+      "context": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "actor_user_id": "60000000-0000-4000-8000-000000000001",
+        "owner_epoch": "1",
+        "review_revision": "1",
+        "run_status": "PREPARING",
+        "selection_state": "SEALED",
+        "selection_pages": "1",
+        "selected_candidates": "5",
+        "preparing": "0",
+        "ready": "1",
+        "review": "2",
+        "removed": "1",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "view": "NOT_IN_DRAFT",
+        "sort": "CANDIDATE_ASC",
+        "row_key": null
+      },
+      "rows": [
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000110",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000010",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE",
+          "work_id": "60000000-0000-4000-8000-000000000110",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000210",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000310",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Daniel Price",
+          "candidate_reference": "C10",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105110",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "daniel price",
+            "SKIP:60000000-0000-4000-8000-000000000110"
+          ]
+        },
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000111",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000011",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "PAYE_EXCLUDED_BY_SAME_WEEK_GUARD",
+          "work_id": "60000000-0000-4000-8000-000000000111",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000211",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000311",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Farah Ahmed",
+          "candidate_reference": "C11",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105111",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "farah ahmed",
+            "SKIP:60000000-0000-4000-8000-000000000111"
+          ]
+        },
+        {
+          "row_key": "RELEASE:60000000-0000-4000-8000-000000000412",
+          "origin": "SYSTEM_RELEASE",
+          "candidate_id": "60000000-0000-4000-8000-000000000012",
+          "run_worker_id": "60000000-0000-4000-8000-000000000412",
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "CASE_NO_PAYABLE_AMOUNT",
+          "work_id": null,
+          "expected_revision_id": null,
+          "physical_timesheet_id": null,
+          "physical_timesheet_version": null,
+          "candidate_display_name": "Isla Morgan",
+          "candidate_reference": "C12",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": null,
+          "week_ending_date": null,
+          "frozen_ex_vat": null,
+          "preparation_revision": "2",
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "isla morgan",
+            "RELEASE:60000000-0000-4000-8000-000000000412"
+          ]
+        },
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000113",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000013",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "BPAY_NEXT_SELECTION_ON_HOLD",
+          "work_id": "60000000-0000-4000-8000-000000000113",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000213",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000313",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Liam Turner",
+          "candidate_reference": "C13",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105113",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "liam turner",
+            "SKIP:60000000-0000-4000-8000-000000000113"
+          ]
+        },
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000114",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000014",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "SELECTED_WORK_REVISION_CHANGED",
+          "work_id": "60000000-0000-4000-8000-000000000114",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000214",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000314",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Noah Williams",
+          "candidate_reference": "C14",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105114",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "noah williams",
+            "SKIP:60000000-0000-4000-8000-000000000114"
+          ]
+        },
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000115",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000015",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "SOURCE_PAY_QUERY_OPEN",
+          "work_id": "60000000-0000-4000-8000-000000000115",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000215",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000315",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Olivia Scott",
+          "candidate_reference": "C15",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105115",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "olivia scott",
+            "SKIP:60000000-0000-4000-8000-000000000115"
+          ]
+        },
+        {
+          "row_key": "SKIP:60000000-0000-4000-8000-000000000116",
+          "origin": "SKIPPED_WORK",
+          "candidate_id": "60000000-0000-4000-8000-000000000016",
+          "run_worker_id": null,
+          "worker_status": "NOT_IN_DRAFT",
+          "issue_code": "BPAY_NEXT_SELECTION_SNOOZED",
+          "work_id": "60000000-0000-4000-8000-000000000116",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000216",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000316",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Priya Sharma",
+          "candidate_reference": "C16",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105116",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": null,
+          "preparation_revision": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "priya sharma",
+            "SKIP:60000000-0000-4000-8000-000000000116"
+          ]
+        }
+      ],
+      "complete": true,
+      "next_cursor": null,
+      "counts": {
+        "skipped_timesheets": "6",
+        "removed_candidates": "1",
+        "scope_count": "7"
+      }
+    }
+  ]
+}

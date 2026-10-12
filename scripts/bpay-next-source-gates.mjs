@@ -701,6 +701,15 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    // DR15 exact closed constructors, including retained current parent branches.
+    "jsonb_build_object('run_id',v_issue_run,'actor_user_id',p_actor_user_id,'owner_epoch',v_issue_epoch::text, 'review_revision',v_issue_run_row.review_revision::text,'run_status',v_issue_run_row.status,'selection_state',v_issue_run_row.selection_state, 'selection_pages',v_issue_run_row.selection_page_count::text,'selected_candidates',v_issue_run_row.selected_candidate_count::text, 'preparing',v_issue_run_row.preparing_candidate_count::text,'ready',v_issue_run_row.ready_candidate_count::text, 'review',v_issue_run_row.review_candidate_count::text,'removed',v_issue_run_row.cancelled_candidate_count::text, 'workbench_revision',v_issue_wb::text,'adoption_revision',v_issue_adoption::text,'view',p_args->>'view','sort',v_issue_sort,'row_key',p_args->'row_key')",
+    "jsonb_build_object('skipped_timesheets',counts.skipped_timesheets::text,'removed_candidates',counts.removed_candidates::text,'scope_count',counts.scope_count::text,'tail_matches',counts.tail_matches::text, 'rows',coalesce((select jsonb_agg(jsonb_build_object('row_key',b.row_key,'origin',b.origin,'candidate_id',b.candidate_id,'run_worker_id',b.worker_id,'worker_status',b.state,'issue_code',b.code, 'work_id',b.work_id,'expected_revision_id',b.revision_id,'physical_timesheet_id',b.physical_timesheet_id,'physical_timesheet_version',b.physical_timesheet_version::text, 'candidate_display_name',b.candidate_name,'candidate_reference',b.candidate_reference,'label_origin',b.label_origin,'timesheet_reference',b.timesheet_reference,'week_ending_date',b.week_ending_date, 'frozen_ex_vat',b.gross::text,'preparation_revision',b.preparation_revision::text,'discard_outcome',b.discard_outcome,'discard_blocked_code',b.discard_blocked_code, 'sort_key',jsonb_build_array(b.sort_value is null,b.sort_value,b.row_key)) order by case when not v_issue_desc then b.sort_value is null end asc,case when v_issue_desc then b.sort_value is null end desc, case when left(v_issue_sort,5)='GROSS' and not v_issue_desc then b.sort_value::numeric end asc, case when left(v_issue_sort,5)='GROSS' and v_issue_desc then b.sort_value::numeric end desc, case when left(v_issue_sort,5)<>'GROSS' and not v_issue_desc then b.sort_value end collate C asc, case when left(v_issue_sort,5)<>'GROSS' and v_issue_desc then b.sort_value end collate C desc, case when not v_issue_desc then b.row_key end collate C asc,case when v_issue_desc then b.row_key end collate C desc) from bounded b),'[]'::jsonb))",
+    "jsonb_build_object('row_key',b.row_key,'origin',b.origin,'candidate_id',b.candidate_id,'run_worker_id',b.worker_id,'worker_status',b.state,'issue_code',b.code, 'work_id',b.work_id,'expected_revision_id',b.revision_id,'physical_timesheet_id',b.physical_timesheet_id,'physical_timesheet_version',b.physical_timesheet_version::text, 'candidate_display_name',b.candidate_name,'candidate_reference',b.candidate_reference,'label_origin',b.label_origin,'timesheet_reference',b.timesheet_reference,'week_ending_date',b.week_ending_date, 'frozen_ex_vat',b.gross::text,'preparation_revision',b.preparation_revision::text,'discard_outcome',b.discard_outcome,'discard_blocked_code',b.discard_blocked_code, 'sort_key',jsonb_build_array(b.sort_value is null,b.sort_value,b.row_key))",
+    "jsonb_build_object('context',v_issue_context,'rows',v_rows||jsonb_build_array(v_row),'complete',false, 'next_cursor',jsonb_build_object('context',v_issue_context,'key',v_row->'sort_key'),'counts',v_issue_reply-array['rows','tail_matches'])",
+    "jsonb_build_object('context',v_issue_context,'key',v_row->'sort_key')",
+    "jsonb_build_object('run_id',v_issue_run,'actor_user_id',p_actor_user_id,'owner_epoch',m.owner_epoch::text, 'review_revision',r.review_revision::text,'run_status',r.status,'selection_state',r.selection_state, 'selection_pages',r.selection_page_count::text,'selected_candidates',r.selected_candidate_count::text, 'preparing',r.preparing_candidate_count::text,'ready',r.ready_candidate_count::text, 'review',r.review_candidate_count::text,'removed',r.cancelled_candidate_count::text, 'workbench_revision',b.workbench_revision::text,'adoption_revision',b.adoption_revision::text,'view',p_args->>'view','sort',v_issue_sort,'row_key',p_args->'row_key')",
+    "jsonb_build_object('context',v_issue_context,'rows',v_rows,'complete',v_complete, 'next_cursor',case when v_complete then null else jsonb_build_object('context',v_issue_context,'key',v_rows->-1->'sort_key') end, 'counts',v_issue_reply-array['rows','tail_matches'])",
+    "jsonb_build_object('context',v_issue_context,'key',v_rows->-1->'sort_key')",
     "jsonb_build_object('rows',jsonb_build_array(private.bpay_next_case_edit_preview_v1(p_actor_user_id, (p_args->>'case_id')::uuid,(p_args->>'expected_case_revision')::bigint,p_args->'input')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_case_create_preview_v1(p_actor_user_id,p_args->'input')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_paye_guard_page_v1(p_actor_user_id,(p_args->>'run_id')::uuid,p_args->'descriptor')),'complete',true)",
@@ -1353,7 +1362,9 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_simple_review_worker_page_v1",
     "private.bpay_next_simple_revision_comparison_page_v1",
     "private.bpay_next_worker_status_page_v1",
-    "substring"
+    "substring",
+    // DR15 native bounded read: finite PostgreSQL builtins only.
+    "length", "right", "left", "lower", "concat_ws", "split_part", "jsonb_each_text", "on", "lateral"
   ],
   "public.bpay_next_preparation_expiry_due_v1(timestamp with time zone,uuid,integer)": [
     "pg_catalog.clock_timestamp",
@@ -2181,6 +2192,11 @@ export function verifyBpayNextSourceGates(){
       throw Error('BPAY_NEXT_PROJECTION_MEMBERSHIP_TYPE_UNCLASSIFIED');
   }
   const projectionMembershipColumns=new Map([['P . SELECTION_NO','BIGINT']]);
+  // DR15 installed predecessor is immutable; the final successor qualifies its point row.
+  const dr15OldFile='supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql';
+  if(createHash('sha256').update(read(dr15OldFile)).digest('hex')!=='183a17cb1800e4980945e0e348d249bc07d0829945f6a30c95414ba82c478955')throw Error('BPAY_NEXT_DR15_PREDECESSOR_CHANGED');
+  const dr15OldHazards=new Map(baselineHazards);
+  dr15OldHazards.set(JSON.stringify(['public.bpay_next_preparation_page_v1(uuid,text,jsonb)','ROWTYPE_SELECT:V_ISSUE_RUN_ROW:PRIVATE . BPAY_NEXT_PAY_RUN','select * into v_issue_run_row from private.bpay_next_pay_run where id=v_issue_run;']),1);
   const sourceFailures=[];
   for(const file of sources){
     const source=read(file);assertSqlWriteBoundaries(source,file);assertNextExactNumericTypes(source,file);
@@ -2192,7 +2208,7 @@ export function verifyBpayNextSourceGates(){
           const isProjection=routineDefinitions(text,file).includes('private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)');
           assertSpecialConstructs(text,file,file===discardRowFile?discardRowHazards:baselineHazards,isProjection?projectionMembershipColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:baselineHazards);assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:baselineHazards);assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }

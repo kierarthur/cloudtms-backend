@@ -33577,7 +33577,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9bf22ede73a62aed6661c018042c1b81ad49c5e937336a5c89c7c124bf012f94"
+      "definition_sha256": "2c5c48aaec0940bd968ae6231ddeff4ab7ff033e23b0d174228cbae151758f2c"
     },
     {
       "acl": [
@@ -106604,6 +106604,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_issue_selected_work_label_idx",
+          "definition": "CREATE INDEX bpay_next_issue_selected_work_label_idx ON private.bpay_next_run_choice_member USING btree (run_id, candidate_id, member_no) INCLUDE (work_id, expected_revision_id, skip_code) WHERE ((member_kind = 'WORK'::text) AND selected)"
+        },
+        {
           "name": "bpay_next_pay_method_change_selected_work_idx",
           "definition": "CREATE INDEX bpay_next_pay_method_change_selected_work_idx ON private.bpay_next_run_choice_member USING btree (candidate_id, run_id, work_id) WHERE ((member_kind = 'WORK'::text) AND selected AND (skip_code IS NULL))"
         },
@@ -109787,6 +109791,14 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_issue_worker_gross_idx",
+          "definition": "CREATE INDEX bpay_next_issue_worker_gross_idx ON private.bpay_next_run_worker USING btree (run_id, gross_ex_vat, candidate_id, id)"
+        },
+        {
+          "name": "bpay_next_issue_worker_state_idx",
+          "definition": "CREATE INDEX bpay_next_issue_worker_state_idx ON private.bpay_next_run_worker USING btree (run_id, status, candidate_id, id)"
+        },
         {
           "name": "bpay_next_pay_method_change_worker_idx",
           "definition": "CREATE INDEX bpay_next_pay_method_change_worker_idx ON private.bpay_next_run_worker USING btree (candidate_id, run_id, id)"
@@ -127723,6 +127735,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_issue_completed_release_idx",
+          "definition": "CREATE INDEX bpay_next_issue_completed_release_idx ON private.bpay_next_worker_reprepare_request USING btree (run_id, candidate_id, run_worker_id) INCLUDE (original_issue_work_id, original_issue_code, target_preparation_revision, initiator_kind) WHERE ((action = 'RELEASE'::text) AND (status = 'COMPLETE'::text))"
+        },
         {
           "name": "bpay_next_worker_action_original_idx",
           "definition": "CREATE INDEX bpay_next_worker_action_original_idx ON private.bpay_next_worker_reprepare_request USING btree (original_prepare_command_id, run_worker_id)"

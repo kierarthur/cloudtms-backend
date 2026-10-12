@@ -291,3 +291,7 @@ Final per-file actual capture/response SHA-256 manifest follows.
 | PF08-unknown-fixed-responses.json | 4f4540a54f2a5bbbc3adec8ae13e4ffd126dc989589e33eeef2672ef68ed3f28 |
 | PF08-unknown-phone-dark-scrolled.png | faaf3bbeb3cce22927660901c24c53c5a85785cd014d4a1bfe6c4534d3541941 |
 | PF08-unknown-phone-dark.png | 433d3386c4b3e361933bd4d7bdda36bce2e983365cbf3deb767e7a097e8bcdf8 |
+
+## DR-15 current diagnostic slice — 12 October 2026
+
+The original receipt above is preserved. Current DR-15 A4 is APPROVED within its diagnostic scope; see [the full DR15 receipt](DR15-review.md) and [consolidated review](../../reviews/DR-15-screen-review.md) for all 42 policy results, actual final PNG/source hashes and every visible difference/control purpose. Later DR14/DR16 composition is deferred; joined/native-child/action/queue/large-list acceptance remains NOT_RUN.

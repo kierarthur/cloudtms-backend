@@ -1,0 +1,42 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PREPARE_ISSUES",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PREPARE_ISSUES",
+      "context": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "actor_user_id": "60000000-0000-4000-8000-000000000001",
+        "owner_epoch": "1",
+        "review_revision": "1",
+        "run_status": "PREPARING",
+        "selection_state": "SEALED",
+        "selection_pages": "1",
+        "selected_candidates": "5",
+        "preparing": "0",
+        "ready": "1",
+        "review": "2",
+        "removed": "1",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "view": "NOT_IN_DRAFT",
+        "sort": "CANDIDATE_ASC",
+        "row_key": null
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "counts": {
+        "skipped_timesheets": "0",
+        "removed_candidates": "0",
+        "scope_count": "0"
+      }
+    }
+  ]
+}
