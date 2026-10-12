@@ -13474,6 +13474,44 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_component_resolution_need_publish_v1(p_operation_id uuid, p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bfe4412273883a902e4484e94fa9f880b0446a36e2afbab3515aef2d824cd132"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_need_v1(p_work_id uuid, p_revision_id uuid, p_line_id uuid, p_segment_id uuid, p_target_channel text, p_target_umbrella_id uuid, p_target_vat boolean, p_valuation_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f5432a8c13a659d03ff4506ffea4f166a6c9d7d32d4c93649e9a479a27c3be1a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_component_resolution_quote_v1(p_decision_id uuid, p_version bigint, p_boundary_revision_id uuid, p_run_position_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -14932,7 +14970,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "43576e36774c61c46e7cc7cb06f998bcbd91c5a574a643b67d4e179ff01eb0be"
+      "definition_sha256": "adc62623396b606869b3e823db52f6e477e9f68b8e6f8cc4c9034d53ed3a0fe7"
     },
     {
       "acl": [
@@ -19314,7 +19352,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6f7633a28bd57f6b521f1a01c5980647b2bcdcc7088fa21b9c9e131358ca815b"
+      "definition_sha256": "c37a5405aae02ce331f2c6855cc85c06a4d4fe4c975bc7a33464561f16772e1c"
     },
     {
       "acl": [
@@ -34642,7 +34680,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7fb354be983c3394e1ffc7620b263c89678a51f6101f8151822850108bf89e95"
+      "definition_sha256": "b0385d9316f3ee817cf079855959e0824c719e383205f1e4495c0b5bfddd0bf5"
     },
     {
       "acl": [
@@ -134173,7 +134211,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (channel_note_code = ANY (ARRAY['CHANNEL_RESOLVER'::text, 'MOVE_CHANNEL_RESOLVER'::text]))"
+          "definition": "CHECK (channel_note_code = ANY (ARRAY['CHANNEL_RESOLVER'::text, 'MOVE_CHANNEL_RESOLVER'::text, 'CHANNEL_RESOLUTION_REQUIRED'::text]))"
         },
         {
           "name": "bpay_next_workbench_item_check",

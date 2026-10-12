@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "455472430069ee1a2c040f5c34e45439a2c34842",
-  "compiledAtUtc": "2026-10-12T20:04:27.718Z",
+  "sourceCommit": "7b124c4120af080c8f9d7aa16b96f942d3db4dfa",
+  "compiledAtUtc": "2026-10-12T20:24:16.390Z",
   "inventory": {
     "migrations": [
       {
@@ -1520,6 +1520,10 @@
       {
         "path": "supabase/migrations/12102026_2100_banking_pay_next_resolution_remaining_basis.sql",
         "sha256": "a1741e391a0dc79f1b178c1e6d5e0a11db117c5c1f87257e582ab3bceec3a400"
+      },
+      {
+        "path": "supabase/migrations/12102026_2116_banking_pay_next_resolution_channel_note.sql",
+        "sha256": "9c5dcd8563459876e9fecc080a5dbfa15904e0790905345bf179b063db9a27ca"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8669,6 +8673,48 @@
         "sha256": "1f7602da9dbdaccfd9f36f18668b4aa7646abcb2b56138ba596eafe92bfcb08b"
       },
       {
+        "path": "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql"
+        ],
+        "sha256": "f60b7250583e624c2ff4e7c52495a9081644d00a76e6c9d1e1b610003a19a9b1"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql"
+        ],
+        "sha256": "ca4a203dfee10e1ae26eda06a40b937b69ad7f62576c534ba8e59b9af32f283b"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql"
+        ],
+        "sha256": "cae1e55feca0bb677aa04b9d5b94fc559e4ab232d383e869b8f96f4f4bc0ba7a"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_pay_method_need_transition_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2123_banking_pay_next_pay_method_need_transition_v1.sql"
+        ],
+        "sha256": "f73d1d5e9e0d5c55b5a552e3c195d9beed820ebed16d618e9493895c8767a6c5"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql"
+        ],
+        "sha256": "9c7104d13afb0fadb76a64a1b15f82e337f90e75ec8ad7c9ef2d1653507dd6bc"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql"
+        ],
+        "sha256": "4c7c27265e610e05095883c615a9f8ef444d2462cd2edf30d002d44d5ccc2a3e"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8678,12 +8724,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/12102026_2100_banking_pay_next_resolution_remaining_basis.sql",
-        "sha256": "a1741e391a0dc79f1b178c1e6d5e0a11db117c5c1f87257e582ab3bceec3a400"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8707,11 +8748,25 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_pay_method_need_transition_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+          "supabase/repeatable/12102026_2123_banking_pay_next_pay_method_need_transition_v1.sql"
         ],
-        "sha256": "1f7602da9dbdaccfd9f36f18668b4aa7646abcb2b56138ba596eafe92bfcb08b"
+        "sha256": "f73d1d5e9e0d5c55b5a552e3c195d9beed820ebed16d618e9493895c8767a6c5"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql"
+        ],
+        "sha256": "9c7104d13afb0fadb76a64a1b15f82e337f90e75ec8ad7c9ef2d1653507dd6bc"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql"
+        ],
+        "sha256": "4c7c27265e610e05095883c615a9f8ef444d2462cd2edf30d002d44d5ccc2a3e"
       }
     ]
   },

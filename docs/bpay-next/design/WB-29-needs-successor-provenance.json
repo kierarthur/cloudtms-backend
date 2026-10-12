@@ -1,0 +1,88 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "Explicit NEED events and future-positive classifier; remaining card joins pending",
+  "builderDecision": "BD154",
+  "signatures": [
+    "public.bpay_next_pay_method_change_apply_v1(uuid,uuid,jsonb)",
+    "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+    "private.bpay_next_component_resolution_need_publish_v1(uuid,uuid)",
+    "private.bpay_next_component_resolution_need_v1(uuid,uuid,uuid,uuid,text,uuid,boolean,date)",
+    "private.bpay_next_pay_method_change_scope_v1(uuid,jsonb)"
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/12102026_2116_banking_pay_next_resolution_channel_note.sql",
+      "sha256": "9c5dcd8563459876e9fecc080a5dbfa15904e0790905345bf179b063db9a27ca"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql",
+      "sha256": "8ab22de33c2e87b9409087b977d2037f04169b066c35814c19ab0e7c2f7c8581"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql",
+      "sha256": "aab9b21f0f8b9e251416c0bbdca73af1c9436112481a4a99776b0a2a34cb47fe"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql",
+      "sha256": "97861a8855ea524f071ba13027ba86882b7a7c65c18a23bb059aa2bef93cffbc"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+      "sha256": "ede3ff15034815163a9fcdbee7b57d236982f667fe87f5d2adc59128d6183719"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2123_banking_pay_next_pay_method_need_transition_v1.sql",
+      "sha256": "a3cb83e50cc4cc4bf5f2985fd1ceb72805597029ba1c588a175e0c71ecfb00bd"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+      "sha256": "08d38a37526b459190d27b3fe3a51ab713e0ce39b53be30a606dee647e2125fc"
+    }
+  ],
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "sha256": "e05d8b9a751f83c6485a0e5d00826489d777483e0332a7fa50fcb6e18aab2c4e"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql",
+      "sha256": "455e61cb1df71f04dd3394a4b03e3320f9ccdaecf1c4d32b096e6185a24d20ff"
+    }
+  ],
+  "publicSecurityDefinerMembershipDelta": 0,
+  "checks": {
+    "dbCheck": "PASS379 migrations/968 repeatables",
+    "sourceGates": "PASS1523 SQL/30 public roots/154 routine-work signatures/37 typed transport; frozen7/18/45/24",
+    "nodeCheck": "PASS scripts/bpay-next-source-gates.mjs; no Worker JS changed",
+    "localPG17": "PASS2116+2123changed schemas/closures only",
+    "catalogue": "PASS5 exact definitions/config/volatility/owner/ACL; existing channel-note CHECK",
+    "browserIsolation": "PASS839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both verifierDOs",
+    "seal": "a3c8dac80c42e235ffbea6a74ecc9f80d48a40f389b5f9ca8f9b1720f11cac75",
+    "coupling": "PASS",
+    "businessCalls": "NOT_RUN"
+  },
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "reviewCorrections": [
+    "N29-S01 VAT does not erase need",
+    "N29-S02 reclassify RATE/GROSS at next transition",
+    "N29-S03 taxable known channel notes only"
+  ],
+  "reviews": [
+    {
+      "path": "docs/bpay-next/design/WB-29-design-review.md",
+      "sha256": "c891be2ca2efdc67a6c8d40871011f02989a6aa79f665295da6eb3dbb07c1a76"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-29-needs-source-review.md",
+      "sha256": "39e8fec3ae3e54e96923ed7c5484e5362280c45b58aff78ccc5ce2719cb474f5"
+    }
+  ],
+  "remaining": [
+    "Complete own publication/canonical Source qualifications",
+    "W2 save/clear and W1 resolution context",
+    "Universal accepted attachment independent of optional memory",
+    "Shared residual estimate/hold/segment-share/frozen advice",
+    "Saved-rate snooze warning"
+  ]
+}
