@@ -1447,6 +1447,10 @@
       "sha256": "73b350c5823dcbdeb125e19dec83d1f6372527620a6c7d7651a41deee3334d34"
     },
     {
+      "path": "supabase/migrations/12102026_0404_banking_pay_next_captured_other_draft_capacity.sql",
+      "sha256": "36569801cb8b8d8989150779e7e4d9aaf6590c169aa6e792ed86ee1d314eb225"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

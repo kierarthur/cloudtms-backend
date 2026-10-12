@@ -11679,7 +11679,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "9567f36d2b059b405a93ed86c90b3374927438acc641d6bca3991669ba95af95"
+      "definition_sha256": "3bdb366dc9781e13ec6cb4488d11a1ca55857dfc373dc5b820ae0b6b7a2b1452"
     },
     {
       "acl": [
@@ -14273,7 +14273,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "208a34d79020ac755a8da8e0fbe1eaf5c6d5f46de67178a480d2d3210549c7bd"
+      "definition_sha256": "fabf58de897047205a97b80a564b9f5131e70fdb05cbc00014929167bef23c39"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_preparation_wait_owner_v1(p_run_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "b663682a21944ee86103af239197e11a5c676c36ba180530c09e89f18706e96a"
     },
     {
       "acl": [
@@ -14349,7 +14368,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "45f65600921d3941b04304f0f1b0e45a93d5d5eb702618a962b4596c88b263d0"
+      "definition_sha256": "987a742fe5c252e4f1f691bbb85c8c7a764c58d8c5af36f55a56c55acf3e70e6"
     },
     {
       "acl": [
@@ -33577,7 +33596,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2c5c48aaec0940bd968ae6231ddeff4ab7ff033e23b0d174228cbae151758f2c"
+      "definition_sha256": "4ca21f2f22f31ec2e23d67b6f07b291ada66e1ac29f5ee5505bfd4fab7072e92"
     },
     {
       "acl": [
@@ -94000,6 +94019,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_job_candidate_live_owner_idx",
+          "definition": "CREATE INDEX bpay_next_job_candidate_live_owner_idx ON private.bpay_next_job USING btree (candidate_id, owner_epoch, module_epoch, id) INCLUDE (job_kind, lease_until_utc, lease_nonce, command_id, retry_run_id) WHERE (status = 'LEASED'::text)"
+        },
+        {
           "name": "bpay_next_job_case_owner_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_job_case_owner_key ON private.bpay_next_job USING btree (id, command_id, candidate_id, module_epoch)"
         },
@@ -105848,6 +105871,30 @@
           "generated": ""
         },
         {
+          "name": "other_run_capacity_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "other_run_capacity_reduction_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "other_run_capacity_reduction_target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "pay_week_start",
           "type": "date",
           "default": null,
@@ -106010,6 +106057,10 @@
           "definition": "CREATE INDEX bpay_next_case_instruction_rule_idx ON private.bpay_next_run_case_instruction USING btree (rule_id, id)"
         },
         {
+          "name": "bpay_next_instruction_other_run_capacity_idx",
+          "definition": "CREATE INDEX bpay_next_instruction_other_run_capacity_idx ON private.bpay_next_run_case_instruction USING btree (run_worker_id, preparation_revision, id) WHERE ((other_run_capacity_reduction_target_ex_vat)::numeric > (0)::numeric)"
+        },
+        {
           "name": "bpay_next_run_case_instructio_id_case_id_candidate_id_case__key",
           "definition": "CREATE UNIQUE INDEX bpay_next_run_case_instructio_id_case_id_candidate_id_case__key ON private.bpay_next_run_case_instruction USING btree (id, case_id, candidate_id, case_component_id, case_kind)"
         },
@@ -106052,6 +106103,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (work_collection_id IS NULL OR case_kind = 'OVERPAYMENT'::text AND tax_treatment = 'TAXABLE'::text AND source_pay_channel = 'PAYE'::text AND target_pay_channel = 'PAYE'::text AND instruction_kind = 'RECOVERY'::text AND direction = 'DEDUCTION'::text AND payroll_stage = 'GROSS_DEDUCT'::text AND hold_purpose = 'GROSS_RECOVERY'::text)"
+        },
+        {
+          "name": "bpay_next_instruction_other_run_capacity_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (other_run_capacity_reduction_source_ex_vat IS NULL AND other_run_capacity_reduction_target_ex_vat IS NULL AND other_run_capacity_reason IS NULL OR other_run_capacity_reduction_source_ex_vat IS NOT NULL AND other_run_capacity_reduction_target_ex_vat IS NOT NULL AND other_run_capacity_reduction_source_ex_vat::numeric >= 0::numeric AND other_run_capacity_reduction_target_ex_vat::numeric >= 0::numeric AND other_run_capacity_reduction_source_ex_vat::numeric <= (nominal_source_ex_vat::numeric - capacity_source_ex_vat::numeric) AND other_run_capacity_reduction_target_ex_vat::numeric <= (nominal_target_ex_vat::numeric - capacity_target_ex_vat::numeric) AND (other_run_capacity_reduction_source_ex_vat::numeric = 0::numeric AND other_run_capacity_reduction_target_ex_vat::numeric = 0::numeric AND other_run_capacity_reason IS NULL OR other_run_capacity_reduction_source_ex_vat::numeric > 0::numeric AND other_run_capacity_reduction_target_ex_vat::numeric > 0::numeric AND other_run_capacity_reason IS NOT NULL AND (other_run_capacity_reason = ANY (ARRAY['SAME_WEEK_INSTALMENT'::text, 'CASE_BALANCE'::text]))))"
         },
         {
           "name": "bpay_next_run_case_instructi_captured_default_floor_revis_check",

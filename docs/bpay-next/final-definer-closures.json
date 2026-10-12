@@ -4139,9 +4139,23 @@
     },
     {
       "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
         "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
@@ -4154,22 +4168,10 @@
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
-        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
-        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
-        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
       ],
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
+      "owner": "DR14 seq120 existing waiting/captured capacity visibility only; NET replacement remains DR37; DR16/DR13 merge current0414; later CM13a keeps capture diagnostics with native valuation.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "chosenReferenceBase": {
         "item": "CM-02a",
@@ -7716,9 +7718,31 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7739,30 +7763,10 @@
         "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
         "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
-        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
-        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql"
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql"
       ],
-      "owner": "DR15 seq119 native issues:0252 ->0307 ->0332 ->0341 State review-first; DR13 merges0341",
+      "owner": "DR14 seq120 existing waiting/captured capacity visibility only; NET replacement remains DR37; DR16/DR13 merge current0414; later CM13a keeps capture diagnostics with native valuation.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14729,21 +14733,23 @@
     },
     {
       "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
       ],
-      "owner": "WB-41 seq118 BD131; next master successor merges full current body"
+      "owner": "DR14 seq120 existing waiting/captured capacity visibility only; NET replacement remains DR37; DR16/DR13 merge current0414; later CM13a keeps capture diagnostics with native valuation."
     },
     {
       "signature": "private.bpay_next_snooze_due_receipt_valid_v1(uuid)",
@@ -15141,24 +15147,25 @@
     },
     {
       "signature": "private.bpay_next_preparation_progress_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
         "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
         "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
+      "finalClosures": [
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql"
+      ],
+      "owner": "DR14 seq120 existing waiting/captured capacity visibility only; NET replacement remains DR37; DR16/DR13 merge current0414; later CM13a keeps capture diagnostics with native valuation.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -16295,6 +16302,19 @@
       ],
       "owner": "WB39 BD129 native reader support; FC02 BD130 screen reader support",
       "baselineSource": "new"
+    },
+    {
+      "signature": "private.bpay_next_preparation_wait_owner_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql"
+      ],
+      "owner": "DR14 seq120 existing waiting/captured capacity visibility only; NET replacement remains DR37; DR16/DR13 merge current0414; later CM13a keeps capture diagnostics with native valuation."
     }
   ],
   "editorChains": [

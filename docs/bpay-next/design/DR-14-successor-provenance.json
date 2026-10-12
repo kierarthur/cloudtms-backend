@@ -1,0 +1,193 @@
+{
+  "item": "DR-14",
+  "sequence": 120,
+  "decision": "BD133",
+  "status": "SOURCE_LOCAL_PASS_A4_PENDING_PARTIAL",
+  "exactDeliverables": [
+    "D02 retained0310",
+    "D03 retained0310",
+    "D06 existing PROGRESS/PREPARE_ISSUES"
+  ],
+  "blocked": {
+    "D05": "DR37 seq130 staged replacement owner",
+    "D07": "exact per-repayment amount renderer through DR16 REVIEW_CASES seq121"
+  },
+  "sources": [
+    {
+      "path": "supabase/migrations/12102026_0404_banking_pay_next_captured_other_draft_capacity.sql",
+      "sha256": "36569801cb8b8d8989150779e7e4d9aaf6590c169aa6e792ed86ee1d314eb225"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql",
+      "sha256": "38f4dbfc0d50645caae36fe1b127270b5de9f5ddef7306e0de51833c8f75e375"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "sha256": "278096454907768263320ba6d53eaa28bce367c79b30fac08597e86bc2845698"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+      "sha256": "8344bff1a8ecd96e3fbb289f3b3f16cb37b56e5043b4b9d5999fbf2ce8d7fe9e"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "a57251a62fbba523ba217f262c936f005331d7ccee7eb9cdbbe03cdd94c9448d"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "25ece9e472c0e3ac8a31eaaada93290ca56144964492feab80d6a76f2e225cb5"
+    }
+  ],
+  "frontendSources": [
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "2afd5876af96e44436c322f68160b750cf80e734418e25a5fc8094790ff54417"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "fc693cf17d5d9d3a4631202f73b83d826950cf62ce26be87dcb5c206b0f391e0"
+    },
+    {
+      "path": "index.html",
+      "sha256": "3e34174753fe71d17c5ce4b4cc5bc23bdb0d58a9ae5ca9c90d9cc3b66a2898fc"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "private.bpay_next_case_capacity_use_guard_v1()",
+      "file": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "sourceMd5": "011fcf54211dcb7d634f5eeb13e0cb68",
+      "installed": {
+        "bodyMd5": "011fcf54211dcb7d634f5eeb13e0cb68",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_hold_guard_v1()",
+      "file": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "sourceMd5": "e812d926a97d0261200a7d146e12bca0",
+      "installed": {
+        "bodyMd5": "e812d926a97d0261200a7d146e12bca0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "file": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "sourceMd5": "bf56455e70b0fb87eb7b0183158153df",
+      "installed": {
+        "bodyMd5": "bf56455e70b0fb87eb7b0183158153df",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+      "sourceMd5": "7a69abe4601283453d68c5ebf3a8aa46",
+      "installed": {
+        "bodyMd5": "7a69abe4601283453d68c5ebf3a8aa46",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "file": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "sourceMd5": "e2160f3852f428bccbc4cdd766415cae",
+      "installed": {
+        "bodyMd5": "e2160f3852f428bccbc4cdd766415cae",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_preparation_progress_v1(uuid)",
+      "file": "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+      "sourceMd5": "be0117df27d461dfd2afc18589119c75",
+      "installed": {
+        "bodyMd5": "be0117df27d461dfd2afc18589119c75",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_preparation_wait_owner_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_0404_banking_pay_next_preparation_wait_owner_v1.sql",
+      "sourceMd5": "57eb33d2a81dd55cc0edfc344514330f",
+      "installed": {
+        "bodyMd5": "57eb33d2a81dd55cc0edfc344514330f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "checks": {
+    "sourceGates": "12 PASS",
+    "dbSource": "364 migrations /939 repeatables PASS",
+    "syntax": "changed Worker/Office PASS",
+    "local": "solePG17 compile +7exact body/security/config/ACL owner matches +General839/76/0/membershipdelta0 +General/Candidate isolationDO PASS",
+    "contract": "3fb3c7a4b95d4d8d00825e069a6290e7060ed06b74d9371ce49ffcbb4ce1a3ad export/seal/coupling PASS",
+    "screen": "eight actual local minimal-response captures; A4pending",
+    "businessQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
+  },
+  "screenEvidence": [
+    "screen-designs/SCR-40/DR14-fixed-responses.json",
+    "screen-designs/SCR-40/DR14-progress-dark.png",
+    "screen-designs/SCR-40/DR14-progress-device-light.png",
+    "screen-designs/SCR-40/DR14-progress-phone-dark.png",
+    "screen-designs/SCR-40/DR14-progress-replies.json",
+    "screen-designs/SCR-40/DR14-progress-waiting-phone-dark.png",
+    "screen-designs/SCR-43c/DR14-fixed-responses.json",
+    "screen-designs/SCR-43c/DR14-review-capacity-phone-dark.png",
+    "screen-designs/SCR-43c/DR14-review-dark.png",
+    "screen-designs/SCR-43c/DR14-review-device-light.png",
+    "screen-designs/SCR-43c/DR14-review-phone-dark.png",
+    "screen-designs/SCR-43c/DR14-review-replies.json"
+  ],
+  "scope": "Named existing native owners plus nullable captured metadata and exact private seek support; no new public SECDEF membership, command, protocol, producer, public trigger or money kernel."
+}
