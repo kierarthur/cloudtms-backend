@@ -1155,10 +1155,8 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object"
   ],
   "private.bpay_next_confirm_simple_run_v1(uuid,bigint)": [
-    "pg_catalog.clock_timestamp",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.transaction_timestamp",
-    "private.bpay_next_channel_drafts_page_v1"
+    "pg_catalog.jsonb_build_object('phase','DRAFT','replay',true, 'review_revision',v_run.review_revision, 'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows')",
+    "pg_catalog.jsonb_build_object('phase','DRAFT','replay',false, 'review_revision',p_review_revision, 'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows')"
   ],
   "private.bpay_next_segment_prepare_owner_v1(uuid,text)": [
     "clock_timestamp",
@@ -1993,6 +1991,9 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     // Rule-B snapshot's exact two additive guards reuse the unchanged callback.
     if(/^create trigger bpay_next_run_work_query_snapshot_immutable before update or delete on private\.bpay_next_run_work_query_snapshot for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
       ||/^create trigger bpay_next_run_work_query_snapshot_no_truncate before truncate on private\.bpay_next_run_work_query_snapshot for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
+    // DR18 exact new private UUID membership guards; unchanged generic callback.
+    if(/^create trigger bpay_next_confirm_refresh_member_immutable before update or delete on private\.bpay_next_confirm_refresh_member for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
+      ||/^create trigger bpay_next_confirm_refresh_member_no_truncate before truncate on private\.bpay_next_confirm_refresh_member for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
     // FC14 exact new immutable hold-transition attachments, unchanged generic callback.
     if(/^create trigger bpay_next_case_hold_transition_immutable_v1 before update or delete on private\.bpay_next_case_hold_transition for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
       ||/^create trigger bpay_next_case_hold_transition_truncate_v1 before truncate on private\.bpay_next_case_hold_transition for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;

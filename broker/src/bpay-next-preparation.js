@@ -909,6 +909,8 @@ function safeError(e,attempted,mutation,action=null,args=null){
     return new PreparationError('BPAY_NEXT_CONFIRM_PREPARATION_EXPIRED_OR_UNBOUND',409,false,false);
   if(mutation&&action==='CONFIRM'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CONFIRM_PREPARATION_DISCARDED_OR_BLOCKED')
     return new PreparationError('BPAY_NEXT_CONFIRM_PREPARATION_DISCARDED_OR_BLOCKED',409,false,false);
+  if(mutation&&action==='CONFIRM'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE')
+    return new PreparationError('BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE',409,false,false);
   if(db?.code==='55000')return db.message==='BPAY_NEXT_MODULE_NOT_ACTIVE'?fault('MODULE_NOT_ACTIVE',503):fault('NOT_ELIGIBLE',409);
   if(db?.code==='54000')return fault('RESPONSE_TOO_LARGE',503,true);
   if(e?.name==='AbortError'||e?.status===408)return fault('DEPENDENCY_TIMEOUT',503,true,attempted&&mutation);

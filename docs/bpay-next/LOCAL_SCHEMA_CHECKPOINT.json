@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "3067a0b3c7bd08cb237a2bb9990744db23adc6e0",
-  "compiledAtUtc": "2026-10-12T05:24:00.620Z",
+  "sourceCommit": "5cf5d22b880bab5ba9122ede5c0e021b45a52b1f",
+  "compiledAtUtc": "2026-10-12T05:51:22.026Z",
   "inventory": {
     "migrations": [
       {
@@ -1472,6 +1472,10 @@
       {
         "path": "supabase/migrations/12102026_0552_banking_pay_next_frozen_recovery_balances.sql",
         "sha256": "b5dbdc84be7669da4fe65d79ab352269e9aec4e2b5a10c37ce3621d7cc002a86"
+      },
+      {
+        "path": "supabase/migrations/12102026_0645_banking_pay_next_confirm_refresh_membership.sql",
+        "sha256": "28785f633847c5fecfd937793d8cdc841299f7847975da779b8019a89a345763"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8502,6 +8506,13 @@
         "sha256": "6cc72905e87811005c70eb46aaec590f1b49d23ca10a9e72c83d61767c5d3327"
       },
       {
+        "path": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
+        ],
+        "sha256": "f3f155a7db0ee398ecbcdb52f62e9695a176fe31788a6ad4716519f9e240f008"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8511,7 +8522,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/12102026_0645_banking_pay_next_confirm_refresh_membership.sql",
+        "sha256": "28785f633847c5fecfd937793d8cdc841299f7847975da779b8019a89a345763"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8535,11 +8551,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_0620_banking_pay_next_frozen_used_line_detail_v1.sql",
+        "path": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_0620_banking_pay_next_frozen_used_line_detail_v1.sql"
+          "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
         ],
-        "sha256": "6cc72905e87811005c70eb46aaec590f1b49d23ca10a9e72c83d61767c5d3327"
+        "sha256": "f3f155a7db0ee398ecbcdb52f62e9695a176fe31788a6ad4716519f9e240f008"
       }
     ]
   },

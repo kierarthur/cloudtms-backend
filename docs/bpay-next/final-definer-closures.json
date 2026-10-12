@@ -3383,9 +3383,18 @@
     },
     {
       "signature": "private.bpay_next_confirm_simple_run_v1(uuid,bigint)",
-      "finalRoot": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
@@ -3393,17 +3402,10 @@
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR18 seq124 BD138 state-only confirm and exact bounded Workbench refresh;0847/0236/1429 successors.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12297,16 +12299,19 @@
     },
     {
       "signature": "private.bpay_next_channel_drafts_page_v1(uuid)",
-      "finalRoot": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
-      "finalPhysical": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql"
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
       ],
-      "owner": "F-06 reviewed carried foundation source",
+      "owner": "DR18 seq124 BD138 state-only confirm and exact bounded Workbench refresh;0847/0236/1429 successors.",
       "baselineSourceHash": "a5c4d384159f7df1f9e08ad2bb560358adbfbe34348cae77e00abdd7bb18a31f"
     },
     {
@@ -14069,29 +14074,35 @@
     },
     {
       "signature": "private.bpay_next_workbench_step_task_v1(uuid,uuid,bigint,bigint,bigint,text,text,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql"
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
       ],
-      "owner": "WB-44 finite current metadata/seed/origin continuation; unchanged money classification; actual later master owners retain order"
+      "owner": "DR18 seq124 BD138 state-only confirm and exact bounded Workbench refresh;0847/0236/1429 successors."
     },
     {
       "signature": "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql"
+        "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql"
       ],
-      "owner": "WB-44 finite current metadata/seed/origin continuation; unchanged money classification; actual later master owners retain order"
+      "owner": "DR18 seq124 BD138 state-only confirm and exact bounded Workbench refresh;0847/0236/1429 successors."
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",

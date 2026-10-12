@@ -490,6 +490,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_confirm_refresh_member",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_next_local_detail_seam_owner_all",
       "check": "true",
       "roles": [
@@ -12401,7 +12413,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "088ee23ad2c276a2920e9fd3fc40e1363fc2b056b5ee5199c0b88eb85c2679bd"
+      "definition_sha256": "a008264f88cfd740adb2d0a0da9cd540a22c5e003632578fecc898d39b166c32"
     },
     {
       "acl": [
@@ -12838,7 +12850,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3fe5f153a44189b21629cb30dffb517bf81ce9e2d9f2f1076e3dffbcfd5506f5"
+      "definition_sha256": "b63efa6da1ae20d3b835550bc8e5ef26c7db64165f470e4c7fa5e4ee432ea9a3"
     },
     {
       "acl": [
@@ -18389,7 +18401,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "42317578343718d8ce92a4bbaa16058d46bc706266c786ddd388567eb1b04d50"
+      "definition_sha256": "fa670273ce0ee1d115a0f68cb2010a387e11d21629366d2cc7ed821e98c00bbf"
     },
     {
       "acl": [
@@ -33971,7 +33983,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "872e55097271e016aa0688cb0c3d61f22f4a1239b48b13c54727eee9e069c451"
+      "definition_sha256": "b2c6385516b06d14b4080097bd9b781f4c9a94589cd07bcdb0d2895b07c0f893"
     },
     {
       "acl": [
@@ -55159,6 +55171,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_component_page_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_component_selection_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_choice_guard_v1()"
+    },
+    {
+      "name": "bpay_next_confirm_refresh_member_immutable",
+      "table": "bpay_next_confirm_refresh_member",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_confirm_refresh_member_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_confirm_refresh_member FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_confirm_refresh_member_no_truncate",
+      "table": "bpay_next_confirm_refresh_member",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_confirm_refresh_member_no_truncate BEFORE TRUNCATE ON private.bpay_next_confirm_refresh_member FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
       "name": "bpay_next_csv_bank_evidence_guard_v1",
@@ -89712,6 +89738,172 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (run_id, work_id) REFERENCES private.bpay_next_work_choice(run_id, work_id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_confirm_refresh_member",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "member_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "native_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "task_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "task_type",
+          "type": "text",
+          "default": "'CONFIRM'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_confirm_refresh_member_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_confirm_refresh_member_pkey ON private.bpay_next_confirm_refresh_member USING btree (task_id, member_kind, native_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_confirm_refresh_member_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id)"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((member_kind = 'WORK'::text AND work_id = native_id AND case_id IS NULL OR member_kind = 'CASE'::text AND case_id = native_id AND work_id IS NULL) IS TRUE)"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_member_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (member_kind = ANY (ARRAY['WORK'::text, 'CASE'::text]))"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (task_id, member_kind, native_id)"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_task_id_task_type_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (task_id, task_type) REFERENCES private.bpay_next_workbench_task(id, task_type)"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_task_type_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (task_type = 'CONFIRM'::text)"
+        },
+        {
+          "name": "bpay_next_confirm_refresh_member_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
         }
       ],
       "view_definition_sha256": null
@@ -127428,6 +127620,22 @@
           "generated": ""
         },
         {
+          "name": "confirm_review_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "confirm_run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "control_changed",
           "type": "boolean",
           "default": "false",
@@ -127686,12 +127894,20 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_workbench_confirm_run_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_confirm_run_idx ON private.bpay_next_workbench_task USING btree (confirm_run_id) WHERE (task_type = 'CONFIRM'::text)"
+        },
+        {
           "name": "bpay_next_workbench_task_candidate_pending_idx",
           "definition": "CREATE INDEX bpay_next_workbench_task_candidate_pending_idx ON private.bpay_next_workbench_task USING btree (candidate_id, id) WHERE (status <> 'DONE'::text)"
         },
         {
           "name": "bpay_next_workbench_task_expired_idx",
           "definition": "CREATE INDEX bpay_next_workbench_task_expired_idx ON private.bpay_next_workbench_task USING btree (lease_until_utc, id) WHERE (status = 'LEASED'::text)"
+        },
+        {
+          "name": "bpay_next_workbench_task_id_type_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_task_id_type_key ON private.bpay_next_workbench_task USING btree (id, task_type)"
         },
         {
           "name": "bpay_next_workbench_task_pkey",
@@ -127742,12 +127958,20 @@
           "definition": "CHECK ((status = 'DONE'::text) = (phase = 'DONE'::text))"
         },
         {
-          "name": "bpay_next_workbench_task_check2",
+          "name": "bpay_next_workbench_task_confirm_review_revision_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (task_type = 'SEED'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = 'SEED'::text OR task_type = 'METADATA'::text AND candidate_id IS NOT NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = ('METADATA:'::text || candidate_id::text) OR task_type = 'ORIGIN'::text AND candidate_id IS NOT NULL AND work_id IS NOT NULL AND umbrella_id IS NULL AND task_key = ('ORIGIN:'::text || work_id::text) OR task_type = 'UMBRELLA'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NOT NULL AND task_key = ('UMBRELLA:'::text || umbrella_id::text))"
+          "definition": "CHECK (confirm_review_revision > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_confirm_run_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (confirm_run_id) REFERENCES private.bpay_next_pay_run(id)"
         },
         {
           "name": "bpay_next_workbench_task_cursor_key_check",
@@ -127780,6 +128004,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (generation > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_id_type_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, task_type)"
         },
         {
           "name": "bpay_next_workbench_task_last_error_code_check",
@@ -127819,7 +128051,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (phase = ANY (ARRAY['SEED_WORK'::text, 'SEED_CASE'::text, 'SEED_GROUP'::text, 'SEED_SNOOZE'::text, 'SEED_METADATA'::text, 'SEED_DRAIN'::text, 'METADATA_GROUP'::text, 'METADATA_SUMMARY'::text, 'ORIGIN_CASE'::text, 'ORIGIN_WORK'::text, 'UMBRELLA_CANDIDATE'::text, 'DONE'::text]))"
+          "definition": "CHECK (phase = ANY (ARRAY['SEED_WORK'::text, 'SEED_CASE'::text, 'SEED_GROUP'::text, 'SEED_SNOOZE'::text, 'SEED_METADATA'::text, 'SEED_DRAIN'::text, 'METADATA_GROUP'::text, 'METADATA_SUMMARY'::text, 'ORIGIN_CASE'::text, 'ORIGIN_WORK'::text, 'UMBRELLA_CANDIDATE'::text, 'CONFIRM_WORK'::text, 'CONFIRM_CASE'::text, 'DONE'::text]))"
         },
         {
           "name": "bpay_next_workbench_task_pkey",
@@ -127836,6 +128068,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (rows_visited >= 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_scope_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((task_type <> 'CONFIRM'::text AND confirm_run_id IS NULL AND confirm_review_revision IS NULL AND (task_type = 'SEED'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = 'SEED'::text OR task_type = 'METADATA'::text AND candidate_id IS NOT NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = ('METADATA:'::text || candidate_id::text) OR task_type = 'ORIGIN'::text AND candidate_id IS NOT NULL AND work_id IS NOT NULL AND umbrella_id IS NULL AND task_key = ('ORIGIN:'::text || work_id::text) OR task_type = 'UMBRELLA'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NOT NULL AND task_key = ('UMBRELLA:'::text || umbrella_id::text)) OR task_type = 'CONFIRM'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NULL AND confirm_run_id IS NOT NULL AND confirm_review_revision IS NOT NULL AND task_key = ('CONFIRM:'::text || confirm_run_id::text) AND (phase = ANY (ARRAY['CONFIRM_WORK'::text, 'CONFIRM_CASE'::text, 'DONE'::text]))) IS TRUE)"
         },
         {
           "name": "bpay_next_workbench_task_status_check",
@@ -127875,7 +128115,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (task_type = ANY (ARRAY['SEED'::text, 'METADATA'::text, 'ORIGIN'::text, 'UMBRELLA'::text]))"
+          "definition": "CHECK (task_type = ANY (ARRAY['SEED'::text, 'METADATA'::text, 'ORIGIN'::text, 'UMBRELLA'::text, 'CONFIRM'::text]))"
         },
         {
           "name": "bpay_next_workbench_task_umbrella_id_fkey",

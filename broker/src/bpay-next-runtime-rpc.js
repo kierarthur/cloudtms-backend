@@ -51,7 +51,7 @@ function expiryInput(value) {
   return Object.freeze({ limit: value.limit });
 }
 const WORKBENCH_PHASES=Object.freeze(['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN',
-  'METADATA_GROUP','METADATA_SUMMARY','ORIGIN_CASE','ORIGIN_WORK','UMBRELLA_CANDIDATE','DONE']);
+  'METADATA_GROUP','METADATA_SUMMARY','ORIGIN_CASE','ORIGIN_WORK','UMBRELLA_CANDIDATE','CONFIRM_WORK','CONFIRM_CASE','DONE']);
 function workbenchInput(action,value) {
   if(['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)) return expiryInput(value);
   if(action==='WORKBENCH_CLAIM') {
@@ -83,7 +83,7 @@ function workbenchResult(value,action,input) {
     });return Object.freeze({...value,items:Object.freeze(items)});
   }
   const phases={SEED:['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN','DONE'],
-    METADATA:['METADATA_GROUP','METADATA_SUMMARY','DONE'],ORIGIN:['ORIGIN_CASE','ORIGIN_WORK','DONE'],UMBRELLA:['UMBRELLA_CANDIDATE','DONE']};
+    METADATA:['METADATA_GROUP','METADATA_SUMMARY','DONE'],ORIGIN:['ORIGIN_CASE','ORIGIN_WORK','DONE'],UMBRELLA:['UMBRELLA_CANDIDATE','DONE'],CONFIRM:['CONFIRM_WORK','CONFIRM_CASE','DONE']};
   if(!exact(value,['task_id','task_type','status','phase','cursor_key','generation','owner_epoch','step_no',
     'lease_nonce','rows_visited','progressed','stale','error_code'])||!uuid(value.task_id)
     ||value.task_id.toLowerCase()!==input.task_id.toLowerCase()||!Object.hasOwn(phases,value.task_type)
