@@ -13811,32 +13811,37 @@
     },
     {
       "signature": "private.bpay_next_snooze_context_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
+        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql",
+        "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
         "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql"
+      ],
+      "owner": "WB-29/WB-45 exact saved-rate PRE_OPEN notice; unchanged native snooze/ACK owner"
+    },
+    {
+      "signature": "private.bpay_next_snooze_action_v1(uuid,text,jsonb)",
+      "finalRoot": "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
+        "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql"
+        "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql"
       ],
-      "owner": "WB-38 shared snooze controls and bounded native expense receipts"
-    },
-    {
-      "signature": "private.bpay_next_snooze_action_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
-      "allowedPhysical": [
-        "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
-      ],
-      "predecessors": [],
-      "finalClosures": [
-        "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
-      ],
-      "owner": "WB-36 private segment/snooze support; WB-08 projection, WB-19 dispatcher, WB-44 stale refresh, WB-45 warning resolver retain their actual later ownership"
+      "owner": "WB-29/WB-45 exact saved-rate PRE_OPEN notice; unchanged native snooze/ACK owner"
     },
     {
       "signature": "private.bpay_next_snooze_metadata_guard_v1()",

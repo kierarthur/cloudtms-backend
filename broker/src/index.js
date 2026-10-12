@@ -199162,6 +199162,20 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
     });
     if (response.ok) {
       const result = await response.clone().json();
+      if (['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(result.action)
+          && result.receipt.received && !result.receipt.replay) {
+        // Native publishers sealed the real POSITION_APPLY children. The
+        // existing enroller owns their jobs; this receipt has no fake job ID.
+        const wake = Promise.resolve().then(() => {
+          if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+            throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+          }
+          return env.BANKING_PAY_CONTINUATION_QUEUE.send({id:'1',kind:'ENROLL'});
+        }).catch(() => console.warn('[banking-pay-next] accepted rate decision awaits recovery', {
+          error_code:'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+        }));
+        if (typeof ctx?.waitUntil === 'function') {try {ctx.waitUntil(wake);} catch {await wake;}} else await wake;
+      }
       if (result.receipt.received && result.receipt.status === 'READY') {
         const wake = Promise.resolve().then(() => env.BANKING_PAY_CONTINUATION_QUEUE.send({
           id:result.receipt.job_id,kind:'POSITION_APPLY'

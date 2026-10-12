@@ -66,7 +66,7 @@ export function normaliseBpayNextSnoozeAction(action,args){
       if(args.scope_kind==='EXPENSES_ALL'&&canonical!=='DO_NOT_PAY')invalid();
     }
     if(mutation&&(typeof args.worker_pay_basis!=='string'||!/^[0-9a-f]{64}$/.test(args.worker_pay_basis)
-      ||(action==='SNOOZE_SET'&&args.phase==='PRE_OPEN')))invalid();
+      ||(['SNOOZE_SET','SNOOZE_WARNING_ACK_ISSUE'].includes(action)&&args.phase==='PRE_OPEN')))invalid();
     if(args.acknowledgement_token!==undefined&&!uuid(args.acknowledgement_token))invalid();
     args={...args,snooze_kind:canonical};
   }
@@ -101,9 +101,11 @@ export function validateBpayNextSnoozeContext(value,args,acknowledgement=false){
   if(!exact(warning,['phase','until_date','business_date','next_official_pay_date','configuration_fingerprint','warning_code','warning_required'])
     ||!['PRE_OPEN','PRE_SAVE'].includes(warning.phase)||!date(warning.business_date)||!date(warning.next_official_pay_date)
     ||warning.until_date!==null&&!date(warning.until_date)||!text(warning.configuration_fingerprint,256)
-    ||![null,'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN','SNOOZE_INCLUDES_NEXT_PAY_RUN'].includes(warning.warning_code)
+    ||warning.phase!==(args.phase??'PRE_SAVE')||warning.business_date!==value.business_date
+    ||!(warning.phase==='PRE_OPEN'?[null,'RATE_RESOLUTION_REQUIRES_REVIEW_AFTER_UNSNOOZE']:[null,'SNOOZE_DATE_BEFORE_NEXT_PAY_RUN','SNOOZE_INCLUDES_NEXT_PAY_RUN']).includes(warning.warning_code)
+    ||warning.warning_code==='RATE_RESOLUTION_REQUIRES_REVIEW_AFTER_UNSNOOZE'&&(!['WHOLE_TIMESHEET','SEGMENT'].includes(value.scope_kind)||!uuid(value.work_id)||!uuid(value.expected_revision_id))
     ||typeof warning.warning_required!=='boolean'||warning.warning_required!==(warning.warning_code!==null)
-    ||acknowledgement&&(!uuid(value.acknowledgement_token)||typeof value.acknowledgement_expires_at_utc!=='string'
+    ||acknowledgement&&(warning.phase!=='PRE_SAVE'||!uuid(value.acknowledgement_token)||typeof value.acknowledgement_expires_at_utc!=='string'
       ||value.acknowledgement_expires_at_utc.length>40||!Number.isFinite(Date.parse(value.acknowledgement_expires_at_utc))))responseInvalid();
   return value;
 }

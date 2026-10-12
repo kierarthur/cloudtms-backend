@@ -1,7 +1,7 @@
 /** WB09 pure Office reads. Closed kinds, trusted admin actor, fixed RPC only.
  * No reconstruction, financial calculation, command or automatic page retry. */
 import {normalizeSnoozesInput,validateSnoozesResponse} from './bpay-next-snooze-reader.js';
-import {normalizeResolutionInput,validateResolutionResponse,resolutionNativeFault} from './bpay-next-resolution.js';
+import {normalizeResolutionInput,validateResolutionResponse,resolutionNativeFault,normalizeResolutionCommand,validateResolutionCommandReceipt,resolutionCommandNativeFault} from './bpay-next-resolution.js';
 import {normaliseBpayNextSnoozeAction,normaliseBpayNextSnoozeMany,validateBpayNextSnoozeContext,validateBpayNextSnoozeReceipt,validateBpayNextSnoozeManyReceipt,BPAY_NEXT_SNOOZE_REFUSALS} from './bpay-next-snooze.js';
 export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
@@ -861,6 +861,19 @@ export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},8000);});
   const send=async()=>{
    const body=await readWorkbenchJson(request,controller.signal,32768);
+   if(['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(body?.action)){
+    if(!exact(body,['action','readback','args'])||typeof body.readback!=='boolean')throw fail('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);
+    const args=normalizeResolutionCommand(body.action,body.args,user.id.toLowerCase());
+    if(typeof dependencies.workbenchCommandRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+    attempted=!body.readback;
+    const response=await dependencies.workbenchCommandRpc(args,body.readback,{actorUserId:user.id.toLowerCase(),signal:controller.signal,action:body.action});
+    if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    const value=await readWorkbenchJson(response,controller.signal,131072);
+    if(!response.ok){const native=resolutionCommandNativeFault(value);if(native){attempted=false;throw native;}throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+    const receipt=validateResolutionCommandReceipt(value,body.action,args);
+    if(!body.readback&&!receipt.received)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    return json(200,{ok:true,action:body.action,receipt});
+   }
    if(['SNOOZE_WARNING_ACK_ISSUE','SNOOZE_SET','SNOOZE_CLEAR','SNOOZE_SET_MANY','SNOOZE_CLEAR_MANY'].includes(body?.action)){
     if(!exact(body,['action','readback','args'])||typeof body.readback!=='boolean')throw fail('BPAY_NEXT_SNOOZE_REQUEST_INVALID',400);
     const many=body.action.endsWith('_MANY'),args=many?normaliseBpayNextSnoozeMany(body.action,body.args):normaliseBpayNextSnoozeAction(body.action,body.args);

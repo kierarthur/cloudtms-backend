@@ -1,0 +1,66 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "frontendImplementationCommit": "PENDING_LOCAL_COMMIT",
+  "builderDecisions": [
+    "BD163"
+  ],
+  "files": [
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "f07c8e08474d5c01708658bcb5eb102ee70d80c8661826f6bae7d5deaf1845ee"
+    },
+    {
+      "path": "broker/src/bpay-next-snooze.js",
+      "sha256": "90fc75a066232f1d8e4b7f74aba2ee85f194134f01e64e81b905a0d3d17d5af9"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "715d3b419f5725845eeb814c6dd3d2a47db6168b3e3e7de07d0c01e1e5a82c6d"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "7e5747350540b6cdaf644d8f47f17b53ed5a71ff0f0f44cd2e3d3b7b2777832b"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "21c8677cec3e7210db02dda3f13a099d661b7bd35d4a4d516f4c618f8b712375"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2344_banking_pay_next_resolution_snooze_warning_v1.sql",
+      "sha256": "6dc67ddafca7e84ce4c1a090c1cba67f0c2716880671cc9f6e052b203659a5f2"
+    }
+  ],
+  "frontendFiles": [
+    {
+      "path": "js/bpay-next-resolution.js",
+      "sha256": "4457b1935f13f1cb5b2ede9804c72719ceae6fc1e88213717dfb476e5fff10ba"
+    },
+    {
+      "path": "js/bpay-next-snooze-window.js",
+      "sha256": "1fc2f2428d483ced5d557b67f3d05a481ab91cba45d54f06d9e15015cc86821e"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "1c6f4805fa0f32d0ef20c2e6cbb8e993077ae43db183aa2c5337abd34f991cfe"
+    }
+  ],
+  "sourceReviews": [
+    "WB-29-w2-transport-source-review.md",
+    "WB-29-snooze-warning-source-review.md",
+    "WB-29-snooze-ui-source-review.md"
+  ],
+  "screenReview": "screen-designs/SCR-32/review.md;40PASS/2scopedNA;15actualPNGs;originalprefixpreserved",
+  "checks": {
+    "localCompile": "2344 changed schema only; no business calls PASS",
+    "exactCatalogue": "2 routine bodies/owners/config/ACL/volatility PASS",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both DO PASS; public membership delta0",
+    "dbCheck": "383 migrations/987 repeatables PASS",
+    "sourceGates": "1546SQL/30RPCroots/164routine signatures/37typed transports PASS",
+    "nodeCheck": "changed BE and FE JS PASS",
+    "contractSealAndCoupling": "6e3e89545e44647d51241d86d10276add15e24d063c3208425194095737e2fa2 PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; captured composition/hold/share/frozen advice/estimate/Ready sorting remain"
+}

@@ -2106,7 +2106,8 @@ export function assertNextQueueShapes(background,financial,index){
   const clean=source=>source.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
   const b=clean(background),f=clean(financial),i=clean(index);
   const sends=[...i.matchAll(/BANKING_PAY_CONTINUATION_QUEUE\.send\(\s*({[^}]*})\s*\)/g)];
-  if(sends.length!==4 || sends.some(([,body])=>!/^\{\s*id\s*:\s*(?:'1'|result\.receipt\.job_id)\s*,\s*kind\s*:\s*'(?:ENROLL|POSITION_APPLY)'\s*\}$/.test(body))
+  // WB29's fresh accepted rate command uses the same native ENROLL identity.
+  if(sends.length!==5 || sends.some(([,body])=>!/^\{\s*id\s*:\s*(?:'1'|result\.receipt\.job_id)\s*,\s*kind\s*:\s*'(?:ENROLL|POSITION_APPLY)'\s*\}$/.test(body))
     || !b.includes('messages.some(body=>!bpayNextQueueIdentity(body))')
     || !b.includes("const ENROLL=Object.freeze({id:'1',kind:'ENROLL'})")
     || !b.includes('sendBatch(messages.map(body=>({body,contentType:')
