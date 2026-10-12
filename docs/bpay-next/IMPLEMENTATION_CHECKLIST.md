@@ -4115,10 +4115,10 @@ Dependencies: F-06, WB-01, WB-08; successor positions: none. Design note: requir
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-45-D05 | MIGRATION: private.bpay_next_component_resolution | MISSING | WB45 independent physical/economic/bucket identity/version, authority/basis and based-on→published continuity; not unique work/component alone. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-45-D06 | MIGRATION: private.bpay_next_component_resolution_event | MISSING | Append-only exact need/save/clear events and versioned explicit EX08 needs; target treatment not changed earnings/debt. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-45-D07 | REPEATABLE: private.bpay_next_component_resolution_active_v1 | MISSING | Mapped independently compatible boundary decisions, not based-on-only current revision lookup. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-45-D09 | DOC: WB-45 independent identity/revision/residual contract | MISSING | Exact physical/economic/bucket decision/version mapping and provable remaining bucket basis, shared residual consumption; ambiguity typed refuse and no new economic formula. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-45-D05 | MIGRATION: private.bpay_next_component_resolution | BUILT_REVIEWED | WB45 independent physical/economic/bucket identity/version, authority/basis and based-on→published continuity; not unique work/component alone. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-45-D06 | MIGRATION: private.bpay_next_component_resolution_event | BUILT_REVIEWED | Append-only exact need/save/clear events and versioned explicit EX08 needs; target treatment not changed earnings/debt. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-45-D07 | REPEATABLE: private.bpay_next_component_resolution_active_v1 | BUILT_REVIEWED | Mapped independently compatible boundary decisions, not based-on-only current revision lookup. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-45-D09 | DOC: WB-45 independent identity/revision/residual contract | BUILT_REVIEWED | Exact physical/economic/bucket decision/version mapping and provable remaining bucket basis, shared residual consumption; ambiguity typed refuse and no new economic formula. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4134,6 +4134,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 Same-day DAY+NIGHT independent decisions and two arbitrary Additional codes; manual choice survives its own published revision; £160 full component with £120 already realised quotes only the provable remaining £40 basis/treatment, preserving old channel/target effects. Stale/frozen/duplicate/mixed/ambiguous basis refuses. Before-Create queued decision included; after-Create decision next run only.
+
+Foundation D05/D06/D07/D09 implementation a52a45116f45785a94a17da11f23c95ed4303a4c; independent reviews/WB-45-source-review.md PASS. Whole ITEM PARTLY_DONE pending WB-29 assigned consumer joins. Joined app acceptance AUTHORED_NOT_RUN.
 
 ## WB-29 — NEXT rate-resolution owner (payment-treatment decisions on approved work)
 

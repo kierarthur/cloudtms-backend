@@ -9,3 +9,5 @@ Independent design and final SOURCE PASS; four concrete findings fixed with fres
 R2:336 assigns commands, explicit needs/classifier, accepted decision/version associations, Source-safe complete publication, actual same-quote estimate/preparation/share/advice integration to WB-29 and windows/adoption to WB-30–34. These are required future joins, not implemented by a schema-only claim; whole WB-45 ITEM remains open until its assigned consumers close. All joined app/queue acceptance AUTHORED_NOT_RUN. Timing check moved to TEST after installation (owner10/10/2026).
 
 Evidence: WB-45-independent-residual-contract.md, WB-45-investigation.md, WB-45-successor-provenance.json, WB-45-current-owner-catalogue.json; independent WB-45-design-review-notes.md and reviews/WB-45-source-review.md.
+
+Implementation commit: a52a45116f45785a94a17da11f23c95ed4303a4c. Checklist D05/D06/D07/D09 BUILT_REVIEWED; whole ITEM PARTLY_DONE.
