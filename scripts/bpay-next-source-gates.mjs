@@ -48,6 +48,9 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB29: one qualified incoming/saved quote; unchanged1157 arithmetic.
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)',
+  'private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)',
   "private.bpay_next_source_query_refresh_v1(uuid,uuid)",
   "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
   "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)",
@@ -215,6 +218,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)": ["private.bpay_next_component_resolution_basis_v1","private.pay_finance_selected_quote_v1","isfinite","length","jsonb_typeof","jsonb_object_keys","jsonb_each","jsonb_each_text","trunc","btrim","octet_length","count","jsonb_build_object"],
+  "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)": ["private.bpay_next_component_resolution_basis_v1","private.bpay_next_component_resolution_input_quote_v1","greatest","jsonb_build_object"],
   "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_work_segment_debt_basis_v1","sum","cardinality","lateral"],
   "private.bpay_next_work_collection_guard_v1()": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_work_collection_observation_v1"],
   "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","by","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","convert_from","decode","replace","encode","convert_to","chr","jsonb_set","to_jsonb","lower","left","least","private.bpay_next_snooze_management_row_v1"],
@@ -1901,9 +1906,14 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
       // A closed catalog predecessor comparison consumes a dollar literal as
       // metadata only; it is not an EXECUTE producer or a SQL body.
       const catalogAssertion=!dynamic&&t.filter(token=>token==='<BODY>').length===1&&/^\s*(?:begin\s+)?if\s+\(select\s+pg_catalog\.pg_get_constraintdef\(c\.oid\)\s+from\s+pg_catalog\.pg_constraint\s+c\s+where\s+c\.conrelid='private\.[a-z_][a-z0-9_]*'::pg_catalog\.regclass\s+and\s+c\.conname='[a-z_][a-z0-9_]*'\)\s+is\s+distinct\s+from\s+\$([a-z_][a-z0-9_]*)\$[\s\S]*?\$\1\$\s+then\s+raise\s+exception\s+using\s+errcode='23514',\s*message='BPAY_NEXT_[A-Z0-9_]+';\s*$/i.test(statement);
+      // WB29: two exact catalogue expression literals, never executed SQL.
+      // Unique observed-name census precedes static receipt CHECK replacement.
+      const receiptExpressionCensus=!dynamic&&t.filter(token=>token==='<BODY>').length===1&&
+        /^\s*(?:begin\s+)?select array_agg\(c\.conname::text order by c\.conname\) into v_names from pg_catalog\.pg_constraint c\s+where c\.conrelid='private\.bpay_next_workbench_command_receipt'::pg_catalog\.regclass and c\.contype='c'\s+and pg_catalog\.pg_get_expr\(c\.conbin,c\.conrelid\)=\$expr\$\(\(jsonb_typeof\((request_body|result)\) = 'object'::text\) AND \(octet_length\(\(\1\)::text\) <= (4096|8192)\)\)\$expr\$;\s*$/.test(statement)&&
+        ((statement.includes('jsonb_typeof(request_body)')&&statement.includes('<= 4096)'))||(statement.includes('jsonb_typeof(result)')&&statement.includes('<= 8192)')));
       const workbenchExecution=workbenchTemplates&&t.filter(token=>token==='EXECUTE').length===1&&closedWorkbenchExecution(statement);
       const workbenchProjection=workbenchTemplates&&['V_PROJECTION','V_WHERE'].some(token=>t.includes(token))&&t.includes('<BODY>');
-      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution&&!workbenchExecution&&!expiryShapeUpgrade&&!payMethodReceiptAcl)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion&&!workbenchProjection&&!expiryShapeUpgrade&&!payMethodReceiptAcl))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
+      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution&&!workbenchExecution&&!expiryShapeUpgrade&&!payMethodReceiptAcl)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion&&!receiptExpressionCensus&&!workbenchProjection&&!expiryShapeUpgrade&&!payMethodReceiptAcl))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
       if(/\bPG_CATALOG \. (?:COALESCE|NULLIF|LEAST|GREATEST) \(/.test(text))hazards.add('SPECIAL_QUALIFIER');
       const intoAt=t.indexOf('INTO'),selectAt=intoAt>=0?t.lastIndexOf('SELECT',intoAt):t.indexOf('SELECT');
       if(selectAt>=0&&intoAt>selectAt){

@@ -17285,17 +17285,21 @@
     },
     {
       "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
         "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      "finalClosures": [
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql"
       ],
-      "finalClosures": [],
-      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+      "owner": "WB-29 qualified shared incoming/saved quote / BD156-157"
     },
     {
       "signature": "private.bpay_next_component_resolution_need_publish_v1(uuid,uuid)",
@@ -17369,6 +17373,22 @@
         "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
       ],
       "owner": "WB-29 complete treatment publication / BD155"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)",
+      "finalRoot": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+        "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
+      ],
+      "owner": "WB-29 qualified shared incoming/saved quote / BD156-157"
     }
   ],
   "editorChains": [

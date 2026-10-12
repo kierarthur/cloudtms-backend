@@ -13474,6 +13474,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_component_resolution_input_quote_v1(p_intent private.bpay_next_component_resolution, p_boundary_revision_id uuid, p_position_basis jsonb, p_included_source_ex_vat numeric)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "9faee9d0d92d2b42dee39f5da49b4b7b6e201323e41705ee62b840ade93c0442"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_component_resolution_need_publish_v1(p_operation_id uuid, p_work_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -13516,7 +13535,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "f04602023191960e5d8834f2d18008f1755a116f8ea552039c3ed5094a2fce11"
+      "definition_sha256": "9c8563ab553d92d3df1407f45b761eafe5088d686b68c2070b5ed073452fe17f"
     },
     {
       "acl": [
@@ -132307,6 +132326,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "action",
+          "type": "text",
+          "default": "'RETRY_WORK_JOB'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "actor_user_id",
           "type": "uuid",
           "default": null,
@@ -132335,7 +132362,7 @@
           "type": "uuid",
           "default": null,
           "identity": "",
-          "not_null": true,
+          "not_null": false,
           "generated": ""
         },
         {
@@ -132429,6 +132456,14 @@
       "force_rls": true,
       "constraints": [
         {
+          "name": "bpay_next_workbench_command_receipt_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['RETRY_WORK_JOB'::text, 'RESOLUTION_SAVE'::text, 'RESOLUTION_CLEAR'::text]))"
+        },
+        {
           "name": "bpay_next_workbench_command_receipt_actor_user_id_fkey",
           "type": "f",
           "deferred": false,
@@ -132461,28 +132496,36 @@
           "definition": "PRIMARY KEY (request_id)"
         },
         {
-          "name": "bpay_next_workbench_command_receipt_request_body_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text AND octet_length(request_body::text) <= 4096)"
-        },
-        {
-          "name": "bpay_next_workbench_command_receipt_result_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (jsonb_typeof(result) = 'object'::text AND octet_length(result::text) <= 8192)"
-        },
-        {
           "name": "bpay_next_workbench_command_receipt_work_id_fkey",
           "type": "f",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_workbench_command_request_size_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text AND octet_length(request_body::text) <=\nCASE\n    WHEN action = 'RETRY_WORK_JOB'::text THEN 4096\n    ELSE 32768\nEND)"
+        },
+        {
+          "name": "bpay_next_workbench_command_result_size_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(result) = 'object'::text AND octet_length(result::text) <=\nCASE\n    WHEN action = 'RETRY_WORK_JOB'::text THEN 8192\n    ELSE 65536\nEND)"
+        },
+        {
+          "name": "bpay_next_workbench_command_variant_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((action = 'RETRY_WORK_JOB'::text AND job_id IS NOT NULL OR (action = ANY (ARRAY['RESOLUTION_SAVE'::text, 'RESOLUTION_CLEAR'::text])) AND job_id IS NULL AND retry_run_worker_id IS NULL AND retry_input_job_id IS NULL AND retry_captured_revision IS NULL AND retry_expected_revision IS NULL AND retry_target_revision IS NULL AND (result ->> 'action'::text) = action AND\nCASE\n    WHEN jsonb_typeof(request_body -> 'works'::text) = 'array'::text AND jsonb_typeof(result -> 'works'::text) = 'array'::text THEN jsonb_array_length(request_body -> 'works'::text) >= 1 AND jsonb_array_length(request_body -> 'works'::text) <= 100 AND jsonb_array_length(result -> 'works'::text) = jsonb_array_length(request_body -> 'works'::text) AND\n    CASE\n        WHEN jsonb_array_length(request_body -> 'works'::text) = 1 THEN work_id IS NOT NULL AND (request_body #>> '{works,0,work_id}'::text[]) = work_id::text AND (result #>> '{works,0,work_id}'::text[]) = work_id::text\n        ELSE work_id IS NULL\n    END\n    ELSE false\nEND) IS TRUE)"
         },
         {
           "name": "bpay_next_workbench_retry_execution_ck",
@@ -132498,7 +132541,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (work_id IS NOT NULL OR NOT (result ->> 'retry_kind'::text) IS DISTINCT FROM 'PREPARE'::text)"
+          "definition": "CHECK (action <> 'RETRY_WORK_JOB'::text OR work_id IS NOT NULL OR NOT (result ->> 'retry_kind'::text) IS DISTINCT FROM 'PREPARE'::text)"
         }
       ],
       "view_definition_sha256": null

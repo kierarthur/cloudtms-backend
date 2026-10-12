@@ -1,0 +1,62 @@
+# WB-29 accepted quote composition design review
+
+12 October 2026, seq140, BD155–157. Independent read-only design/source-boundary review of the saved accepted-join note, final input-quote design and actual2213 implementation. Root alone writes product. No SQL/RPC, business rows, fixtures, tests, remote actions or joined journey was run. Whole WB-29 remains open; this receipt does not pass an unwritten captured composer.
+
+**Verdict: scalar incoming/saved quote design is coherent; accepted composition needs the concrete native scope boundary below before design closure.** The existing four-argument input helper is insufficient for the card's completed INCLUDED segment scope. These are required narrow changes to named WB-29 quote/capture/share/advice seams, not grounds to refuse all multibucket/partial work.
+
+## Current evidence and open boundary
+
+`2213_banking_pay_next_resolution_input_quote_v1.sql:9–153` adds `private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)`. It uses an in-memory native decision composite without a dummy stored row. Exact original/published line mapping and native basis are checked at31–40; closed A/R/H/source-channel shape at41–60; mode/manual/reason admission at64–78; immutable winning policy window and ambiguity at79–89. Its original-channel native-price qualification and actual target quote both call unchanged1157 (110–111,125–135,141–143). It contains no competing ERNI/VAT conversion formula. The private INVOKER/closed ACL boundary remains155–157.
+
+The persisted wrapper `bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)` at159–218 retains actual current/applied and native target/Run/date checks. Exact saved version is read without requiring live ACTIVE (168–176). Those guards are reuse, including owner E2's actual expected/current boundary; canonical Source approval metadata cannot revive a changed accepted revision.
+
+Required design deltas are precise:
+
+1. **DQ-01: actual captured scope must be an input identity.**2213:56–60 and206–209 still require included positive Source to be no greater than aggregate algebraic residual and residual nonnegative. Native captured segments may contain positive Included members alongside negative/recovery members, so this is not the completed-segment conservation predicate. Replace it only for a positively qualified completed captured scope. Leave scalar Position admission intact for callers with no such native scope.
+2. **DQ-02: included units cannot come from whole RateDetail.**2213:95–103 uses whole-component full/partial and refuses all partial multibucket;97 initially uses full approved bucket hours. A component can be partially paid/held or narrowed while its remaining Included segments have complete untouched bucket vectors. Those vectors must be consumed. Do not quote excluded/snoozed/query-held vectors and do not turn a partially spent multi-bucket segment into full hours.
+3. **DQ-03: source qualification must be at the same native scope as the target.**2213:104–117 correctly supports intact whole-parent suggestions only when same1157 native bucket source quotes sum to approval, and permits manual rate with NULL source split. The captured extension must perform that qualification per Included segment/prefix rather than reuse full RateDetail units or compare a narrowed sum to the whole parent approval.
+
+## Minimum concrete composer boundary
+
+Use one private STABLE captured component composer with actual `p_run_position_id uuid` and optional `p_through_segment_key text` identifying an exact Included positive member of that component. NULL means the full completed component. It returns the parent target ex/VAT/inc, actual included Source once, and finite per-bucket quote detail/ref identities. Derive the boundary/line, RunWork/Worker/Run, original target/Umbrella/VAT/policy/date and accepted WorkChoice refs from those native rows; do not accept browser source amounts, units, quote objects or a boolean assertion of attribution.
+
+The trusted membership is the existing `bpay_next_run_work_segment_parent` joined through its exact `run_work_segment_id` to the captured `bpay_next_run_work_segment`, and its exact `approved_segment_id` to immutable `bpay_next_approved_segment`. Require same RunWork/Work/component/captured revision/native approved line and `disposition='INCLUDED'`, positive `included_positive_source_ex_vat`, and completed `RunPosition.segment_attribution_complete`. Existing capture2223:1071–1105 records the approved segment, actual disposition, per-segment A/R/H and Included/Excluded/recovery/overhang; it does not record paid hours by bucket. Require the full parent count and maintained totals to match this native finite scope before evaluating any prefix. An optional prefix must be a real member, not an arbitrary text boundary that silently selects a different scope.
+
+The smallest reuse of2213 is a native-scope overload of the existing input quote, for example its four existing arguments plus `p_run_position_id uuid,p_through_segment_key text`. The four-argument scalar entry delegates with NULL native scope; current wrappers keep their original predicates. A captured caller must prove its passed A/R/H and included Source equal the actual native full/prefix scope; the overload derives bucket units/source itself. Keep one body for intent/basis/mode/window admission and1157 arithmetic. An equally small internal typed context is acceptable only when generated by the same native point reader and never accepted by W1/W2/browser transport. Do not invent another public token, decision row, store or producer.
+
+An aggregate composer calls that same qualified bucket evaluator once per independent native bucket/code and returns one component target sum. No-decision scope preserves the original one-component valuer exactly once and the DR38 reimbursement branch. Mixed manual/suggested/fallback treatment applies only with the applicable accepted ref or existing compatible receipt/resolver precedence; it cannot repeatedly count the parent's Source money. Explicit accepted [] never consults later ACTIVE. Preserve the independent exact identity and typed duplicate/ambiguity refusal. The incoming preview and captured composer need not fabricate the same scope: scalar W1/W2 use native current Position; captured input uses the original completed selected membership, with the same1157 arithmetic and intent admission.
+
+## Provable units and Source contributions
+
+* **All-manual narrowed multibucket is supported.** For each positive Included segment with native R=H=0 and Included=A, use that segment's actual Day/Night/Sat/Sun/BH vectors, summed by exact bucket. This works even when aggregate component R/H is nonzero because paid/held or snoozed/unselected siblings are outside the quoted units. Fully spent/no-positive segments contribute no quote units. Manual target rates need no invented source split; reserve the existing parent Included Source only once.
+* **Suggested or mixed fallback scope needs genuine Source attribution.** For an intact Included segment, quote each positive native bucket's used units and used Source rate in its original channel with VAT disabled through1157; require the Source quotes sum exactly to that segment's actual Source approval/Included amount. Do not allocate an unexplained penny remainder. Preserve native Source book/receipt/head/classification qualification before using Source values. Aggregate only the qualified member contributions, not the whole original parent amount. All-manual target units can remain usable when that monetary split is unavailable.
+* **Partially spent one-rate segments use BD157's exact qualification.** Prove the original used units/rate quote equals native segment approval, exact SOURCE channel and A/R/H, strictly positive used rate, and an exact finite quotient Included/rate with at most six decimal places, bounded by original units. Require multiplication and original-channel1157 roundtrip to equal Included Source. Never round/truncate a quotient into admission. The earlier join note's looser wording about a “qualified representation” is superseded by final BD157. An exact known one-rate Source residual may still support Suggested with units NULL; ManualRate requires proved units.
+* **A partially spent multibucket segment is not proved by its vector alone.** Current native segment parents have money A/R/H, not per-bucket paid/held units. Only an existing positively qualified allocation boundary can supply those units; there is no permission to distribute R/H by bucket order, approved fraction or target ratio. This genuine per-segment ambiguity is different from an all-manual partial component composed of intact remaining Included segments.
+* **MANUAL_AMOUNT remains amount-led and exact saved-scope.** Retain original A/R/H/source-channel equality and full exact included residual (2213:76–78). Do not scale it to a narrowed selection or synthesize standard segment shares.
+
+These predicates conserve the original financial Source; they do not modify A/R/H, Source debt, prior effects, excluded money, recovery/overhang or accepted Case allocation. A missing basis/window is unavailable, never inferred zero.
+
+## Share and frozen-reader joins
+
+Current `record_work_segment_origin_shares_v1(uuid,uuid)` is1236:2692–2748. Its actual line/hold/RunPosition tuple is checked2700–2713, and Source-key prefixes are formed2718–2721. Replace only the accepted-treatment old-valuer call2724–2726 with the same captured composition on each exact native prefix. Difference target ex and VAT as2728–2729 already does; retain the final count/Source/ex/VAT/inc equality2741–2743. One source reserve is preserved per actual member. Prefix members/units/contributions should be materialized once inside the existing recorder, avoiding a repeated whole membership read for every prefix when practical; do not disguise arbitrary history scans as bounded point calls.
+
+The current origin-share fact guard2223:931–945 checks native PREPARE ownership, ACTIVE hold, Included segment membership and hold/line target equality. It does not rerun the old valuer per share, so no settlement money-formula successor follows from this design. Existing effect-share consumers remain unchanged.
+
+Actual named reader joins are:
+
+| Current exact signature / physical owner | Required native use |
+|---|---|
+| `private.bpay_next_simple_rate_detail_page_v1(uuid,text,integer)` /0025:111–135 | Original source bucket facts plus own line's immutable accepted ref and completed quote units/selected target; no ACTIVE lookup. |
+| `public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)` /0620:154–178 | Same frozen line/composer facts in existing RATE_DETAILS DTO, preserving byte/page/auth guards. |
+| `public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)` /2018:2838–2847 | Same captured target detail alongside original source rates; no current Candidate/rate inference. |
+| `public.bpay_next_workbench_page_v1(jsonb)` /0235:209,615 | Existing estimate reads use the same intent/quote arithmetic and their own qualified native read scope/continuation. No first-offer accepted ref substitution. |
+
+Store each frozen RunLine's own bounded IDs/versions as required card02:1119; WorkChoice remains the immutable accepted cut, with historical NULL and new explicit empty attachment distinct. Show approved source units separately from Included/equivalent quote units. Final quote/source window/target tuple must be original captured facts. This is finite DTO support to existing named readers; no additional list kind or live money reader is needed.
+
+## Reviewed bytes and limits
+
+* Accepted-join note: `59676751795E75FE8A42D5C871B5FF606E08A622D7DF1187BEE951CFA8F8DC68`.
+* Final input-quote design: `AD84968881C9C16468AA12CE360340618F519FC7E781A4F9B8F40F345391BC48`.
+* Actual2213 repeatable: `37D3DF35BC6297C1B6695B765476965B5AD024BD28AF469E7BEB49BB469A5C2A`.
+
+This review passes the reuse/authority choice of BD156–157 and identifies the exact remaining accepted composer requirements. It does not claim implemented accepted capture, source-gate/compile success, performance or app acceptance. Existing immutable2213 scalar bodies need a dated successor for the completed native scope; Root decides product bytes and finite attachment ceilings after this design amendment.
