@@ -1,0 +1,204 @@
+{
+  "scope": "DR17 smallest fixed local presentation replies only; no database rows/business actions",
+  "actor": "11111111-1111-4111-8111-111111111111",
+  "worker": "33333333-3333-4333-8333-333333333333",
+  "origin": {
+    "classification": "UNKNOWN",
+    "revision_id": "00000001-1111-4111-8111-111111111111",
+    "origin_kind": "CONTRACT",
+    "sheet_scope": null,
+    "contract_id": "00000028-1111-4111-8111-111111111111",
+    "client_id": null,
+    "work_date": null,
+    "physical_timesheet_id": "00000003-1111-4111-8111-111111111111",
+    "physical_timesheet_version": 1,
+    "candidate_display_name": "Bethany Clarke",
+    "candidate_reference": "TMS 10421",
+    "client_display_name": "HealthRoster client",
+    "job_title": "Care Assistant",
+    "band_label": "Band 3",
+    "timesheet_reference": "TS 2087",
+    "pay_channel": "PAYE",
+    "authorised_at_utc": "2026-10-10T16:00:00Z",
+    "source_kind": "SOURCE"
+  },
+  "lines": [
+    {
+      "run_line_id": "00000004-1111-4111-8111-111111111111",
+      "line_no": "1",
+      "original_timesheet_id": "00000003-1111-4111-8111-111111111111",
+      "captured_revision_id": "00000001-1111-4111-8111-111111111111",
+      "component_key": "WORK:DAY:2026-10-09",
+      "component_kind": "WORK",
+      "work_date": "2026-10-09",
+      "source_pay_channel": "PAYE",
+      "target_pay_channel": "PAYE",
+      "source_consumed_ex_vat": "150.00",
+      "frozen_ex_vat": "150.00",
+      "frozen_vat": "0.00",
+      "frozen_inc_vat": "150.00"
+    }
+  ],
+  "shifts": [
+    {
+      "shift_detail_id": "00000005-1111-4111-8111-111111111111",
+      "detail_no": 1,
+      "work_date": "2026-10-09",
+      "shift_start_at": "2026-10-09T06:30:00Z",
+      "shift_end_at": "2026-10-09T14:30:00Z",
+      "shift_start_local": "07:30",
+      "shift_end_local": "15:30",
+      "shift_overnight": false,
+      "submitted_minutes": 480,
+      "approved_minutes": 450,
+      "approved_hours": "7.500000",
+      "detail_label": null,
+      "segment_pay_ex_vat": null,
+      "pay_excluded": null,
+      "hours_day": null,
+      "hours_night": null,
+      "hours_sat": null,
+      "hours_sun": null,
+      "hours_bh": null
+    }
+  ],
+  "breaks": [
+    {
+      "break_detail_id": "00000006-1111-4111-8111-111111111111",
+      "break_no": 1,
+      "break_start_at": "2026-10-10T10:00:00Z",
+      "break_end_at": "2026-10-10T10:30:00Z",
+      "break_start_local": "11:00",
+      "break_end_local": "11:30",
+      "break_minutes": 30
+    }
+  ],
+  "used": [
+    {
+      "rate_detail_id": "00000007-1111-4111-8111-111111111111",
+      "bucket": "DAY",
+      "approved_hours": "7.500000",
+      "source_pay_rate": "20.000000"
+    }
+  ],
+  "schedule": [
+    {
+      "rate_schedule_id": "00000032-1111-4111-8111-111111111111",
+      "rate_family": "ADDITIONAL",
+      "rate_code": "BONUS",
+      "unit_label": "shift",
+      "paye_rate": "12.500000",
+      "umbrella_rate": null,
+      "charge_rate": null
+    },
+    {
+      "rate_schedule_id": "00000033-1111-4111-8111-111111111111",
+      "rate_family": "MILEAGE",
+      "rate_code": "MILE",
+      "unit_label": "mile",
+      "paye_rate": null,
+      "umbrella_rate": null,
+      "charge_rate": null
+    },
+    {
+      "rate_schedule_id": "00000014-1111-4111-8111-111111111111",
+      "rate_family": "STANDARD",
+      "rate_code": "BH",
+      "unit_label": "hour",
+      "paye_rate": null,
+      "umbrella_rate": null,
+      "charge_rate": null
+    },
+    {
+      "rate_schedule_id": "00000015-1111-4111-8111-111111111111",
+      "rate_family": "STANDARD",
+      "rate_code": "DAY",
+      "unit_label": "hour",
+      "paye_rate": "20.000000",
+      "umbrella_rate": "25.000000",
+      "charge_rate": "30.000000"
+    },
+    {
+      "rate_schedule_id": "00000016-1111-4111-8111-111111111111",
+      "rate_family": "STANDARD",
+      "rate_code": "NIGHT",
+      "unit_label": "hour",
+      "paye_rate": null,
+      "umbrella_rate": null,
+      "charge_rate": null
+    },
+    {
+      "rate_schedule_id": "00000017-1111-4111-8111-111111111111",
+      "rate_family": "STANDARD",
+      "rate_code": "SAT",
+      "unit_label": "hour",
+      "paye_rate": null,
+      "umbrella_rate": null,
+      "charge_rate": null
+    },
+    {
+      "rate_schedule_id": "00000018-1111-4111-8111-111111111111",
+      "rate_family": "STANDARD",
+      "rate_code": "SUN",
+      "unit_label": "hour",
+      "paye_rate": null,
+      "umbrella_rate": null,
+      "charge_rate": null
+    }
+  ],
+  "comparison": [
+    {
+      "run_work_id": "00000008-1111-4111-8111-111111111111",
+      "work_id": "00000009-1111-4111-8111-111111111111",
+      "original_timesheet_id": "00000003-1111-4111-8111-111111111111",
+      "captured_revision_id": "00000001-1111-4111-8111-111111111111",
+      "current_revision_id": "00000001-1111-4111-8111-111111111111",
+      "newer_approval_available": false
+    }
+  ],
+  "run": "60000000-0000-4000-8000-000000000002",
+  "usedLines": [
+    {
+      "component_kind": "WORK",
+      "component_key": "WORK:DAY:2026-10-09",
+      "unit_label": null,
+      "approved_quantity": "7.5",
+      "approved_unit_rate": null
+    }
+  ],
+  "status": {
+    "run_id": "60000000-0000-4000-8000-000000000002",
+    "run_status": "REVIEW",
+    "selection_state": "SEALED",
+    "review_revision": "1",
+    "run_worker_id": "33333333-3333-4333-8333-333333333333",
+    "candidate_id": "0000003c-1111-4111-8111-111111111111",
+    "worker_status": "READY",
+    "target_pay_channel": "PAYE",
+    "umbrella_id": null,
+    "preparation_revision": "1",
+    "case_selection_revision": "0",
+    "net_request_revision": "0",
+    "net_projection_revision": "0",
+    "net_pending": false,
+    "review_issue_code": null,
+    "review_issue_work_id": null,
+    "frozen_gross_ex_vat": "150.00",
+    "frozen_gross_vat": "0.00",
+    "frozen_gross_inc_vat": "150.00",
+    "projection_id": null,
+    "projection_input_kind": null,
+    "entered_paye_net": null,
+    "accepted_recoveries": null,
+    "accepted_net_additions": null,
+    "cash_amount": null,
+    "reservation_mode": "UNCONFIRMED",
+    "reservation_projection_id": null,
+    "remaining_reservation_cash": null,
+    "reservation_internal_zero": false,
+    "reservation_holds_state": "NONE",
+    "gross_stage_deductions": "0.00",
+    "net_recovery_reserved": "0.00",
+    "frozen_offer_complete": true
+  }
+}

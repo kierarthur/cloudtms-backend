@@ -284,3 +284,7 @@ Current actual files below are relative to this SCR-47 folder. All21 PNGs were i
 | DY09-local-requests.json | `768f7cd82054126fe43e698ddae7fcf0abf3291d8b83c5516c32a60e9bbdc821` |
 
 **Final DY09 verdict: scoped A4 PASS; no remaining essential visual finding. Historical DY05 evidence and later-owner/joined limits remain explicit.**
+
+## DR17 current implemented-slice receipt — 12 October 2026
+
+**A4 PASS: 38 PASS / 0 FAIL / 4 N/A;29 actual PNGs independently inspected.** See [DR17-review.md](DR17-review.md) for all42 policy rows, every supplied-design difference/control purpose, closed P17-P01/P02 and exact source/image hashes. D06 DR31 tree-host integration (sequence158), whole ITEM and joined/business acceptance remain deferred/NOT_RUN. Historical DY05/DY09 evidence above is preserved.

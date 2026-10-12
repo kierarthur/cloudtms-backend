@@ -1,10 +1,10 @@
 {
   "card": "DR-17",
   "sequence": 123,
-  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PENDING_BLOCKED_ON_DR31_HOST",
+  "status": "PARTLY_BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR31_HOST",
   "decision": "BD137",
-  "implementationCommit": null,
-  "frontendImplementationCommit": null,
+  "implementationCommit": "92a49f6de72b0ef5598f9ea295ca515708d746b5",
+  "frontendImplementationCommit": "b29255e68a0b879cda359abf0641dcf96ddedfed",
   "exactDeliverables": [
     "D01 exact frozen reader/source kind/approved line operands",
     "D02 existing unconditional immutable owner/four bindings reused",
@@ -35,7 +35,7 @@
     "local": "Sole PG17 compile;two exact current owners/config/ACL; original immutable guard and four exact attachments; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and Candidate DO PASS; public membership delta0",
     "seal": "5683f5546df208ee3f7706ed3fd1264392901ced2e64803cdf020c9074f1c6bc",
     "coupling": "PASS",
-    "screen": "29 actual local fixed-response captures; independent A4 pending",
+    "screen": "29 actual native Office local fixed-response PNGs; independent full42-row A4:38 PASS,0 FAIL,4 scoped N/A, implemented slice only",
     "business": "AUTHORED_NOT_RUN; no DB rows/business calls",
     "timing": "Moved to TEST after installation (owner10October)"
   },
@@ -43,5 +43,6 @@
     "reviews/DR-17-scope-review.md",
     "reviews/DR-17-reader-transport-review.md",
     "screen-designs/SCR-47/DR17-review.md"
-  ]
+  ],
+  "frontendPhoneCorrectionCommit": "f5aedd5424d2b27b62043272300c3fd6f37d9f44"
 }
