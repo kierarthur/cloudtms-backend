@@ -66,6 +66,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_reconcile_discarded_work_collection_v1(uuid,uuid)",
   "private.bpay_next_discarded_prepare_receipt_v1(uuid)",
   "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+  "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
   "private.bpay_next_work_collection_guard_v1()",
   "private.bpay_next_preparation_expiry_guard_v1()",
   "private.bpay_next_preparation_discard_guard_v1()",
@@ -212,6 +213,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)": ["private.bpay_next_work_segment_debt_basis_v1","sum","cardinality","lateral"],
+  "private.bpay_next_work_collection_guard_v1()": ["private.bpay_next_work_collection_observation_v1"],
   "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","by","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","convert_from","decode","replace","encode","convert_to","chr","jsonb_set","to_jsonb","lower","left","least","private.bpay_next_snooze_management_row_v1"],
   "private.bpay_next_snooze_management_row_v1(uuid)": ["to_char","private.bpay_next_snooze_revision_basis_v1"],
   "private.bpay_next_snooze_receipt_guard_v1()": ["upper","to_jsonb","jsonb_set","private.bpay_next_snooze_due_receipt_valid_v1","private.bpay_next_snooze_publication_cancel_valid_v1"],
@@ -279,7 +282,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
   "private.bpay_next_workbench_refresh_group_display_v1(text)": ["lateral","private.bpay_next_workbench_require_next_v1","pg_catalog.jsonb_build_array","bool_or","min","array_agg","filter","sum","cardinality"],
-  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_source_query_segment_exclusions_v1","private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_work_collection_observation_v1","private.bpay_next_source_query_segment_exclusions_v1","private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
   "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
   "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","concat_ws","transaction_timestamp"],
   "private.bpay_next_workbench_umbrella_metadata_trigger_v1()": ["private.bpay_next_workbench_schedule_task_v1"],
@@ -421,6 +424,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.transaction_timestamp"
   ],
   "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": [
+    "private.bpay_next_work_collection_observation_v1","private.bpay_next_workbench_refresh_many_v1",
     "private.bpay_next_segment_collection_basis_v1",
     "private.bpay_next_expired_work_collection_scope_v1",
     "pg_catalog.cardinality",
@@ -1469,6 +1473,8 @@ export function assertRoutineHistoryPoints(source,file,signature){
     "exists(select 1 from private.bpay_next_financial_effect e join private.bpay_next_outcome_request r on r.command_id=j.command_id where e.id=new.last_effect_id and e.operation_id=j.command_id and e.effect_kind='payroll_settled' and e.work_id=new.work_id and e.component_key=new.component_key and e.candidate_id=new.candidate_id and e.original_transfer_id=r.transfer_id and e.source_disposition_ex_vat>0)",
     "exists(select 1 from private.bpay_next_financial_effect e join private.bpay_next_case_event ce on ce.id=e.operation_item_id and ce.operation_id=j.command_id join private.bpay_next_run_case_instruction i on i.id=ce.instruction_id and i.work_collection_id=new.id join private.bpay_next_case_hold h on h.id=ce.operation_item_id and h.status='realised' join private.bpay_next_case_capacity_use u on u.case_hold_id=h.id and u.status='realised' and u.realisation_event_id=ce.id join private.bpay_next_outcome_request r on r.command_id=j.command_id and r.transfer_id=ce.original_transfer_id where e.id=new.last_effect_id and e.operation_id=j.command_id and e.effect_kind='work_collection_recovered' and ce.event_kind='recovered' and ce.case_id=new.case_id and ce.case_component_id=new.case_component_id and e.work_id=new.work_id and e.component_key=new.component_key and e.candidate_id=new.candidate_id and e.original_transfer_id=ce.original_transfer_id and (e.source_disposition_ex_vat,e.target_amount_ex_vat,e.target_amount_vat,e.target_amount_inc_vat) is not distinct from (-ce.source_amount_ex_vat,-ce.target_amount_ex_vat,-ce.target_amount_vat,-ce.target_amount_inc_vat))");
   if(signature.startsWith('private.bpay_next_reconcile_work_collection_v1('))exact.push(
+    "select e.id into v_anchor from private.bpay_next_financial_effect e where e.work_id=p_work_id and e.component_key=p_component_key and e.effect_kind='payroll_settled' and e.source_disposition_ex_vat>0 order by e.occurred_at_utc,e.id limit 1;",
+    'select eff.* into strict v_effect from private.bpay_next_financial_effect eff where eff.id=v_anchor;',
     'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_effect_id;',
     `select 1 from private.bpay_next_work_collection b
       join private.bpay_next_case_event ce on ce.id=v_effect.operation_item_id and ce.case_id=b.case_id

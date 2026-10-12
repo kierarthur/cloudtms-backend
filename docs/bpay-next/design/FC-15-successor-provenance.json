@@ -1,0 +1,150 @@
+{
+  "item": "FC-15",
+  "sequence": 135,
+  "builderDecision": "BD149",
+  "implementationCommit": null,
+  "frontendCommit": null,
+  "ownerRuling": "12October FC15/SP10; one net difference, unsupportedautomatic retainedmanual; frozenunchanged; futurecorrectionchain notbuilt",
+  "parents": [
+    {
+      "signature": "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d"
+    },
+    {
+      "signature": "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c"
+    },
+    {
+      "signature": "private.bpay_next_work_collection_guard_v1()",
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c"
+    },
+    {
+      "signature": "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6"
+    },
+    {
+      "signature": "private.bpay_next_worker_released_collection_scope_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6"
+    },
+    {
+      "signature": "private.bpay_next_discarded_work_collection_scope_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c"
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "path": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
+      "path": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "sha256": "15518a516d7e4e1264e44b949ee432b694418daafd9df9fdaf6fed22abca9f27"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "path": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "sha256": "c050f51fb7f132626bd479c87de127f78a41029ee16044d048d39af2e94b4e37"
+    }
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/12102026_1822_banking_pay_next_work_collection_non_work.sql",
+      "sha256": "a7563bc0c03e983a0de2b502946bedfe1c874331805bd5e94f8aebb872cbc00c"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sha256": "b9650e9da89a3dca3b59bc33f73efc8acf132038dae163df826d1f18730990fd"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+      "sha256": "de67314666b76892ef6b4ac25554fa44e7f7a89a96068eabe6b7ea9a3b79a830"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql",
+      "sha256": "455e61cb1df71f04dd3394a4b03e3320f9ccdaecf1c4d32b096e6185a24d20ff"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "6cd3eecd249d8e173ed3ff708149d2a0c6e88093e790ef18a15b4710137a758b"
+    }
+  ],
+  "finalDefinitions": [
+    {
+      "signature": "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+      "final": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_work_collection_guard_v1()",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "final": "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_worker_released_collection_scope_v1(uuid,uuid,uuid)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_discarded_work_collection_scope_v1(uuid,uuid,uuid)",
+      "final": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
+      "final": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql"
+    }
+  ],
+  "retainedRecoveryApply": "10102026_0316 same source=target/VAT0 native recovery; no successor required",
+  "blocked": [
+    {
+      "id": "D06",
+      "reason": "Locked1822 generated-name discovery conflicts card03:1357 audited-expression-only; Bible15/48-49 prevents rewrite/relock",
+      "evidence": "reviews/FC-15-first-sql-review.md; reviews/FC-15-final-sql-review.md; original1519 and local catalogue"
+    },
+    {
+      "id": "Owner all-origin partial-removal authority",
+      "reason": "Missing/changed component representation without exact current typed book binding or complete certified-zero/native segment evidence cannot be priced; retained MANUAL AMOUNT_UNBOUND with visible unavailable amount, never zero/deletion/REVIEW",
+      "evidence": "design/FC-15.md; SP-10-investigation.md; helper1822/1849"
+    }
+  ],
+  "checks": {
+    "db": "376 migrations/958 repeatables",
+    "catalogue": "11 exact source bodies/config/ACL/owner/volatility, zero newpublicSECDEF",
+    "browser": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; bothDO",
+    "sourceGates": "PASS final1858:1510 SQL sources/28 roots/154 routine work signatures/37 typed transport signatures",
+    "localContract": "1bfc1b6fc7450efa0ca0ae640fd7933d450f61cdeacfc4b81ab5ca95f88432c7",
+    "business": "AUTHORED_NOT_RUN",
+    "timing": "Timing check moved to TEST after installation (owner10/10/2026)"
+  }
+}

@@ -11877,7 +11877,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "374c5e3144043f1e234a88593997307fda153a337613a4b84bcd170909fd9b06"
+      "definition_sha256": "05e594381d7da797c8cbf7ec9a55abe77a3e4bf554386c3bbb25ead77b690497"
     },
     {
       "acl": [
@@ -13777,7 +13777,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "abd60f635cd68b1991395f8cd579035c478ef306825d3e3a0f65e26895e175a1"
+      "definition_sha256": "d4c4bec1980d42aa36ee01889b17de65617c66821b10d84fbac0d24fd4522dac"
     },
     {
       "acl": [
@@ -14005,7 +14005,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b277d4eab2148be81e8df2017a058dfc440d1bce79e2bc9f217f570b9874b916"
+      "definition_sha256": "996ce8c594cc79db14730a8087921fde429a3eb9484456a842268e830e54c25c"
     },
     {
       "acl": [
@@ -15934,7 +15934,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "78c23e7dea75c7ca2e3228b6dc1b2eb1b367615f80415a749269ed5c9a329223"
+      "definition_sha256": "c37b6d66b64eb10dbfaa730bae1b18a276edf3f72f628912c416bb7be2323e6c"
     },
     {
       "acl": [
@@ -18481,7 +18481,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "20fcc2fa2ca6a92d0d01f85d4422a2fc5d5cc2173d45e2c6bc8a90c4a6346730"
+      "definition_sha256": "a7106e559c539fc82589ac3646549f1131aca606c6940f3d610ab02c4d984b8f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_work_collection_observation_v1(p_work_id uuid, p_component_key text, p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "6cdd82b2a58da2caf92dc79ff45c27ecb576e3ce3de10230a781abf418a44672"
     },
     {
       "acl": [
@@ -18500,7 +18519,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "07d8cdb917f4cf9fc7303ce6ce9e4435077ef2372c1c8d7bb0213185d6d8b0e4"
+      "definition_sha256": "191a039fc2bc73393d7f9d0acc74a1d0687ba3e131f07e26d460b8ce49e1c203"
     },
     {
       "acl": [
@@ -19081,7 +19100,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "46c3c13d54bdd13932e699f1ea6063f5071230c9025a19c0bb10aaf36be4c6b5"
+      "definition_sha256": "0c186a16b7c36a37d0ea10385e250f04cb891847623e2138f5827a4685603efb"
     },
     {
       "acl": [
@@ -19100,7 +19119,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d61c19e66f491a898187025d4ac5f78cf6f6360e0f189ba0796db4c31b704e9f"
+      "definition_sha256": "755a4c56b9efbda03d41f07543712da090bf0a943669d33d9726792f90b4ec62"
     },
     {
       "acl": [
@@ -19138,7 +19157,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5a5ab36675e7099e6abd80b16dadc453ad04c819db2a60c3f31da99831c7f772"
+      "definition_sha256": "6f7633a28bd57f6b521f1a01c5980647b2bcdcc7088fa21b9c9e131358ca815b"
     },
     {
       "acl": [
@@ -19423,7 +19442,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "9328699734c510b4e74356cc1802a4caa538e83f2b38f7498a04d906a65f6503"
+      "definition_sha256": "0acbbb8ca1a9202f96dba915248b20c58b93d1a22cab031b91297d0f42d94670"
     },
     {
       "acl": [
@@ -96110,6 +96129,10 @@
           "definition": "CREATE INDEX bpay_next_case_effect_audit_idx ON private.bpay_next_financial_effect USING btree (case_id, occurred_at_utc, id) WHERE (case_id IS NOT NULL)"
         },
         {
+          "name": "bpay_next_effect_collection_paid_anchor_idx",
+          "definition": "CREATE INDEX bpay_next_effect_collection_paid_anchor_idx ON private.bpay_next_financial_effect USING btree (work_id, component_key, occurred_at_utc, id) WHERE ((effect_kind = 'PAYROLL_SETTLED'::text) AND (source_disposition_ex_vat > (0)::numeric))"
+        },
+        {
           "name": "bpay_next_effect_source_book_identity_uq",
           "definition": "CREATE UNIQUE INDEX bpay_next_effect_source_book_identity_uq ON private.bpay_next_financial_effect USING btree (id, work_id, component_key)"
         },
@@ -128176,6 +128199,14 @@
           "generated": ""
         },
         {
+          "name": "collection_mode",
+          "type": "text",
+          "default": "'AUTOMATIC'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "component_key",
           "type": "text",
           "default": null,
@@ -128213,6 +128244,22 @@
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manual_outstanding_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "manual_reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -128475,7 +128522,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (case_id IS NULL OR NOT original_tax_treatment IS DISTINCT FROM 'TAXABLE'::text)"
+          "definition": "CHECK (case_id IS NULL OR original_tax_treatment IS NOT NULL AND (original_tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text])))"
         },
         {
           "name": "bpay_next_work_collection_check2",
@@ -128483,7 +128530,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (NOT paid_basis_qualified OR NOT original_tax_treatment IS DISTINCT FROM 'TAXABLE'::text)"
+          "definition": "CHECK (NOT paid_basis_qualified OR original_tax_treatment IS NOT NULL AND (original_tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text])))"
         },
         {
           "name": "bpay_next_work_collection_check3",
@@ -128500,6 +128547,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (isfinite(created_at_utc) AND isfinite(updated_at_utc))"
+        },
+        {
+          "name": "bpay_next_work_collection_collection_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (collection_mode = ANY (ARRAY['AUTOMATIC'::text, 'MANUAL'::text]))"
         },
         {
           "name": "bpay_next_work_collection_component_key_check",
@@ -128532,6 +128587,30 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (last_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_collection_manual_observation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (collection_mode = 'AUTOMATIC'::text AND manual_reason_code IS NULL AND manual_outstanding_source_ex_vat IS NULL OR collection_mode = 'MANUAL'::text AND manual_reason_code IS NOT NULL AND (manual_reason_code = 'AMOUNT_UNBOUND'::text AND manual_outstanding_source_ex_vat IS NULL OR manual_reason_code = 'AUTOMATIC_COLLECTION_UNAVAILABLE'::text AND manual_outstanding_source_ex_vat IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_work_collection_manual_outstanding_source_ex_va_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (manual_outstanding_source_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_collection_manual_reason_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (manual_reason_code = ANY (ARRAY['AUTOMATIC_COLLECTION_UNAVAILABLE'::text, 'AMOUNT_UNBOUND'::text]))"
         },
         {
           "name": "bpay_next_work_collection_observed_segment_negative_ex_va_check",
@@ -128579,7 +128658,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (original_source_pay_channel = 'PAYE'::text)"
+          "definition": "CHECK ((original_source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])) AND (collection_mode = 'MANUAL'::text OR original_source_pay_channel = 'PAYE'::text))"
         },
         {
           "name": "bpay_next_work_collection_original_transfer_id_fkey",

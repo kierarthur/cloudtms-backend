@@ -1,0 +1,57 @@
+# FC-15 independent design review — 12 October 2026
+
+**Current verdict: DESIGN PASS for the narrow authored boundary**, after the refined design reread below. Earlier OPEN findings are retained as history. This is not full-item completion; genuinely unbound amount branches remain explicitly BLOCKED. Read-only design review of `design/FC-15.md`, the complete FC-15 card03:1339–1370, all working checklist rows D01–D13, R2 applicable segments/frozen money boundaries, the ordinary-backend owner12October FC15/SP10 message, and both saved FC-15 investigations. Root alone edits product. No database, runtime, business, tests, fixtures, hosted, browser or product actions by this reviewer.
+
+## Initial findings (historical; closed in the final reread)
+
+### F15-D01 — distinguish the logged plan conflict from an invented automatic requirement
+
+Draft `FC-15.md:11` says the “whole extended all-origin automatic contract” stays blocked pending later owners. No such acceptance requirement exists in the owner message: lines3–14 expressly allow **recorded manual collection** where automatic collection cannot be built. The approved card's narrow PAYE automatic scope and deferred SP09/CM13a owners must remain, with the owner/card coverage amendment logged as the owner requires atline22. They do not themselves block a truthful all-origin manual liability. Remove the all-automatic completion condition here and from manual-retention investigation:67. The real BLOCKED boundary is an **unproved net/source/removal amount**, not the mere absence of an automatic collector. Do not promote later owners or silently claim an unknown amount is a fulfilled manual debt.
+
+### F15-D02 — draft manual representation and transitions are not yet concrete
+
+`FC-15.md:23–27` expressly leaves mode/reason/amount, projection and transition rules under investigation. The existing one `(work_id,component_key)` collection owner is the right minimal identity, but this is not yet a complete implementation contract. Before SOURCE approval, specify:
+
+- The exact finite AUTOMATIC/MANUAL shape and null-safe checks: original paid anchor/channel/tax/policy stays immutable; automatic eligibility is separate from retained liability; historical NULL is neither reclassified nor given a fictitious Case.
+- Which **native amount** is retained and displayed. First paid effect is a provenance anchor, never the cumulative paid total. Current Position or positively complete native segment/source comparison owns the amount. Define outstanding versus unreserved amount, and preserve recovered/write-off/active-hold protection for an already-linked Case. Do not count/display the Work and its Case as two collectible obligations.
+- Exact same-job unknown-result replay equality and allowed mode transitions. Existing collection guard0814:1230 forbids false→true paid qualification; this cannot be casually relaxed for manual promotion. An unchanged reconciliation cannot repeatedly bump financial/projection counters. Later supported automatic promotion, if not implemented here, remains a named-owner handoff using the same identity.
+- The retained original-positive-PAYROLL_SETTLED admission from current POSITION_APPLY: genuine completed native settlement/outcome/hold/member identity, exact source/target tuple, current leased publication observation, order/epoch/Candidate fence. Preserve the separate original settlement INSERT path; do not require the new publication job to masquerade as the old settlement command (`0814:1240–1243`).
+- The finite manual-only visible reason and primary amount, complete affected existing reader/FE mapping, and automatic exclusion in origin/plan/capture. A generic REVIEW or zero primary amount does not meet the owner requirement.
+
+These are genuinely required precision within the existing liability owner, not authority for a second debt table, command, new calculator, public trigger or generic framework.
+
+### F15-D03 — removed/unbound evidence needs an explicit truth boundary
+
+`FC-15.md:25` correctly cites native position money and immutable paid anchors, but must explicitly prohibit deriving a manual debt from unqualified representation changes or an absent Source member alone. Current reconciler0814:1083–1091 says DAY absence may be an AGGREGATE/date representation change. Complete segment proof1236:4105–4124 is ordinaryPAYE SHIFT/certified-zero only. Current position0016:248–253 supplies approved0 for an omitted key under a genuine complete publication; it does not by itself certify every Source removed-shift comparison or withdrawal. Owner withdrawal semantics remain unchanged.
+
+Record genuine unbound source/net/shift evidence as BLOCKED/unavailable, retain real original paid evidence, and do not invent a known amount, reprice the accepted Draft, or claim full all-origin owner completion for that branch. No silent discarded reduction, guessed tax/channel, fake0, per-shift take-home NET or unbounded history aggregate is justified. Future correction-chain netting is still forthcoming under ownerline20.
+
+## Minimum required scope that is sound
+
+The design's automatic PAYE widening is coherent: two audited NULL-safe tax CHECKs; four native ordinary kinds matching original classification; exact original/rule/Case/component tax; TAXABLE GROSS versus NON_TAXABLE NET stage/purpose; unchanged principal and source=target/VAT0 recovery; genuine NET weekly authority rather than widening NOT_AFFECTED. One physical successor per card signature preserves original owner/config/ACL.
+
+Actual current plan is1646; preparation remains1536. Narrow required support includes plan's inline collection/zero-WAIT proof, exact release0559/discard0814/expiry0559 tuples and Workbench Case0207 AVAILABLE annotation while retaining accepted/RESERVED portions. Capture guard should stay unchanged unless the chosen manual shape needs an explicit automatic-ineligibility check. Recovery0316 arithmetic is already valid and should be preserved. The current FC13 branch, Source comparison refusal and all earlier funding/restructure/edit/fence logic must survive the full-parent merge.
+
+For manual visibility, the saved investigation identifies exact existing support rather than new APIs: Work core2223 RECOVERY informational portion; Case0207 AVAILABLE manual annotation; group display1946 informational amount handling; existing ACTION_REQUIRED/GROUP_LINES/ISSUE_DETAIL operands; FE Workbench reason/primary amount. A new ledger-backed manual portion is required when original `amount_known=false` prevents the old RECOVERY branch. Store the server sort amount consistently with the displayed amount. These are only permissible insofar as needed to show this card's recorded liability; Ready payment/accepted/RESERVED money and positive offer qualification stay unchanged.
+
+Refresh exact Work and optional Case in the same transaction, with the existing canonical Work-before-Case locks and native revision invalidation. Do not append late Work locks after a Case lock; replay is readback rather than a second refresh effect. If the related set requires native ORIGIN continuation, preserve its bounded existing task/receipt.
+
+## Source and acceptance boundary
+
+Approved economics remain one net-difference liability, ordinary extra-only increase, and original RuleB frozen Draft. Owner manual fallback is expressly allowed. No new Underpayment producer, premature SP09/CM13a automatic collection or replacement-chain protocol is required. Card D01/D09 are CONTEXT; paired exact-successor rows do not duplicate physical edits. No checklist or product was changed.
+
+Historical checkpoint: the initial design required F15-D01 wording and F15-D02/F15-D03 concrete boundary before PASS. The final reread below closes those findings. Neither checkpoint is a whole-item, SQL, catalogue, joined application or timing approval; all those business first-use checks remain NOT_RUN.
+
+Saved-source checkpoint: FC-15.md `BB5F8C90FC736751792E1B110B8418767654C869BEE9AA059474475C2935C7E6`; manual-retention investigation `AD26185390BF9FDDC3A02971DFA002D3212745C4E4C3944C412F779260ED8F4D`; owner-ruling investigation `EA24256AAD45CFA573E09F8285E703305640DF458C9D79DE875A3BAA097C7113`. A later saved design revision requires a focused reread before closing these findings.
+
+## Refined design reread and findings closure
+
+Fresh complete `design/FC-15.md` read, SHA-256 **`B64FC014AB15D085468916B2D1E893507A1D4593064990FC5EA5A0B06CA0594E`**. No product has yet been reviewed or approved by this receipt.
+
+- **F15-D01 CLOSED:** line11 expressly allows manual retention to satisfy unavailable automatic collection and removes the invented all-origin automatic completion requirement. The owner/card coverage amendment stays explicit; no later automatic Source/Umbrella owner is promoted. Genuine unbound amount evidence is the remaining BLOCKED branch.
+- **F15-D02 CLOSED at design boundary:** lines31–37 now define exactly three subordinate fields on the one existing collection identity: AUTOMATIC/MANUAL mode, nullable manual source outstanding, and finite unavailable/unbound reason. Automatic manual fields are NULL; manual amount exists only for a genuine qualifying observation. Native original identities/Case pair remain immutable. The deterministic positive-PAYROLL_SETTLED anchor is provenance only; realised total is the conserved Position/qualified native attribution. Current POSITION_APPLY admission proves its own publication/lease/order separately from the past actual payment. Same-job replay returns without another observation/refresh. Original paid qualification cannot be promoted from incomplete/mixed history; linked Case R/W/H and free unreserved amount remain protected.
+- **F15-D03 CLOSED at design boundary:** line33 explicitly requires current sealed revision, native original kind/channel/source identity or genuine certified-zero, complete segment/source and actual target conservation. Ambiguous representation/Source book/removed identity retains NULL amount with AMOUNT_UNBOUND and a recorded BLOCKED reason. Missing key alone never certifies removal; withdrawal preserves the earlier observation rather than becoming zero.
+
+The final visibility contract is appropriately narrow: unlinked manual Work informational amount or the single linked Case liability; linked Work is only a factual reference. Case AVAILABLE is manual/disabled before generic REVIEW while original accepted and RESERVED portions remain untouched. A separate ledger-backed manual informational portion can coexist with an unbound positive-offer Evidence without qualifying positive pay. Existing fields and server AMOUNT operands remain the API, with exact Work-before-Case prelocks and targeted same-transaction refresh. The one pure observation helper validates and reports native facts; it must not become a second economic allocator or a new Source/proof protocol.
+
+**Final design verdict: PASS for this stated narrow boundary.** Root may implement the named PAYE widenings plus genuinely required manual ledger/guard/index/display support. Actual source review must still verify the exact point predicates, NULL checks, amount/target conservation, bounded joins, financial fences, identity/replay and inverse parent preservation. Unsupported or genuinely unbound branches remain explicit gaps/BLOCKED and cannot be claimed as fulfilled all-origin amounts. Product correctness, installed catalogue, business first use, all queue/app journeys and timing remain **NOT_RUN** here.

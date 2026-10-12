@@ -1,0 +1,339 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "e88878444c16b01af490da1141fb7926",
+      "installed": {
+        "bodyMd5": "e88878444c16b01af490da1141fb7926",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+      "file": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+      "sourceMd5": "5ea840cfbd240dd805070edd18a32adf",
+      "installed": {
+        "bodyMd5": "5ea840cfbd240dd805070edd18a32adf",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_work_collection_guard_v1()",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "005f3d08e7e09955a5b86ab35c1a57d3",
+      "installed": {
+        "bodyMd5": "005f3d08e7e09955a5b86ab35c1a57d3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "095650f8fb84f56f867a52d6137b2463",
+      "installed": {
+        "bodyMd5": "095650f8fb84f56f867a52d6137b2463",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "682637ffaccd614420a61ba4050e0cfe",
+      "installed": {
+        "bodyMd5": "682637ffaccd614420a61ba4050e0cfe",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql",
+      "sourceMd5": "789453c6b9221fc1705711e948c70d4c",
+      "installed": {
+        "bodyMd5": "789453c6b9221fc1705711e948c70d4c",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "317e2207d25c5edfec5a7e51a3974e0d",
+      "installed": {
+        "bodyMd5": "317e2207d25c5edfec5a7e51a3974e0d",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "df3680f39c1a216596906add747f7920",
+      "installed": {
+        "bodyMd5": "df3680f39c1a216596906add747f7920",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_worker_released_collection_scope_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "03597870e376da155cdeb5062097480f",
+      "installed": {
+        "bodyMd5": "03597870e376da155cdeb5062097480f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_discarded_work_collection_scope_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sourceMd5": "90847714fe099268d3d35b955642e724",
+      "installed": {
+        "bodyMd5": "90847714fe099268d3d35b955642e724",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
+      "file": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+      "sourceMd5": "9e4400b6c86f3eb1af83c9727ee2425e",
+      "installed": {
+        "bodyMd5": "9e4400b6c86f3eb1af83c9727ee2425e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_case_list_native_changed",
+      "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+    },
+    {
+      "name": "bpay_next_collection_case_candidate_unique",
+      "definition": "UNIQUE (id, case_id, candidate_id)"
+    },
+    {
+      "name": "bpay_next_collection_work_key_unique",
+      "definition": "UNIQUE (id, work_id, component_key)"
+    },
+    {
+      "name": "bpay_next_work_collection_case_component_id_case_id_candid_fkey",
+      "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_case_component_id_key",
+      "definition": "UNIQUE (case_component_id)"
+    },
+    {
+      "name": "bpay_next_work_collection_case_id_candidate_id_fkey",
+      "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_case_id_key",
+      "definition": "UNIQUE (case_id)"
+    },
+    {
+      "name": "bpay_next_work_collection_check",
+      "definition": "CHECK (((case_id IS NULL) = (case_component_id IS NULL)))"
+    },
+    {
+      "name": "bpay_next_work_collection_check1",
+      "definition": "CHECK (((case_id IS NULL) OR ((original_tax_treatment IS NOT NULL) AND (original_tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text])))))"
+    },
+    {
+      "name": "bpay_next_work_collection_check2",
+      "definition": "CHECK (((NOT paid_basis_qualified) OR ((original_tax_treatment IS NOT NULL) AND (original_tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text])))))"
+    },
+    {
+      "name": "bpay_next_work_collection_check3",
+      "definition": "CHECK (((qualification_state <> 'READY'::text) OR paid_basis_qualified))"
+    },
+    {
+      "name": "bpay_next_work_collection_check4",
+      "definition": "CHECK ((isfinite(created_at_utc) AND isfinite(updated_at_utc)))"
+    },
+    {
+      "name": "bpay_next_work_collection_collection_mode_check",
+      "definition": "CHECK ((collection_mode = ANY (ARRAY['AUTOMATIC'::text, 'MANUAL'::text])))"
+    },
+    {
+      "name": "bpay_next_work_collection_component_key_check",
+      "definition": "CHECK (((octet_length(component_key) >= 1) AND (octet_length(component_key) <= 256)))"
+    },
+    {
+      "name": "bpay_next_work_collection_id_candidate_id_key",
+      "definition": "UNIQUE (id, candidate_id)"
+    },
+    {
+      "name": "bpay_next_work_collection_last_effect_id_fkey",
+      "definition": "FOREIGN KEY (last_effect_id) REFERENCES private.bpay_next_financial_effect(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_last_job_id_fkey",
+      "definition": "FOREIGN KEY (last_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_manual_observation_check",
+      "definition": "CHECK ((((collection_mode = 'AUTOMATIC'::text) AND (manual_reason_code IS NULL) AND (manual_outstanding_source_ex_vat IS NULL)) OR ((collection_mode = 'MANUAL'::text) AND (manual_reason_code IS NOT NULL) AND (((manual_reason_code = 'AMOUNT_UNBOUND'::text) AND (manual_outstanding_source_ex_vat IS NULL)) OR ((manual_reason_code = 'AUTOMATIC_COLLECTION_UNAVAILABLE'::text) AND (manual_outstanding_source_ex_vat IS NOT NULL))))))"
+    },
+    {
+      "name": "bpay_next_work_collection_manual_outstanding_source_ex_va_check",
+      "definition": "CHECK (((manual_outstanding_source_ex_vat)::numeric >= (0)::numeric))"
+    },
+    {
+      "name": "bpay_next_work_collection_manual_reason_code_check",
+      "definition": "CHECK ((manual_reason_code = ANY (ARRAY['AUTOMATIC_COLLECTION_UNAVAILABLE'::text, 'AMOUNT_UNBOUND'::text])))"
+    },
+    {
+      "name": "bpay_next_work_collection_observed_segment_negative_ex_va_check",
+      "definition": "CHECK ((observed_segment_negative_ex_vat >= (0)::numeric))"
+    },
+    {
+      "name": "bpay_next_work_collection_original_effect_id_fkey",
+      "definition": "FOREIGN KEY (original_effect_id) REFERENCES private.bpay_next_financial_effect(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_original_effect_id_key",
+      "definition": "UNIQUE (original_effect_id)"
+    },
+    {
+      "name": "bpay_next_work_collection_original_revision_id_original_ap_fkey",
+      "definition": "FOREIGN KEY (original_revision_id, original_approved_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_original_run_line_id_fkey",
+      "definition": "FOREIGN KEY (original_run_line_id) REFERENCES private.bpay_next_run_line(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_original_source_pay_channel_check",
+      "definition": "CHECK (((original_source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])) AND ((collection_mode = 'MANUAL'::text) OR (original_source_pay_channel = 'PAYE'::text))))"
+    },
+    {
+      "name": "bpay_next_work_collection_original_transfer_id_fkey",
+      "definition": "FOREIGN KEY (original_transfer_id) REFERENCES private.bpay_next_transfer(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_original_valuation_policy_id_fkey",
+      "definition": "FOREIGN KEY (original_valuation_policy_id) REFERENCES private.bpay_next_valuation_policy(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_pkey",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "bpay_next_work_collection_qualification_state_check",
+      "definition": "CHECK ((qualification_state = ANY (ARRAY['READY'::text, 'ORIGINAL_TAX_UNBOUND'::text, 'PAID_BASIS_UNBOUND'::text, 'CURRENT_APPROVAL_UNBOUND'::text, 'CURRENT_SOURCE_UNBOUND'::text, 'SIGNED_SOURCE_UNBOUND'::text])))"
+    },
+    {
+      "name": "bpay_next_work_collection_reconcile_revision_check",
+      "definition": "CHECK ((reconcile_revision > 0))"
+    },
+    {
+      "name": "bpay_next_work_collection_work_id_candidate_id_fkey",
+      "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_work_id_component_key_fkey",
+      "definition": "FOREIGN KEY (work_id, component_key) REFERENCES private.bpay_next_position(work_id, component_key) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_work_id_component_key_key",
+      "definition": "UNIQUE (work_id, component_key)"
+    },
+    {
+      "name": "bpay_next_work_collection_work_id_observed_revision_id_fkey",
+      "definition": "FOREIGN KEY (work_id, observed_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_work_collection_work_id_original_revision_id_fkey",
+      "definition": "FOREIGN KEY (work_id, original_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}
