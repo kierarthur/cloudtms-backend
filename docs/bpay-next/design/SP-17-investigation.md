@@ -1,0 +1,65 @@
+# SP-17 current owner investigation
+
+12 October 2026. Sequence137. Read-only source investigation; no product/checklist edits, SQL/RPC/business execution, tests/fixtures or hosted actions. Root alone writes product. **Investigation complete: reuse the current classifier; correct the existing I3 pending-phase allowlists and existing category service bound, with the finite caller support described below.** No whole-item or joined acceptance is claimed; every application journey remains NOT_RUN.
+
+Read complete `05_SOURCE_AND_PROTECTED_PAY.md:574–599`, every SP17 working checklist row, master08 chain/sequence. Exact scope D01 current classifier, D02 closed I3, D03 existing Office category page, D04 `design/SP-17-i3.md` record. Card591 explicitly owns no Worker/screen here; future list belongs SP18. Dependencies F05/F06/SP10/SP16. OR45 removes old engine parity, not current native admission/epoch/security or immutable obligations; OR38 requires one precise interface/file/commit record, no reply extension.
+
+## Current owners and confirmed deltas
+
+| Deliverable | Exact saved owner | Current source facts / minimum remaining work |
+| --- | --- | --- |
+| D01 | `private.weekly_source_operational_empty_v1(uuid,uuid)` and `private.weekly_source_timesheet_category_v2(uuid)` in `supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql` | Native I4 authorisation/original origin/complete inventory + eight duty facts; exact I3 call170. Category237–245 has archive-first, current authorised weekly nonadjustment root, complete genuine emptiness, exact APPLIED only and target-family qualification. No financial settlement/recovery-completion check and no Banking discovery filter. No classifier rewrite presently proved. |
+| D02 | `private.bpay_next_source_origin_state_v1(uuid,uuid)` final registry `supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql` | Exact native points19–100; current revision/origin/publication/member/job/epoch; strict APPLIED117–122 and closed17-key reply138–160. **Confirmed current-phase gap:** PENDING128/133 allows NEW/REMOVED only, but current Position0016 has native SNOOZE before finalDONE. Qualifying SNOOZE must stay PENDING/OK with the same reply shape; one narrow current I3 successor is necessary, not a new protocol/financial owner. |
+| D03 | `public.weekly_source_office_summary_rows_v1(jsonb)` in `supabase/repeatable/05102026_0559_weekly_source_office_category_batch_v1.sql` | One original paged summary call, STABLE snapshot, exact native Source/target ownership, category signature equality and service-only authority. **Confirmed bound discrepancy:** input31–38 accepts limit1–200; card584/590 requires at most100 roots per service read. The bound is reachable from the current Worker. Tighten this existing SQL page guard and its existing finite adapter support without dropping rows or altering browser pagination. |
+| D04 | `docs/bpay-next/design/SP-17-i3.md` | Required precise17-key types/state predicates/file/commit + strict derived Withdrawn record still must be written by Root. No new key, code or counter. |
+
+## I3 existing native authority
+
+NULL input raises22023. The pure STABLE private invoker reads exact Work/current expected revision, native Source HEAD or initial root-authorisation/TSFIN, one publication/command/member/POSITION_APPLY job and Candidate financial revision. It requires NEXT current module epoch, approved+sealed current Source/Protected revision with original physical/family/Candidate/Contract/week and exact inventory digest. APPLIED requires Work.current=Work.applied=expected, publicationAPPLIED/DONE/null cursor/applied timestamp, commandCOMPLETE/member1/current epoch, jobDONE/DONE/null cursor/no nonce/deadline. It never infers completion from amounts, row counts, zero debt, holds or recovered money.
+
+The closed reply is `ok,code,work_id,owner_epoch,current_revision_id,applied_revision_id,source_event_id,source_head_id,financial_snapshot_id,physical_root_id,physical_root_version,revision_seal,source_inventory_digest,application_state,command_id,agency_sequence,financial_view_revision`. APPLIED/PENDING → codeOK; unavailable native evidence → UNAVAILABLE; incompatible tuple → INCOMPATIBLE. Sealed timestamp/digest and existing PENDING carry SRQ310 without reply extension. Own source EOF owner/current_user + revoke all private API168–169 remain unchanged.
+
+## Classifier retained rules
+
+Authorisation65–79 distinguishes currently authorised, prior withdrawn and never authorised; not a cleared-stamp guess. Native Source or actual target-family ownership84–87 must qualify. Effective inventory89–104 requires complete original scope/digests. Each WORKED_TIME owns a work duty even if excluded/zero-priced; Additional units/pay/charge114–116 and Magnit pay/charge117–119 are distinct duties. Query127–132, approval137–142, invoice143–148 each require genuine complete exact-owner discovery; unknown stays NULL. Independently owned adjustment153–159 proves absence across exact physical family/current adjustment children; invoice history is not a task. Complete187–188 means all eight facts known and false; never-authorised exits before derived empty evaluation88. Archive wins237; derived WITHDRAWN244 requires I3 APPLIED. No restore action is introduced; later genuine positive protection returns to native positive category branch253 onward.
+
+## Exact pending-phase correction
+
+Current `12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql:270–298` processes the publication/job's native SNOOZE page while publication remains APPLYING and command SEALED; it has not yet advanced Work.applied_revision. Only299–309 sets publication APPLIED/DONE, Work.applied_revision and job DONE together. Original I3 `2106:128,133` excludes SNOOZE from its two PENDING phase lists. Add that existing phase to both lists only, preserving current expected/predecessor/epoch/member/status qualifications and all APPLIED predicates. No DONE shortcut, financial-completion condition, new job/command/state or reply key is needed. Old queued certified-empty revision remains Stage/pending; only this exact committed final publication permits derived Withdrawn.
+
+## D03 finite caller support and pagination
+
+Current `broker/src/index.js:86042–86053` makes one category RPC and permits <=200 reply rows. Normal Timesheet summary accepts page_size1–200 at86232–86236, calculates offset `(page-1)*pageSize` at86591–86597 and returns that page_size at86816–86822. Source display-sort scanning uses200 at86607 and the same adapter86650–86657. Targeted native patches accept <=200 original identities86164–86166, collect up to four distinct UUIDs per identity86178–86183, then currently request up to200 rows86188–86189 and map returned native rows to all original identities86194–86216. The deduplicated ID union is therefore finitely bounded at800, not necessarily200.
+
+Do not perform one mixed200-row summary followed by only100 Source enrichments: that leaves part of the page incomplete. Do not simply clamp regular browser pages to100: current FE `js/main.js:380156–380162` sends the original page size and380784–380785 derives continuation from that same local value; it does not adopt response page_size. Returning100 for a requested200 would lose the next100 through the original offset calculation.
+
+The narrow compatible support is finite chunking in the **existing** adapter/callers: each normal requested page of <=200 native rows can be read as at most two <=100 category-service pages at original offset and original+100, retaining the original response page/size/ordering and stopping on a genuinely short native page. Each SQL service statement still pairs its canonical row and category/signature in one STABLE snapshot; do not describe two statements as one global snapshot. The existing Source display scan can itself request100 and advance its existing offset accordingly. Targeted patches can partition the already bounded exact ID union into <=100-ID chunks, retaining all IDs, native rows and original correlation mapping; deduplicate repeated native row identities before the existing presentation/map. At most eight such service reads cover the input's maximum800 distinct IDs. Retain original SQL permissions, row/category equality refusal and all-or-error adapter handling; no per-root HTTP fan-out or best-effort partial response.
+
+Card591 says Worker/screen none. The adapter above is the minimum supporting correction necessary to make the **named D03 existing reader's** <=100 service bound usable by its actual callers. Root must document this exact support against that line; it is not a new route, reader, paging protocol, UI feature or early SP18 build. If that support is declined under scope, D03 must remain BLOCKED rather than falsely claim its original200-row caller conforms. No new public function membership, table, projection or index is indicated for these two changes.
+
+## Native point identity and currentness
+
+The operational-empty revision lookup `0512:161–169` is not an unbounded historical selector: core migration `03102026_1324_banking_pay_next_core.sql:141` gives source_event_id its native UNIQUE key. Work/current expected revision are PK/composite-FK bound132–186. I3 publication lookup2106:59 is covered by native `(work_id,revision_id)` UNIQUE at core946; member lookup61–62 is its original command/Candidate identity and job lookup63–64 has native `(command_id,candidate_id,job_kind)` UNIQUE at986. Head/authorisation/TSFIN/command/control joins remain exact IDs; no new counter, history sum, certificate, digest or proof framework is required.
+
+Summary0559:43–59 positively qualifies genuine weekly NHSP/HealthRoster Source or exact TARGET_MANAGED raw-booking family (Candidate/Contract/week/root) and excludes adjustment roots in that fallback. It does not infer ownership from Candidate/week alone. Authority61, native root64, category root/version/Stage equality67–72 and fail-closed40001 remain. Current classifier functions make factual categories; a search of Banking-named repeatables found no classifier/operational-empty call used to exclude financial membership. Existing receipted selected-source witness0645 and NULL-as-unavailable caller closure remain unchanged as verified in `reviews/SP-16-source-review.md`; there is no SP16 witness rewrite here.
+
+## Delivery and sequence boundary
+
+OR07/08/09 are explicit in card05:75–77: operational Withdrawn, no wait for recovery completion, never-authorised empty remains unauthorised. OR44 frozen Draft acceptance73 is unchanged; a category read neither reprices an accepted Draft nor cancels Banking debt/paid/held facts. OR38 at82 records exact interface file/commit, superseding two-chat approval; OR45 at64 retains genuine shared/security/currentness obligations while removing old Banking parity.
+
+D01's eight known-false duties and archive/auth/APPLIED precedence are source supplied. D02 needs the two native SNOOZE allowlist additions. D03 needs the100-row native bound plus finite existing-caller compatibility above. D04 must record the closed17-key interface and current final owner filename/commit after those changes. `git log` identifies commit `420513c6a56a972f7c701f3f9e053803e64f221f` as the latest historical commit touching the three original Source/I3 files at this read; this is provenance, not a receipt for a future successor. Current saved registry chooses I3 physical2106, and final owner/source/config/ACL should be freshly recorded by Root after installation.
+
+Master08:221–223 puts SP17seq137 before SP04; SP18/19 list/actions are later238/239, and SP34 processing wording is later252. Preserve original Processing delayed text and all current witness/classifier branches. No SP18 screen, SP19 action overhaul, SP34 wording, SP35 event refresh, source producer, collection/capture money owner, parked F25 protocol or new financial owner belongs here. Done-means paid100 recovery, queued/APPLIED transitions, each duty preventing false filing and later protection returning without Restore are all NOT_RUN application checks, not evidence supplied by this read.
+
+## Reviewed saved-byte source SHA256
+
+| Artifact | SHA256 |
+| --- | --- |
+| I3 current2106 | `1B91F4B5DE40D4D18606DD89D65BFA4D93E9198C3C7A2D7BC3E56B0642D911EC` |
+| Classifier/operational-empty0512 | `602DB4EDB834BE6A6B3428B5D47828B62F4C7FF3589738BC36D756B30A1B8700` |
+| Summary0559 | `7F7B89775BE928EA49F001FB74B7262E7D2D6D1B1600739742BC620803D33D54` |
+| Current Position0016 | `2D9822DA9881179DACE5A2FF97C65FCAAF1DFBAAD920337A4701133D8FE487AE` |
+| Registry at investigation read | `A5940E314145E65E8CEA52DCF876EE9ABD79188EA487B8A87512847BDEF776FF` |
+| Worker index at investigation read | `0B50987A43F2B76C069EB1E08C68C44CB87F4A073B8A6667DE9B74CCFCA21729` |
+
+SP10 investigation S2 wording was corrected separately: receipt1301 stages47, locks61, publishes62–63, then binds exact affected components68–83 in the same transaction. There is no claim of binding-before-publication.

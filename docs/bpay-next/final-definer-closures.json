@@ -5253,16 +5253,19 @@
     },
     {
       "signature": "private.bpay_next_source_origin_state_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
+        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql"
+        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "SP17 seq137 BD151: closed17-key nativeSNOOZE/PENDING and <=100-root existing service read; classifier/witness/money/producers unchanged.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -17145,6 +17148,22 @@
       "finalPhysical": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
       "finalRoot": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
       "owner": "SP10 seq136 / FC15 owner12Oct correction: explicit accepted REMOVED single-book component qualifies unchanged native manual net liability; no producer or money formula changes."
+    },
+    {
+      "signature": "public.weekly_source_office_summary_rows_v1(jsonb)",
+      "predecessors": [
+        "supabase/repeatable/05102026_0559_weekly_source_office_category_batch_v1.sql"
+      ],
+      "allowedPhysical": [
+        "supabase/repeatable/05102026_0559_weekly_source_office_category_batch_v1.sql",
+        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "owner": "SP17 seq137 BD151: closed17-key nativeSNOOZE/PENDING and <=100-root existing service read; classifier/witness/money/producers unchanged."
     }
   ],
   "editorChains": [

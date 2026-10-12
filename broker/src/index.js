@@ -86041,16 +86041,30 @@ async function readCandidateTimesheetSummaryCursor(env) {
 
 async function readWeeklySourceOfficeSummaryRows(env, actorUserId, filters, rpc = sbRpc) {
   const functionName = 'weekly_source_office_summary_rows_v1';
-  const raw = await rpc(env, functionName,
-    { p_request: { actor_user_id: actorUserId, p_filters: filters } });
-  const payload = unwrapWeeklySourceOfficePresentation(raw, functionName);
-  if (!payload || payload.contract !== 'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1'
-      || !Array.isArray(payload.rows) || payload.rows.length > 200) {
+  const requestedLimit = Number(filters?.limit);
+  const originalOffset = Number(filters?.offset ?? 0);
+  if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200
+      || !Number.isSafeInteger(originalOffset) || originalOffset < 0) {
     throw new Error('WEEKLY_SOURCE_SUMMARY_CONTRACT_INVALID');
   }
-  // The SQL wrapper pairs canonical paged rows with category evidence in one
-  // statement. Never repair membership or financial/action facts in JavaScript.
-  return payload.rows;
+  const rows = [];
+  // Preserve the caller's page identity; each native statement pairs its own
+  // canonical rows and category facts. There is no cross-page snapshot claim.
+  for (let readOffset = 0; readOffset < requestedLimit; readOffset += 100) {
+    const limit = Math.min(100, requestedLimit - readOffset);
+    const raw = await rpc(env, functionName, { p_request: {
+      actor_user_id: actorUserId,
+      p_filters: { ...filters, limit, offset: originalOffset + readOffset }
+    } });
+    const payload = unwrapWeeklySourceOfficePresentation(raw, functionName);
+    if (!payload || payload.contract !== 'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1'
+        || !Array.isArray(payload.rows) || payload.rows.length > limit) {
+      throw new Error('WEEKLY_SOURCE_SUMMARY_CONTRACT_INVALID');
+    }
+    rows.push(...payload.rows);
+    if (payload.rows.length < limit) break;
+  }
+  return rows;
 }
 
 function candidateTimesheetSummaryCompactPatch(row) {
@@ -86185,8 +86199,14 @@ async function handleCandidateTimesheetSummaryPatches(env, req) {
   if (!ids.length) return withCORS(env, req, badRequest('Candidate Timesheet Summary identities were invalid.'));
 
   try {
-    const rows = await readWeeklySourceOfficeSummaryRows(env, user.id,
-      { ids,limit: Math.min(ids.length,200),offset: 0 });
+    const rows = [];
+    // The existing bounded identity union can contain several UUIDs per row.
+    // Keep every requested identity, with no per-root service fan-out.
+    for (let start = 0; start < ids.length; start += 100) {
+      const pageIds = ids.slice(start, start + 100);
+      rows.push(...await readWeeklySourceOfficeSummaryRows(env, user.id,
+        { ids: pageIds, limit: pageIds.length, offset: 0 }));
+    }
     const presentedRows = await attachCandidateDailyOfficePresentation(env,rows);
     const projectedRows = attachTimesheetExpensePresentation(
       await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
