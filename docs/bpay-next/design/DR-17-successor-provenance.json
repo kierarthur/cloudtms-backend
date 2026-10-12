@@ -1,0 +1,47 @@
+{
+  "card": "DR-17",
+  "sequence": 123,
+  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PENDING_BLOCKED_ON_DR31_HOST",
+  "decision": "BD137",
+  "implementationCommit": null,
+  "frontendImplementationCommit": null,
+  "exactDeliverables": [
+    "D01 exact frozen reader/source kind/approved line operands",
+    "D02 existing unconditional immutable owner/four bindings reused",
+    "D07 existing native five-tab detail and READY Candidate launchers"
+  ],
+  "blocked": {
+    "D06": "Review Candidate five controls built; actual DR31 beneficiaries host joins at seq158.",
+    "ITEM": "Actual D06 DR31 host deferred in plan order; no early tree or false whole-card tick."
+  },
+  "files": [
+    {
+      "file": "supabase/repeatable/12102026_0620_banking_pay_next_frozen_used_line_detail_v1.sql",
+      "sha256": "96a26c83328dbb7253e8526c789dd11544d04d1b8a9dcf1b421e946fcd7dbc65"
+    },
+    {
+      "file": "broker/src/bpay-next-frozen-read.js",
+      "sha256": "79e2a9b16e1d09d879d121e011cee10f88ee2adff535fb0f39d1936a2bc217e3"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "8e5b15827af3c75d2e3a20a86587168ac195ac95103333fe9ec678076dbe28f0"
+    }
+  ],
+  "checks": {
+    "source": "12/12 PASS",
+    "dbCheck": "366 migrations/945 repeatables PASS",
+    "syntax": "changed Worker and Office node --check PASS",
+    "local": "Sole PG17 compile;two exact current owners/config/ACL; original immutable guard and four exact attachments; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and Candidate DO PASS; public membership delta0",
+    "seal": "5683f5546df208ee3f7706ed3fd1264392901ced2e64803cdf020c9074f1c6bc",
+    "coupling": "PASS",
+    "screen": "29 actual local fixed-response captures; independent A4 pending",
+    "business": "AUTHORED_NOT_RUN; no DB rows/business calls",
+    "timing": "Moved to TEST after installation (owner10October)"
+  },
+  "reviews": [
+    "reviews/DR-17-scope-review.md",
+    "reviews/DR-17-reader-transport-review.md",
+    "screen-designs/SCR-47/DR17-review.md"
+  ]
+}

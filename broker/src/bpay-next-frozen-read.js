@@ -69,7 +69,8 @@ const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1
 const BUCKETS = ['BH', 'DAY', 'NIGHT', 'SAT', 'SUN'];
 const FAMILIES = ['ADDITIONAL', 'MILEAGE', 'STANDARD'];
 const ENCODER = new TextEncoder();
-const ORIGIN_SCHEMA=Object.freeze({"classification":"classification","revision_id":"uuid","origin_kind":"originKind","sheet_scope":"dailyScope?","contract_id":"uuid?","client_id":"uuid?","work_date":"date?","physical_timesheet_id":"uuid","physical_timesheet_version":"positiveInt","candidate_display_name":"label","candidate_reference":"label?","client_display_name":"label","job_title":"label?","band_label":"label?","timesheet_reference":"label?","pay_channel":"channel","authorised_at_utc":"timestamp?"});
+const ORIGIN_SCHEMA=Object.freeze({"classification":"classification","revision_id":"uuid","origin_kind":"originKind","source_kind":"sourceKind","sheet_scope":"dailyScope?","contract_id":"uuid?","client_id":"uuid?","work_date":"date?","physical_timesheet_id":"uuid","physical_timesheet_version":"positiveInt","candidate_display_name":"label","candidate_reference":"label?","client_display_name":"label","job_title":"label?","band_label":"label?","timesheet_reference":"label?","pay_channel":"channel","authorised_at_utc":"timestamp?"});
+const USED_LINE_SCHEMA=Object.freeze({component_kind:'component',component_key:'componentKey',unit_label:'capturedText?',approved_quantity:'capturedDecimal?',approved_unit_rate:'capturedDecimal?'});
 const SCHEMAS = Object.freeze({
   SHIFTS: {
     shift_detail_id: 'uuid', detail_no: 'positiveInt', work_date: 'date',
@@ -140,6 +141,11 @@ function field(value, type) {
   switch (type) {
     case 'classification': return ['CLASSIFIED','UNCLASSIFIED_MISMATCH','UNKNOWN'].includes(value);
     case 'originKind': return ['CONTRACT','DAILY'].includes(value);
+    case 'sourceKind': return ['ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT'].includes(value);
+    case 'component': return ['WORK','PROTECTED_WORK','EXPENSE','MILEAGE','ADDITIONAL','ADJUSTMENT'].includes(value);
+    case 'componentKey': return typeof value==='string'&&!value.includes('\0')&&[...value].length>=1&&[...value].length<=256;
+    case 'capturedText': return typeof value==='string'&&!value.includes('\0')&&ENCODER.encode(value).byteLength<=120000;
+    case 'capturedDecimal': return typeof value==='string'&&value.length<=120000&&/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value);
     case 'dailyScope': return value === 'DAILY';
     case 'channel': return ['PAYE','UMBRELLA'].includes(value);
     case 'uuid': return typeof value === 'string' && UUID.test(value);
@@ -155,7 +161,7 @@ function field(value, type) {
     case 'bucket': return BUCKETS.includes(value);
     case 'family': return FAMILIES.includes(value);
     case 'code': return typeof value === 'string' && Array.from(value).length >= 1
-      && Array.from(value).length <= 128;
+      && Array.from(value).length <= 245 && !value.includes('\0');
     case 'unit': return typeof value === 'string' && ENCODER.encode(value).byteLength <= 512;
     case 'label': return typeof value === 'string' && ENCODER.encode(value).byteLength <= 8192;
     default: return false;
@@ -303,8 +309,7 @@ function pageRows(value, call) {
       // Text tuple order belongs to PostgreSQL's collation, not JS localeCompare.
       if (row.rate_family === call.args.p_after_rate_family
         && row.rate_code === call.args.p_after_rate_code) invalid();
-      if (row.rate_family !== 'STANDARD' && [row.paye_rate, row.umbrella_rate, row.charge_rate].every((rate) => rate === null)
-        || (row.rate_family === 'STANDARD' && !BUCKETS.includes(row.rate_code))
+      if ((row.rate_family === 'STANDARD' && !BUCKETS.includes(row.rate_code))
         || (row.rate_family === 'MILEAGE' && row.rate_code !== 'MILE')) invalid();
     }
   }
@@ -370,15 +375,18 @@ export async function handleBpayNextFrozenRead(request, dependencies = {}) {
       if (!(response instanceof Response)) throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const payload = await limitedJson(response, BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes, false, controller.signal);
       if (!response.ok) throw dependencyError({ status: response.status, json: payload });
-      if (!record(payload) || Object.keys(payload).length !== 3
-        || !Object.hasOwn(payload, 'rows') || !Object.hasOwn(payload,'origin') || typeof payload.complete !== 'boolean') {
+      if (!record(payload) || Object.keys(payload).length !== 4
+        || !Object.hasOwn(payload, 'rows') || !Object.hasOwn(payload,'origin') || !Object.hasOwn(payload,'used_line') || typeof payload.complete !== 'boolean') {
         throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       }
+      const used=payload.used_line,usedKeys=Object.keys(USED_LINE_SCHEMA);
+      if(call.kind==='RATE_DETAILS' ? !record(used)||Object.keys(used).length!==usedKeys.length
+        ||usedKeys.some(key=>!Object.hasOwn(used,key)||!field(used[key],USED_LINE_SCHEMA[key])) : used!==null)throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const rows = pageRows(payload.rows, call);
       const complete = payload.complete;
       if (!complete && rows.length === 0) throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const result = {
-        ok: true, kind: call.kind, rows, complete, origin: capturedOrigin(payload.origin),
+        ok: true, kind: call.kind, rows, complete, origin: capturedOrigin(payload.origin), used_line:used,
         next_cursor: complete ? null : nextCursor(call.kind, rows.at(-1))
       };
       if (ENCODER.encode(JSON.stringify(result)).byteLength > BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes) {
