@@ -13,6 +13,46 @@ const MONEY=/^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/;
 const ENCODER=new TextEncoder();
 
 
+// DR27: identical closed directory/count read contract in Worker and Office.
+const CHANNEL_DRAFT_CONTEXT={agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',status:'channelDraftFilter',generation:'integer'};
+const CHANNEL_DRAFT_INPUT={agency_id:'uuid',owner_epoch:'positive',status:'channelDraftFilter',context:'channelDraftContext?'};
+const CHANNEL_DRAFT_ROW={run_id:'uuid',pay_channel:'channel',type_label:'channelDraftType',created_at_utc:'timestamp',confirmed_at_utc:'timestamp',original_worker_count:'positive',original_timesheet_count:'integer',original_gross_ex_vat:'channelDraftMoney',original_gross_vat:'channelDraftMoney',original_gross_inc_vat:'channelDraftMoney',cash_known:'channelDraftMoney',cash_complete:'boolean',status_group:'channelDraftStatus',status_label:'channelDraftLabel',status_note:'label?',has_payment_issue:'boolean',execution_route:'channelDraftRoute?',pay_date:'date?',scheduled_at_utc:'timestamp?',reference:'label?',change_revision:'integer'};
+const CHANNEL_DRAFT_LABELS={NOT_PAID:'Not paid',WAITING_APPROVAL:'Waiting for approval',PROCESSING:'Processing',PARTLY_PAID:'Partly paid',BANK_UNAVAILABLE:'Bank unavailable',PAID:'Paid',CANCELLED:'Cancelled'};
+function channelDraftField(v,t,base,shape){
+ if(t==='channelDraftStatus')return typeof v==='string'&&Object.hasOwn(CHANNEL_DRAFT_LABELS,v);
+ if(t==='channelDraftFilter')return v==='ALL'||channelDraftField(v,'channelDraftStatus');
+ if(t==='channelDraftType')return v==='PAYE'||v==='Umbrella';
+ if(t==='channelDraftLabel')return Object.values(CHANNEL_DRAFT_LABELS).includes(v);
+ if(t==='channelDraftRoute')return ['BANK_CSV','EXTERNAL','SCHEDULED'].includes(v);
+ if(t==='channelDraftMoney')return typeof v==='string'&&/^-?(?:0|[1-9]\d{0,35})\.\d{2}$/.test(v);
+ if(t==='channelDraftContext')return shape(v,CHANNEL_DRAFT_CONTEXT);
+ if(t==='channelDraftCursor')return shape(v,{context:'channelDraftContext',created_at_utc:'timestamp',run_id:'uuid',pay_channel:'channel'})&&new TextEncoder().encode(JSON.stringify(v)).byteLength<=4096;
+ if(t==='channelDraftRows')return Array.isArray(v)&&v.length<=100&&v.every(r=>shape(r,CHANNEL_DRAFT_ROW));
+ return false;
+}
+function channelDraftTime(v){const fraction=v.match(/\.(\d{1,6})(?:Z|[+-]\d\d:\d\d)$/)?.[1]??'';return BigInt(Date.parse(v.replace(/\.\d{1,6}(?=Z|[+-]\d\d:\d\d$)/,'')))*1000n+BigInt(fraction.padEnd(6,'0'));}
+function channelDraftOrder(a,b){const x=channelDraftTime(a.created_at_utc),y=channelDraftTime(b.created_at_utc);return x!==y?(x>y?-1:1):a.run_id!==b.run_id?(a.run_id<b.run_id?-1:1):a.pay_channel===b.pay_channel?0:a.pay_channel<b.pay_channel?-1:1;}
+function channelDraftResult(p,kind,args,actor,shape,bad){
+ const count=kind==='CHANNEL_DRAFT_COUNT';
+ if(!shape(p,count?{context:'channelDraftContext',count:'integer'}:{context:'channelDraftContext',rows:'channelDraftRows',complete:'boolean',next_cursor:'channelDraftCursor?'}))bad();
+ const c=p.context;if(c.agency_id!==args.agency_id||c.actor_user_id!==actor||c.owner_epoch!==args.owner_epoch||c.status!==args.status||args.context!==null&&!worksheetEqual(args.context,c))bad();
+ if(count)return p;
+ if(p.rows.length>args.limit||p.complete!==(p.next_cursor===null)||!p.complete&&p.rows.length===0||args.after!==null&&!worksheetEqual(args.after.context,c))bad();
+ const ids=new Set();let previous=args.after;
+ for(const r of p.rows){
+  const id=r.run_id+':'+r.pay_channel,pence=v=>BigInt(v.replace('.',''));
+  if(ids.has(id)||r.type_label!==(r.pay_channel==='PAYE'?'PAYE':'Umbrella')||r.status_label!==CHANNEL_DRAFT_LABELS[r.status_group]
+   ||args.status!=='ALL'&&r.status_group!==args.status||pence(r.original_gross_inc_vat)!==pence(r.original_gross_ex_vat)+pence(r.original_gross_vat)
+   ||pence(r.cash_known)<0n||channelDraftTime(r.confirmed_at_utc)<channelDraftTime(r.created_at_utc)
+   ||r.execution_route===null&&(r.pay_date!==null||r.scheduled_at_utc!==null)
+   ||r.execution_route!==null&&(r.pay_date===null||(r.execution_route==='SCHEDULED')!==(r.scheduled_at_utc!==null))
+   ||previous!==null&&channelDraftOrder(previous,r)>=0)bad();
+  ids.add(id);previous=r;
+ }
+ if(p.next_cursor!==null){const last=p.rows.at(-1);if(!worksheetEqual(p.next_cursor.context,c)||p.next_cursor.created_at_utc!==last.created_at_utc||p.next_cursor.run_id!==last.run_id||p.next_cursor.pay_channel!==last.pay_channel)bad();}
+ return p;
+}
+
 // DR21: identical closed read contract in Worker and native Office.
 const WORKSHEET_INPUT={run_id:'uuid',pay_channel:'worksheetChannel',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort',after:'worksheetCursor?',limit:'limit'};
 const WORKSHEET_CONTEXT={run_id:'uuid',pay_channel:'worksheetChannel',actor_user_id:'uuid',owner_epoch:'positive',review_revision:'integer',run_status:'worksheetRun',totals_revision:'integer',net_request_sequence:'integer',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort'};
@@ -251,6 +291,8 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  CHANNEL_DRAFT_LIST:{...CHANNEL_DRAFT_INPUT,after:'channelDraftCursor?',limit:'limit'},
+  CHANNEL_DRAFT_COUNT:CHANNEL_DRAFT_INPUT,
   ACTIVE_PREPARATIONS:ACTIVE_PREPARATION_INPUT,
   REVIEW_TOTALS:{run_id:'uuid'},
   REVIEW_CASES:{run_id:'uuid',run_worker_id:'uuid',sort:'reviewCaseSort',after:'reviewCursor?',limit:'limit'},
@@ -396,6 +438,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+    if(t.startsWith('channelDraft'))return t.endsWith('?')?v===null||channelDraftField(v,t.slice(0,-1),field,exact):channelDraftField(v,t,field,exact);
  if(t.startsWith('worksheet')&&!t.endsWith('?'))return worksheetField(v,t,field,exact);
  if(t.startsWith('active')&&!t.endsWith('?'))return activePreparationField(v,t,field,exact);
  if(t==='reviewCounts')return exact(v,{selected:'integer',excluded:'integer',scope_count:'integer'});
@@ -717,7 +760,7 @@ function pageCall(request){
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS','PAYE_WORKSHEET'].includes(kind)&&key==='after'&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
+    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS','PAYE_WORKSHEET','CHANNEL_DRAFT_LIST','CHANNEL_DRAFT_COUNT'].includes(kind)&&['after','context'].includes(key)&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
     if(!(type==='caseInput'?caseInput(v):field(v,type)))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
@@ -746,6 +789,7 @@ function result(payload,call,mutation){
   if(!mutation&&['REVIEW_TOTALS','REVIEW_CASES'].includes(call.kind))return reviewResult(payload,call.kind,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='LINES'&&Object.hasOwn(call.args,'worksheet_run_id'))return worksheetLinesResult(payload,call.args,exact,bad);
   if(!mutation&&call.kind==='PAYE_WORKSHEET')return worksheetResult(payload,call.args,call.actorUserId,field,exact,bad);
+  if(!mutation&&['CHANNEL_DRAFT_LIST','CHANNEL_DRAFT_COUNT'].includes(call.kind))return channelDraftResult(payload,call.kind,call.args,call.actorUserId,exact,bad);
   if(!mutation&&call.kind==='ACTIVE_PREPARATIONS')return activePreparationsResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='PREPARE_ISSUES')return prepareIssuesResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&(call.kind==='CASE_LIST'||call.kind==='CASE_SUMMARY'))return caseListResult(payload,call,bad);
@@ -1032,6 +1076,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
     return new PreparationError('BPAY_NEXT_CONFIRM_PREPARATION_DISCARDED_OR_BLOCKED',409,false,false);
   if(mutation&&action==='CONFIRM'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE')
     return new PreparationError('BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE',409,false,false);
+  if(!mutation&&db?.code==='55000'&&db.message==='BPAY_NEXT_CHANNEL_DRAFT_CONTEXT_CHANGED')return new PreparationError('BPAY_NEXT_CHANNEL_DRAFT_CONTEXT_CHANGED',409,false,false);
   if(!mutation&&db?.code==='55000'&&db.message==='BPAY_NEXT_ACTIVE_PREPARATIONS_CONTEXT_CHANGED')return new PreparationError('BPAY_NEXT_ACTIVE_PREPARATIONS_CONTEXT_CHANGED',409,false,false);
   if(db?.code==='55000')return db.message==='BPAY_NEXT_MODULE_NOT_ACTIVE'?fault('MODULE_NOT_ACTIVE',503):fault('NOT_ELIGIBLE',409);
   if(db?.code==='54000')return fault('RESPONSE_TOO_LARGE',503,true);

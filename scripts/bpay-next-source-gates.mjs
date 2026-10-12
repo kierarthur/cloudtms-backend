@@ -227,7 +227,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_review_simple_run_v1(uuid)": ["private.bpay_next_prepare_attention_v1"],
-  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_prepare_attention_page_v1","private.bpay_next_preparation_wait_owner_v1","private.bpay_next_run_review_totals_v1","private.bpay_next_run_review_cases_v1","private.bpay_next_paye_worksheet_page_v1"],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_prepare_attention_page_v1","private.bpay_next_preparation_wait_owner_v1","private.bpay_next_run_review_totals_v1","private.bpay_next_run_review_cases_v1","private.bpay_next_paye_worksheet_page_v1","private.bpay_next_channel_draft_page_v1"],
   "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)": ["private.bpay_next_prepare_retry_admit_v1","private.bpay_next_prepare_failure_v1"],
   "private.bpay_next_worker_execution_guard_v1()": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_prepare_job_active_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
@@ -368,6 +368,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.trunc"
   ],
   "private.bpay_next_confirm_simple_run_v1(uuid,bigint)": [
+    "private.bpay_next_channel_draft_summary_apply_v1",
     "private.bpay_next_channel_drafts_page_v1",
     "pg_catalog.clock_timestamp",
     "pg_catalog.jsonb_build_object",

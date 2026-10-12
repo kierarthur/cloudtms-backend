@@ -12409,6 +12409,63 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_channel_draft_directory_commit_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "beaf391bf818f469e5c722793755654da55e3efeeb21464398be79e5b2fa7040"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_channel_draft_page_v1(p_actor_user_id uuid, p_kind text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "49211dd56c2033017764f33b10b694f31ea00ab54f4d22cad70d63ca888c01ca"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_channel_draft_summary_apply_v1(p_run_id uuid, p_pay_channel text, p_old_worker private.bpay_next_run_worker, p_new_worker private.bpay_next_run_worker, p_confirm_task_id uuid, p_touch boolean, p_status_group text, p_status_note text, p_execution_route text, p_execution_pay_date date, p_scheduled_at_utc timestamp with time zone, p_execution_reference text, p_has_payment_issue boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4d80b872eb03de404bac3c8f167346072843b55b82485b9af37626480ad46c19"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_channel_drafts_page_v1(p_run_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -12850,7 +12907,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b63efa6da1ae20d3b835550bc8e5ef26c7db64165f470e4c7fa5e4ee432ea9a3"
+      "definition_sha256": "eaa86777ab148be57795c1523c667ac6e85a4fce0b77fc276b1233e1b42ecd5b"
     },
     {
       "acl": [
@@ -15501,7 +15558,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "bc02af81d2f93254bb0d54a64d81e1235e52f0fbe665a113cf5dcec791ef8627"
+      "definition_sha256": "dadba96511a34cb31068389c8256d48ca711efbd68c8d0358ce34fa0a237e72a"
     },
     {
       "acl": [
@@ -33798,7 +33855,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d2feaff8303b3412be2984935aef3e514c9f819d1e30537e80c2f907c935c665"
+      "definition_sha256": "36ad9da623e60952d2d3c6f3f8dc54074628d94f39fa680581205ffa1d7384cf"
     },
     {
       "acl": [
@@ -55823,6 +55880,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_work_collection_instruction_guard_v1 BEFORE INSERT ON private.bpay_next_run_case_instruction FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_collection_capture_guard_v1()"
+    },
+    {
+      "name": "bpay_next_channel_draft_directory_commit_v1",
+      "table": "bpay_next_run_channel_totals",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_channel_draft_directory_commit_v1 AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_run_channel_totals DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_channel_draft_directory_commit_v1()"
     },
     {
       "name": "bpay_next_accepted_choice_member_guard",
@@ -89204,6 +89268,220 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_channel_draft_directory",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "bank_unavailable_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cancelled_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generation",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "not_paid_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "paid_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "partly_paid_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "processing_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "waiting_approval_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_channel_draft_directory_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_channel_draft_directory_pkey ON private.bpay_next_channel_draft_directory USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_channel_draft_directory_bank_unavailable_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bank_unavailable_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_cancelled_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cancelled_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (generation >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_id_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (id = 1)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_not_paid_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (not_paid_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_paid_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (paid_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_partly_paid_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (partly_paid_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_processing_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (processing_count >= 0)"
+        },
+        {
+          "name": "bpay_next_channel_draft_directory_waiting_approval_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (waiting_approval_count >= 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_command",
@@ -107201,6 +107479,54 @@
           "generated": ""
         },
         {
+          "name": "change_revision",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "confirmed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "execution_pay_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "execution_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "execution_route",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "gross_ex_vat",
           "type": "numeric(38,2)",
           "default": "0",
@@ -107228,6 +107554,22 @@
           "name": "gross_vat",
           "type": "numeric(38,2)",
           "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "has_payment_issue",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "list_visible",
+          "type": "boolean",
+          "default": "false",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -107265,6 +107607,46 @@
           "generated": ""
         },
         {
+          "name": "original_gross_ex_vat",
+          "type": "numeric(38,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_gross_inc_vat",
+          "type": "numeric(38,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_gross_vat",
+          "type": "numeric(38,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_timesheet_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_worker_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "pay_channel",
           "type": "text",
           "default": null,
@@ -107289,6 +107671,30 @@
           "generated": ""
         },
         {
+          "name": "scheduled_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "status_group",
+          "type": "text",
+          "default": "'NOT_PAID'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status_note",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "totals_revision",
           "type": "bigint",
           "default": "0",
@@ -107307,6 +107713,14 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_channel_draft_created_idx",
+          "definition": "CREATE INDEX bpay_next_channel_draft_created_idx ON private.bpay_next_run_channel_totals USING btree (created_at_utc DESC, run_id, pay_channel COLLATE \"C\") WHERE list_visible"
+        },
+        {
+          "name": "bpay_next_channel_draft_status_idx",
+          "definition": "CREATE INDEX bpay_next_channel_draft_status_idx ON private.bpay_next_run_channel_totals USING btree (status_group, created_at_utc DESC, run_id, pay_channel COLLATE \"C\") WHERE list_visible"
+        },
+        {
           "name": "bpay_next_run_channel_totals_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_run_channel_totals_pkey ON private.bpay_next_run_channel_totals USING btree (run_id, pay_channel)"
         }
@@ -107314,6 +107728,38 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_channel_draft_directory_commit_v1",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_channel_draft_execution_date_finite",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(execution_pay_date))"
+        },
+        {
+          "name": "bpay_next_channel_draft_frozen_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT list_visible AND created_at_utc IS NULL AND confirmed_at_utc IS NULL AND original_worker_count IS NULL AND original_timesheet_count IS NULL AND original_gross_ex_vat IS NULL AND original_gross_vat IS NULL AND original_gross_inc_vat IS NULL OR list_visible AND created_at_utc IS NOT NULL AND isfinite(created_at_utc) AND confirmed_at_utc IS NOT NULL AND isfinite(confirmed_at_utc) AND original_worker_count IS NOT NULL AND original_timesheet_count IS NOT NULL AND original_gross_ex_vat IS NOT NULL AND original_gross_vat IS NOT NULL AND original_gross_inc_vat IS NOT NULL AND original_gross_inc_vat = (original_gross_ex_vat + original_gross_vat))"
+        },
+        {
+          "name": "bpay_next_channel_draft_timing_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((execution_route IS NULL AND execution_pay_date IS NULL AND scheduled_at_utc IS NULL OR (execution_route = ANY (ARRAY['BANK_CSV'::text, 'EXTERNAL'::text])) AND execution_pay_date IS NOT NULL AND scheduled_at_utc IS NULL OR execution_route = 'SCHEDULED'::text AND execution_pay_date IS NOT NULL AND scheduled_at_utc IS NOT NULL) IS TRUE)"
+        },
         {
           "name": "bpay_next_run_channel_totals_candidate_count_check",
           "type": "c",
@@ -107329,6 +107775,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (cash_known >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_change_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (change_revision >= 0)"
         },
         {
           "name": "bpay_next_run_channel_totals_check",
@@ -107371,6 +107825,22 @@
           "definition": "CHECK (gross_inc_vat = (gross_ex_vat + gross_vat))"
         },
         {
+          "name": "bpay_next_run_channel_totals_execution_reference_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(execution_reference) >= 1 AND octet_length(execution_reference) <= 256)"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_execution_route_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (execution_route = ANY (ARRAY['BANK_CSV'::text, 'EXTERNAL'::text, 'SCHEDULED'::text]))"
+        },
+        {
           "name": "bpay_next_run_channel_totals_gross_stage_deductions_check",
           "type": "c",
           "deferred": false,
@@ -107395,6 +107865,22 @@
           "definition": "CHECK (octet_length(net_refused_code) >= 1 AND octet_length(net_refused_code) <= 256)"
         },
         {
+          "name": "bpay_next_run_channel_totals_original_timesheet_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_timesheet_count >= 0)"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_original_worker_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_worker_count > 0)"
+        },
+        {
           "name": "bpay_next_run_channel_totals_pay_channel_check",
           "type": "c",
           "deferred": false,
@@ -107417,6 +107903,30 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (run_id) REFERENCES private.bpay_next_pay_run(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_scheduled_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(scheduled_at_utc))"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_status_group_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (status_group = ANY (ARRAY['NOT_PAID'::text, 'WAITING_APPROVAL'::text, 'PROCESSING'::text, 'PARTLY_PAID'::text, 'BANK_UNAVAILABLE'::text, 'PAID'::text, 'CANCELLED'::text]))"
+        },
+        {
+          "name": "bpay_next_run_channel_totals_status_note_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(status_note) >= 1 AND octet_length(status_note) <= 512)"
         },
         {
           "name": "bpay_next_run_channel_totals_totals_revision_check",
