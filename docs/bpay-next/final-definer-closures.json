@@ -5459,23 +5459,25 @@
     },
     {
       "signature": "private.bpay_next_work_choice_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
       ],
-      "owner": "WB-40 current native pay-hold control and original accepted choice",
+      "owner": "WB-40 current native pay-hold control and original accepted choice; WB29 BD158 exact accepted reference cut",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15671,20 +15673,21 @@
     },
     {
       "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
       ],
-      "owner": "DR-10 same-week policy; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission",
+      "finalClosures": [
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+      ],
+      "owner": "DR-10 same-week policy; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission; WB29 BD158 exact accepted reference cut",
       "baselineSource": "LOCAL_DR10_ADDITIVE"
     },
     {
@@ -17389,6 +17392,19 @@
         "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
       ],
       "owner": "WB-29 qualified shared incoming/saved quote / BD156-157"
+    },
+    {
+      "signature": "private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+      ],
+      "owner": "WB29 BD158 exact accepted reference cut"
     }
   ],
   "editorChains": [

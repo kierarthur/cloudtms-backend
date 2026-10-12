@@ -10868,6 +10868,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accepted_resolution_refs_v1(p_run_id uuid, p_work_id uuid, p_boundary_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "14ebefd62f2ed48888e23d2f10c6a45605053737f25c423e38d5d66034bf662d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -13630,7 +13649,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "089f8142cf519c6bc235dda50a7f9ee8c16512c7efad5a75e35f231a67ad1dc8"
+      "definition_sha256": "8fa734be635c70796c758376136bf0d0f9a190f438c5452e6fcab9fc9a3d3aa3"
     },
     {
       "acl": [
@@ -18695,7 +18714,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fa8325c69263f6aef0c6f6783315c718897fefcd03356b4375873009c223f012"
+      "definition_sha256": "e6d843f79c674b271a8158f6454238ada29d9192c974be31e013c099d4ddafa8"
     },
     {
       "acl": [
@@ -115684,6 +115703,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "accepted_resolution_refs",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "approved_line_id",
           "type": "uuid",
           "default": null,
@@ -115889,6 +115916,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_run_line_accepted_resolution_refs_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (accepted_resolution_refs IS NULL OR\nCASE\n    WHEN jsonb_typeof(accepted_resolution_refs) = 'array'::text THEN jsonb_array_length(accepted_resolution_refs) <= 5 AND octet_length(accepted_resolution_refs::text) <= 8192\n    ELSE false\nEND)"
+        },
         {
           "name": "bpay_next_run_line_approved_line_id_fkey",
           "type": "f",
@@ -129054,6 +129089,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "accepted_resolution_refs",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "component_count",
           "type": "bigint",
           "default": "0",
@@ -129214,6 +129257,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (segment_sealed_count IS NULL OR segment_sealed_count = segment_count)"
+        },
+        {
+          "name": "bpay_next_work_choice_accepted_resolution_refs_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (accepted_resolution_refs IS NULL OR\nCASE\n    WHEN jsonb_typeof(accepted_resolution_refs) = 'array'::text THEN jsonb_array_length(accepted_resolution_refs) <= 100 AND octet_length(accepted_resolution_refs::text) <= 32768\n    ELSE false\nEND)"
         },
         {
           "name": "bpay_next_work_choice_check",

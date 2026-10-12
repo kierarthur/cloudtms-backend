@@ -48,6 +48,8 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB29: bounded exact accepted references on the existing Create cut.
+  'private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)',
   // WB29: one qualified incoming/saved quote; unchanged1157 arithmetic.
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)',
   'private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)',
@@ -218,6 +220,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)": ["private.bpay_next_component_resolution_active_v1","upper","jsonb_build_array","jsonb_build_object","array_append","octet_length"],
   "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)": ["private.bpay_next_component_resolution_basis_v1","private.pay_finance_selected_quote_v1","isfinite","length","jsonb_typeof","jsonb_object_keys","jsonb_each","jsonb_each_text","trunc","btrim","octet_length","count","jsonb_build_object"],
   "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)": ["private.bpay_next_component_resolution_basis_v1","private.bpay_next_component_resolution_input_quote_v1","greatest","jsonb_build_object"],
   "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_work_segment_debt_basis_v1","sum","cardinality","lateral"],
