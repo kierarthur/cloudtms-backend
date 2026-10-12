@@ -15768,7 +15768,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "343d69b154d0c9fd4b5fc115f697b737053fdc60d6681e5a4dc1e7495da6bce1"
+      "definition_sha256": "b71485ecc88735e77d31548e16479d387fcc7a7e0ec7a11f907ada66a32dbc01"
     },
     {
       "acl": [
@@ -16433,7 +16433,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "87902468449f9e2c57ebf7dd95cbf02fdf59ecca1e9320d8de88de8c1a6baf2c"
+      "definition_sha256": "9b5103e80a7f7f137fb2535537b1fb36a08259b476516d9fc63ba8f4d76e0227"
     },
     {
       "acl": [
@@ -18482,6 +18482,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_stage_treatment_revision_v1(p_work_id uuid, p_expected_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c499dcc88ccbce11431d3a3a48a6845997d712918ef21f0ab2b3ffab3817705a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_stored_credit_legacy_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -18544,6 +18563,44 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b11389162a854f13da2da77e47388b16b68baf2b14a11ad299cd45e05ea6feee"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_treatment_approval_revision_v1(p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "07108d115cddfa1ff59c997e16c9f01db2d8383c39a2f5a3e210ca9e2ce2af0e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_treatment_payload_assert_v1(p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "30888cd7e1b64d58b8e516a2e07b5ae175ab126b10bd90a1fc1aca0b90ab3b28"
     },
     {
       "acl": [
@@ -130050,6 +130107,14 @@
           "generated": ""
         },
         {
+          "name": "payment_treatment_approval_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "physical_timesheet_id",
           "type": "uuid",
           "default": null,
@@ -130238,6 +130303,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (source_inventory_digest IS NULL OR octet_length(source_inventory_digest) = 32 AND (source_kind = ANY (ARRAY['SOURCE'::text, 'PROTECTED'::text])) AND source_event_id IS NOT NULL AND (source_kind <> 'PROTECTED'::text OR source_head_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_treatment_approval_distinct_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (payment_treatment_approval_revision_id IS NULL OR payment_treatment_approval_revision_id <> id AND source_event_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_treatment_approval_revision_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, payment_treatment_approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
         },
         {
           "name": "bpay_next_work_revision_candidate_display_name_check",

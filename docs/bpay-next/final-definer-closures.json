@@ -4411,19 +4411,21 @@
     },
     {
       "signature": "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
         "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql"
       ],
-      "owner": "WB-06 exact publication Processing and final applied-pointer/linked-Case projection; WB44 closes actual larger indexed continuation, CM10 next1430 editor",
+      "owner": "WB-29 complete treatment publication / BD155",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4654,21 +4656,23 @@
     },
     {
       "signature": "private.bpay_next_revision_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
         "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
         "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
-        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql"
       ],
-      "owner": "DY05 genuine Daily captured approval/settings/labels; exact current0939 successor",
+      "owner": "WB-29 complete treatment publication / BD155",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -17304,6 +17308,45 @@
         "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql"
       ],
       "owner": "WB-29 explicit needs / review corrections N29-S01–03"
+    },
+    {
+      "signature": "private.bpay_next_treatment_approval_revision_v1(uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "owner": "WB-29 complete treatment publication / BD155"
+    },
+    {
+      "signature": "private.bpay_next_treatment_payload_assert_v1(uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "owner": "WB-29 complete treatment publication / BD155"
+    },
+    {
+      "signature": "private.bpay_next_stage_treatment_revision_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+      ],
+      "owner": "WB-29 complete treatment publication / BD155"
     }
   ],
   "editorChains": [

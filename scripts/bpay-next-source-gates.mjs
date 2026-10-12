@@ -27,6 +27,8 @@ const DAILY_GUARD_ADDITIONS=Object.freeze({
   }
 });
 // DY05 exact complete frozen parent plus genuine Daily captured-context guard only.
+const TREATMENT_REVISION_GUARD='supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql';
+const TREATMENT_GUARD_ADDITION="  -- WB-29: direct original approval; staged payload has no publication yet.\n  if new.payment_treatment_approval_revision_id is not null then\n    perform private.bpay_next_treatment_payload_assert_v1(old.id);\n  end if;\n";
 const DAILY_FROZEN_GUARD='supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql';
 const DAILY_FROZEN_ADDITION=Object.freeze({
   "declaration": "  v_daily_work private.bpay_next_work%rowtype;\n  v_daily_timesheet public.timesheets%rowtype;\n  v_daily_financial public.timesheets_financials%rowtype;\n",
@@ -2051,7 +2053,7 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     if(file===DAILY_PUBLICATION_GUARDS&&(
       /^revoke\s+all\s+on\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
       ||/^alter\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
-    if(file===DAILY_FROZEN_GUARD&&(
+    if((file===DAILY_FROZEN_GUARD||file===TREATMENT_REVISION_GUARD)&&(
       /^revoke\s+all\s+on\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
       ||/^alter\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
     if(competing&&!baseline.includes(statement))throw Error(`BPAY_NEXT_FROZEN_COMPETING_AUTHORITY: ${file}`);
@@ -2129,13 +2131,18 @@ export function verifyBpayNextSourceGates(){
         if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_PUBLICATION_GUARD_CHANGED');
         continue;
       }
-      if(definition.physical===DAILY_FROZEN_GUARD&&signature==='private.bpay_next_revision_guard_v1()'){
+      if((definition.physical===DAILY_FROZEN_GUARD||definition.physical===TREATMENT_REVISION_GUARD)&&signature==='private.bpay_next_revision_guard_v1()'){
         const parent=frozenSources.get(file).replaceAll('\r\n','\n'),addition=DAILY_FROZEN_ADDITION;
         const rows=scanManagedSql(parent).statements.filter(row=>routineDefinitions(parent.slice(row.start,row.end),file).includes(signature));
         if(rows.length!==1||exact.length!==1)throw Error('BPAY_NEXT_DAILY_FROZEN_GUARD_SHAPE');
         let expected=parent.slice(rows[0].start,rows[0].end);
         if(expected.split(addition.declAnchor).length!==2||expected.split(addition.blockEnd).length!==2)throw Error('BPAY_NEXT_DAILY_FROZEN_PARENT_SHAPE');
         expected=expected.replace(addition.declAnchor,()=>addition.declAnchor+addition.declaration).replace(addition.blockEnd,()=>addition.block+addition.blockEnd);
+        if(definition.physical===TREATMENT_REVISION_GUARD){
+          const anchor='  select count(*),coalesce(sum(source_pay_ex_vat),0)';
+          if(expected.split(anchor).length!==2)throw Error('BPAY_NEXT_TREATMENT_FROZEN_PARENT_SHAPE');
+          expected=expected.replace(anchor,()=>TREATMENT_GUARD_ADDITION+anchor);
+        }
         if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_FROZEN_GUARD_CHANGED');
         continue;
       }
