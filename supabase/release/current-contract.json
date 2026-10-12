@@ -14323,7 +14323,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "fabf58de897047205a97b80a564b9f5131e70fdb05cbc00014929167bef23c39"
+      "definition_sha256": "2867779e394b1aeea866fea03fb61cf9b8cce49ddaaa5749bb4f03edd67fb112"
     },
     {
       "acl": [
@@ -33741,7 +33741,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0f3e1f9c35bb6cb805245c913675e689da9b979868faaea4f92f1c6224559041"
+      "definition_sha256": "1f47b8a1fff0bc7cad2221533eb1b6b2a42fb9cc8a53b99fc020198ee87606ec"
     },
     {
       "acl": [
@@ -97203,6 +97203,14 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_active_preparation_actor_created_idx",
+          "definition": "CREATE INDEX bpay_next_active_preparation_actor_created_idx ON private.bpay_next_pay_run USING btree (actor_user_id, created_at_utc DESC, id DESC) WHERE (status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text]))"
+        },
+        {
+          "name": "bpay_next_active_preparation_created_idx",
+          "definition": "CREATE INDEX bpay_next_active_preparation_created_idx ON private.bpay_next_pay_run USING btree (created_at_utc DESC, id DESC) WHERE (status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text]))"
+        },
         {
           "name": "bpay_next_pay_run_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_pay_run_pkey ON private.bpay_next_pay_run USING btree (id)"

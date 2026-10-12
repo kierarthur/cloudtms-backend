@@ -74,6 +74,42 @@ function reviewResult(p,kind,args,actor,base,shape,bad){
  if(p.next_cursor!==null&&(!reviewSame(p.next_cursor.context,c)||!reviewSame(p.next_cursor.key,p.rows.at(-1).sort_key)))bad();return p;
 }
 
+const ACTIVE_PREPARATION_INPUT={agency_id:'uuid',owner_epoch:'positive',scope:'activeScope',after:'activeCursor?',limit:'limit'};
+const ACTIVE_PREPARATION_CONTEXT={agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',scope:'activeScope'};
+const ACTIVE_PREPARATION_ROW={run_id:'uuid',actor_user_id:'uuid',actor_display_name:'label',status:'activeStatus',selection_state:'activeSelection',started_at_utc:'timestamp',expires_at_utc:'timestamp',selected_candidates:'integer',ready:'integer',review:'integer',pending:'integer',preparing:'integer',removed:'integer',safe_to_close:'true'};
+function activePreparationField(v,t,base,shape){
+ if(t==='activeScope')return ['ALL','MINE'].includes(v);
+ if(t==='activeStatus')return ['PREPARING','REVIEW'].includes(v);
+ if(t==='activeSelection')return ['OPEN','SEALED'].includes(v);
+ if(t==='activeContext')return shape(v,ACTIVE_PREPARATION_CONTEXT);
+ if(t==='activeCursor')return shape(v,{context:'activeContext',created_at_utc:'timestamp',run_id:'uuid'})&&new TextEncoder().encode(JSON.stringify(v)).byteLength<=8192;
+ if(t==='activeRows')return Array.isArray(v)&&v.length<=100&&v.every(r=>shape(r,ACTIVE_PREPARATION_ROW));
+ return false;
+}
+function activePreparationMicros(value){
+ const m=value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d{1,6}))?(?:Z|[+-]\d{2}:\d{2})$/),ms=Date.parse(value);
+ if(!m||!Number.isFinite(ms))return null;
+ return BigInt(ms)*1000n+BigInt((m[1]??'').padEnd(6,'0').slice(3));
+}
+function activePreparationsResult(p,args,actor,base,shape,bad){
+ if(!shape(p,{context:'activeContext',rows:'activeRows',complete:'boolean',next_cursor:'activeCursor?'}))bad();
+ const c=p.context;
+ if(c.actor_user_id!==actor||c.agency_id!==args.agency_id||c.owner_epoch!==args.owner_epoch||c.scope!==args.scope
+  ||p.rows.length>args.limit||p.complete!==(p.next_cursor===null)||!p.complete&&p.rows.length===0
+  ||args.after!==null&&!reviewSame(args.after.context,c))bad();
+ let previous=args.after===null?null:{time:activePreparationMicros(args.after.created_at_utc),id:args.after.run_id.toLowerCase()};
+ if(previous&&previous.time===null)bad();const ids=new Set();
+ for(const r of p.rows){
+  const time=activePreparationMicros(r.started_at_utc),expiry=activePreparationMicros(r.expires_at_utc),id=r.run_id.toLowerCase(),n=k=>BigInt(r[k]);
+  if(time===null||expiry===null||expiry-time!==259200000000n||!r.actor_display_name.trim()||ids.has(id)
+   ||c.scope==='MINE'&&r.actor_user_id!==actor||n('ready')+n('review')+n('pending')+n('removed')!==n('selected_candidates')
+   ||n('preparing')>n('pending')||previous&&(time>previous.time||time===previous.time&&id>=previous.id))bad();
+  ids.add(id);previous={time,id};
+ }
+ if(p.next_cursor!==null&&(!reviewSame(p.next_cursor.context,c)||p.next_cursor.run_id!==p.rows.at(-1).run_id
+  ||p.next_cursor.created_at_utc!==p.rows.at(-1).started_at_utc))bad();return p;
+}
+
 const PREPARE_ISSUE_INPUT={run_id:'uuid',view:'prepareIssueView',sort:'prepareIssueSort',after:'prepareIssueCursor?',limit:'limit',row_key:'prepareIssueRowKey?',waiting_only:'boolean'};
 const PREPARE_ISSUE_CONTEXT={run_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',review_revision:'integer',run_status:'runStatus',selection_state:'selectionState',selection_pages:'integer',selected_candidates:'integer',preparing:'integer',ready:'integer',review:'integer',removed:'integer',workbench_revision:'integer',adoption_revision:'integer',view:'prepareIssueView',sort:'prepareIssueSort',row_key:'prepareIssueRowKey?',waiting_only:'boolean',paye_totals_revision:'integer?',umbrella_totals_revision:'integer?'};
 const PREPARE_ISSUE_ROW={row_key:'prepareIssueRowKey',origin:'prepareIssueOrigin',candidate_id:'uuid',run_worker_id:'uuid?',worker_status:'prepareIssueState',issue_code:'issue?',work_id:'uuid?',expected_revision_id:'uuid?',physical_timesheet_id:'uuid?',physical_timesheet_version:'positive?',candidate_display_name:'label?',candidate_reference:'label?',label_origin:'prepareIssueLabelOrigin',timesheet_reference:'label?',week_ending_date:'date?',frozen_ex_vat:'money?',preparation_revision:'positive?',discard_outcome:'discardOutcome?',discard_blocked_code:'discardBlockedCode?',waiting_on_other_run:'boolean',waiting_run_id:'uuid?',waiting_actor_display_name:'label?',capacity_reduced_by_other_run:'boolean',pay_channel:'channel?',deduction_total:'money?',frozen_offer_complete:'boolean',case_count:'integer?',sort_key:'prepareIssueKey'};
@@ -139,6 +175,7 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  ACTIVE_PREPARATIONS:ACTIVE_PREPARATION_INPUT,
   REVIEW_TOTALS:{run_id:'uuid'},
   REVIEW_CASES:{run_id:'uuid',run_worker_id:'uuid',sort:'reviewCaseSort',after:'reviewCursor?',limit:'limit'},
   PREPARE_ISSUES:PREPARE_ISSUE_INPUT,
@@ -193,7 +230,7 @@ const OUTPUTS={
   CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean',drafts:'drafts'}
 };
 const ROWS={
-  PROGRESS:{needs_attention:'boolean',waiting_on_other_run:'boolean',run_id:'uuid',status:'runStatus',actor_display_name:'label',started_at_utc:'timestamp',expires_at_utc:'timestamp',selected_candidates:'integer',ready:'integer',review:'integer',pending:'integer',preparing:'integer',removed:'integer',enrolled_candidates:'integer',enrolment_complete:'boolean',enrolment_failed:'boolean',safe_to_close:'true',expired_at_utc:'timestamp?',review_revision:'integer',discard_phase:'discardPhase?',discard_actor_display_name:'label?',discarded_at_utc:'timestamp?',discard_removed_candidates:'integer',discard_already_removed_candidates:'integer',discard_blocked_candidates:'integer'},
+  PROGRESS:{needs_attention:'boolean',waiting_on_other_run:'boolean',run_id:'uuid',status:'runStatus',selection_state:'selectionState',actor_display_name:'label',started_at_utc:'timestamp',expires_at_utc:'timestamp',selected_candidates:'integer',ready:'integer',review:'integer',pending:'integer',preparing:'integer',removed:'integer',enrolled_candidates:'integer',enrolment_complete:'boolean',enrolment_failed:'boolean',safe_to_close:'true',expired_at_utc:'timestamp?',review_revision:'integer',discard_phase:'discardPhase?',discard_actor_display_name:'label?',discarded_at_utc:'timestamp?',discard_removed_candidates:'integer',discard_already_removed_candidates:'integer',discard_blocked_candidates:'integer'},
   ACCEPTED_CANDIDATES:{candidate_id:'uuid',accepted_input_id:'uuid',module_epoch:'positive',target_pay_channel:'channel',target_umbrella_id:'uuid?',pay_week_start:'date',case_scope:'acceptedCaseScope',case_selection_revision:'positive?',settings_witness_kind:'settingsWitness',input_evidence_sha256:'sha',prepare_job_id:'uuid?',prepare_job_status:'prepareJobStatus?',prepare_job_phase:'prepareJobPhase?',run_worker_id:'uuid?',worker_status:'workerStatus?',has_unsealed_work:'boolean',waiting_command_id:'uuid?',waiting_command_sequence:'positive?',progress_state:'acceptedProgress',progress_code:'acceptedProgressCode?',review_issue_code:'issue?'},
   ACCEPTED_WORK:{candidate_id:'uuid',accepted_input_id:'uuid',accepted_work_input_id:'uuid',work_id:'uuid',original_revision_id:'uuid',effective_revision_id:'uuid',selection_mode:'mode',selected_line_count:'integer',publication_command_id:'uuid',predecessor_sequence:'positive',source_kind:'acceptedSourceKind',query_disposition:'acceptedQuery?',query_state_sha256:'sha?',input_evidence_sha256:'sha',effective_cut_id:'uuid?',cut_state:'acceptedCutState'},
   CHANNEL_WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',pay_channel:'channel',worker_status:'workerStatus',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',review_issue_code:'issue?'},
@@ -282,6 +319,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+ if(t.startsWith('active')&&!t.endsWith('?'))return activePreparationField(v,t,field,exact);
  if(t==='reviewCounts')return exact(v,{selected:'integer',excluded:'integer',scope_count:'integer'});
  if(["reviewLimitNote","reviewAmount","reviewMoney","reviewRun","reviewSelection","reviewWorker","reviewCaseSort","reviewNetRefusal","reviewDirection","reviewStage","reviewBasis","reviewForeign","reviewContext","reviewKey","reviewCursor","reviewCases","reviewTotal","reviewChannels"].includes(t))return reviewField(v,t,field,exact);
   if(t==='prepareIssueRows')return Array.isArray(v)&&v.length<=100&&v.every(r=>exact(r,PREPARE_ISSUE_ROW));
@@ -601,7 +639,7 @@ function pageCall(request){
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES'].includes(kind)&&key==='after'&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
+    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS'].includes(kind)&&key==='after'&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
     if(!(type==='caseInput'?caseInput(v):field(v,type)))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
@@ -627,6 +665,7 @@ function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
   if(!mutation&&['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)){try{return caseFinanceResult(payload,call.kind,call.args,call.actorUserId);}catch{bad();}}
   if(!mutation&&['REVIEW_TOTALS','REVIEW_CASES'].includes(call.kind))return reviewResult(payload,call.kind,call.args,call.actorUserId,field,exact,bad);
+  if(!mutation&&call.kind==='ACTIVE_PREPARATIONS')return activePreparationsResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='PREPARE_ISSUES')return prepareIssuesResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&(call.kind==='CASE_LIST'||call.kind==='CASE_SUMMARY'))return caseListResult(payload,call,bad);
   if(mutation){
@@ -911,6 +950,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
     return new PreparationError('BPAY_NEXT_CONFIRM_PREPARATION_DISCARDED_OR_BLOCKED',409,false,false);
   if(mutation&&action==='CONFIRM'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE')
     return new PreparationError('BPAY_NEXT_CONFIRM_NO_PAYABLE_CANDIDATE',409,false,false);
+  if(!mutation&&db?.code==='55000'&&db.message==='BPAY_NEXT_ACTIVE_PREPARATIONS_CONTEXT_CHANGED')return new PreparationError('BPAY_NEXT_ACTIVE_PREPARATIONS_CONTEXT_CHANGED',409,false,false);
   if(db?.code==='55000')return db.message==='BPAY_NEXT_MODULE_NOT_ACTIVE'?fault('MODULE_NOT_ACTIVE',503):fault('NOT_ELIGIBLE',409);
   if(db?.code==='54000')return fault('RESPONSE_TOO_LARGE',503,true);
   if(e?.name==='AbortError'||e?.status===408)return fault('DEPENDENCY_TIMEOUT',503,true,attempted&&mutation);
@@ -932,7 +972,7 @@ async function handle(request,dependencies,mutation){
     const rpc=mutation?dependencies.preparationRpc:dependencies.preparationPageRpc;
     if(typeof rpc!=='function')throw fault('DEPENDENCY_UNAVAILABLE',503,true);
     controller=new AbortController();
-    const timeoutMs=!mutation&&['PROGRESS','CASE_LIST','CASE_SUMMARY'].includes(call.kind)?2000:BPAY_NEXT_PREPARATION_LIMITS.timeoutMs;
+    const timeoutMs=!mutation&&['PROGRESS','ACTIVE_PREPARATIONS','CASE_LIST','CASE_SUMMARY'].includes(call.kind)?2000:BPAY_NEXT_PREPARATION_LIMITS.timeoutMs;
     const maxResponseBytes=!mutation&&['CASE_LIST','CASE_SUMMARY','CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)?120000:BPAY_NEXT_PREPARATION_LIMITS.responseBytes;
     const timeout=new Promise((resolve,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fault('DEPENDENCY_TIMEOUT',503,true,attempted&&mutation));},timeoutMs);});
     const send=async()=>{
