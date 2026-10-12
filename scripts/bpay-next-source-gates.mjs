@@ -212,7 +212,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
-  "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","private.bpay_next_snooze_management_row_v1"],
+  "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","by","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","convert_from","decode","replace","encode","convert_to","chr","jsonb_set","to_jsonb","lower","left","least","private.bpay_next_snooze_management_row_v1"],
   "private.bpay_next_snooze_management_row_v1(uuid)": ["to_char","private.bpay_next_snooze_revision_basis_v1"],
   "private.bpay_next_snooze_receipt_guard_v1()": ["upper","to_jsonb","jsonb_set","private.bpay_next_snooze_due_receipt_valid_v1","private.bpay_next_snooze_publication_cancel_valid_v1"],
   "private.bpay_next_snooze_metadata_guard_v1()": ["jsonb_strip_nulls","to_jsonb","jsonb_set","clock_timestamp","current_setting","octet_length","private.bpay_next_snooze_publication_cancel_valid_v1","private.bpay_next_snooze_context_v1"],

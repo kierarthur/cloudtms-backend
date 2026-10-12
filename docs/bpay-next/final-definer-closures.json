@@ -15697,16 +15697,23 @@
     },
     {
       "signature": "private.bpay_next_case_list_refresh_key_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
       "allowedPhysical": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql",
+        "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql"
       ],
-      "predecessors": [],
+      "predecessors": [
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql"
+      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql",
+        "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql"
       ],
-      "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained",
+      "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained; FC02 BD130 screen reader support; FC02 SCR114 ownerA3e native current counters",
       "baselineSource": "LOCAL_FC01_ADDITIVE"
     },
     {
@@ -15758,16 +15765,23 @@
     },
     {
       "signature": "private.bpay_next_case_list_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
       "allowedPhysical": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql",
+        "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql"
       ],
-      "predecessors": [],
+      "predecessors": [
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql"
+      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql",
+        "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql"
       ],
-      "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained",
+      "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained; FC02 BD130 screen reader support; FC02 SCR114 ownerA3e native current counters",
       "baselineSource": "LOCAL_FC01_ADDITIVE"
     },
     {
@@ -16244,20 +16258,26 @@
     },
     {
       "signature": "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
-        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0101_banking_pay_next_snooze_screen_reader_v1.sql",
+        "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql"
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0101_banking_pay_next_snooze_screen_reader_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
-        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0101_banking_pay_next_snooze_screen_reader_v1.sql",
+        "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql"
       ],
-      "owner": "WB39 BD129 native reader support",
+      "owner": "WB39 BD129 native reader support; FC02 BD130 screen reader support",
       "baselineSource": "new"
     }
   ],

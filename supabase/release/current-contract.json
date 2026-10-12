@@ -12116,7 +12116,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "445e554550f65c61b588bcd273c9fad211c59f4ac065382271150dea0876b18c"
+      "definition_sha256": "e6426eded161d6695149f4c3ef1f13aa23ceb8a3311127c38f1f906e6486218c"
     },
     {
       "acl": [
@@ -12135,7 +12135,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "034701a4b82ca07b969cbf8bcf638179d9018b2d5d6feb09817c878da2d51f66"
+      "definition_sha256": "b0e36685425db8429aa29af90bede4432e412de26fc8dea7f513c8e7bb119874"
     },
     {
       "acl": [
@@ -16325,7 +16325,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "e37ee9504a7ab16891e4c7d25f439a98d79449088865747e42dd0a52c558a086"
+      "definition_sha256": "f7f3d82501bb6c16adcdd7a48264bd7aabcf8413709029d0058c7c0be60da5cc"
     },
     {
       "acl": [
@@ -85542,6 +85542,62 @@
           "identity": "",
           "not_null": false,
           "generated": ""
+        },
+        {
+          "name": "list_funded",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_original",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_outstanding",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_recovered",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_weekly_due",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "list_written_off",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -85570,8 +85626,48 @@
           "definition": "CREATE INDEX bpay_next_case_list_created_desc_idx ON private.bpay_next_case_list_key USING btree (((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
         },
         {
+          "name": "bpay_next_case_list_funded_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_funded_asc_idx ON private.bpay_next_case_list_key USING btree (((list_funded IS NULL)), list_funded, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_funded_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_funded_desc_idx ON private.bpay_next_case_list_key USING btree (((list_funded IS NULL)), list_funded DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
           "name": "bpay_next_case_list_key_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_case_list_key_pkey ON private.bpay_next_case_list_key USING btree (case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_original_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_original_asc_idx ON private.bpay_next_case_list_key USING btree (((list_original IS NULL)), list_original, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_original_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_original_desc_idx ON private.bpay_next_case_list_key USING btree (((list_original IS NULL)), list_original DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_outstanding_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_outstanding_asc_idx ON private.bpay_next_case_list_key USING btree (((list_outstanding IS NULL)), list_outstanding, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_outstanding_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_outstanding_desc_idx ON private.bpay_next_case_list_key USING btree (((list_outstanding IS NULL)), list_outstanding DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_recovered_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_recovered_asc_idx ON private.bpay_next_case_list_key USING btree (((list_recovered IS NULL)), list_recovered, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_recovered_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_recovered_desc_idx ON private.bpay_next_case_list_key USING btree (((list_recovered IS NULL)), list_recovered DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_status_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_status_asc_idx ON private.bpay_next_case_list_key USING btree (((list_status IS NULL)), list_status, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_status_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_status_desc_idx ON private.bpay_next_case_list_key USING btree (((list_status IS NULL)), list_status DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
         },
         {
           "name": "bpay_next_case_list_subtype_scope_idx",
@@ -85584,6 +85680,22 @@
         {
           "name": "bpay_next_case_list_type_desc_idx",
           "definition": "CREATE INDEX bpay_next_case_list_type_desc_idx ON private.bpay_next_case_list_key USING btree (case_type_label DESC, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_weekly_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_weekly_asc_idx ON private.bpay_next_case_list_key USING btree (((list_weekly_due IS NULL)), list_weekly_due, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_weekly_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_weekly_desc_idx ON private.bpay_next_case_list_key USING btree (((list_weekly_due IS NULL)), list_weekly_due DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_written_off_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_written_off_asc_idx ON private.bpay_next_case_list_key USING btree (((list_written_off IS NULL)), list_written_off, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_written_off_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_written_off_desc_idx ON private.bpay_next_case_list_key USING btree (((list_written_off IS NULL)), list_written_off DESC NULLS LAST, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
         }
       ],
       "options": [],
@@ -112444,12 +112556,44 @@
           "definition": "CREATE INDEX bpay_next_snooze_due_idx ON private.bpay_next_snooze USING btree (until_date, id) WHERE (active AND (until_date IS NOT NULL))"
         },
         {
+          "name": "bpay_next_snooze_history_created_asc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_history_created_asc_idx ON private.bpay_next_snooze USING btree (active, created_at_utc, id)"
+        },
+        {
+          "name": "bpay_next_snooze_history_created_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_history_created_idx ON private.bpay_next_snooze USING btree (active, created_at_utc DESC, id)"
+        },
+        {
+          "name": "bpay_next_snooze_note_asc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_note_asc_idx ON private.bpay_next_snooze USING btree (active, note COLLATE \"C\", created_at_utc DESC, id)"
+        },
+        {
+          "name": "bpay_next_snooze_note_desc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_note_desc_idx ON private.bpay_next_snooze USING btree (active, note COLLATE \"C\" DESC, created_at_utc DESC, id)"
+        },
+        {
           "name": "bpay_next_snooze_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_snooze_pkey ON private.bpay_next_snooze USING btree (id)"
         },
         {
           "name": "bpay_next_snooze_scope_history_idx",
           "definition": "CREATE INDEX bpay_next_snooze_scope_history_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, scope_identity, id)"
+        },
+        {
+          "name": "bpay_next_snooze_scope_label_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_scope_label_idx ON private.bpay_next_snooze USING btree (scope_kind, case_kind, created_at_utc DESC, id)"
+        },
+        {
+          "name": "bpay_next_snooze_until_asc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_until_asc_idx ON private.bpay_next_snooze USING btree (active, ((until_date IS NULL)), until_date, created_at_utc DESC, id)"
+        },
+        {
+          "name": "bpay_next_snooze_until_desc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_until_desc_idx ON private.bpay_next_snooze USING btree (active, ((until_date IS NULL)), until_date DESC, created_at_utc DESC, id)"
+        },
+        {
+          "name": "bpay_next_snooze_work_labels_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_work_labels_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, id)"
         },
         {
           "name": "bpay_next_workbench_snooze_seed_idx",
@@ -121168,6 +121312,14 @@
         {
           "name": "bpay_next_revision_work_idx",
           "definition": "CREATE INDEX bpay_next_revision_work_idx ON private.bpay_next_work_revision USING btree (work_id, revision_no, id)"
+        },
+        {
+          "name": "bpay_next_snooze_revision_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_revision_candidate_idx ON private.bpay_next_work_revision USING btree (\"left\"(lower(candidate_display_name), 512) COLLATE \"C\", work_id, id)"
+        },
+        {
+          "name": "bpay_next_snooze_revision_week_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_revision_week_idx ON private.bpay_next_work_revision USING btree (week_ending_date, work_id, id)"
         },
         {
           "name": "bpay_next_work_revision_pkey",

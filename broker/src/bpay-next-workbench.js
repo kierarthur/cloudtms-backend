@@ -657,8 +657,8 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
     const user=await dependencies.requireOfficeUser?.(request,['admin']);if(!user||typeof user.id!=='string'||!UUID.test(user.id.toLowerCase()))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
     const actor=user.id.toLowerCase(),url=new URL(request.url);if(ENCODER.encode(url.search).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
     if(url.searchParams.get('kind')==='SNOOZES'){
-      const input={};for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!['candidate_id','client_id','scope_kind','filter','snooze_id','sort','after','limit'].includes(key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-        if(key==='kind')continue;if(key==='after'){try{input.after=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d?$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
+      const input={};for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!['candidate_id','client_id','scope_kind','filter','snooze_id','sort','after','limit','view','count_only'].includes(key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+        if(key==='kind')continue;if(key==='after'||key==='count_only'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d?$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
       let args;try{args=normalizeSnoozesInput(input);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}
       if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
       if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);

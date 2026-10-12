@@ -336,7 +336,7 @@ function caseListField(value,type){
   }
   const enums={caseListSubtype:['ALL','LOAN','PAYMENT_ADVANCE','OVERPAYMENT','UNDERPAYMENT','MANUAL_CREDIT','MANUAL_DEBT','UNMAPPED'],
     caseListView:['ALL','ACTIVE','SNOOZED','HISTORY'],caseListSnooze:['ALL','FINITE','INDEFINITE'],
-    caseListSort:['CREATED_ASC','CREATED_DESC','CANDIDATE_ASC','CANDIDATE_DESC','TYPE_ASC','TYPE_DESC'],
+    caseListSort:['CREATED_ASC','CREATED_DESC','CANDIDATE_ASC','CANDIDATE_DESC','TYPE_ASC','TYPE_DESC','STATUS_ASC','STATUS_DESC','ORIGINAL_ASC','ORIGINAL_DESC','OUTSTANDING_ASC','OUTSTANDING_DESC','WEEKLY_ASC','WEEKLY_DESC','FUNDED_ASC','FUNDED_DESC','RECOVERED_ASC','RECOVERED_DESC','WRITTEN_OFF_ASC','WRITTEN_OFF_DESC'],
     caseListStatus:['OPEN','PAUSED','CLOSED','WRITTEN_OFF'],caseListClient:['FROZEN','UNASSOCIATED','UNKNOWN']};
   if(Object.hasOwn(enums,type))return enums[type].includes(value);
   if(type==='caseListLast')return caseListExact(value,CASE_LIST_LAST);
@@ -393,7 +393,13 @@ function caseListTime(value){
 function caseListCompare(a,b,sort){
   if(sort==='CASE_ID_ASC')return caseListTextCompare(a.case_id,b.case_id);
   if(!sort.startsWith('CREATED_')){
-    const key=caseListTextCompare(a.sort_value,b.sort_value);
+    let key;
+    if(/^(ORIGINAL|OUTSTANDING|WEEKLY|FUNDED|RECOVERED|WRITTEN_OFF)_/.test(sort)){
+      if((a.sort_value==='~')!==(b.sort_value==='~'))return a.sort_value==='~'?1:-1;
+      const scaled=value=>{if(value==='~')return 0n;if(!/^-?\d{1,24}(?:\.\d{1,6})?$/.test(value))throw fault('RESPONSE_INVALID',502);
+        const [whole,part='']=value.replace(/^-/,'').split('.');return BigInt(whole+part.padEnd(6,'0'))*(value.startsWith('-')?-1n:1n);};
+      const x=scaled(a.sort_value),y=scaled(b.sort_value);key=x===y?0:x<y?-1:1;
+    }else key=caseListTextCompare(a.sort_value,b.sort_value);
     if(key)return sort.endsWith('_DESC')?-key:key;
   }
   if((a.created_at_utc===null)!==(b.created_at_utc===null))return a.created_at_utc===null?1:-1;
@@ -438,6 +444,9 @@ function caseListResult(payload,call,bad){
         ||row.sort_key.case_id!==row.case_id||row.sort_key.created_at_utc!==row.created_at_utc
         ||sort.startsWith('CREATED_')&&row.sort_key.sort_value!==null
         ||sort.startsWith('TYPE_')&&row.sort_key.sort_value!==row.case_type_label
+        ||sort.startsWith('STATUS_')&&row.sort_key.sort_value!==row.status
+        ||/^(ORIGINAL|OUTSTANDING|WEEKLY|FUNDED|RECOVERED|WRITTEN_OFF)_/.test(sort)&&caseListCompare({...row.sort_key,case_id:row.case_id},
+          {...row.sort_key,sort_value:(sort.startsWith('ORIGINAL_')?row.principal_approved:sort.startsWith('OUTSTANDING_')?row.outstanding:sort.startsWith('FUNDED_')?row.principal_funded:sort.startsWith('RECOVERED_')?row.principal_recovered:sort.startsWith('WRITTEN_OFF_')?row.principal_written_off:row.weekly_due)??'~'},sort)!==0
         ||sort.startsWith('CANDIDATE_')&&row.sort_key.sort_value===null
         ||previous!==null&&caseListCompare(row.sort_key,previous,sort)<=0
         ||next!==null&&caseListCompare(row.sort_key,caseListDecodedLast(next),sort)>0

@@ -1435,6 +1435,14 @@
       "sha256": "6128edf48b34bb490712050528bcf9f6cefe1b2529bd110362ac4bb3f77a2d09"
     },
     {
+      "path": "supabase/migrations/12102026_0058_banking_pay_next_case_screen_sort_indexes.sql",
+      "sha256": "9a8ba79f02d421c0245efcf233c484d952ef8ad8225c093cdd500cd1043cffff"
+    },
+    {
+      "path": "supabase/migrations/12102026_0132_banking_pay_next_candidate_case_sort_indexes.sql",
+      "sha256": "d1de5b1ca0a3ed8fa8779fad19d63156f4382e7409b20f16e2636bd3b0581629"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

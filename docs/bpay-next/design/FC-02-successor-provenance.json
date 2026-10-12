@@ -1,0 +1,126 @@
+{
+  "item": "FC-02",
+  "sequence": 117,
+  "decision": "BD130",
+  "status": "SOURCE_AND_LOCAL_CHECKS_PASS_PENDING_FINAL_A4",
+  "sources": [
+    {
+      "path": "supabase/migrations/12102026_0058_banking_pay_next_case_screen_sort_indexes.sql",
+      "sha256": "9a8ba79f02d421c0245efcf233c484d952ef8ad8225c093cdd500cd1043cffff"
+    },
+    {
+      "path": "supabase/migrations/12102026_0132_banking_pay_next_candidate_case_sort_indexes.sql",
+      "sha256": "d1de5b1ca0a3ed8fa8779fad19d63156f4382e7409b20f16e2636bd3b0581629"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0058_banking_pay_next_case_screen_readers_v1.sql",
+      "sha256": "47aab29e2e908075c074531b5aae375be4520336c3c3535a50bcd787efa0d321"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0101_banking_pay_next_snooze_screen_reader_v1.sql",
+      "sha256": "a8498f28c1d12cf011a91262b750f6ffaff18d6366636a7f62357b6fc8422b7e"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql",
+      "sha256": "a01a392b6b5d07581431615ed7373866d79bd767673b61228b2115791f604685"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
+      "sha256": "c95c5e71e9dfd1be7f8507affda5fa2808c722f2150da13ef0eac76f90aa4176"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "e930ccece59e729c734725e9b050c8c9c9990a5a97de40773f9ebb134437f475"
+    },
+    {
+      "path": "broker/src/bpay-next-snooze-reader.js",
+      "sha256": "f90b01fa46c30b235931abc538094f2b8084a5bda14a15520617bee670a1a07b"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "16273b40801af7e3a5b96d711100b70fdad142d39f0e6e487dd8711aa22d382e"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "33fca448664ef8ced970041c8324cce2bd26ccfd204ed9c9f52250a2bf05b9d8"
+    }
+  ],
+  "currentOwners": [
+    {
+      "signature": "private.bpay_next_case_list_refresh_key_v1(uuid)",
+      "path": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
+      "sourceMd5": "540bd16b32ef0472b6d3968b81a0849b"
+    },
+    {
+      "signature": "private.bpay_next_case_list_page_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_0132_banking_pay_next_candidate_case_sort_readers_v1.sql",
+      "sourceMd5": "854ac7b7f04ba079ce58c1edca4bc914"
+    },
+    {
+      "signature": "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/12102026_0108_banking_pay_next_snooze_screen_sort_keys_v1.sql",
+      "sourceMd5": "e87d3eaccfbf168ae2a736a749b57c93"
+    }
+  ],
+  "frontend": [
+    {
+      "path": "js/bpay-next-case-list.js",
+      "sha256": "81762f7bfb98263acb56b0d1ad191e925dfd703493eababc1e521aa4ca0a0647"
+    },
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "f876b7961aaf8d0cbce0fcbcf981ce8f641ba74a122882c1b4b9836b87578929"
+    },
+    {
+      "path": "js/bpay-next-snooze-actions.js",
+      "sha256": "2e66b0d1d959ebe4018eab02283509ecb7e7e4b0c0f087522f7c0cb89f195aa4"
+    },
+    {
+      "path": "js/bpay-next-snooze-window.js",
+      "sha256": "c4e09ea7455b0caed49e6f1ce6b43eedaac50448647ef9b3e80e96d7ee057f57"
+    },
+    {
+      "path": "js/main.js",
+      "sha256": "9fce38d1c9bd25da3417dfee210a965b5480b5a5d42760a8fb1490a42e56b85e"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "a2dbee744d9a8a00a285435a5b574dcefa2116379729dcd38610d7b67149616c"
+    },
+    {
+      "path": "index.html",
+      "sha256": "73722dfa478fc7ec338de1013ab4f1c57ad2a7acc4f6569764913d5215750cf1"
+    }
+  ],
+  "checks": {
+    "integrity": "362 migrations /928 repeatables PASS",
+    "sourceGates": "12/12 PASS",
+    "nodeSyntax": "All changed JS PASS",
+    "localLoad": "Sole local PG17; two migrations and four repeatables compiled; no business calls or rows",
+    "catalogue": "3 current source-body/config/ACL matches;24 new native indexes",
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "publicDefinerMembershipDelta": 0,
+    "isolation": "General and Candidate DO PASS",
+    "contractHash": "43dfe02808caf27a7406fc6b002efe2fd15ed98fca7c7e0477bda88d0ac667d8",
+    "seal": "PASS",
+    "coupling": "PASS"
+  },
+  "reviews": [
+    "reviews/FC-02-case-sort-review.md",
+    "reviews/FC-02-snooze-sort-review.md",
+    "reviews/FC-02-office-source-review.md",
+    "design/FC-02-action-recovery-investigation.md"
+  ],
+  "screens": [
+    "screen-designs/SCR-112/review.md",
+    "screen-designs/SCR-112b/review.md",
+    "screen-designs/SCR-112c/review.md",
+    "screen-designs/SCR-113/review.md",
+    "screen-designs/SCR-114/review.md",
+    "screen-designs/SCR-115/review.md"
+  ],
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "deployment": "NOT_RUN",
+  "actualLocalCaptures": 24
+}
