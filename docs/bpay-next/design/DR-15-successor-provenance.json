@@ -2,7 +2,7 @@
   "item": "DR-15",
   "sequence": 119,
   "decision": "BD132",
-  "status": "SOURCE_LOCAL_PASS_A4_PENDING",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
   "exactDeliverables": [
     "DR-15-D02",
     "DR-15-D04",
@@ -83,7 +83,7 @@
     "syntax": "preparation Worker, Office and main PASS",
     "local": "sole PG17 exact body/configuration/ACL and General/Candidate isolation DO PASS; membership delta 0",
     "contract": "8a2dd815323a04599a7c2ffe8cf4cefe2331b8fa824869a219d490d1e70ff97f export / seal-local / coupling PASS",
-    "actualScreens": "14 real local minimal fixed-response captures; A4 receipts pending",
+    "actualScreens": "14 real local minimal fixed-response captures; three independent42-row A4 PASS receipts",
     "businessJoinedQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
   },
   "screenEvidence": [
@@ -115,5 +115,12 @@
     "screen-designs/SCR-40/DR15-progress-replies.json",
     "screen-designs/SCR-40/DR15-review.md"
   ],
-  "scope": "Named PREPARE_ISSUES branch/mapping/native consumer and small private read-index support only; no new command, producer, protocol, public trigger or money owner."
+  "scope": "Named PREPARE_ISSUES branch/mapping/native consumer and small private read-index support only; no new command, producer, protocol, public trigger or money owner.",
+  "implementationCommit": "a35177750b7037c8ad437fdd354a6d2a81bb1877",
+  "frontendImplementationCommit": "a7b1b8ee3689d176761fad6d613d5aa36bde70ae",
+  "screenReviews": [
+    "screen-designs/SCR-46/DR15-review.md",
+    "screen-designs/SCR-43c/DR15-review.md",
+    "screen-designs/SCR-40/DR15-review.md"
+  ]
 }
