@@ -1,8 +1,8 @@
 {
   "item": "WB-29",
   "sequence": 140,
-  "implementationCommit": "PENDING_LOCAL_COMMIT",
-  "frontendImplementationCommit": "PENDING_LOCAL_COMMIT",
+  "implementationCommit": "a6621e1e2a20daa1605f5a8b8768cff2b56db3ff",
+  "frontendImplementationCommit": "fd06a0accb3c213536414c174e7e4b7f13752f2d",
   "builderDecisions": [
     "BD163"
   ],

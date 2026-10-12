@@ -1,0 +1,165 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "builderDecisions": [
+    "BD164",
+    "BD165"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "sha256": "e45c85d73006720caaa39622dd7cc6560ededbccdec830b709fec8e91f773052"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "sha256": "5dd92083243dde0bd41418da6436d28d1566c32c1b0a0a540d9a8d4ae742f66a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    }
+  ],
+  "successors": [
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "currentPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "currentPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_seal_segment_selection_v1(uuid,uuid,uuid,bigint,bigint)",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)",
+      "currentPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_segment_fact_guard_v1()",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_materialise_choice_segments_v1(uuid,uuid)",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
+      "currentPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)",
+      "currentPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+        "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_captured_component_resolution_quote_v1(uuid,text)",
+      "currentPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_captured_resolution_operands_v1(uuid)",
+      "currentPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_choice_leaf_eligible_v1(uuid,uuid,uuid,uuid,uuid)",
+      "currentPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)",
+      "currentPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "predecessors": []
+    }
+  ],
+  "designs": [
+    "WB-29-captured-working-set-implementation.md",
+    "WB-29-captured-native-composer-design.md",
+    "WB-29-eligible-leaf-join.md"
+  ],
+  "reviews": [
+    "WB-29-captured-working-set-design-review.md",
+    "WB-29-eligible-leaf-join-review.md",
+    "WB-29-captured-composition-source-review.md",
+    "WB-29-captured-hold-source-review.md",
+    "WB-29-eligible-leaf-source-review.md",
+    "WB-29-captured-registry-source-gate-review.md"
+  ],
+  "checks": {
+    "dbCheck": "383 migrations/990 repeatables PASS",
+    "sourceGates": "1549 SQL/30 RPC roots/168 routine-work signatures/37 typed transports PASS",
+    "localPG17": "0 migrations/6 closures; schema compilation only PASS",
+    "catalogue": "14 exact current routine bodies/config/owner/ACL/volatility PASS",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both DO PASS; public membership delta0",
+    "nodeCheck": "scripts/bpay-next-source-gates.mjs PASS",
+    "contractSealAndCoupling": "6210af0b212336b2025899fa7c1a133462d782a18e7b0e512aefebee0e25a5ca PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; frozen/advice reader projection, estimate and Ready chosen amount/sorting remain"
+}

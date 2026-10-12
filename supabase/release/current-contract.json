@@ -11863,7 +11863,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9b32841c74097159c0836eda07a0b9124b42c9722d3efc05b33dedff661d7cd0"
+      "definition_sha256": "f33cac7cc1a604077d0eafc250fc51d41a4400aa1d6e196f44d6b479efcb1434"
     },
     {
       "acl": [
@@ -11902,6 +11902,44 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "287657a5c1ae7c59f2addd2eb5cb3300998b14f9d5ba898e88f376416eca9044"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_captured_component_resolution_quote_v1(p_run_position_id uuid, p_through_segment_key text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "964043d9db98492a2e82600603ab8c0f4856a74402ae5f951f0769fadf2f8dcf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_captured_resolution_operands_v1(p_run_position_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "d47b0b02e87f1cdda9273deffdf6913889b20391e6fa9f256c07c6c410daff06"
     },
     {
       "acl": [
@@ -13018,6 +13056,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_choice_leaf_eligible_v1(p_run_id uuid, p_work_id uuid, p_revision_id uuid, p_line_id uuid, p_segment_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "ffdc9aab1597a404f1813d686b83df8b578e31f19f2a666bd0d812af466a8bd4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_claim_case_channel_job_v1(p_job_id uuid, p_lease_seconds integer)",
       "parallel": "u",
       "volatility": "v",
@@ -13497,7 +13554,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "9faee9d0d92d2b42dee39f5da49b4b7b6e201323e41705ee62b840ade93c0442"
+      "definition_sha256": "ea43e6c70e19320b73f92103c96c11e6ae2f262a4ad092839f4b96699069bb0d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_input_quote_v1(p_intent private.bpay_next_component_resolution, p_boundary_revision_id uuid, p_position_basis jsonb, p_included_source_ex_vat numeric, p_run_position_id uuid, p_through_segment_key text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "17346c9e311523cea174ecf1c44144dcd59d34feb0c5a9170da13fe4ef821711"
     },
     {
       "acl": [
@@ -13554,7 +13630,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "33f5730e43a1dfe780ed190025c47e056fb86ffbbf698c42cc07c2bac149fce2"
+      "definition_sha256": "1cf024abb66bc1f9b3c40f0cbdd27a11d35a0b2f70287932b0febe67201c0c46"
     },
     {
       "acl": [
@@ -13649,7 +13725,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8fa734be635c70796c758376136bf0d0f9a190f438c5452e6fcab9fc9a3d3aa3"
+      "definition_sha256": "7ceadad6737802ec7e0a5c93eb73f3d1d0a4f220b0689141c1c989c269e522d9"
     },
     {
       "acl": [
@@ -14314,7 +14390,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0cee308577d6fae109a3bfbc2fd6814061b48f9683a1c4fe5a5a41d538b31f2d"
+      "definition_sha256": "101b7a0c420953551808a400b446e857b1394f2b5d874b731e0c37bac321fb42"
     },
     {
       "acl": [
@@ -14609,7 +14685,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "7fb7f0e5ed05f54a9bae5fa8ec7fd1ef033079a17fa4eefdf17e4c74aece2a8c"
+      "definition_sha256": "4bd74635503341677c2cacad8c6265182204ab2ca10447add2d3f637513562a0"
     },
     {
       "acl": [
@@ -16262,7 +16338,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "fc254118db4b9d5736583354a5a27cd7558ffb9b967666406192f7fee82368b9"
+      "definition_sha256": "8d6cf4a3e7f3c69bf8e88dad8d67334e0022f0ec49259080687e14ad2e14ac11"
     },
     {
       "acl": [
@@ -16832,7 +16908,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "58b3a53a44c041e553b1d5ca9f18fbd980c6417c2b8264417257f04503768ef3"
+      "definition_sha256": "ad35fc5a425d6400e9db51614489392f28d2b68c032be345694096b678a7dfe2"
     },
     {
       "acl": [
@@ -16965,7 +17041,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b2d2278db16cec0d45ba90022ba26d364c7b5d5d1ec3e660b67010d25e110c61"
+      "definition_sha256": "058dff724445ed803823442ae758d67324ca1352f7a69805380b58f56ab794c0"
     },
     {
       "acl": [
@@ -17231,7 +17307,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5cc92df041929029cfcd9d9c6007f1142d819078bd1bdacaa484a272bab40031"
+      "definition_sha256": "d49990ff6c04a1ed06d3a2c6087dea1aacd3a18ba64c6e2b87e14f692a21973e"
     },
     {
       "acl": [

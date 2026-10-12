@@ -2942,9 +2942,21 @@
     },
     {
       "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
@@ -2955,20 +2967,10 @@
         "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
         "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
       ],
-      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3871,9 +3873,21 @@
     },
     {
       "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
@@ -3884,20 +3898,10 @@
         "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
         "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
       ],
-      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13493,19 +13497,21 @@
     },
     {
       "signature": "private.bpay_next_seal_segment_selection_v1(uuid,uuid,uuid,bigint,bigint)",
-      "finalRoot": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
       ],
-      "owner": "WB-36 private segment/snooze support; WB-08 projection, WB-19 dispatcher, WB-44 stale refresh, WB-45 warning resolver retain their actual later ownership; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
@@ -13525,19 +13531,21 @@
     },
     {
       "signature": "private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+        "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql"
       ],
-      "owner": "WB-36 private segment/snooze support; WB-08 projection, WB-19 dispatcher, WB-44 stale refresh, WB-45 warning resolver retain their actual later ownership; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_segment_payroll_effect_membership_v1()",
@@ -13630,22 +13638,23 @@
     },
     {
       "signature": "private.bpay_next_segment_fact_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
       ],
-      "owner": "WB-36 private segment/snooze support; WB-08 projection, WB-19 dispatcher, WB-44 stale refresh, WB-45 warning resolver retain their actual later ownership; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission"
+      "finalClosures": [
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_work_segment_debt_basis_v1(uuid,text,uuid)",
@@ -14578,16 +14587,19 @@
     },
     {
       "signature": "private.bpay_next_materialise_choice_segments_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
       ],
-      "owner": "WB-21 bounded choice-input support; no monetary or producer authority"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_ack_choice_work_page_v1(uuid,bigint,jsonb,boolean)",
@@ -14820,16 +14832,19 @@
     },
     {
       "signature": "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
       ],
-      "owner": "WB-22 finite two-table native choice memory support"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_selection_memory_intent_valid_v1(jsonb)",
@@ -15682,21 +15697,23 @@
     },
     {
       "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
         "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql"
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
       ],
-      "owner": "DR-10 same-week policy; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission; WB29 BD158 exact accepted reference cut",
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join",
       "baselineSource": "LOCAL_DR10_ADDITIVE"
     },
     {
@@ -17301,23 +17318,25 @@
     },
     {
       "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
         "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
         "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
         "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
-        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
-        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql"
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
       ],
-      "owner": "WB-29 qualified shared incoming/saved quote / BD156-157; WB29 native live snooze applicability"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_component_resolution_need_publish_v1(uuid,uuid)",
@@ -17394,19 +17413,21 @@
     },
     {
       "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)",
-      "finalRoot": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+        "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
         "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql"
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
       ],
-      "owner": "WB-29 qualified shared incoming/saved quote / BD156-157"
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     },
     {
       "signature": "private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)",
@@ -17514,6 +17535,58 @@
         "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
       ],
       "owner": "WB29 native complete resolution transaction"
+    },
+    {
+      "signature": "private.bpay_next_captured_component_resolution_quote_v1(uuid,text)",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "predecessors": [],
+      "finalRoot": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
+    },
+    {
+      "signature": "private.bpay_next_captured_resolution_operands_v1(uuid)",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "predecessors": [],
+      "finalRoot": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
+    },
+    {
+      "signature": "private.bpay_next_choice_leaf_eligible_v1(uuid,uuid,uuid,uuid,uuid)",
+      "allowedPhysical": [
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "predecessors": [],
+      "finalRoot": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql"
+      ],
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "predecessors": [],
+      "finalRoot": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ],
+      "owner": "WB29 BD164/BD165 captured composition and exact original eligible leaf join"
     }
   ],
   "editorChains": [

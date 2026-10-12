@@ -59,6 +59,10 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)',
   // WB29: one qualified incoming/saved quote; unchanged1157 arithmetic.
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)',
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)',
+  'private.bpay_next_captured_resolution_operands_v1(uuid)',
+  'private.bpay_next_captured_component_resolution_quote_v1(uuid,text)',
+  'private.bpay_next_choice_leaf_eligible_v1(uuid,uuid,uuid,uuid,uuid)',
   'private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)',
   "private.bpay_next_source_query_refresh_v1(uuid,uuid)",
   "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
@@ -1464,6 +1468,27 @@ const DR11_ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_assert_candidate_financial_fence_v1(uuid,uuid,uuid,bigint)": ["pg_catalog.clock_timestamp"]
 });
 
+// WB29: exact captured/native eligibility edges; no latest need/history reader.
+const WB29_CAPTURED_WORK_CALLEES=Object.freeze({
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)': ['private.bpay_next_component_resolution_input_quote_v1'],
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)': [
+    'private.bpay_next_captured_resolution_operands_v1','private.bpay_next_component_resolution_basis_v1',
+    'private.pay_finance_selected_quote_v1','array_append','array_position','array_agg','bool_or','filter','sum',
+    'isfinite','jsonb_agg','jsonb_each','jsonb_each_text','jsonb_object_keys','jsonb_populate_record','to_jsonb','trunc','unnest','octet_length'
+  ],
+  'private.bpay_next_captured_resolution_operands_v1(uuid)': ['private.bpay_next_choice_leaf_eligible_v1','bool_or','jsonb_agg','sum','filter','to_jsonb','octet_length'],
+  'private.bpay_next_captured_component_resolution_quote_v1(uuid,text)': ['private.bpay_next_component_resolution_input_quote_v1','bool_or','sum','filter'],
+  'private.bpay_next_choice_leaf_eligible_v1(uuid,uuid,uuid,uuid,uuid)': [],
+  'private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)': ['private.bpay_next_treatment_approval_revision_v1'],
+  'private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)': [
+    'private.bpay_next_treatment_approval_revision_v1','private.bpay_next_choice_leaf_eligible_v1',
+    'private.bpay_next_captured_component_resolution_quote_v1','jsonb_agg'
+  ],
+  'private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)': [
+    'private.bpay_next_captured_component_resolution_quote_v1','jsonb_to_recordset','x'
+  ]
+});
+
 export function assertRoutineHistoryPoints(source,file,signature){
   const parts=executableParts(source,file).filter(part=>part.signature===signature);
   if(parts.length!==1||parts[0].unclassified)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
@@ -1471,7 +1496,7 @@ export function assertRoutineHistoryPoints(source,file,signature){
   const tokens=scanManagedSql(body).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
   if(/\b(?:bpay_next_payment_history_page_v1|audit_events_list|pay_finance_case_audit_actor_index)\s*\(/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_READER: ${signature}`);
   if(/\bexecute\b/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DYNAMIC: ${signature}`);
-  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[]),...(DR09_ROUTINE_WORK_CALLEES[signature]??[]),...(DR11_ROUTINE_WORK_CALLEES[signature]??[])]);
+  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[]),...(DR09_ROUTINE_WORK_CALLEES[signature]??[]),...(DR11_ROUTINE_WORK_CALLEES[signature]??[]),...(WB29_CAPTURED_WORK_CALLEES[signature]??[])]);
   const native=new Set(['and','any','as','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
     'else','elsif','encode','exists','extract','from','greatest','if','in','jsonb_array_elements',
     'jsonb_array_length','jsonb_build_array','jsonb_build_object','jsonb_typeof','least','materialized',
