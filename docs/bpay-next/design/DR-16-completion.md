@@ -1,0 +1,11 @@
+# DR-16 completion evidence
+
+Sequence121; BD134. One private Run/channel summary, native transactional OLD/NEW worker trigger, two bounded read contracts, existing Worker mappings and the real Draft review/NX104 header are implemented. Context prepare/NET/no-Case owners were reused unchanged; the trigger is not an allocation chain editor. Original selection/rule/query evidence remains controlling. Missing historical summary or observations are not fabricated or backfilled.
+
+Source/local checks PASS:365 migrations/941 repeatables;12 existing source gates; changed Worker/Office/native decorator syntax; sole local PG17 load, nine exact current body/security/configuration/owner/ACL matches; public definer membership delta0 with catalogue839/76/0/hash338226c4e9b878c5aa92fc8e319dd7bf; General and Candidate isolation DOs; contract export/seal/coupling7211686911bd05b543b952c101f8c6a12ff643d1b7e43ffc2c163bb9fcfb8018. These are compile/catalogue/source checks; no business first-use or allocation/concurrency acceptance was run.
+
+Independent receipts: reviews/DR-16-totals-review.md, DR-16-reader-review.md, DR-16-transport-review.md and DR-16-screen-source-review.md. Final real local dark/device-light/phone parent and Draft detail captures, minimal fixed responses and A4 policy/difference/control-purpose receipts are in screen-designs/SCR-44. No reusable test tool or database fixtures were added.
+
+Joined app acceptance authored/NOT_RUN:120 PAYE/30 Umbrella Run, all Candidate sums versus the three server cards, before/after entered PAYE net and replacement/clear/cancel/release transitions, original-click captured Case choices, page sorting to last row, parent/header frozen-money agreement and concurrent capacity/expiry. Future DR27 writers must retain current native summary hooks; DR37 remains the staged NET replacement owner. Timing check moved to TEST after installation (owner10/10/2026).
+
+DR14-D07's exact per-repayment Due/This Draft/Outstanding and original other-Draft reason are now present through REVIEW_CASES and the reviewed expanded row. DR14-D05/ITEM remain open until scheduled DR37 staged replacement; no extra early objects were installed. No push, hosted installation, agency switch or payment action.

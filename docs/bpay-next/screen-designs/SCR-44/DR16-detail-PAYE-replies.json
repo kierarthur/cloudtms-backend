@@ -1,0 +1,109 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "STATUS"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "LINES"
+    },
+    {
+      "path": "/api/banking/pay/next/frozen-detail",
+      "kind": "SHIFTS"
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "STATUS",
+      "header": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "run_status": "REVIEW",
+        "selection_state": "SEALED",
+        "review_revision": "1",
+        "run_worker_id": "33333333-3333-4333-8333-000000000102",
+        "candidate_id": "33333333-3333-4333-8333-000000000002",
+        "worker_status": "READY",
+        "target_pay_channel": "PAYE",
+        "umbrella_id": null,
+        "preparation_revision": "1",
+        "case_selection_revision": "0",
+        "net_request_revision": "0",
+        "net_projection_revision": "0",
+        "net_pending": false,
+        "review_issue_code": null,
+        "review_issue_work_id": null,
+        "frozen_gross_ex_vat": "1284.50",
+        "frozen_gross_vat": "0.00",
+        "frozen_gross_inc_vat": "1284.50",
+        "projection_id": null,
+        "projection_input_kind": null,
+        "entered_paye_net": null,
+        "accepted_recoveries": null,
+        "accepted_net_additions": null,
+        "cash_amount": null,
+        "reservation_mode": "UNCONFIRMED",
+        "reservation_projection_id": null,
+        "remaining_reservation_cash": null,
+        "reservation_internal_zero": false,
+        "reservation_holds_state": "NONE",
+        "gross_stage_deductions": "0.00",
+        "net_recovery_reserved": "0.00",
+        "frozen_offer_complete": true
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "LINES",
+      "rows": [
+        {
+          "run_line_id": "77777777-7777-4777-8777-777777777777",
+          "line_no": "1",
+          "original_timesheet_id": "88888888-8888-4888-8888-888888888888",
+          "captured_revision_id": "99999999-9999-4999-8999-999999999999",
+          "component_key": "WORK:1",
+          "component_kind": "WORK",
+          "work_date": "2026-10-09",
+          "source_pay_channel": "PAYE",
+          "target_pay_channel": "PAYE",
+          "source_consumed_ex_vat": "1284.50",
+          "frozen_ex_vat": "1284.50",
+          "frozen_vat": "0.00",
+          "frozen_inc_vat": "1284.50"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "SHIFTS",
+      "origin": {
+        "classification": "CLASSIFIED",
+        "revision_id": "99999999-9999-4999-8999-999999999999",
+        "origin_kind": "CONTRACT",
+        "sheet_scope": null,
+        "contract_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "client_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "work_date": null,
+        "physical_timesheet_id": "88888888-8888-4888-8888-888888888888",
+        "physical_timesheet_version": 1,
+        "candidate_display_name": "Amelia Hughes",
+        "candidate_reference": "TMS 10422",
+        "client_display_name": "Northside Care",
+        "job_title": "Support Worker",
+        "band_label": null,
+        "timesheet_reference": "TS 2087",
+        "pay_channel": "PAYE",
+        "authorised_at_utc": "2026-10-10T08:00:00Z"
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null
+    }
+  ]
+}

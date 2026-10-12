@@ -1,0 +1,240 @@
+{
+  "item": "DR-16",
+  "sequence": 121,
+  "decision": "BD134",
+  "status": "SOURCE_LOCAL_PASS_A4_FINAL_RECEIPT_REQUIRED",
+  "exactDeliverables": [
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "D07",
+    "D09",
+    "D10"
+  ],
+  "sources": [
+    {
+      "path": "supabase/migrations/12102026_0442_banking_pay_next_run_channel_totals.sql",
+      "sha256": "12cbad8f671fe84491674633d5d226734282d5052f9859ede86a6dbbf2329971"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "sha256": "ecec108929c8c2492a8d104a7f648d420c70e754fe45761044fb8e3fb9c68a11"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "sha256": "8cbbd0d0bde4fc93c507ef1002a94b050dd3a85d64107ddf592b1e2db6fd978e"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "4c6b2846b38f1d14a835fc9c62e666106370881a9898562bae6d3affecb1c443"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "6d471569386ec91573d004dcd90ec738dd0159107ba4dccbb0690e7c45438fb4"
+    }
+  ],
+  "frontend": [
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "d6e6f914e1a83994ebe0ca2082e6f2456a41c765445cc1e9c2afd8d94bb2b185"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "254cc0f85b911a4267d735f90787273b84fe0ad18b8d758e80cbf7e7d1e2d9d8"
+    },
+    {
+      "path": "js/modal-modernisation.js",
+      "sha256": "5eea89b05fbea6320656bfddb7dcab6574afc742563f6e2b4e7885f732e610e5"
+    }
+  ],
+  "finalDefiners": [
+    {
+      "signature": "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable.",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "successorChain": [
+        "0580",
+        "PS-14 (0639)",
+        "DR-37"
+      ],
+      "nextEditor": "DR-37 must merge onto current PS-14 0639; preserve its original obligation and remaining-leg reservation fields"
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable.",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_run_channel_contribution_v1(private.bpay_next_run_worker)",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_run_channel_totals_trigger_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_case_review_outstanding_capture_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_case_review_excluded_capture_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_run_review_context_v1(uuid,uuid,uuid,text)",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_run_review_totals_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    },
+    {
+      "signature": "private.bpay_next_run_review_cases_v1(uuid,uuid,uuid,text,jsonb,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+      ],
+      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+    }
+  ],
+  "checks": {
+    "sourceGates": "12 PASS",
+    "dbSource": "365 migrations/941 repeatables PASS",
+    "syntax": "changed Worker/Office/native secondary decorator PASS",
+    "local": "solePG17 compile+9exact owner/body/config/ACL matches+General839/76/0 membershipdelta0+General/Candidate isolationDO PASS",
+    "contract": "7211686911bd05b543b952c101f8c6a12ff643d1b7e43ffc2c163bb9fcfb8018 export/seal/coupling PASS",
+    "businessQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
+  },
+  "reviews": [
+    "reviews/DR-16-totals-review.md",
+    "reviews/DR-16-reader-review.md",
+    "reviews/DR-16-transport-review.md",
+    "reviews/DR-16-screen-source-review.md",
+    "screen-designs/SCR-44/review.md"
+  ],
+  "scope": "Typed same-transaction native summary, original observations and closed read/presentation support only; no producer/protocol/allocator or other money owner replaced"
+}

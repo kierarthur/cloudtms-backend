@@ -1,0 +1,93 @@
+{
+  "STATUS": {
+    "ok": true,
+    "kind": "STATUS",
+    "header": {
+      "run_id": "60000000-0000-4000-8000-000000000002",
+      "run_status": "REVIEW",
+      "selection_state": "SEALED",
+      "review_revision": "1",
+      "run_worker_id": "33333333-3333-4333-8333-000000000104",
+      "candidate_id": "33333333-3333-4333-8333-000000000004",
+      "worker_status": "READY",
+      "target_pay_channel": "UMBRELLA",
+      "umbrella_id": "44444444-4444-4444-8444-444444444444",
+      "preparation_revision": "1",
+      "case_selection_revision": "0",
+      "net_request_revision": "0",
+      "net_projection_revision": "0",
+      "net_pending": false,
+      "review_issue_code": null,
+      "review_issue_work_id": null,
+      "frozen_gross_ex_vat": "962.00",
+      "frozen_gross_vat": "192.40",
+      "frozen_gross_inc_vat": "1154.40",
+      "projection_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "projection_input_kind": "UMBRELLA",
+      "entered_paye_net": null,
+      "accepted_recoveries": "150.00",
+      "accepted_net_additions": "0.00",
+      "cash_amount": "1004.40",
+      "reservation_mode": "UNCONFIRMED",
+      "reservation_projection_id": null,
+      "remaining_reservation_cash": null,
+      "reservation_internal_zero": false,
+      "reservation_holds_state": "NONE",
+      "gross_stage_deductions": "0.00",
+      "net_recovery_reserved": "150.00",
+      "frozen_offer_complete": true
+    },
+    "rows": [],
+    "complete": true,
+    "next_cursor": null
+  },
+  "LINES": {
+    "ok": true,
+    "kind": "LINES",
+    "rows": [
+      {
+        "run_line_id": "77777777-7777-4777-8777-777777777777",
+        "line_no": "1",
+        "original_timesheet_id": "88888888-8888-4888-8888-888888888888",
+        "captured_revision_id": "99999999-9999-4999-8999-999999999999",
+        "component_key": "WORK:1",
+        "component_kind": "WORK",
+        "work_date": "2026-10-09",
+        "source_pay_channel": "UMBRELLA",
+        "target_pay_channel": "UMBRELLA",
+        "source_consumed_ex_vat": "962.00",
+        "frozen_ex_vat": "962.00",
+        "frozen_vat": "192.40",
+        "frozen_inc_vat": "1154.40"
+      }
+    ],
+    "complete": true,
+    "next_cursor": null
+  },
+  "SHIFTS": {
+    "ok": true,
+    "kind": "SHIFTS",
+    "origin": {
+      "classification": "CLASSIFIED",
+      "revision_id": "99999999-9999-4999-8999-999999999999",
+      "origin_kind": "CONTRACT",
+      "sheet_scope": null,
+      "contract_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "client_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "work_date": null,
+      "physical_timesheet_id": "88888888-8888-4888-8888-888888888888",
+      "physical_timesheet_version": 1,
+      "candidate_display_name": "Arjun Patel",
+      "candidate_reference": "TMS 10424",
+      "client_display_name": "Northside Care",
+      "job_title": "Support Worker",
+      "band_label": null,
+      "timesheet_reference": "TS 2087",
+      "pay_channel": "UMBRELLA",
+      "authorised_at_utc": "2026-10-10T08:00:00Z"
+    },
+    "rows": [],
+    "complete": true,
+    "next_cursor": null
+  }
+}
