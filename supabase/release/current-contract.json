@@ -10429,6 +10429,25 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_accept_case_channel_v1(p_actor_user_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e01084a98f5b320f97edac890fbc886b670539f3759a78b9ed8da34d957b57e5"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_accept_case_create_v1(p_command_id uuid, p_candidate_id uuid, p_actor_user_id uuid, p_case_kind text, p_case_subtype text, p_tax_treatment text, p_principal numeric, p_due_date date, p_start_monday date, p_weekly_due numeric, p_week_count bigint, p_minimum_earnings_threshold numeric, p_take_home_floor_override numeric, p_reason text)",
       "parallel": "u",
       "volatility": "v",
@@ -11061,6 +11080,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "dafcde45667d062bcc963307acba1ece147e180bc9571fdd9314ef8c0b31cdea"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_apply_case_channel_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "3bf01571f8e31ce74f8e47a4058d73582282890c9409a957fc5999f622c8eead"
     },
     {
       "acl": [
@@ -11839,7 +11877,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "3ba827da94666b3727598016fca6111cc06350c6cf60f07ea841ee9e3e6dbc36"
+      "definition_sha256": "374c5e3144043f1e234a88593997307fda153a337613a4b84bcd170909fd9b06"
     },
     {
       "acl": [
@@ -11984,6 +12022,139 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_input_v1(p_input jsonb)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "f4fc2d933f5dab9b59ae8917a2cf9b69278c49d2ef6d980cd084547be4c03d0d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_origin_v1(p_rule_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "41fc5450d9b26439b297b885f9448d41af47f6651c57a6cce6eb3263e1ba6308"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_preview_v1(p_actor_user_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "569a900e6e449960b11beb52a2d3bc71bc58ceb3c88dc5d1b55e85a61e5c7b9c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_quote_v1(p_component_id uuid, p_target_channel text, p_vat_chargeable boolean, p_effective_date date, p_mode pay_finance_component_resolution_mode_enum, p_manual_amount numeric)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "9555785d3b0d84857a0f8a8b4361145e5191b540b8ad7dbf9afaddbc1e50f749"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_quotes_v1(p_case_id uuid, p_target_channel text, p_vat_chargeable boolean, p_effective_date date, p_input jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "26423981fa67a81853269576261a1b79c7875f7d579d98dcff4ca81c63892040"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_receipt_v1(p_command_id uuid, p_case_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "bf15ec04ec2a0b2426c5de6a6d4933706a63bf7e9e9eada871d4e5f721024bf8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_channel_schedule_v1(p_candidate_id uuid, p_target_total numeric, p_source_total numeric, p_input jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "961868b0cff18115c9c8b714d9210bea43f037d871f688851b8a5a74fc4b385c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -12067,7 +12238,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "8ecbab697ab3929ccc72ae21955d3331fd6f3477c4fa1b610e56b32de22d1e60"
+      "definition_sha256": "24c9267a6dbbe4e40319e1c5240eb3efb7a04cf1dbaed40be3f1d375e26d7cfe"
     },
     {
       "acl": [
@@ -12804,6 +12975,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_claim_case_channel_job_v1(p_job_id uuid, p_lease_seconds integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "ae0d8b204becffc29e6314a52ba45ef3e5e6e4f52c4fba7ca0729156bf22f063"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_claim_case_create_job_v1(p_job_id uuid, p_lease_seconds integer)",
       "parallel": "u",
       "volatility": "v",
@@ -13264,7 +13454,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "d403f4134c0e9d4ed9b9c4d7f4649bfbb3e82931500ed0eb9a1be494bc194f59"
+      "definition_sha256": "8351c6fb4091672078c56d6de20c35aa5d4ac3f527f61b12aa4debf9110ea5c2"
     },
     {
       "acl": [
@@ -13644,7 +13834,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "60e0c0330ebf2e2654b4f4ea1933023a0bf44b4c22a27ed4f1753e2ab502202a"
+      "definition_sha256": "8966de156191c68e427318eb3f1778dc9fa18be9a97c6a2ce37a882f9d9330f4"
     },
     {
       "acl": [
@@ -34107,7 +34297,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c2e8badf06df9179b8b05f45fc4311cd1dcbd374ba46e52bcdda6b32c2b724c6"
+      "definition_sha256": "85c569083556c7f2c864b56e289b39edd61c300c14face4c911b7bdd7f94fb37"
     },
     {
       "acl": [
@@ -34131,7 +34321,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0fdb8cf5b3c414ea2b81fc2ee9842c394405aaa1f165cc09a9879aa9cc8801e0"
+      "definition_sha256": "7d319185fca9f3659c1cec00862e604e6ab144aad1afa943d1a18d2dc16a3fe0"
     },
     {
       "acl": [
@@ -34421,7 +34611,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "bad122de2c6ca37bb8859476ed8c0b16f00b4feef54317b03406f8cc7fa32d37"
+      "definition_sha256": "9deedfa06d79680d02cb7d1b52e0743ad183306afa8871f5d7176731054e89bb"
     },
     {
       "acl": [
@@ -55634,6 +55824,48 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_case_capacity_use_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_capacity_use FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_capacity_use_guard_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_component_immutable_v1",
+      "table": "bpay_next_case_channel_component",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_component_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_component FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_component_truncate_v1",
+      "table": "bpay_next_case_channel_component",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_component_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_component FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_outcome_immutable_v1",
+      "table": "bpay_next_case_channel_outcome",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_outcome_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_outcome FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_outcome_truncate_v1",
+      "table": "bpay_next_case_channel_outcome",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_outcome_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_outcome FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_request_immutable_v1",
+      "table": "bpay_next_case_channel_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_channel_request_truncate_v1",
+      "table": "bpay_next_case_channel_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_channel_request_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
       "name": "bpay_next_case_list_native_changed",
@@ -83650,6 +83882,1220 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (status = ANY (ARRAY['ACTIVE'::text, 'REALISED'::text, 'RELEASED'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_case_channel_component",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "applied_basis_source_amount_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "applied_component_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "applied_rule_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "fixed_reimbursement",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "instruction_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_component",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_rule_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "previous_component_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "quote_operands",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolution_mode",
+          "type": "pay_finance_component_resolution_mode_enum",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "tax_treatment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "valuation_policy_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "valuation_window_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_channel_compone_command_id_component_ordinal_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_compone_command_id_component_ordinal_key ON private.bpay_next_case_channel_component USING btree (command_id, component_ordinal)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_case_idx",
+          "definition": "CREATE INDEX bpay_next_case_channel_component_case_idx ON private.bpay_next_case_channel_component USING btree (case_id, candidate_id, command_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_component_pkey ON private.bpay_next_case_channel_component USING btree (command_id, case_component_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_version_idx",
+          "definition": "CREATE INDEX bpay_next_case_channel_component_version_idx ON private.bpay_next_case_channel_component USING btree (case_component_id, applied_component_revision, command_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_compo_applied_basis_source_amount__check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (applied_basis_source_amount_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_applied_rule_id_case_id_cand_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (applied_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_case_component_id_case_id_ca_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_command_id_case_id_candidate_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_channel_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_original_rule_id_case_id_can_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_previous_component_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (previous_component_revision > 0 AND previous_component_revision < '9223372036854775807'::bigint)"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_valuation_policy_id_valuatio_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (valuation_policy_id, valuation_window_id) REFERENCES private.bpay_next_valuation_policy_window(policy_id, source_window_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compone_command_id_component_ordinal_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (command_id, component_ordinal)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_captured_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(captured_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (applied_component_revision = (previous_component_revision + 1))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_inc_vat::numeric = (target_ex_vat::numeric + target_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (fixed_reimbursement = (tax_treatment = 'NON_TAXABLE'::text))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT fixed_reimbursement OR target_ex_vat::numeric = applied_basis_source_amount_ex_vat::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_component_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_ordinal > 0)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_instruction_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (instruction_kind = ANY (ARRAY['RECOVERY'::text, 'CREDIT'::text]))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_original_component_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(original_component) = 'object'::text AND octet_length(original_component::text) <= 16384)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id, case_component_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_quote_operands_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(quote_operands) = 'object'::text AND octet_length(quote_operands::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_resolution_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (resolution_mode = ANY (ARRAY['SUGGESTED_EQUIVALENT_BASIS'::pay_finance_component_resolution_mode_enum, 'MANUAL_AMOUNT'::pay_finance_component_resolution_mode_enum]))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_source_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_tax_treatment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_case_channel_outcome",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "applied_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "applied_component_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "applied_rule_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issue_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_channel_outcome_case_idx",
+          "definition": "CREATE INDEX bpay_next_case_channel_outcome_case_idx ON private.bpay_next_case_channel_outcome USING btree (case_id, candidate_id, completed_at_utc, command_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_job_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_outcome_job_id_key ON private.bpay_next_case_channel_outcome USING btree (job_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_outcome_pkey ON private.bpay_next_case_channel_outcome USING btree (command_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_outcom_applied_rule_id_case_id_cand_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (applied_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcom_command_id_case_id_candidate_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_channel_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_applied_component_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (applied_component_count >= 0)"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = 'APPLIED'::text AND applied_case_revision IS NOT NULL AND applied_case_revision > 0 AND applied_component_count > 0 AND issue_code IS NULL OR outcome = 'BLOCKED'::text AND applied_case_revision IS NULL AND applied_rule_id IS NULL AND applied_component_count = 0 AND issue_code IS NOT NULL AND (issue_code = ANY (ARRAY['BPAY_NEXT_CASE_PROTECTION_CHANGED'::text, 'BPAY_NEXT_CASE_CHANNEL_UNSUPPORTED'::text, 'BPAY_NEXT_CASE_CHANNEL_NO_BALANCE'::text, 'BPAY_NEXT_CASE_PREVIEW_CHANGED'::text, 'BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'::text, 'BPAY_NEXT_CASE_CHANNEL_CONTEXT_UNAVAILABLE'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_completed_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_job_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (job_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['APPLIED'::text, 'BLOCKED'::text]))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_case_channel_request",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_edit_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approval_input",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approved_principal",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_component_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "new_rule_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "new_rule_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "preview_token",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "previous_rule_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_basis",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_terms",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_terms",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_total_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_total_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_total_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_vat_chargeable",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_channel_reques_command_id_case_id_candidate__key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_reques_command_id_case_id_candidate__key ON private.bpay_next_case_channel_request USING btree (command_id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_actor_idx",
+          "definition": "CREATE INDEX bpay_next_case_channel_request_actor_idx ON private.bpay_next_case_channel_request USING btree (actor_user_id, command_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_case_channel_request_candidate_idx ON private.bpay_next_case_channel_request USING btree (candidate_id, case_id, command_sequence)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_new_rule_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_request_new_rule_id_key ON private.bpay_next_case_channel_request USING btree (new_rule_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_channel_request_pkey ON private.bpay_next_case_channel_request USING btree (command_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_reques_command_id_case_id_candidate__key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (command_id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_reques_previous_rule_id_case_id_can_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id, previous_rule_revision) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id, rule_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_accepted_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_approval_edit_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_edit_command_id) REFERENCES private.bpay_next_case_edit_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_case_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_total_inc_vat::numeric = (target_total_ex_vat::numeric + target_total_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = 'PAYE'::text AND target_umbrella_id IS NULL AND target_umbrella_vat_chargeable IS NULL OR target_pay_channel = 'UMBRELLA'::text AND target_umbrella_id IS NOT NULL AND target_umbrella_vat_chargeable IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (new_rule_id IS NULL AND new_rule_revision IS NULL AND original_command_id IS NULL AND approved_principal IS NULL AND approval_input IS NULL AND approval_edit_command_id IS NULL OR new_rule_id IS NOT NULL AND new_rule_id = command_id AND new_rule_revision IS NOT NULL AND new_rule_revision = (previous_rule_revision + 1) AND original_command_id IS NOT NULL AND approved_principal IS NOT NULL AND approved_principal::numeric > 0::numeric AND approval_input IS NOT NULL AND jsonb_typeof(approval_input) = 'object'::text AND octet_length(approval_input::text) <= 12288)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_terms IS NULL AND source_terms IS NULL OR target_terms IS NOT NULL AND source_terms IS NOT NULL AND jsonb_typeof(target_terms) = 'object'::text AND jsonb_typeof(source_terms) = 'object'::text AND octet_length(target_terms::text) <= 8192 AND octet_length(source_terms::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_id_command_sequence_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, command_sequence) REFERENCES private.bpay_next_command(id, agency_sequence) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (command_sequence > 0)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_effective_date_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(effective_date) AND effective_date >= '0001-01-01'::date AND effective_date <= '9999-12-31'::date)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_expected_case_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_case_revision > 0 AND expected_case_revision < '9223372036854775807'::bigint)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_expected_component_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_component_count > 0)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_input_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(input) = 'object'::text AND octet_length(input::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_new_rule_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (new_rule_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_original_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_command_id) REFERENCES private.bpay_next_case_create_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_preview_token_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(preview_token) = 'object'::text AND octet_length(preview_token::text) <= 32768)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_previous_rule_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (previous_rule_revision > 0 AND previous_rule_revision < '9223372036854775807'::bigint)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_source_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_basis::numeric > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_total_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_total_ex_vat::numeric > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_total_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_total_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

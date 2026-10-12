@@ -1,7 +1,7 @@
 // Two closed wrappers: financial intake and exact original-credit binding.
 // No caller-selected RPC/SQL, retry
 // or response buffering: the handler owns byte bounds and uncertainty reporting.
-const ACTIONS = new Set(['CASE_CREATE','CASE_EDIT','CASE_RESTRUCTURE','CASE_PAUSE','CASE_RESUME', 'PAYE_NET','CASE_PAYOUT','TRANSFER_BEGIN','CANCEL_REQUEST','CASH_REISSUE','REISSUE_CANCEL',
+const ACTIONS = new Set(['CASE_CREATE','CASE_EDIT','CASE_RESTRUCTURE','CASE_CHANNEL_RESOLVE','CASE_PAUSE','CASE_RESUME', 'PAYE_NET','CASE_PAYOUT','TRANSFER_BEGIN','CANCEL_REQUEST','CASH_REISSUE','REISSUE_CANCEL',
   'CSV_ISSUE','CSV_SETTLEMENT','CSV_RETURN','INTERNAL_SETTLE','PREPARATION_EXPIRE','WRITE_OFF','BIND_STORED_CREDIT','RETRY_WORK_JOB']);
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export function createBpayNextFinancialCommandRpc({ baseUrl, headers, fetchImpl=fetch }) {

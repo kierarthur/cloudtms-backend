@@ -1,0 +1,1457 @@
+[
+  {
+    "file": "FC13-before-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-preview-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-weekly-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£60.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nThe Preview shows the number of weeks.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£60.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£60.00\nPayments\n3\nLast weekly amount\n£34.44\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-manual-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£150.00\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£150.00\nVAT\n£30.00\nNew total inc VAT\n£180.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£50.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£50.00\nPayments\n3\nLast weekly amount\n£50.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£150.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-confirmation-dark.png",
+    "errors": [],
+    "copy": "?\nRestructure this overpayment recovery?\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-refused-dark.png",
+    "errors": [],
+    "copy": "!\nRestructure this overpayment recovery?\n\nThis case has changed; go back and try again.\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/command",
+        "kind": null,
+        "method": "POST"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-missing-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nNot available — this case’s payment details need checking.\n\nOriginal amount\nNot available\nOpen balance\nNot available\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\nNot available\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\nNot available\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\tNot available\tNot available\n\n1 line\n\nOpen balance ex VAT\nNot available\nConversion on taxable pay\nNot available\nNew total ex VAT\nNot available\nVAT\nNot available\nNew total inc VAT\nNot available\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalidated-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-credit-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Credit\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Credit · Open payment · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Credit\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to pay\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nStart week\nReason\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-pending-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nYour request is being prepared.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-unknown-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThe result is not known yet; try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-applied-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nArrangement changed.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-load-error-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nCould not load this arrangement; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-reason-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-go-back-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-reimbursement-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Manual Debt\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Debt · Open recovery · PAYE · Reimbursement\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Debt\tReimbursement\t£120.00\t£120.00\nNot converted\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\nNot available\nNew total ex VAT\n£120.00\nVAT\n£0.00\nNew total inc VAT\n£120.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£40.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£40.00\nPayments\n3\nLast weekly amount\n£40.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-blocked-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThis case has changed; refresh and try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-before-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-preview-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-weekly-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£60.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nThe Preview shows the number of weeks.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£60.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£60.00\nPayments\n3\nLast weekly amount\n£34.44\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-manual-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£150.00\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£150.00\nVAT\n£30.00\nNew total inc VAT\n£180.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£50.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£50.00\nPayments\n3\nLast weekly amount\n£50.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£150.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-confirmation-device-light.png",
+    "errors": [],
+    "copy": "?\nRestructure this overpayment recovery?\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-refused-device-light.png",
+    "errors": [],
+    "copy": "!\nRestructure this overpayment recovery?\n\nThis case has changed; go back and try again.\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/command",
+        "kind": null,
+        "method": "POST"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-missing-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nNot available — this case’s payment details need checking.\n\nOriginal amount\nNot available\nOpen balance\nNot available\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\nNot available\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\nNot available\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\tNot available\tNot available\n\n1 line\n\nOpen balance ex VAT\nNot available\nConversion on taxable pay\nNot available\nNew total ex VAT\nNot available\nVAT\nNot available\nNew total inc VAT\nNot available\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalidated-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-credit-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Credit\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Credit · Open payment · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Credit\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to pay\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nStart week\nReason\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-pending-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nYour request is being prepared.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-unknown-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThe result is not known yet; try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-applied-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nArrangement changed.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-load-error-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nCould not load this arrangement; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-reason-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-go-back-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-reimbursement-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Manual Debt\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Debt · Open recovery · PAYE · Reimbursement\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Debt\tReimbursement\t£120.00\t£120.00\nNot converted\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\nNot available\nNew total ex VAT\n£120.00\nVAT\n£0.00\nNew total inc VAT\n£120.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£40.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£40.00\nPayments\n3\nLast weekly amount\n£40.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-blocked-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThis case has changed; refresh and try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-before-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-weekly-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£60.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nThe Preview shows the number of weeks.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£60.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£60.00\nPayments\n3\nLast weekly amount\n£34.44\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-manual-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£150.00\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£150.00\nVAT\n£30.00\nNew total inc VAT\n£180.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£50.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£50.00\nPayments\n3\nLast weekly amount\n£50.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£150.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-confirmation-phone-dark.png",
+    "errors": [],
+    "copy": "?\nRestructure this overpayment recovery?\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-refused-phone-dark.png",
+    "errors": [],
+    "copy": "!\nRestructure this overpayment recovery?\n\nThis case has changed; go back and try again.\n\nThe new arrangement starts in the week of 19/10/2026.\n\nBefore: £120.00 PAYE · £40.00 a week for 3 weeks · After: £154.44 Umbrella · £51.48 a week for 3 weeks\n\nGo back\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/command",
+        "kind": null,
+        "method": "POST"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-missing-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nNot available — this case’s payment details need checking.\n\nOriginal amount\nNot available\nOpen balance\nNot available\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\nNot available\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\nNot available\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\nNot available\nNot available\n\n1 line\n\nOpen balance ex VAT\nNot available\nConversion on taxable pay\nNot available\nNew total ex VAT\nNot available\nVAT\nNot available\nNew total inc VAT\nNot available\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalidated-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPreview first.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-credit-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Credit\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Credit · Open payment · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Credit\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to pay\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nStart week\nReason\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nYour request is being prepared.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-unknown-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThe result is not known yet; try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-applied-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nArrangement changed.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-load-error-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nCould not load this arrangement; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-reason-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-go-back-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n£51.48\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£51.48 a week for 3 payments\nWeeks\n3\nWeekly amount\n£51.48\nPayments\n3\nLast weekly amount\n£51.48\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£154.44\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-reimbursement-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Manual Debt\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Debt · Open recovery · PAYE · Reimbursement\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Debt\nReimbursement\n£120.00\n£120.00\nNot converted\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\nNot available\nNew total ex VAT\n£120.00\nVAT\n£0.00\nNew total inc VAT\n£120.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£40.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£40.00\nPayments\n3\nLast weekly amount\n£40.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\n\nThis case has changed; refresh and try again.\n\nRequested arrangement\nUmbrella\nRequested total ex VAT\n£154.44\nVAT\n£30.89\nRequested total inc VAT\n£185.33\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-long-reason-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a shorter reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-long-reason-device-light.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\tTaxable pay\t£120.00\t£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a shorter reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-invalid-long-reason-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Overpayment recovery\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nOverpayment · Open recovery · PAYE\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£154.44\nWeekly due\n—\nWeeks remaining\n—\nStart week\n—\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nOverpayment recovery\nTaxable pay\n£120.00\n£154.44\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\n28.7000%\nNew total ex VAT\n£154.44\nVAT\n£30.89\nNew total inc VAT\n£185.33\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nEnter a shorter reason.\n\nPreview first.\nRefresh\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC13-reimbursement-phone-dark-breakdown.png",
+    "errors": [],
+    "copy": "Restructure for new pay channel\n\nChloe Davies · TMS 10233 · Manual Debt\n\nClose\nOriginal amount\n£150.00\nOpen balance\n£120.00\nPay channel\nPAYE to Umbrella\nManual Debt · Open recovery · PAYE · Reimbursement\n£120.00\nEXISTING ARRANGEMENT\nPAYE\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nSUGGESTED ARRANGEMENT\nUmbrella\nRemaining total\n£120.00\nWeekly due\n£40.00\nWeeks remaining\n3\nStart week\n19/10/2026\nBreakdown\nLINE\tKIND\tORIGINAL AMOUNT\tCONVERTED AMOUNT\nManual Debt\nReimbursement\n£120.00\n£120.00\nNot converted\n\n1 line\n\nOpen balance ex VAT\n£120.00\nConversion on taxable pay\nNot available\nNew total ex VAT\n£120.00\nVAT\n£0.00\nNew total inc VAT\n£120.00\nTotal to recover\nAccept suggested total\nEnter a total\nTotal\n£\nChoose Enter a total to type one.\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nThe Preview shows the weekly amount.\nStart week\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\nPREVIEW\n£40.00 a week for 3 payments\nWeeks\n3\nWeekly amount\n£40.00\nPayments\n3\nLast weekly amount\n£40.00\nLast payment week\n02/11/2026\nFirst week\n19/10/2026\nLast week\n02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nChange a term, then Preview again before you restructure.\nPreview\nRestructure",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_CHANNEL_SUGGEST",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  }
+]

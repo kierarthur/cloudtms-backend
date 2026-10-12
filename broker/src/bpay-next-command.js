@@ -17,7 +17,7 @@
  * retry occurs here. Accepted commands still need the separate worker drain.
  */
 
-import {caseRestructureInput,caseRestructureToken,RESTRUCTURE_ISSUES,CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,pauseReason,equal} from './bpay-next-case-contract.js';
+import {caseChannelInput,caseChannelToken,caseChannelCursor,caseChannelPreview,caseChannelReceipt,CHANNEL_ISSUES,CHANNEL_RECEIPT_SCHEMA,channelValue,caseRestructureInput,caseRestructureToken,RESTRUCTURE_ISSUES,CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,pauseReason,equal} from './bpay-next-case-contract.js';
 
 export const BPAY_NEXT_COMMAND_LIMITS = Object.freeze({
   requestBytes: 2048,
@@ -59,6 +59,7 @@ const INPUTS = Object.freeze({
   CASE_CREATE: {command_id:'uuid',...CASE_INPUT_SCHEMA,preview_token:'caseToken'},
   CASE_PAUSE: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',reason:'pauseReason'},
   CASE_RESUME: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',reason:'pauseReason'},
+  CASE_CHANNEL_RESOLVE:{command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',input:'channelInput',preview_token:'channelToken'},
   CASE_RESTRUCTURE: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',input:'restructureInput',preview_token:'restructureToken'},
   CASE_EDIT: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',...CASE_INPUT_SCHEMA,preview_token:'caseEditToken'},
   BIND_STORED_CREDIT: { command_id: 'uuid', legacy_case_id: 'uuid' },
@@ -79,6 +80,7 @@ const OUTPUTS = Object.freeze({
   CASE_CREATE: {case_id:'uuid',command_id:'uuid',sequence:'positiveBigint',phase:'storedCreditPhase',replay:'boolean'},
   CASE_PAUSE: {case_id:'uuid',candidate_id:'uuid',command_id:'uuid',action:'pauseAction',sequence:'positiveBigint',expected_case_revision:'positiveBigint',phase:'pauseAdmissionPhase',replay:'boolean'},
   CASE_RESUME: {case_id:'uuid',candidate_id:'uuid',command_id:'uuid',action:'pauseAction',sequence:'positiveBigint',expected_case_revision:'positiveBigint',phase:'pauseAdmissionPhase',replay:'boolean'},
+  CASE_CHANNEL_RESOLVE:{case_id:'uuid',candidate_id:'uuid',command_id:'uuid',sequence:'positiveBigint',expected_case_revision:'positiveBigint',rule_id:'uuid?',phase:'channelAdmission',replay:'boolean'},
   CASE_RESTRUCTURE: {case_id:'uuid',candidate_id:'uuid',command_id:'uuid',sequence:'positiveBigint',expected_case_revision:'positiveBigint',rule_id:'uuid',phase:'restructureAdmission',replay:'boolean'},
   CASE_EDIT: {case_id:'uuid',command_id:'uuid',sequence:'positiveBigint',case_revision:'positiveBigint',rule_id:'uuid',phase:'caseEditPhase',replay:'boolean'},
   BIND_STORED_CREDIT: { case_id: 'uuid', command_id: 'uuid', sequence: 'positiveBigint', phase: 'storedCreditPhase', replay: 'boolean' },
@@ -131,6 +133,9 @@ function bigint(value, positive = false) {
 function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
   if(type==='pauseReason')return pauseReason(value);
+  if(type==='channelInput')return caseChannelInput(value);
+  if(type==='channelToken')return caseChannelToken(value);
+  if(type==='channelAdmission')return value==='ACCEPTED_PENDING_CHANNEL_RESOLUTION';
   if(type==='restructureInput')return caseRestructureInput(value);
   if(type==='restructureToken')return caseRestructureToken(value);
   if(type==='restructureAdmission')return value==='ACCEPTED_PENDING_RESTRUCTURE';
@@ -244,9 +249,10 @@ function commandCall(body) {
     || Object.keys(body).some((key) => key !== 'action' && key !== 'reauth_token' && !Object.hasOwn(schema, key))
     || keys.some((key) => !Object.hasOwn(body, key) || (!['CASE_CREATE','CASE_EDIT'].includes(body.action)&&!field(body[key], schema[key])))) invalid();
   const args = Object.fromEntries(keys.map((key) => [key, body[key]]));
-  if(ENCODER.encode(JSON.stringify(body)).byteLength>(['CASE_PAUSE','CASE_RESUME'].includes(body.action)?16384:body.action==='CASE_RESTRUCTURE'?32768:body.action==='CASE_EDIT'?49152:body.action==='CASE_CREATE'?BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes:BPAY_NEXT_COMMAND_LIMITS.requestBytes))throw fault('BPAY_NEXT_COMMAND_REQUEST_TOO_LARGE',413);
+  if(ENCODER.encode(JSON.stringify(body)).byteLength>(['CASE_PAUSE','CASE_RESUME'].includes(body.action)?16384:body.action==='CASE_CHANNEL_RESOLVE'?49152:body.action==='CASE_RESTRUCTURE'?32768:body.action==='CASE_EDIT'?49152:body.action==='CASE_CREATE'?BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes:BPAY_NEXT_COMMAND_LIMITS.requestBytes))throw fault('BPAY_NEXT_COMMAND_REQUEST_TOO_LARGE',413);
   if(body.action==='CASE_CREATE'){const {command_id,preview_token,...input}=args;if(!field(command_id,'uuid')||!caseInput(input)||!caseToken(preview_token)||!equal(preview_token.input,input))invalid();}
   if(['CASE_PAUSE','CASE_RESUME'].includes(body.action)&&BigInt(args.expected_case_revision)>=9223372036854775807n)invalid();
+  if(body.action==='CASE_CHANNEL_RESOLVE'&&(!caseChannelToken(args.preview_token,args)||BigInt(args.expected_case_revision)>=9223372036854775807n))invalid();
   if(body.action==='CASE_RESTRUCTURE'&&(!caseRestructureToken(args.preview_token,args)||BigInt(args.expected_case_revision)>=9223372036854775807n))invalid();
   if(body.action==='CASE_EDIT'){const {command_id,case_id,expected_case_revision,preview_token,...input}=args;
     if(!field(command_id,'uuid')||!field(case_id,'uuid')||!field(expected_case_revision,'positiveBigint')||!caseInput(input)
@@ -352,6 +358,7 @@ function commandResult(payload, call) {
   if (['BIND_STORED_CREDIT','CASE_CREATE'].includes(call.action)
     && payload.case_id.toLowerCase() !== call.args.command_id.toLowerCase()) invalid();
   if(['CASE_PAUSE','CASE_RESUME'].includes(call.action)&&(payload.action!==call.action||payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()||payload.expected_case_revision!==call.args.expected_case_revision))invalid();
+  if(call.action==='CASE_CHANNEL_RESOLVE'&&(payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()||payload.candidate_id.toLowerCase()!==call.args.preview_token.context.candidate_id.toLowerCase()||payload.expected_case_revision!==call.args.expected_case_revision||(call.args.preview_token.context.case_kind==='MANUAL_DEBT'?payload.rule_id?.toLowerCase()!==call.args.command_id.toLowerCase():payload.rule_id!==null)))invalid();
   if(call.action==='CASE_RESTRUCTURE'&&(payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()||payload.candidate_id.toLowerCase()!==call.args.preview_token.context.candidate_id.toLowerCase()||payload.rule_id.toLowerCase()!==call.args.command_id.toLowerCase()||payload.expected_case_revision!==call.args.expected_case_revision))invalid();
   if(call.action==='CASE_EDIT'&&(payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()
     ||payload.rule_id.toLowerCase()!==call.args.command_id.toLowerCase()
@@ -394,6 +401,7 @@ function dependencyError(error, attempted = false, action = null) {
   const db = error?.json ?? error;
   if(action==='CASE_CREATE'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')return fault(db.message,409);
   if(['CASE_PAUSE','CASE_RESUME'].includes(action)&&['BPAY_NEXT_CASE_PAUSE_UNSUPPORTED','BPAY_NEXT_CASE_PAUSE_STATE_CHANGED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID','BPAY_NEXT_CASE_PAUSE_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
+  if(action==='CASE_CHANNEL_RESOLVE'&&[...CHANNEL_ISSUES,'BPAY_NEXT_CASE_CHANNEL_FIXED_AMOUNT','BPAY_NEXT_CASE_CHANNEL_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
   if(action==='CASE_RESTRUCTURE'&&[...RESTRUCTURE_ISSUES,'BPAY_NEXT_CASE_RESTRUCTURE_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
   if(action==='CASE_EDIT'&&['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED',
     'BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID','BPAY_NEXT_CASE_EDIT_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);

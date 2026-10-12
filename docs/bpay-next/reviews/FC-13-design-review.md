@@ -1,0 +1,46 @@
+# FC-13 independent design review
+
+12 October 2026. SOURCE / DESIGN ONLY. Reviewed the full FC-13 card03:1290–1314, all twelve working checklist rows, applicable R2 sections2–3, master08 successor chains, owner10October schedule ruling, `FC-13.md`/BD148, saved investigation, current registry and actual1536/1157 owners. No product, checklist, SQL, RPC, fixture, test or business action was changed or run. Joined acceptance remains NOT_RUN.
+
+**Current verdict: PASS for BD148's scoped decision-first design**, after the amendment below closes both findings. Cross-channel capture/partial source disposition/NET/transfer consumers remain explicitly BLOCKED_ON_CM-13a. This is not approval of a completed FC-13 ITEM, current product code or the later money consumers.
+
+The two findings below are retained as **historical closed findings** against the earlier design bytes.
+
+## R13-D01 — qualify the real FC-13 manual rule origin, including taxable Manual Debt
+
+`FC-13.md:17/41/43` promises an FC-12-approved future-rule lineage but does not define the actual admissible association. Current `private.bpay_next_case_edit_origin_v1(uuid)` (`12102026_1536_banking_pay_next_case_restructure_v1.sql:2555–2604`) delegates only to `private.bpay_next_case_restructure_origin_v1(uuid)` at2564. The latter accepts only its exact native restructure request/outcome and a DONE `CASE_RESTRUCTURE` job plus COMPLETE `CASE_RESTRUCTURE` command (1536:18–19/38–58). It does not recognize a newly appended FC-13 rule merely because its copied columns resemble FC-12 terms.
+
+Further, the existing FC-12 preview `private.bpay_next_case_restructure_preview_v1(uuid,jsonb)` rejects a taxable `MANUAL_DEBT` at1536:90–92. FC-13 explicitly owns taxable Manual Debt (card1292/1296/1303/1312). Calling that preview/apply unchanged or storing an FC-13 command in an FC-12 request would give either a real refusal or false command provenance.
+
+Specify the minimal **FC-13-native** qualified origin: original Create ID and exact Case/Candidate/type/tax/source identity; current qualified canonical14-field `approval_input` and genuine approved principal; real nullable `approval_edit_command_id` (never a restructure/channel command disguised as an edit); exact previous/new Rule and monotone revision; copied creation/funding identity and age; source-valued native schedule; immutable APPLIED outcome; original `CASE_CHANNEL_RESOLVE` DONE job/COMPLETE command and exact module/sequence association. A small named channel-origin helper can be exposed through the existing origin reader without changing FC-12's non-tax permission/admission. The precise successor/branch must be named in the design.
+
+The current DERIVE consumer reads that origin and validates its actual principal/type at1536:2760–2787, so an unqualified new rule is not harmless metadata. Specify when the new rule becomes the Case/component current rule, and how readers qualify it. The existing FC-12 period-amendment owner (`private.bpay_next_apply_case_restructure_period_v1(uuid,jsonb,jsonb,uuid)`,1536:314–336) also explicitly expects the native restructure origin/request. Do not claim its unchanged body already accepts an FC-13 receipt. If new-period/old-unreserved-period consumption stays with CM-13a, state that precisely; no protected opening/history is changed now.
+
+## R13-D02 — separate accepted target scheduling from native source rule units
+
+`FC-13.md:13/19/41/43` gives an accepted remaining-source→target quote and a future weekly arrangement, but does not identify the unit of each stored scheduling operand. The native Rule field is `weekly_due_source_ex_vat`; FC-12 writes the source-denominated `terms.weekly_due` there at1536:250–255. Current DERIVE computes component/Case/period capacity in source before producing its currently identical target tuple. Therefore, a £115 source liability/£100 accepted target is **not** a £15 write-off, and the screen's £20 target weekly amount cannot silently become £20 source due.
+
+The design should state that original Case/component P/R/W, genuine principal, realised amounts and all protected source reservations are unchanged. Store accepted target total/weekly/final-instalment terms separately in the FC-13 decision. Specify the exact source-denominated future Rule terms, or explicitly defer activation/consumption of target-denominated scheduling to the blocked consumer boundary. Do not label one amount as both channels. Existing1157:452/604–636/728–734/751–754/764 supplies the selected **remaining-basis** quote, target ex/VAT/inc per source and applied source basis; it is the legacy arithmetic reference, not authorization to scale an unqualified full original balance or invent a second allocator. Exact partial allocation/source residual and final penny conservation are part of the later consumer closure.
+
+## Design portions supported by source
+
+- BD148 correctly separates automatic immutable origin from an independent accepted component decision.1519:306–319 freezes original collection Rule/kind/tax/source identities; the new receipt can update only approved resolution facts/revision.
+- The chosen quote must remain SUGGESTED or MANUAL exactly as accepted; £100 target on £115 remaining source is retained, never replaced by the automatic full-principal quote. Distinct money kinds/reimbursements retain the legacy conversion predicate and fixed subtotal.
+- Current result insert guard1215:1853–1857 already permits separately bounded source/target values; no equality relaxation there is needed.
+- The CM-13a dependency is concrete: approved file06:581/585–591 explicitly owns the lifted Case channel gates,0390/0410 layer and selected reuse factors; master08:61–62/311 assigns its later boundary. Current consumers remain incompatible as recorded in `FC-13-consumption-investigation.md`. No WB-45 producer or parked F25 framework is needed to author the independent FC-13 receipt now.
+- The original UK effective date is distinct from internal Monday periods. Weeks OR weekly choice, server-derived other term/final week, Preview invalidation, reason and before/after confirmation follow owner10OctoberB and SCR-30 variants. Missing amounts stay null/reason; no new Underpayment producer or native payout turned into a recurring debt.
+- Ordered module/Candidate/fence/Case locking, original-byte replay and targeted WB-08 refresh are the correct required boundaries. All existing captured Drafts/holds/results/openings retain their original channel/decision.
+
+## Reviewed source bytes
+
+`FC-13.md` SHA256 `26E86CAF55213F889850EEF8ED204D204AB6D87B7380351B22435F39F26E3DB3`. Current1536 SHA256 `14364DA406573B3031C30E9F2F74148862109EB2C03613E0035B3897B6F0665B`;1157 `AD1C7A92754F2937EDB642DD5EE387F62761EF241CEF77D3B792185B2EB22F3C`. These are saved-source/design observations only. No independent SQL/runtime or app acceptance is claimed.
+
+## Final design amendment — both findings closed
+
+Re-read the current saved design `FC-13.md:47–55`, SHA256 `E23A7C7E79469C0BB6959DA1F752F26F57AFA82B4C2707C358600DE94A84E68E`.
+
+**R13-D01 CLOSED:** line49 names `private.bpay_next_case_channel_origin_v1(rule_id)` with the real FC-13 request/outcome and DONE/COMPLETE `CASE_CHANNEL_RESOLVE` association, original Create/canonical approval input, actual nullable edit identity and unchanged approved source principal/funding/age. It explicitly rejects counterfeit FC-12 request provenance and the unchanged NON_TAXABLE-only preview/apply. It names the minimal current `case_edit_origin_v1` early delegate and preserves the existing FC-12/edit branches. Automatic collection identities stay outside that manual helper. Rule/period **money consumption** remains at the recorded CM-13a boundary; current old openings are retained.
+
+**R13-D02 CLOSED:** line51 explicitly stores target schedule terms separately, derives native source Rule terms over the genuinely unreserved source basis and the target-derived week count, and uses source terms in `weekly_due_source_ex_vat`. It never substitutes the chosen target total for actual approved principal. The current `private.bpay_next_case_create_terms_v1(jsonb)` (`11102026_1536_banking_pay_next_case_create_intake_v1.sql:5–99`) positively supports TAXABLE/NON_TAXABLE Manual Debt at53, validates genuine positive penny operands at59–69, and implements weekly/week-count arithmetic at81–97. Thus two calls with separately labelled genuine source/target nominal inputs are reuse of one existing schedule helper, not an invented conversion or repayment formula. The internal Monday key is qualified separately from the retained effective UK date. Partial converted source disposal/penny residuals remain explicitly deferred, and payment-direction Credit/Underpayment has no fabricated recurring repayment rule (design53).
+
+Source/target totals are accepted quote/nominal schedule operands; the £115→£100 example remains £115 source liability priced at £100 target, with no £15 write-off and no principal/counter mutation. Future consumer closure must still prove that it honors this exact accepted remaining basis and conserves both amounts; compile alone cannot prove it. No further design defect found in the scoped stage. Product definitions were not reviewed by this amendment, and all joined/runtime/business acceptance remains NOT_RUN.

@@ -141,4 +141,106 @@ function caseRestructureReceipt(v){const s={command_id:'uuid',case_id:'uuid',can
  if(typeof v.completed_at_utc!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(v.completed_at_utc)||!Number.isFinite(Date.parse(v.completed_at_utc)))return false;
  return v.phase==='BLOCKED'?RESTRUCTURE_ISSUES.includes(v.issue_code)&&v.applied_case_revision===null:v.issue_code===null&&BigInt(v.applied_case_revision??0)===BigInt(v.expected_case_revision)+1n;}
 
-export {CASE_INPUT_SCHEMA,caseRestructureInput,caseRestructureToken,caseRestructurePreview,caseRestructureReceipt,RESTRUCTURE_ISSUES,caseInput,caseToken,caseEditToken,caseEditState,caseEditReceipt,PAUSE_ISSUES,PAUSE_RECEIPT_SCHEMA,pauseReason,pauseSummary,pauseProtection,pauseValue,casePauseState,casePauseReceipt,casePreview,equal};
+// FC13 finite native decision contract. Validation only; SQL owns valuation.
+const CHANNEL_ISSUES=Object.freeze(['BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_CHANNEL_UNSUPPORTED',
+ 'BPAY_NEXT_CASE_CHANNEL_NO_BALANCE','BPAY_NEXT_CASE_PREVIEW_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID',
+ 'BPAY_NEXT_CASE_CHANNEL_CONTEXT_UNAVAILABLE']);
+const CHANNEL_INPUT={resolution_mode:'channelMode',manual_total:'positiveMoney?',effective_date:'date',
+ weekly_due:'positiveMoney?',week_count:'positive?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',reason:'reason'};
+const CHANNEL_CONTEXT={actor_user_id:'uuid',candidate_id:'uuid',owner_epoch:'positive',financial_view_revision:'integer',
+ case_id:'uuid',case_revision:'positive',rule_id:'uuid',rule_revision:'positive',status:'channelStatus',case_kind:'channelFamily',
+ source_basis:'money?',target_pay_channel:'channel',target_umbrella_id:'uuid?',target_umbrella_vat_chargeable:'boolean?',
+ component_count:'integer',valuation_date:'date'};
+const CHANNEL_RECEIPT_SCHEMA={command_id:'uuid',case_id:'uuid',candidate_id:'uuid',sequence:'positive',
+ expected_case_revision:'positive',rule_id:'uuid?',phase:'channelPhase',applied_case_revision:'positive?',
+ applied_component_count:'integer?',issue_code:'channelIssue?',completed_at_utc:'channelTimestamp?'};
+function channelValue(v,t){if(t.endsWith('?'))return v===null||channelValue(v,t.slice(0,-1));
+ if(t==='boolean')return typeof v==='boolean';
+ if(t==='channelPercent')return typeof v==='string'&&/^(0|[1-9][0-9]*)([.][0-9]+)?$/.test(v)&&v.length<=1024;
+ if(t==='channelMode')return ['SUGGESTED_EQUIVALENT_BASIS','MANUAL_AMOUNT'].includes(v);
+ if(t==='channelStatus')return ['OPEN','PAUSED'].includes(v);
+ if(t==='channelFamily')return ['OVERPAYMENT','MANUAL_DEBT','CREDIT'].includes(v);
+ if(t==='channelSubtype')return ['OVERPAYMENT','MANUAL_DEBT','UNDERPAYMENT','MANUAL_CREDIT'].includes(v);
+ if(t==='channelInstruction')return ['RECOVERY','CREDIT'].includes(v);
+ if(t==='channelPhase')return ['PENDING','CASE_CHANNEL_RESOLVED','BLOCKED'].includes(v);
+ if(t==='channelIssue')return CHANNEL_ISSUES.includes(v);
+ if(t==='channelTimestamp')return typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?Z$/.test(v)&&Number.isFinite(Date.parse(v));
+ return value(v,t);}
+const channelShape=(v,s)=>object(v)&&Object.keys(v).length===Object.keys(s).length&&Object.entries(s).every(([k,t])=>Object.hasOwn(v,k)&&channelValue(v[k],t));
+function caseChannelInput(v,defaults=false){return channelShape(v,defaults?{...CHANNEL_INPUT,reason:'note'}:CHANNEL_INPUT)
+ &&enc.encode(JSON.stringify(v)).byteLength<=8192
+ &&(v.resolution_mode==='MANUAL_AMOUNT')===(v.manual_total!==null)
+ &&!(v.week_count!==null&&v.weekly_due!==null);}
+function channelContext(v){return channelShape(v,CHANNEL_CONTEXT)&&v.case_revision!=='9223372036854775807'
+ &&v.rule_revision!=='9223372036854775807'
+ &&(v.target_pay_channel==='PAYE'?v.target_umbrella_id===null&&v.target_umbrella_vat_chargeable===null:
+   v.target_umbrella_id!==null&&v.target_umbrella_vat_chargeable!==null);}
+function channelTerms(v,input,context){if(context.case_kind==='CREDIT')return v===null&&['weekly_due','week_count',
+ 'minimum_earnings_threshold','take_home_floor_override'].every(k=>input[k]===null);
+ if(!object(v)||Object.keys(v).sort().join()!=='effective_date,last_target_payment_week,last_target_week_amount,source_terms,target_payment_week_count,target_terms'
+  ||v.effective_date!==input.effective_date||!restructureTerms(v.target_terms)||!restructureTerms(v.source_terms)
+  ||!value(v.last_target_week_amount,'positiveMoney')||!value(v.target_payment_week_count,'positive')||!value(v.last_target_payment_week,'date')
+  ||BigInt(v.target_payment_week_count)>BigInt(v.target_terms.week_count)||v.target_terms.week_count!==v.source_terms.week_count
+  ||v.target_terms.first_due_monday!==v.source_terms.first_due_monday
+  ||v.target_terms.last_due_monday!==v.source_terms.last_due_monday)return false;
+ const date=new Date(input.effective_date+'T00:00:00Z'),monday=new Date(date.getTime()-((date.getUTCDay()+6)%7)*86400000).toISOString().slice(0,10);
+ const total=restructureMoney(v.target_terms.total),weekly=restructureMoney(v.target_terms.weekly_due),payments=BigInt(v.target_payment_week_count);
+ if(weekly<=0n||payments!==(total+weekly-1n)/weekly||restructureMoney(v.last_target_week_amount)!==total-weekly*(payments-1n))return false;
+ const expectedLast=new Date(new Date(monday+'T00:00:00Z').getTime()+Number(payments-1n)*7*86400000).toISOString().slice(0,10);
+ return v.last_target_payment_week===expectedLast&&v.target_terms.first_due_monday===monday&&restructureMoney(v.source_terms.total)===restructureMoney(context.source_basis)
+  &&(input.week_count===null||v.target_terms.week_count===input.week_count)
+  &&(input.weekly_due===null||restructureMoney(v.target_terms.weekly_due)===restructureMoney(input.weekly_due))
+  &&['minimum_earnings_threshold','take_home_floor_override'].every(k=>restructureMoney(v.target_terms[k])===restructureMoney(input[k])
+    &&restructureMoney(v.source_terms[k])===restructureMoney(input[k]));}
+function caseChannelToken(v,args){if(!object(v)||Object.keys(v).sort().join()!=='context,input,target_total_ex_vat,target_total_inc_vat,target_total_vat,terms'
+ ||!caseChannelInput(v.input)||!channelContext(v.context)||!channelTerms(v.terms,v.input,v.context)
+ ||!value(v.target_total_ex_vat,'positiveMoney')||!value(v.target_total_vat,'money')||!value(v.target_total_inc_vat,'positiveMoney')
+ ||!value(v.context.source_basis,'positiveMoney')||v.context.component_count==='0'
+ ||v.context.valuation_date!==v.input.effective_date||enc.encode(JSON.stringify(v)).byteLength>32768)return false;
+ return restructureMoney(v.target_total_inc_vat)===restructureMoney(v.target_total_ex_vat)+restructureMoney(v.target_total_vat)
+  &&(v.terms===null||restructureMoney(v.terms.target_terms.total)===restructureMoney(v.target_total_ex_vat))
+  &&(v.input.resolution_mode!=='MANUAL_AMOUNT'||restructureMoney(v.input.manual_total)===restructureMoney(v.target_total_ex_vat))
+  &&(!args||v.context.case_id.toLowerCase()===args.case_id.toLowerCase()&&v.context.case_revision===args.expected_case_revision&&equal(v.input,args.input));}
+function caseChannelCursor(v){return v===null||object(v)&&Object.keys(v).sort().join()==='after_component_ordinal,context'
+ &&value(v.after_component_ordinal,'positive')&&channelContext(v.context)&&enc.encode(JSON.stringify(v)).byteLength<=8192;}
+function caseChannelPreview(v,args,actor){const keys=['context','defaults','scheduled','before','source_principal','source_outstanding','source_reserved',
+ 'suggested_total_ex_vat','suggested_total_vat','suggested_total_inc_vat','after','chosen_total_ex_vat','chosen_total_vat','chosen_total_inc_vat',
+ 'preview_token','issue_code','protection','rows','next_cursor','candidate_balances','conversion_pct','source_pay_channels'];
+ if(!object(v)||Object.keys(v).sort().join()!==keys.sort().join()||!channelContext(v.context)||!caseChannelInput(v.defaults,true)
+  ||typeof v.scheduled!=='boolean'||v.scheduled!==(v.context.case_kind!=='CREDIT')||!(v.before===null||restructureTerms(v.before))
+  ||!pauseSummary(v.protection)||!channelValue(v.issue_code,'channelIssue?')||!caseChannelCursor(v.next_cursor)
+  ||v.context.case_id.toLowerCase()!==args.case_id.toLowerCase()||v.context.case_revision!==args.expected_case_revision
+  ||actor&&v.context.actor_user_id.toLowerCase()!==actor.toLowerCase()
+  ||!Array.isArray(v.rows)||v.rows.length>(args.limit??100)||enc.encode(JSON.stringify(v)).byteLength>120000)return false;
+ if(!channelValue(v.conversion_pct,'channelPercent?')||!Array.isArray(v.candidate_balances)||v.candidate_balances.length>128
+  ||!Array.isArray(v.source_pay_channels)||v.source_pay_channels.length>2||v.source_pay_channels.some(c=>!value(c,'channel'))
+  ||new Set(v.source_pay_channels).size!==v.source_pay_channels.length)return false;
+ const balances=new Set();for(const b of v.candidate_balances){if(!object(b)||Object.keys(b).sort().join()!=='case_kind,case_subtype,instruction_kind,issue_code,outstanding,source_pay_channel,tax_treatment'
+  ||!['LOAN','ADVANCE','OVERPAYMENT','MANUAL_DEBT','CREDIT'].includes(b.case_kind)||!['LOAN','PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT','UNDERPAYMENT','MANUAL_CREDIT'].includes(b.case_subtype)
+  ||!['PAYOUT','RECOVERY','CREDIT'].includes(b.instruction_kind)||!['TAXABLE','NON_TAXABLE','NOT_APPLICABLE'].includes(b.tax_treatment)||!value(b.source_pay_channel,'channel')
+  ||!value(b.outstanding,'money?')||!(b.issue_code===null||b.issue_code==='BPAY_NEXT_CASE_CHANNEL_CONTEXT_UNAVAILABLE')
+  ||(b.outstanding===null)!==(b.issue_code!==null))return false;const key=[b.case_kind,b.case_subtype,b.instruction_kind,b.tax_treatment,b.source_pay_channel].join('|');if(balances.has(key))return false;balances.add(key);}
+ const moneyKeys=['source_principal','source_outstanding','source_reserved','suggested_total_ex_vat','suggested_total_vat',
+  'suggested_total_inc_vat','chosen_total_ex_vat','chosen_total_vat','chosen_total_inc_vat'];
+ if(!moneyKeys.every(k=>value(v[k],'money?'))||v.issue_code!==null&&v.issue_code!=='BPAY_NEXT_CASE_CHANNEL_NO_BALANCE'&&['source_principal','source_outstanding','source_reserved',
+  'suggested_total_ex_vat','suggested_total_vat','suggested_total_inc_vat'].some(k=>v[k]!==null))return false;
+ const rowSchema={case_component_id:'uuid',component_ordinal:'positive',case_subtype:'channelSubtype',tax_treatment:'tax',
+  instruction_kind:'channelInstruction',source_pay_channel:'channel',source_basis:'money?',target_ex_vat:'money?',target_vat:'money?',
+  target_inc_vat:'money?',erni_pct:'channelPercent?',vat_rate_pct:'channelPercent?',converted:'boolean',issue_code:'channelIssue?'};let prior=BigInt(args.after?.after_component_ordinal??0);const ids=new Set();
+ for(const r of v.rows){if(!channelShape(r,rowSchema)||r.tax_treatment==='NOT_APPLICABLE'||BigInt(r.component_ordinal)<=prior||ids.has(r.case_component_id.toLowerCase()))return false;
+  prior=BigInt(r.component_ordinal);ids.add(r.case_component_id.toLowerCase());
+  if((r.target_ex_vat===null)!==(r.target_vat===null)||(r.target_ex_vat===null)!==(r.target_inc_vat===null)
+   ||r.target_ex_vat!==null&&restructureMoney(r.target_inc_vat)!==restructureMoney(r.target_ex_vat)+restructureMoney(r.target_vat))return false;}
+ if(v.next_cursor!==null&&(!equal(v.next_cursor.context,v.context)||v.rows.length===0||BigInt(v.next_cursor.after_component_ordinal)!==prior))return false;
+ if(args.after&&!equal(args.after.context,v.context))return false;
+ if(args.input===null||v.issue_code!==null)return v.after===null&&v.preview_token===null&&['chosen_total_ex_vat','chosen_total_vat','chosen_total_inc_vat'].every(k=>v[k]===null);
+ return caseChannelToken(v.preview_token,args)&&equal(v.preview_token.context,v.context)&&equal(v.preview_token.terms,v.after)
+  &&['target_total_ex_vat','target_total_vat','target_total_inc_vat'].every(k=>v.preview_token[k]===v[k.replace('target_total','chosen_total')]);}
+function caseChannelReceipt(v){if(!channelShape(v,CHANNEL_RECEIPT_SCHEMA)||v.rule_id!==null&&v.rule_id.toLowerCase()!==v.command_id.toLowerCase())return false;
+ if(v.phase==='PENDING')return ['applied_case_revision','applied_component_count','issue_code','completed_at_utc'].every(k=>v[k]===null);
+ if(v.completed_at_utc===null)return false;
+ return v.phase==='BLOCKED'?v.applied_case_revision===null&&v.applied_component_count==='0'&&v.issue_code!==null:
+  v.issue_code===null&&value(v.applied_case_revision,'positive')&&BigInt(v.applied_case_revision)===BigInt(v.expected_case_revision)+1n
+   &&value(v.applied_component_count,'positive');}
+
+export {CHANNEL_ISSUES,CHANNEL_RECEIPT_SCHEMA,channelValue,caseChannelInput,caseChannelToken,caseChannelCursor,caseChannelPreview,caseChannelReceipt,CASE_INPUT_SCHEMA,caseRestructureInput,caseRestructureToken,caseRestructurePreview,caseRestructureReceipt,RESTRUCTURE_ISSUES,caseInput,caseToken,caseEditToken,caseEditState,caseEditReceipt,PAUSE_ISSUES,PAUSE_RECEIPT_SCHEMA,pauseReason,pauseSummary,pauseProtection,pauseValue,casePauseState,casePauseReceipt,casePreview,equal};

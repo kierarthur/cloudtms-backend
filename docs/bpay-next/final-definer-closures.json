@@ -3493,9 +3493,19 @@
     },
     {
       "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
         "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
@@ -3504,18 +3514,10 @@
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors.",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3717,9 +3719,22 @@
     },
     {
       "signature": "private.bpay_next_enroll_one_v1()",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
@@ -3731,21 +3746,10 @@
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-        "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
-        "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors.",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7582,9 +7586,21 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
@@ -7595,27 +7611,30 @@
         "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
-        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors.",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
@@ -7627,21 +7646,10 @@
         "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-        "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
-        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors.",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7782,9 +7790,37 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+        "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+        "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+        "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7811,36 +7847,10 @@
         "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
-        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
-        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
-        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
-        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
-        "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
-        "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
-        "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors.",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14821,25 +14831,27 @@
     },
     {
       "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
         "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
-        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors."
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
     },
     {
       "signature": "private.bpay_next_snooze_due_receipt_valid_v1(uuid)",
@@ -15913,18 +15925,20 @@
     {
       "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
       "predecessors": [
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
-      "allowedPhysical": [
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
       ],
-      "finalClosures": [
-        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
       ],
-      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
-      "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors."
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
     },
     {
       "signature": "private.bpay_next_case_edit_state_v1(uuid,uuid)",
@@ -16956,6 +16970,136 @@
       "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
       "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
       "owner": "FC12 seq133 BD147 exact future arrangement, immutable original approval/funding age and unreserved opening amendments; current successors."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_input_v1(jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_schedule_v1(uuid,numeric,numeric,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_quote_v1(uuid,text,boolean,date,public.pay_finance_component_resolution_mode_enum,numeric)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_quotes_v1(uuid,text,boolean,date,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_preview_v1(uuid,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_accept_case_channel_v1(uuid,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_origin_v1(uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_case_channel_receipt_v1(uuid,uuid,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_apply_case_channel_v1(uuid,uuid,bigint)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
+    },
+    {
+      "signature": "private.bpay_next_claim_case_channel_job_v1(uuid,integer)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "owner": "FC13 seq134 BD148 remaining-balance decision/origin and exact-cut refusal; downstream money consumer BLOCKED_ON_CM13a."
     }
   ],
   "editorChains": [
