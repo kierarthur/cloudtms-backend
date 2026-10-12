@@ -3725,6 +3725,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows DR
 
 With a 300-Timesheet mixed Draft on the NEXT TEST agency, browser start to "Payment Draft created" (two Drafts) takes at most 60 s (RQ-239, RQ-300, RQ-319); two concurrent runs of 120 and 30 both complete (RQ-319); a 1,000-Timesheet run completes with more progress steps and the same per-Candidate figures (RQ-243).
 
+Whole DR-20 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. BE ed8339f5233d52dbb17d647edc4f34e66e087f94. BD140; exact bounded same-original-command metadata page and PREPARE turns; independent design/SQL/Worker SOURCEPASS, localPG17 compile/catalogue/isolation/seal/coupling PASS. Source12/db368948/JSsyntax PASS. PF02 checklist authored with answer per line. Joined queue/business/C3 timing AUTHORED_NOT_RUN; no local timing/data. Evidence design/DR-20-completion.md and successor-provenance.json.
+
 ## DR-21 — PAYE worksheet reader for all workers in a PAYE Draft
 
 Seq 127; PAYE net · D2-D; reviewer R3; current requested-feature status PARTLY_DONE.

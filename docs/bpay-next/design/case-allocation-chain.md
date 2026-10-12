@@ -355,3 +355,5 @@ DR17seq123 BD137: private captured-origin/public frozen-detail1005 ->12102026_06
 DR18seq124: confirm0847 ->0645; factualchannels0236 ->0645; WB08 STEP/runtime1429 ->0645. New exact immutable Work/Case CONFIRM task membership uses existing WB08 queue/finish and stable original addresses, no financial inputs. Later editors merge final0645 in final-definer registry; futureDR07 publicpreparationpage merges0442, not0645. D02 actualDR28handoff remainsopen.
 
 DR07seq125 BD139: public preparation-page0442 ->12102026_0718; private progress0414 ->12102026_0718. Later successor editors merge these current registry parents. ACTIVE_PREPARATIONS is bounded factual metadata, not a financial-chain input. D06 real DR28 host/handoff joins at sequence155; original confirm0645, workerSTATUS0442 and all money/Source/query owners remain unchanged.
+
+DR20seq126 BD140: public enroll_service0541 ->12102026_0945 ->later exactregistryowner. One original-command bounded metadata page only; unchanged private enroll_one2041 and financial_job0016 plus native capture/hold/allocation/NET owners remain their exact merge parents. No money-chain successor added.
