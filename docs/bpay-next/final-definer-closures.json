@@ -16348,29 +16348,35 @@
     },
     {
       "signature": "private.bpay_next_case_review_outstanding_capture_v1()",
-      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql"
       ],
-      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+      "owner": "DR13 seq122 BD135 frozen original source observations and capped recovery explanation; merges0442 private capture pair and Case reader only."
     },
     {
       "signature": "private.bpay_next_case_review_excluded_capture_v1()",
-      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql"
       ],
-      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+      "owner": "DR13 seq122 BD135 frozen original source observations and capped recovery explanation; merges0442 private capture pair and Case reader only."
     },
     {
       "signature": "private.bpay_next_run_review_context_v1(uuid,uuid,uuid,text)",
@@ -16400,16 +16406,19 @@
     },
     {
       "signature": "private.bpay_next_run_review_cases_v1(uuid,uuid,uuid,text,jsonb,integer)",
-      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+        "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql"
       ],
-      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+      "owner": "DR13 seq122 BD135 frozen original source observations and capped recovery explanation; merges0442 private capture pair and Case reader only."
     }
   ],
   "editorChains": [

@@ -1,0 +1,65 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_case_review_outstanding_capture_v1()",
+      "file": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
+      "sourceMd5": "8d98ad0a6530eafa003babce4b99802e",
+      "installed": {
+        "bodyMd5": "8d98ad0a6530eafa003babce4b99802e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_review_excluded_capture_v1()",
+      "file": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
+      "sourceMd5": "8b820dc6e059683f2638496249a35741",
+      "installed": {
+        "bodyMd5": "8b820dc6e059683f2638496249a35741",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_run_review_cases_v1(uuid,uuid,uuid,text,jsonb,integer)",
+      "file": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql",
+      "sourceMd5": "75f1588f05b2738bd8df78a872544390",
+      "installed": {
+        "bodyMd5": "75f1588f05b2738bd8df78a872544390",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

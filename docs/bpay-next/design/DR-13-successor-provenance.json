@@ -1,0 +1,56 @@
+{
+  "card": "DR-13",
+  "sequence": 122,
+  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PENDING_BLOCKED_ON_ORIGINAL_WAIT_MEMBERSHIP",
+  "decision": "BD135",
+  "implementationCommit": null,
+  "frontendImplementationCommit": null,
+  "exactDeliverables": [
+    "D02 frozen REVIEW_CASES balance contract",
+    "D04 reused E2 system release / DR15 no-pay explanation",
+    "D05 capped/zero/native-reason/historical/unticked display implemented; WAIT clause blocked"
+  ],
+  "blocked": {
+    "D03": "WB41 excludes genuine pre-click WAIT from selectable LEAF/Create; RuleB forbids later live withdrawal replacing accepted inputs.",
+    "D05": "WAIT-specific acceptance depends on D03; other required display built.",
+    "ITEM": "D03 and WAIT-specific D05 remain open; retry final blocked sweep."
+  },
+  "files": [
+    {
+      "file": "supabase/migrations/12102026_0552_banking_pay_next_frozen_recovery_balances.sql",
+      "sha256": "b5dbdc84be7669da4fe65d79ab352269e9aec4e2b5a10c37ce3621d7cc002a86"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_balance_capture_v1.sql",
+      "sha256": "2a99688a8c754ed47419d2d6398c894c2321e330cbd8d51f603f64f288cecfba"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0552_banking_pay_next_recovery_explanation_v1.sql",
+      "sha256": "36d4639005dba6cd7b43ef406e14623f22dd6d692717f38e509d2efe40e6da45"
+    },
+    {
+      "file": "broker/src/bpay-next-preparation.js",
+      "sha256": "acb469410855505e1d8c4113274d71db7a2df8b62a0b3af2e50b3eb40e2be32e"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "6d471569386ec91573d004dcd90ec738dd0159107ba4dccbb0690e7c45438fb4"
+    }
+  ],
+  "checks": {
+    "source": "12/12 PASS",
+    "dbCheck": "366 migrations/943 repeatables PASS",
+    "syntax": "Worker/Office node --check PASS",
+    "local": "Sole PG17 compile,3 exact body/config/owner/ACL matches, General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and Candidate DO PASS",
+    "seal": "3b0d0e7a3ddfff14ff4ffd739d030dac68d20bbb0e07948e85a52878adac4495",
+    "coupling": "PASS",
+    "screen": "Actual smallest fixed-response local capture, independent A4 pending",
+    "business": "AUTHORED_NOT_RUN; no DB data or business RPC",
+    "timing": "Moved to TEST after installation(owner10/10/2026)"
+  },
+  "reviews": [
+    "reviews/DR-13-sql-review.md",
+    "reviews/DR-13-transport-review.md",
+    "screen-designs/SCR-44/DR13-review.md"
+  ]
+}

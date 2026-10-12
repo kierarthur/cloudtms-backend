@@ -12268,7 +12268,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2e6ca0c8f9cf8332c83fc9ae71c1dd65fc1af0f37629332b83a0832e3478b1fd"
+      "definition_sha256": "f97af80497d1a957f27f531ac6410b54e59f481c21ce2cd25f43e76a01b243a4"
     },
     {
       "acl": [
@@ -12287,7 +12287,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b66847d42a778a2c296f9d84d751ce24fc2750d23a097b62a76e01ceb082e6c8"
+      "definition_sha256": "4cb8281bcb3bc5304e2830d515c27049329555e82093b9f89d1c122079ea5af7"
     },
     {
       "acl": [
@@ -15489,7 +15489,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "a275d488ffb686fee2947a6baca9cc4c6eedc15457b7eb927bd1ce9f48c1acb1"
+      "definition_sha256": "8a5c555cf0a8cde1b669c0527080d8545121b9216da183b79b92ea0fdf43c37e"
     },
     {
       "acl": [
@@ -88184,6 +88184,22 @@
           "generated": ""
         },
         {
+          "name": "review_observed_component_principal_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "review_observed_component_reserved_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "review_observed_due_source_ex_vat",
           "type": "private.bpay_next_penny_amount",
           "default": null,
@@ -88193,6 +88209,14 @@
         },
         {
           "name": "review_observed_outstanding_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "review_observed_unreserved_source_ex_vat",
           "type": "private.bpay_next_penny_amount",
           "default": null,
           "identity": "",
@@ -88253,6 +88277,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_case_review_excluded_reservations",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (review_observed_component_principal_source_ex_vat IS NULL AND review_observed_component_reserved_source_ex_vat IS NULL AND review_observed_unreserved_source_ex_vat IS NULL OR review_observed_component_principal_source_ex_vat IS NOT NULL AND review_observed_component_reserved_source_ex_vat IS NOT NULL AND review_observed_unreserved_source_ex_vat IS NOT NULL AND review_observed_component_principal_source_ex_vat::numeric >= 0::numeric AND review_observed_component_reserved_source_ex_vat::numeric >= 0::numeric AND review_observed_unreserved_source_ex_vat::numeric >= 0::numeric AND review_observed_at_utc IS NOT NULL)"
+        },
         {
           "name": "bpay_next_case_selection_ite_review_observed_due_source_e_check",
           "type": "c",
@@ -105912,6 +105944,14 @@
           "generated": ""
         },
         {
+          "name": "captured_case_reserved_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "captured_case_revision",
           "type": "bigint",
           "default": null,
@@ -105921,6 +105961,14 @@
         },
         {
           "name": "captured_component_outstanding_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_component_reserved_source_ex_vat",
           "type": "private.bpay_next_penny_amount",
           "default": null,
           "identity": "",
@@ -106321,6 +106369,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_case_review_reserved_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((captured_component_reserved_source_ex_vat IS NULL) = (captured_case_reserved_source_ex_vat IS NULL) AND (captured_component_reserved_source_ex_vat IS NULL OR captured_component_reserved_source_ex_vat::numeric >= 0::numeric AND captured_case_reserved_source_ex_vat::numeric >= 0::numeric AND captured_component_outstanding_source_ex_vat IS NOT NULL AND captured_case_outstanding_source_ex_vat IS NOT NULL))"
+        },
         {
           "name": "bpay_next_instruction_collection_origin_fk",
           "type": "f",
