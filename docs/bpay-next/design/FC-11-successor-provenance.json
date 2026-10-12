@@ -1,0 +1,107 @@
+{
+  "item": "FC-11",
+  "sequence": 132,
+  "decision": "BD146",
+  "status": "BUILT_SOURCE_A4_REVIEWED",
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
+      "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "sha256": "0a3936fbfcd31e9fe327df2af40f1bf996d78aa01a48ae753b2765e294cf0e66"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "c228ebf921f5464f91af06b38d0252e222d6b4bb34eee20daea4b157e4f17e68"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "a9171adedfb11c2a9fc2b4e78090104426fb1ebd253eecdb8e53c6e21d5366b7"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-write-off.js",
+      "sha256": "38fbbea83062503849f0d86f2791627deaa6af41a842f48c8bc4c0cccd04af30"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "12372158e0c1fcfbd2e3d592f3328a5424cbd97203406fb21d8eaab0b8ab9cce"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-list.js",
+      "sha256": "3af4293c8cfb8d24ccbda09115e74375e172c5baa4a182d28f49b5845306726f"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "608bba49ef1153c5a49144cea40cf75d591109113a1cae39b50effa36f06992d"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "b1a24e20d0c51c217a80d0dba411fd562d58381e13efd95c173a8dd9a8e11dd0"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "4453be4e48facdc6be8bcdfc62b34633e91f773e7e63724be614a4462ec8231f"
+    }
+  ],
+  "owners": [
+    {
+      "signature": "private.bpay_next_accept_write_off_v1(uuid,uuid,uuid,bigint,text,text,text)",
+      "finalPhysical": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_1647_banking_pay_next_work_collection_write_off_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_apply_write_off_v1(uuid,uuid,bigint)",
+      "finalPhysical": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_1647_banking_pay_next_work_collection_write_off_v1.sql",
+        "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_write_off_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_1647_banking_pay_next_work_collection_write_off_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_segment_write_off_membership_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_reauth_scope_v1(uuid,text,jsonb,boolean)",
+      "finalPhysical": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_override_reauth_v1.sql"
+      ]
+    }
+  ],
+  "checks": {
+    "dbCheck": "373 migrations, 953 repeatables",
+    "sourceGates": "PASS: sqlSources1502,rpcRoots29,frozenFiles7,frozenTriggers18,frozenTables45",
+    "javascript": "node --check changed Worker and Office JS PASS",
+    "local": "Sole PG17 compiled1migration/fiveowners; exact body/owner/config/ACL matches in current-owner-catalogue; both browser-isolation DO PASS; General839/76/0/hash338226c4e9b878c5aa92fc8e319dd7bf, publicmembership delta0",
+    "contract": "720b8cdbf562e3b8ebdbaa5b750b1540978604891b1061c527908b2b7e50846f export/seal/coupling PASS",
+    "a4": "Independent A4 APPROVED: 30 native Case captures + 10 phone-bottom + 3 existingEX01password previews; every supplied-design difference/control explained; full42 policy in eachscreen review (34PASS/0FAIL/8scopedNA). No actual auth/code/email/business execution.",
+    "business": "AUTHORED_NOT_RUN; no fixture, business SQL/RPC, hosted/queue/payment/auth action"
+  }
+}

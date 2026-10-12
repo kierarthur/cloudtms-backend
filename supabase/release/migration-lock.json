@@ -1483,6 +1483,10 @@
       "sha256": "4d9f2a154de191084f98fb015322a4a7b400aa358344d04c97e962e95a9509b2"
     },
     {
+      "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
+      "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

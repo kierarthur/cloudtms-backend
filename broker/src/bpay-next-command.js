@@ -289,7 +289,7 @@ export function qualifyBpayNextReauthPreview(payload,action) {
     || !payload.action_label || payload.action_label.length>80 || (action==='PAYE_SAME_WEEK_OVERRIDE'?payload.candidate_count!==null:payload.candidate_count!==1)
     || typeof payload.candidate_name!=='string' || !payload.candidate_name || payload.candidate_name.length>512
     || (action==='PAYE_SAME_WEEK_OVERRIDE'?(payload.total_amount!==null||payload.amount_basis!=='PAYE_POLICY')
-      :(!field(payload.total_amount,'caseMoney') || !['CASH','DRAFT_GROSS'].includes(payload.amount_basis)))
+      :(!field(payload.total_amount,'caseMoney') || (action==='WRITE_OFF'?payload.amount_basis!=='SOURCE_DEBT':!['CASH','DRAFT_GROSS'].includes(payload.amount_basis))))
     || typeof payload.accepted!=='boolean'
     || !(field(payload.scope_sha256,'sha256') || (payload.accepted && action==='CSV_ISSUE' && payload.scope_sha256===null))) {
     throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503);
@@ -360,7 +360,7 @@ function commandResult(payload, call) {
       || (payload.phase === 'EXPIRED'
         && payload.completed_candidates !== payload.expected_candidates))) invalid();
   if (call.action === 'WRITE_OFF') {
-    if (payload.requested_scope !== call.args.scope || payload.case_id.toLowerCase() !== payload.case_component_id.toLowerCase()) invalid();
+    if (payload.requested_scope !== call.args.scope) invalid();
     if (payload.phase === 'REQUESTED') {
       if (['applied_amount','remaining_amount','protected_amount','event_id','issue_code'].some((key) => payload[key] !== null)) invalid();
     } else {

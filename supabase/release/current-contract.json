@@ -10680,7 +10680,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b7875e7af835f698c1dcae148caa91587c4965f9c6b610f6b8e8ecb424d01907"
+      "definition_sha256": "d7872e11c9e056f7c231a1f2caf0ce8589798a4249a4c179fe0a9a029c08b5e8"
     },
     {
       "acl": [
@@ -11269,7 +11269,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "0f10ff53fd9f1a5459985d25920b1776e1f1a5ea15444421af54b456fb08b13d"
+      "definition_sha256": "4bb1759662460496d95264bc3483009db3ad50b2d493c8cb70500fe2efa74d72"
     },
     {
       "acl": [
@@ -15421,7 +15421,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "37e78dbc5867f4c5928a355c2ee73b069fb57c45cf58a838e3886e73ecef6e76"
+      "definition_sha256": "2ee7aa87cab8ddd7fa7ab56c16bc8388acde93255ba08f350f5370b443aa552c"
     },
     {
       "acl": [
@@ -16466,7 +16466,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "48e80e88318ab94e9ac24f14b124278a0c7cebda0a5f58abc74e401f416df735"
+      "definition_sha256": "8c9b2783a18ca872daebfdb6595b20de497c889fe755e4c52371b823f552b62b"
     },
     {
       "acl": [
@@ -19157,7 +19157,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "c84abb3ca076428c0e3b1c3b4f517e3199d15b189405df0612210ee781b25e68"
+      "definition_sha256": "2993d9047eb89ce82d1901821ab7b0d67a36e3a8becd92aae63d78ce39607170"
     },
     {
       "acl": [
@@ -134228,7 +134228,7 @@
           "type": "uuid",
           "default": null,
           "identity": "",
-          "not_null": true,
+          "not_null": false,
           "generated": ""
         }
       ],
@@ -134334,14 +134334,6 @@
           "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
         },
         {
-          "name": "bpay_next_write_off_request_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (work_collection_id = case_id AND work_collection_id = case_component_id)"
-        },
-        {
           "name": "bpay_next_write_off_request_check1",
           "type": "c",
           "deferred": false,
@@ -134428,6 +134420,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (issue_code = ANY (ARRAY['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY'::text, 'BPAY_NEXT_WRITE_OFF_AMOUNT_EXCEEDS_BALANCE'::text, 'BPAY_NEXT_WRITE_OFF_COMPONENT_CHANGED'::text, 'BPAY_NEXT_WRITE_OFF_ORIGIN_UNBOUND'::text, 'BPAY_NEXT_WRITE_OFF_NO_BALANCE'::text, 'BPAY_NEXT_WRITE_OFF_INPUT_PENDING'::text]))"
+        },
+        {
+          "name": "bpay_next_write_off_request_origin_identity_v2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (work_collection_id IS NULL OR work_collection_id = case_id AND work_collection_id = case_component_id)"
         },
         {
           "name": "bpay_next_write_off_request_pkey",

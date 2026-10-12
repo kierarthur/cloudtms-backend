@@ -1,0 +1,392 @@
+[
+  {
+    "id": "SCR-124b",
+    "file": "FC11-all-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nPAYE Draft\n\nOpen Draft\nCancel\nWrite off",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 547,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        },
+        {
+          "text": "Cancel",
+          "width": 67.953125,
+          "height": 38
+        },
+        {
+          "text": "Write off",
+          "width": 83.59375,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124b",
+    "file": "FC11-blocked-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nThis amount is protected in a Draft; cancel the Candidate payment before trying again.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nCurrent PAYE Draft\n\nOpen Draft\nCancel\nWrite off all\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 547,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        },
+        {
+          "text": "Cancel",
+          "width": 67.953125,
+          "height": 38
+        },
+        {
+          "text": "Write off all",
+          "width": 101.5625,
+          "height": 38
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124b",
+    "file": "FC11-all-device-light.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nPAYE Draft\n\nOpen Draft\nCancel\nWrite off",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 547,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        },
+        {
+          "text": "Cancel",
+          "width": 67.953125,
+          "height": 38
+        },
+        {
+          "text": "Write off",
+          "width": 83.59375,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124b",
+    "file": "FC11-blocked-device-light.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nThis amount is protected in a Draft; cancel the Candidate payment before trying again.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nCurrent PAYE Draft\n\nOpen Draft\nCancel\nWrite off all\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 547,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        },
+        {
+          "text": "Cancel",
+          "width": 67.953125,
+          "height": 38
+        },
+        {
+          "text": "Write off all",
+          "width": 101.5625,
+          "height": 38
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124b",
+    "file": "FC11-all-phone-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nPAYE Draft\n\nOpen Draft\nCancel\nWrite off",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 338,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Cancel",
+          "width": 61.953125,
+          "height": 44
+        },
+        {
+          "text": "Write off",
+          "width": 77.59375,
+          "height": 44
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124b",
+    "file": "FC11-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\n\nA write-off cannot be undone.\n\nThis amount is protected in a Draft; cancel the Candidate payment before trying again.\n\nOutstanding\n£80.00\nProtected in a Draft\n£30.00\nCan be written off\n£50.00\nWrite off\nAll outstanding £80.00\nAn amount Up to £50.00\nReason\n\nConfirm it is you\n\nCurrent PAYE Draft\n\nOpen Draft\nCancel\nWrite off all\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "radio",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "bpay-next-write-off-reason",
+          "width": 338,
+          "height": 76.671875
+        },
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Cancel",
+          "width": 61.953125,
+          "height": 44
+        },
+        {
+          "text": "Write off all",
+          "width": 95.5625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        }
+      ]
+    },
+    "failure": null
+  }
+]

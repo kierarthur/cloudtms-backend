@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "f11c9486157261076cffb3ded15f1fd1281aa19d",
-  "compiledAtUtc": "2026-10-12T13:34:29.974Z",
+  "sourceCommit": "cbff1fdba491e4df78b88aaebbd55d1a3004b37f",
+  "compiledAtUtc": "2026-10-12T14:02:38.785Z",
   "inventory": {
     "migrations": [
       {
@@ -1496,6 +1496,10 @@
       {
         "path": "supabase/migrations/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
         "sha256": "4d9f2a154de191084f98fb015322a4a7b400aa358344d04c97e962e95a9509b2"
+      },
+      {
+        "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
+        "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8575,6 +8579,13 @@
         "sha256": "3d5c57ebcd308171985b760a123d4016b2132375d18fe779851cdd8816b8267a"
       },
       {
+        "path": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+        "paths": [
+          "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql"
+        ],
+        "sha256": "ef689b68f2d35ac94bbde34194cd03f075ed3df48d854bb4cf695807cec92a56"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8584,7 +8595,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
+        "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8608,11 +8624,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+        "path": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
         "paths": [
-          "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+          "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql"
         ],
-        "sha256": "3d5c57ebcd308171985b760a123d4016b2132375d18fe779851cdd8816b8267a"
+        "sha256": "ef689b68f2d35ac94bbde34194cd03f075ed3df48d854bb4cf695807cec92a56"
       }
     ]
   },

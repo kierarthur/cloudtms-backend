@@ -241,8 +241,7 @@ function resultInput(payload, call, unknown) {
   if(['CASE_PAUSE','CASE_RESUME'].includes(call.jobKind)&&(payload.phase==='PENDING'||!casePauseReceipt(Object.fromEntries(Object.keys(PAUSE_RECEIPT_SCHEMA).map(k=>[k,payload[k]])))||payload.action!==call.jobKind))invalid();
   if(call.jobKind==='CASE_EDIT'&&((payload.phase==='BLOCKED')!==(payload.issue_code!==null)))invalid();
   if (call.jobKind === 'CASE_WRITE_OFF') {
-    if (payload.case_id.toLowerCase() !== payload.case_component_id.toLowerCase()
-      || pennies(payload.protected_amount) > pennies(payload.remaining_amount)) invalid();
+    if (pennies(payload.protected_amount) > pennies(payload.remaining_amount)) invalid();
     if (payload.phase === 'WRITTEN_OFF') {
       if (pennies(payload.applied_amount) <= 0n || payload.event_id === null || payload.issue_code !== null) invalid();
     } else if (pennies(payload.applied_amount) !== 0n || payload.event_id !== null || payload.issue_code === null
