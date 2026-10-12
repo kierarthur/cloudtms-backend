@@ -2,7 +2,7 @@
   "item": "DR-16",
   "sequence": 121,
   "decision": "BD134",
-  "status": "SOURCE_LOCAL_PASS_A4_FINAL_RECEIPT_REQUIRED",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
   "exactDeliverables": [
     "D03",
     "D04",
@@ -227,14 +227,18 @@
     "syntax": "changed Worker/Office/native secondary decorator PASS",
     "local": "solePG17 compile+9exact owner/body/config/ACL matches+General839/76/0 membershipdelta0+General/Candidate isolationDO PASS",
     "contract": "7211686911bd05b543b952c101f8c6a12ff643d1b7e43ffc2c163bb9fcfb8018 export/seal/coupling PASS",
-    "businessQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
+    "businessQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation",
+    "screen": "17 actual local minimal-response PNGs; independent42-row A4 PASS38/0/4 scopedN/A"
   },
   "reviews": [
     "reviews/DR-16-totals-review.md",
     "reviews/DR-16-reader-review.md",
     "reviews/DR-16-transport-review.md",
     "reviews/DR-16-screen-source-review.md",
-    "screen-designs/SCR-44/review.md"
+    "screen-designs/SCR-44/DR16-review.md"
   ],
-  "scope": "Typed same-transaction native summary, original observations and closed read/presentation support only; no producer/protocol/allocator or other money owner replaced"
+  "scope": "Typed same-transaction native summary, original observations and closed read/presentation support only; no producer/protocol/allocator or other money owner replaced",
+  "implementationCommit": "60b6fcac9bd13051a9e16b160c922063436f3c40",
+  "frontendImplementationCommit": "9fdc4f841462ea77d22ee14a304c27cb91943ca0",
+  "frontendProductPredecessor": "22732041f56c0d734689dfbb5bbf7075f80c33a0"
 }

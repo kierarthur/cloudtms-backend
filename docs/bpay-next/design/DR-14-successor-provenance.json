@@ -2,15 +2,15 @@
   "item": "DR-14",
   "sequence": 120,
   "decision": "BD133",
-  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR16_DR37",
+  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR37",
   "exactDeliverables": [
     "D02 retained0310",
     "D03 retained0310",
-    "D06 existing PROGRESS/PREPARE_ISSUES"
+    "D06 existing PROGRESS/PREPARE_ISSUES",
+    "D07 closed through DR16 REVIEW_CASES 60b6fcac9bd13051a9e16b160c922063436f3c40"
   ],
   "blocked": {
-    "D05": "DR37 seq130 staged replacement owner",
-    "D07": "exact per-repayment amount renderer through DR16 REVIEW_CASES seq121"
+    "D05": "DR37 seq130 staged replacement owner"
   },
   "sources": [
     {
@@ -194,5 +194,11 @@
   ],
   "scope": "Named existing native owners plus nullable captured metadata and exact private seek support; no new public SECDEF membership, command, protocol, producer, public trigger or money kernel.",
   "implementationCommit": "114130a049bf09c70f025e17c27e89db1b258c53",
-  "frontendImplementationCommit": "32681f0c5d3adfd5a2919789e2d6ddafa9c24129"
+  "frontendImplementationCommit": "32681f0c5d3adfd5a2919789e2d6ddafa9c24129",
+  "d07Closure": {
+    "backendCommit": "60b6fcac9bd13051a9e16b160c922063436f3c40",
+    "frontendCommit": "9fdc4f841462ea77d22ee14a304c27cb91943ca0",
+    "evidence": "screen-designs/SCR-44/DR16-review.md",
+    "business": "AUTHORED_NOT_RUN"
+  }
 }
