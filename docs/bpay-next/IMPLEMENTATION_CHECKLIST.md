@@ -3814,6 +3814,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows DR
 
 Re-approve a Timesheet in a confirmed Draft at a higher amount: the Draft shows "Newer information (1)" and the Draft total is unchanged (RQ-139, NX-082, NX-092). Put a Timesheet in a confirmed Draft on pay hold: the pill counts it as "Pay hold changed after Create" and the Draft still pays it.
 
+DR19seq129 BLOCKED exact query cut vs bounded/no-history/producer constraints; ITEM and all concrete rows unticked. See design/DR-19-blocked.md and three source investigations; design scope-only, Q01/C01/G01 OPEN. Uninstalled prototype outside release inventory; retry at end. Whole104/288 unchanged; continue DR37seq130.
+
 ## DR-37 — PAYE net refused inside a confirmed Draft keeps the Candidate READY
 
 Seq 130; PAYE net · D2-D; reviewer R3; current requested-feature status PARTLY_DONE.
