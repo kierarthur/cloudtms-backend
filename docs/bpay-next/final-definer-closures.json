@@ -2782,38 +2782,40 @@
     },
     {
       "signature": "private.bpay_next_build_case_transfer_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "private.bpay_next_build_destination_group_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2832,23 +2834,25 @@
     },
     {
       "signature": "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
         "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
-      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2933,8 +2937,8 @@
     },
     {
       "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
@@ -2943,7 +2947,8 @@
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
@@ -2952,16 +2957,13 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
-      ],
-      "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
         "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission; SP20 BD127 answered Source tax/target guards",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3855,8 +3857,8 @@
     },
     {
       "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
@@ -3865,7 +3867,8 @@
         "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
@@ -3874,15 +3877,13 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
-      "finalClosures": [
-        "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; SP20 BD127 answered Source tax/target guards",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4063,19 +4064,21 @@
     },
     {
       "signature": "private.bpay_next_post_simple_outcome_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0200_banking_pay_next_simple_csv_settlement_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0200_banking_pay_next_simple_csv_settlement_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0200_banking_pay_next_simple_csv_settlement_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
-      "owner": "F-25 BD019 parked protocol; latest surviving original authority",
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4346,9 +4349,19 @@
     },
     {
       "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
@@ -4357,18 +4370,10 @@
         "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
         "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
+        "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql"
       ],
-      "owner": "DY05 genuine Daily captured approval/settings/labels; exact current0939 successor",
+      "owner": "DR38 seq131 BD145 ordinary and native expense-carrier classifier/fixed reimbursement/once-valued downstream Work tuple only; preserves current DR37 simple builder; Case/destination WORK support only, no Case slices or Source producers. WB29 merges1419 forhold.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
