@@ -12,6 +12,82 @@ const INT=/^(?:0|[1-9]\d{0,18})$/;
 const MONEY=/^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/;
 const ENCODER=new TextEncoder();
 
+
+// DR21: identical closed read contract in Worker and native Office.
+const WORKSHEET_INPUT={run_id:'uuid',pay_channel:'worksheetChannel',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort',after:'worksheetCursor?',limit:'limit'};
+const WORKSHEET_CONTEXT={run_id:'uuid',pay_channel:'worksheetChannel',actor_user_id:'uuid',owner_epoch:'positive',review_revision:'integer',run_status:'worksheetRun',totals_revision:'integer',net_request_sequence:'integer',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort'};
+const WORKSHEET_ROW={run_worker_id:'uuid',candidate_id:'uuid',candidate_display_name:'label?',candidate_reference:'label?',worker_status:'workerStatus',captured_line_count:'integer',case_instruction_count:'integer',earnings_gross:'worksheetMoney?',payroll_gross:'worksheetMoney',gross_stage_deductions:'worksheetMoney?',advance_repayment:'worksheetMoney?',overpayment_recovery:'worksheetMoney?',gross_manual_debt:'worksheetMoney?',net_manual_debt:'worksheetMoney?',other_repayment:'worksheetMoney?',net_recovery:'worksheetMoney?',net_additions:'worksheetMoney?',deduction_basis:'worksheetBasis?',payout_only:'boolean',applicable_net:'boolean',projection_id:'uuid?',accepted_net:'worksheetMoney?',pending_net:'worksheetMoney?',projection_status:'worksheetProjection',expected_projection_revision:'integer',cash_amount:'worksheetMoney?',input_source:'worksheetSource?',net_state:'worksheetNetState',sort_key:'worksheetKey'};
+
+const WORKSHEET_LINE={run_line_id:'uuid',line_no:'positive',original_timesheet_id:'uuid',captured_revision_id:'uuid',component_key:'key',component_kind:'componentKind',work_date:'date?',source_pay_channel:'channel',target_pay_channel:'channel',source_consumed_ex_vat:'money',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',client_display_name:'label',week_ending_date:'date',unit_label:'worksheetText?',approved_quantity:'worksheetDecimal?',approved_unit_rate:'worksheetDecimal?'};
+function worksheetLinesResult(p,args,shape,bad){
+ if(!shape(p,{rows:'worksheetLines',complete:'boolean',next_cursor:'worksheetLineCursor?'}))bad();
+ let prior=BigInt(args.after_line_no??'0');const ids=new Set();
+ for(const r of p.rows){if(BigInt(r.line_no)<=prior||ids.has(r.run_line_id)||r.target_pay_channel!=='PAYE')bad();prior=BigInt(r.line_no);ids.add(r.run_line_id);}
+ if(p.rows.length>args.limit||p.complete!==(p.next_cursor===null)||(!p.complete&&(p.rows.length===0||p.next_cursor.after_line_no!==prior.toString()))||new TextEncoder().encode(JSON.stringify(p)).byteLength>128*1024)bad();return p;
+}
+
+function worksheetField(v,t,base,shape){
+ if(t==='worksheetText')return typeof v==='string'&&!v.includes('\0')&&new TextEncoder().encode(v).byteLength<=120000;
+ if(t==='worksheetDecimal')return typeof v==='string'&&/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(v)&&new TextEncoder().encode(v).byteLength<=120000;
+ if(t==='worksheetLines')return Array.isArray(v)&&v.length<=100&&v.every(r=>shape(r,WORKSHEET_LINE));
+ if(t==='worksheetLineCursor')return shape(v,{after_line_no:'positive'});
+ if(t==='worksheetChannel')return v==='PAYE';
+ if(t==='worksheetQuery')return typeof v==='string'&&!v.includes('\0')&&[...v].length<=120;
+ if(t==='worksheetSort')return typeof v==='string'&&/^(CANDIDATE|GROSS|ADVANCE|OVERPAYMENT|NET|CASH|SOURCE|STATUS)_(ASC|DESC)$/.test(v);
+ if(t==='worksheetMoney')return typeof v==='string'&&/^(0|[1-9]\d{0,15})\.\d{2}$/.test(v);
+ if(t==='worksheetRun')return ['DRAFT','EXECUTING','COMPLETE','CANCELLED'].includes(v);
+ if(t==='worksheetProjection')return ['NONE','REQUESTED','APPLYING','ACCEPTED','REFUSED'].includes(v);
+ if(t==='worksheetNetState')return ['MISSING','ENTERED','ENTERED_ZERO','PAYOUT_ONLY'].includes(v);
+ if(t==='worksheetSource')return ['PAYE_MANUAL','PAYE_IMPORT'].includes(v);
+ if(t==='worksheetBasis')return ['RESERVED','ACCEPTED'].includes(v);
+ if(t==='worksheetContext')return shape(v,WORKSHEET_CONTEXT);
+ if(t==='worksheetKey')return Array.isArray(v)&&v.length===4&&typeof v[0]==='boolean'
+  &&(v[0]?v[1]===null:base(v[1],'label'))&&base(v[2],'uuid')&&base(v[3],'uuid');
+ if(t==='worksheetCursor')return shape(v,{context:'worksheetContext',candidate_id:'uuid',run_worker_id:'uuid'})&&new TextEncoder().encode(JSON.stringify(v)).byteLength<=4096;
+ if(t==='worksheetRows')return Array.isArray(v)&&v.length<=100&&v.every(r=>shape(r,WORKSHEET_ROW));
+ return false;
+}
+function worksheetEqual(a,b){if(a===b)return true;if(a===null||b===null||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;return Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>Object.hasOwn(b,k)&&worksheetEqual(a[k],b[k]));}
+function worksheetCOrder(a,b){const e=new TextEncoder(),x=e.encode(a),y=e.encode(b);for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]>y[i]?1:-1;return x.length===y.length?0:x.length>y.length?1:-1;}
+function worksheetOrder(a,b,sort){
+ if(a[0]!==b[0])return a[0]?1:-1;
+ if(!a[0]&&a[1]!==b[1]){const numeric=/^(GROSS|ADVANCE|OVERPAYMENT|NET|CASH)_/.test(sort);
+  let c;if(numeric){if(!worksheetField(a[1],'worksheetMoney')||!worksheetField(b[1],'worksheetMoney'))return null;const p=v=>BigInt(v.replace('.',''));c=p(a[1])===p(b[1])?0:p(a[1])>p(b[1])?1:-1;}else c=worksheetCOrder(a[1],b[1]);
+  if(c)return sort.endsWith('_DESC')?-c:c;
+ }
+ return a[2]!==b[2]?(a[2]>b[2]?1:-1):a[3]===b[3]?0:a[3]>b[3]?1:-1;
+}
+function worksheetResult(p,args,actor,base,shape,bad){
+ if(!shape(p,{context:'worksheetContext',rows:'worksheetRows',complete:'boolean',next_cursor:'worksheetCursor?'}))bad();
+ const c=p.context;if(c.run_id!==args.run_id||c.pay_channel!=='PAYE'||c.actor_user_id!==actor
+  ||c.candidate_id!==args.candidate_id||c.query!==args.query||c.sort!==args.sort||p.rows.length>args.limit
+  ||(args.after!==null&&!worksheetEqual(args.after.context,c))||p.complete!==(p.next_cursor===null)
+  ||(!p.complete&&p.rows.length===0))bad();
+ let previous=null;const seen=new Set(),columns={GROSS:'earnings_gross',ADVANCE:'advance_repayment',OVERPAYMENT:'overpayment_recovery',NET:'accepted_net',CASH:'cash_amount',SOURCE:'input_source',STATUS:'projection_status'},column=columns[args.sort.split('_')[0]];
+ for(const r of p.rows){
+  if(seen.has(r.run_worker_id)||r.run_worker_id===args.after?.run_worker_id||r.sort_key[2]!==r.candidate_id||r.sort_key[3]!==r.run_worker_id
+   ||(args.candidate_id!==null&&r.candidate_id!==args.candidate_id)
+   ||(column&&(r.sort_key[1]!==r[column]||r.sort_key[0]!==(r[column]===null)))
+   ||(previous!==null&&(worksheetOrder(r.sort_key,previous,args.sort)??0)<=0))bad();
+  seen.add(r.run_worker_id);previous=r.sort_key;
+  if(r.applicable_net!==(BigInt(r.captured_line_count)>0n||r.payroll_gross!=='0.00')
+   ||r.payout_only!== (r.net_state==='PAYOUT_ONLY')
+   ||(r.payout_only&&(r.applicable_net||r.accepted_net!==null||r.input_source!==null))
+   ||(r.net_state==='ENTERED_ZERO')!==(r.accepted_net==='0.00')
+   ||(r.net_state==='ENTERED'&&(r.accepted_net===null||r.accepted_net==='0.00'))
+   ||(r.net_state==='MISSING'&&r.accepted_net!==null)
+   ||(r.projection_id===null&&(r.accepted_net!==null||r.cash_amount!==null||r.input_source!==null))
+   ||(r.projection_id!==null&&(r.cash_amount===null||r.expected_projection_revision==='0'))
+   ||(r.accepted_net!==null&&(r.projection_id===null||r.input_source===null))
+   ||(r.projection_status==='ACCEPTED'&&(r.projection_id===null||r.pending_net!==null))
+   ||(r.projection_status==='NONE'&&(r.projection_id!==null||r.pending_net!==null))
+   ||(r.pending_net!==null&&!['REQUESTED','APPLYING','REFUSED'].includes(r.projection_status)))bad();
+ }
+ if(p.next_cursor!==null&&(!worksheetEqual(p.next_cursor.context,c)||p.next_cursor.candidate_id!==previous?.[2]||p.next_cursor.run_worker_id!==previous?.[3]))bad();
+ if(new TextEncoder().encode(JSON.stringify(p)).byteLength>128*1024)bad();
+ return p;
+}
+
 // DR16 explicit frozen review contracts, shared shape in Worker and Office.
 const REVIEW_CONTEXT={run_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',review_revision:'integer',run_status:'reviewRun',selection_state:'reviewSelection',paye_totals_revision:'integer',umbrella_totals_revision:'integer',run_worker_id:'uuid?',candidate_id:'uuid?',worker_status:'reviewWorker?',preparation_revision:'positive?',captured_preparation_revision:'positive?',case_selection_revision:'integer?',net_request_revision:'integer?',net_projection_revision:'integer?',sort:'reviewCaseSort?'};
 const REVIEW_TOTAL={candidate_count:'integer',ready_count:'integer',gross_ex_vat:'reviewMoney',gross_vat:'reviewMoney',gross_inc_vat:'reviewMoney',gross_stage_deductions:'reviewMoney',net_recovery_reserved:'reviewMoney',cash_known:'reviewMoney',net_missing_count:'integer',applicable_net_missing_count:'integer',net_replacement_pending_count:'integer',net_refused_code:'reviewNetRefusal?'};
@@ -193,6 +269,7 @@ export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
   WORK_CHOICES:{run_id:'uuid',after_work_id:'uuid?',limit:'limit'},
   SELECTED_COMPONENTS:{run_id:'uuid',work_id:'uuid',after_selection_no:'integer?',limit:'limit'},
   CHANNEL_DRAFTS:{run_id:'uuid'},
+  PAYE_WORKSHEET:WORKSHEET_INPUT,
   CHANNEL_WORKERS:{run_id:'uuid',pay_channel:'channel',after_candidate_id:'uuid?',limit:'limit'},
   CHANNEL_STATUS:{run_id:'uuid',pay_channel:'channel',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'},
   WORKERS:{run_id:'uuid',after_candidate_id:'uuid?',limit:'limit'},
@@ -319,6 +396,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+ if(t.startsWith('worksheet')&&!t.endsWith('?'))return worksheetField(v,t,field,exact);
  if(t.startsWith('active')&&!t.endsWith('?'))return activePreparationField(v,t,field,exact);
  if(t==='reviewCounts')return exact(v,{selected:'integer',excluded:'integer',scope_count:'integer'});
  if(["reviewLimitNote","reviewAmount","reviewMoney","reviewRun","reviewSelection","reviewWorker","reviewCaseSort","reviewNetRefusal","reviewDirection","reviewStage","reviewBasis","reviewForeign","reviewContext","reviewKey","reviewCursor","reviewCases","reviewTotal","reviewChannels"].includes(t))return reviewField(v,t,field,exact);
@@ -634,16 +712,17 @@ function pageCall(request){
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
   const kind=url.searchParams.get('kind');
   if(['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(kind)){try{return caseFinanceQuery(kind,url.searchParams);}catch{throw fault('REQUEST_INVALID',400);}}
-  const schema=kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS'].includes(kind)&&key==='after'&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
+    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS','PAYE_WORKSHEET'].includes(kind)&&key==='after'&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
     if(!(type==='caseInput'?caseInput(v):field(v,type)))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
   if(kind==='CURRENT_WORK'&&(args.after_week===null)!==(args.after_work_id===null))throw fault('REQUEST_INVALID',400);
+  if(kind==='PAYE_WORKSHEET')return {kind,args:Object.freeze({...args,run_id:args.run_id.toLowerCase(),candidate_id:args.candidate_id?.toLowerCase()??null,after:args.after===null?null:{context:{...args.after.context,run_id:args.after.context.run_id.toLowerCase(),actor_user_id:args.after.context.actor_user_id.toLowerCase(),candidate_id:args.after.context.candidate_id?.toLowerCase()??null},candidate_id:args.after.candidate_id.toLowerCase(),run_worker_id:args.after.run_worker_id.toLowerCase()}})};
   return {kind,args:kind==='CASE_PREVIEW'?Object.freeze(args):normalized(args)};
 }
 async function limitedJson(input,maximum,request,signal,mutation){
@@ -665,6 +744,8 @@ function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
   if(!mutation&&['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)){try{return caseFinanceResult(payload,call.kind,call.args,call.actorUserId);}catch{bad();}}
   if(!mutation&&['REVIEW_TOTALS','REVIEW_CASES'].includes(call.kind))return reviewResult(payload,call.kind,call.args,call.actorUserId,field,exact,bad);
+  if(!mutation&&call.kind==='LINES'&&Object.hasOwn(call.args,'worksheet_run_id'))return worksheetLinesResult(payload,call.args,exact,bad);
+  if(!mutation&&call.kind==='PAYE_WORKSHEET')return worksheetResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='ACTIVE_PREPARATIONS')return activePreparationsResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='PREPARE_ISSUES')return prepareIssuesResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&(call.kind==='CASE_LIST'||call.kind==='CASE_SUMMARY'))return caseListResult(payload,call,bad);
@@ -912,6 +993,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(['CASE_PREVIEW','CASE_CREATE'].includes(action)&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')
     return new PreparationError(db.message,409,false,false);
   if(['REVIEW_TOTALS','REVIEW_CASES'].includes(action)&&db?.code==='55000'&&['BPAY_NEXT_REVIEW_CONTEXT_CHANGED','BPAY_NEXT_CASE_REVIEW_NOT_READY'].includes(db.message))return new PreparationError(db.message,409,false,false);
+  if(action==='PAYE_WORKSHEET'&&db?.code==='55000'&&['BPAY_NEXT_PAYE_WORKSHEET_CONTEXT_CHANGED','BPAY_NEXT_PAYE_WORKSHEET_NOT_APPLICABLE','BPAY_NEXT_CHANNEL_DRAFT_NOT_AVAILABLE'].includes(db.message))return new PreparationError(db.message,409,false,false);
   if(action==='PREPARE_ISSUES'&&db?.code==='55000'&&db.message==='BPAY_NEXT_PREPARE_ISSUES_CONTEXT_CHANGED')return new PreparationError(db.message,409,false,false);
   if(['BPAY_NEXT_CASE_FINANCE_CONTEXT_CHANGED','BPAY_NEXT_CASE_FINANCE_NOT_FOUND','BPAY_NEXT_CASE_FINANCE_REQUEST_INVALID','BPAY_NEXT_CASE_FINANCE_ROW_TOO_LARGE'].includes(db?.message))
     return new PreparationError(db.message,db.code==='P0002'?404:db.code==='22023'?400:409,false,false);

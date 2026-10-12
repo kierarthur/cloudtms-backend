@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "97c8be2eb1603a62f5ace284e128cd1462dd68c2",
-  "compiledAtUtc": "2026-10-12T08:55:34.003Z",
+  "sourceCommit": "e7b0cb2a634ad83c691f59ac2f78aef168506fbe",
+  "compiledAtUtc": "2026-10-12T09:48:54.296Z",
   "inventory": {
     "migrations": [
       {
@@ -1480,6 +1480,10 @@
       {
         "path": "supabase/migrations/12102026_0718_banking_pay_next_active_preparation_index.sql",
         "sha256": "d1bebed17f1668e2095ee3783028be28e95164c599c52bfea9e921c6bc7cff2d"
+      },
+      {
+        "path": "supabase/migrations/12102026_1019_banking_pay_next_worksheet_label_indexes.sql",
+        "sha256": "3c94d86f70d4b94037773f351d939a1bc5a200087a4a2dad57225f41137bbc97"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8531,6 +8535,13 @@
         "sha256": "70b73dff3d4c258ffed1c778d571ea9a1687970361aa590109dab2a1362ed210"
       },
       {
+        "path": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql"
+        ],
+        "sha256": "b67ff5944d964dc5138f9f0959b6273f831f60c65cff40c0917639a61170a85d"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8540,7 +8551,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/12102026_1019_banking_pay_next_worksheet_label_indexes.sql",
+        "sha256": "3c94d86f70d4b94037773f351d939a1bc5a200087a4a2dad57225f41137bbc97"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8564,11 +8580,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+        "path": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql"
+          "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql"
         ],
-        "sha256": "70b73dff3d4c258ffed1c778d571ea9a1687970361aa590109dab2a1362ed210"
+        "sha256": "b67ff5944d964dc5138f9f0959b6273f831f60c65cff40c0917639a61170a85d"
       }
     ]
   },

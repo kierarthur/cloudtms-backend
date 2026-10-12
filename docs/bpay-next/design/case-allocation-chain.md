@@ -357,3 +357,5 @@ DR18seq124: confirm0847 ->0645; factualchannels0236 ->0645; WB08 STEP/runtime142
 DR07seq125 BD139: public preparation-page0442 ->12102026_0718; private progress0414 ->12102026_0718. Later successor editors merge these current registry parents. ACTIVE_PREPARATIONS is bounded factual metadata, not a financial-chain input. D06 real DR28 host/handoff joins at sequence155; original confirm0645, workerSTATUS0442 and all money/Source/query owners remain unchanged.
 
 DR20seq126 BD140: public enroll_service0541 ->12102026_0945 ->later exactregistryowner. One original-command bounded metadata page only; unchanged private enroll_one2041 and financial_job0016 plus native capture/hold/allocation/NET owners remain their exact merge parents. No money-chain successor added.
+
+DR21seq127 BD141: public preparation_page0718 ->12102026_1019 ->DR27 current full-parent merge. Two early read-only worksheet branches only, original0718 retained. Private worksheet label/job display triggers and frozen worksheet view/page1019 share no economic allocation owner. Actual DR22/29 host joins remain open.

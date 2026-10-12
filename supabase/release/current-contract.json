@@ -14091,6 +14091,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_paye_worksheet_page_v1(p_actor_user_id uuid, p_run_id uuid, p_candidate_id uuid, p_query text, p_sort text, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "96a7f1f5f698bd3c4a3fb44f994271499fdb01a7ba9808868e0c458f5d142dd6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_payment_client_origin_v1(p_revision_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -16034,6 +16053,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "92b3e59cef50b0cdda302ca149ff501249c559fd9dd60d8b7ec7188c85b17082"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_selection_labels_capture_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bf2d7fb873f291a703b3a02bfbe58623b23c8138d7b71fd7cbe7bffdeba61fbd"
     },
     {
       "acl": [
@@ -18592,6 +18630,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "bc9b3c1184bc93cbac9ec93c2de8b001a89444ff356e7cf9ab9c3673012a475f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worksheet_job_revision_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4719facfa3540977b20c66b9af7818d0e296ebcb0a6639885eb9537d7208f2f8"
     },
     {
       "acl": [
@@ -33741,7 +33798,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1f47b8a1fff0bc7cad2221533eb1b6b2a42fb9cc8a53b99fc020198ee87606ec"
+      "definition_sha256": "d2feaff8303b3412be2984935aef3e514c9f819d1e30537e80c2f907c935c665"
     },
     {
       "acl": [
@@ -55362,6 +55419,13 @@
       "definition": "CREATE TRIGGER bpay_next_job_lifecycle_clock_v1 BEFORE INSERT OR UPDATE ON private.bpay_next_job FOR EACH ROW EXECUTE FUNCTION private.bpay_next_job_lifecycle_clock_v1()"
     },
     {
+      "name": "bpay_next_worksheet_job_revision_v1",
+      "table": "bpay_next_job",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_worksheet_job_revision_v1 AFTER UPDATE OF status, attempt_count ON private.bpay_next_job FOR EACH ROW EXECUTE FUNCTION private.bpay_next_worksheet_job_revision_v1()"
+    },
+    {
       "name": "bpay_next_local_detail_seam_guard",
       "table": "bpay_next_local_detail_seam",
       "schema": "private",
@@ -55934,6 +55998,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_selected_segment FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_selection_labels_capture_v1",
+      "table": "bpay_next_selection_candidate",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_selection_labels_capture_v1 BEFORE INSERT OR UPDATE ON private.bpay_next_selection_candidate FOR EACH ROW EXECUTE FUNCTION private.bpay_next_selection_labels_capture_v1()"
     },
     {
       "name": "bpay_next_selection_exclusion_memory_guard",
@@ -80946,6 +81017,10 @@
         {
           "name": "bpay_next_case_result_positive_idx",
           "definition": "CREATE INDEX bpay_next_case_result_positive_idx ON private.bpay_next_case_allocation_result USING btree (state_id, instruction_id) WHERE ((allocated_source_ex_vat)::numeric > (0)::numeric)"
+        },
+        {
+          "name": "bpay_next_worksheet_result_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_result_idx ON private.bpay_next_case_allocation_result USING btree (state_id, instruction_id) INCLUDE (run_worker_id, candidate_id, preparation_revision, selection_revision, allocated_target_ex_vat)"
         }
       ],
       "options": [],
@@ -81656,6 +81731,10 @@
         {
           "name": "bpay_next_case_allocation_state_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_case_allocation_state_pkey ON private.bpay_next_case_allocation_state USING btree (id)"
+        },
+        {
+          "name": "bpay_next_worksheet_state_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_state_idx ON private.bpay_next_case_allocation_state USING btree (run_worker_id, preparation_revision, selection_revision, pass_kind, projection_no) INCLUDE (status, completed_at_utc, prepare_stage, net_stage, projection_id, captured_work_gross, allocated_gross_additions, allocated_gross_deductions, allocated_net_additions)"
         }
       ],
       "options": [],
@@ -95738,6 +95817,10 @@
         {
           "name": "bpay_next_projection_umbrella_bridge_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_projection_umbrella_bridge_key ON private.bpay_next_net_projection USING btree (id, run_worker_id, input_kind, gross_ex_vat, gross_vat, gross_inc_vat, payment_case_target_inc_vat, deduction_case_target_inc_vat, cash_amount)"
+        },
+        {
+          "name": "bpay_next_worksheet_projection_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_projection_idx ON private.bpay_next_net_projection USING btree (run_worker_id, projection_no) INCLUDE (retired_at_utc, entered_paye_net, cash_amount, input_kind, request_command_id, accepted_recoveries, accepted_net_additions)"
         }
       ],
       "options": [],
@@ -97612,6 +97695,10 @@
         {
           "name": "bpay_next_paye_net_request_run_worker_id_request_no_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_paye_net_request_run_worker_id_request_no_key ON private.bpay_next_paye_net_request USING btree (run_worker_id, request_no)"
+        },
+        {
+          "name": "bpay_next_worksheet_request_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_request_idx ON private.bpay_next_paye_net_request USING btree (run_worker_id, request_no) INCLUDE (command_id, entered_paye_net, input_kind)"
         }
       ],
       "options": [],
@@ -106564,6 +106651,10 @@
         {
           "name": "bpay_next_run_case_instruction_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_run_case_instruction_pkey ON private.bpay_next_run_case_instruction USING btree (id)"
+        },
+        {
+          "name": "bpay_next_worksheet_instruction_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_instruction_idx ON private.bpay_next_run_case_instruction USING btree (run_worker_id, preparation_revision, selection_revision, payroll_stage, case_kind, id) INCLUDE (case_subtype, instruction_kind)"
         }
       ],
       "options": [],
@@ -111720,6 +111811,30 @@
           "generated": ""
         },
         {
+          "name": "captured_candidate_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_candidate_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_candidate_surname",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "member_no",
           "type": "bigint",
           "default": null,
@@ -111776,11 +111891,35 @@
         {
           "name": "bpay_next_selection_candidate_run_id_member_no_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_selection_candidate_run_id_member_no_key ON private.bpay_next_selection_candidate USING btree (run_id, member_no)"
+        },
+        {
+          "name": "bpay_next_worksheet_surname_asc_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_surname_asc_idx ON private.bpay_next_selection_candidate USING btree (run_id, ((captured_candidate_surname IS NULL)), \"left\"(lower(captured_candidate_surname), 512) COLLATE \"C\", candidate_id)"
+        },
+        {
+          "name": "bpay_next_worksheet_surname_desc_idx",
+          "definition": "CREATE INDEX bpay_next_worksheet_surname_desc_idx ON private.bpay_next_selection_candidate USING btree (run_id, ((captured_candidate_surname IS NULL)), \"left\"(lower(captured_candidate_surname), 512) COLLATE \"C\" DESC, candidate_id)"
         }
       ],
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_selection_candidat_captured_candidate_display_n_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(captured_candidate_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_selection_candidat_captured_candidate_reference_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(captured_candidate_reference) <= 8192)"
+        },
         {
           "name": "bpay_next_selection_candidate_candidate_id_fkey",
           "type": "f",
@@ -111788,6 +111927,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_selection_candidate_captured_candidate_surname_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(captured_candidate_surname) <= 8192)"
         },
         {
           "name": "bpay_next_selection_candidate_member_no_check",
@@ -137473,6 +137620,304 @@
         }
       ],
       "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "v",
+      "name": "bpay_next_paye_worksheet_rows_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_net",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "advance_repayment",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "applicable_net",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_surname",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_line_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "case_instruction_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cash_amount",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "deduction_basis",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "earnings_gross",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_projection_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "gross_manual_debt",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "gross_stage_deductions",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "input_source",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_additions",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_manual_debt",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_recovery",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "other_repayment",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "overpayment_recovery",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payout_only",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payroll_gross",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pending_net",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "projection_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "worker_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [
+        "security_invoker=true"
+      ],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": "c343b6561570b77d1c6b12d90bb9dc4f101f7a59ffe6209a39e6498bcbe79946"
     },
     {
       "acl": [

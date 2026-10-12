@@ -1,0 +1,81 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "sourceMd5": "27fb863572f62410603c353b9137c401",
+      "installed": {
+        "bodyMd5": "27fb863572f62410603c353b9137c401",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_selection_labels_capture_v1()",
+      "file": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "sourceMd5": "fe0f9839d96a63aeaec94724acde95c7",
+      "installed": {
+        "bodyMd5": "fe0f9839d96a63aeaec94724acde95c7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_worksheet_job_revision_v1()",
+      "file": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "sourceMd5": "98918070db8d765880d1fcea7aae8d55",
+      "installed": {
+        "bodyMd5": "98918070db8d765880d1fcea7aae8d55",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_worksheet_page_v1(uuid,uuid,uuid,text,text,jsonb,integer)",
+      "file": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "sourceMd5": "755f1c4447f6522fa08af8587b44c341",
+      "installed": {
+        "bodyMd5": "755f1c4447f6522fa08af8587b44c341",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}
