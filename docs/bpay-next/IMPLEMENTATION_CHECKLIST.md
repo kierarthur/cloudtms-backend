@@ -3473,7 +3473,7 @@ Dependencies: WB-02, WB-26, WB-27, F-06, F-07, FC-10, F-16; successor positions:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-41-D09 | SCREEN: Origin-WAIT case allocation/issue display integration | MISSING | Only affected Timesheet recovery pauses; unrelated debt/query unaffected; frozen boundary controls and future reauthorisation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-41-D09 | SCREEN: Origin-WAIT case allocation/issue display integration | MISSING | Only affected Timesheet recovery pauses; unrelated debt/query unaffected; frozen boundary controls and future reauthorisation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3492,6 +3492,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 A Candidate owes GBP 60 recovery from Timesheet A and GBP 40 on a Payment Advance. Straight after Timesheet A (already paid) is unauthorised, A's GBP 60 recovery shows in Action Required "Waiting for re-authorisation — recovery paused" with GBP 60.00 outstanding. Show estimate and the next Draft recover the GBP 40 Payment Advance repayment only and show A's row as "GBP 0.00 this run – recovery paused, waiting for re-authorisation" (the DR-13 wording) (RQ-078). A Pay Query on A alone pauses nothing. Re-authorising A returns the GBP 60 recovery to Ready and makes it recoverable again.
+
+Whole WB-41 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. design/WB-41-completion.md; design/WB-41-successor-provenance.json; design/WB-41-current-owner-catalogue.json; FE 21416c6a726be09fad795fa0de498b7aada8dda0 Review: reviews/WB-41-source-review.md; reviews/WB-41-office-source-review.md; design/WB-41-design-review.md; design/WB-41-origin-reader-integration.md; screen-designs/SCR-05/WB41-review.md; screen-designs/SCR-09/WB41-review.md; screen-designs/SCR-11/WB41-review.md; screen-designs/SCR-12/WB41-review.md.
 
 ## DR-15 — Review shows every REVIEW/PENDING/omitted Candidate with a plain-English reason
 

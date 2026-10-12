@@ -2,7 +2,7 @@
   "item": "WB-41",
   "sequence": 118,
   "decision": "BD131",
-  "status": "SOURCE_LOCAL_PASS_A4_PENDING",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
   "exactDeliverables": [
     "WB-41-D09"
   ],
@@ -68,7 +68,8 @@
     "isolation": "General839/76/0/338226c4e9b878c5aa92fc8e319dd7bf; both General/Candidate DO PASS",
     "contract": "dfcb5f2b2eb90a63bff7048dde9cad5ea5b573c4c7b92feb063aaaa5cd32b97c export/seal/coupling PASS",
     "joinedApp": "AUTHORED_NOT_RUN",
-    "timing": "Moved to TEST after installation (owner10/10/2026)"
+    "timing": "Moved to TEST after installation (owner10/10/2026)",
+    "actualScreens": "25 actual local captures; four independent42-row A4 APPROVED receipts; source-only navigation guards PASS"
   },
   "sourceReviews": [
     "design/WB-41-design-review.md",
@@ -83,15 +84,23 @@
   "frontendSources": [
     {
       "path": "js/bpay-next-workbench.js",
-      "sha256": "f7b26a6df3bb3623ff985689ff398a71a86f965d2e4277dba7faa57108fb5f95"
+      "sha256": "d2ae96a723ec70f05778c39c8e4db8b073629b953212997daff59c25526784e9"
     },
     {
       "path": "css/bpay-next-office.css",
-      "sha256": "b5714e1789020bd37cbd84dee0d5af32650cab913273dec7c9c3ce4802545cde"
+      "sha256": "2654f2d93642cdc7dabcdccece73e40a2e5917f44b81cef34c3806a29a49032b"
     },
     {
       "path": "index.html",
       "sha256": "a2e54ac047c7e494791099cbdef5c12afbb964b80d071ba583fdae61ca7d9f4a"
     }
+  ],
+  "implementationCommit": "6ed0faf44844068f9c91aff8acf3a92994129aee",
+  "frontendImplementationCommit": "21416c6a726be09fad795fa0de498b7aada8dda0",
+  "screenReviews": [
+    "screen-designs/SCR-05/WB41-review.md",
+    "screen-designs/SCR-09/WB41-review.md",
+    "screen-designs/SCR-11/WB41-review.md",
+    "screen-designs/SCR-12/WB41-review.md"
   ]
 }
