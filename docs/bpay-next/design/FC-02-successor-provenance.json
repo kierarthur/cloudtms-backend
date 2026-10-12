@@ -2,7 +2,7 @@
   "item": "FC-02",
   "sequence": 117,
   "decision": "BD130",
-  "status": "SOURCE_AND_LOCAL_CHECKS_PASS_PENDING_FINAL_A4",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
   "sources": [
     {
       "path": "supabase/migrations/12102026_0058_banking_pay_next_case_screen_sort_indexes.sql",
@@ -103,7 +103,8 @@
     "isolation": "General and Candidate DO PASS",
     "contractHash": "43dfe02808caf27a7406fc6b002efe2fd15ed98fca7c7e0477bda88d0ac667d8",
     "seal": "PASS",
-    "coupling": "PASS"
+    "coupling": "PASS",
+    "actualScreens": "24 local captures; six independent 42-row A4 APPROVED receipts; no unexplained difference"
   },
   "reviews": [
     "reviews/FC-02-case-sort-review.md",
@@ -122,5 +123,7 @@
   "futureJoined": "AUTHORED_NOT_RUN",
   "timing": "Moved to TEST after installation (owner10/10/2026)",
   "deployment": "NOT_RUN",
-  "actualLocalCaptures": 24
+  "actualLocalCaptures": 24,
+  "implementationCommit": "f773f0d74cb463eb85ec51aa0e465fa94d743951",
+  "frontendImplementationCommit": "5bbd042e3e9895ef307d4fbc04d3443b0bff1e71"
 }

@@ -2,19 +2,18 @@
   "item": "FC-01",
   "sequence": 103,
   "decision": "BD115",
-  "status": "BACKEND_BUILT_REVIEWED_PENDING_FC02_SCREEN",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
   "builtDeliverables": [
     "FC-01-D01",
     "FC-01-D02",
     "FC-01-D03",
     "FC-01-D04",
     "FC-01-D05",
-    "FC-01-D07"
-  ],
-  "openDeliverables": [
+    "FC-01-D07",
     "FC-01-D08"
   ],
-  "itemOpen": true,
+  "openDeliverables": [],
+  "itemOpen": false,
   "screenOwner": "FC-02 sequence117",
   "sources": [
     {
@@ -59,5 +58,22 @@
   },
   "futureJoined": "AUTHORED_NOT_RUN",
   "timing": "Moved to TEST after installation (owner10/10/2026)",
-  "implementationCommit": "2b802c1f3386610b2adbac89b4757fd833e76894"
+  "implementationCommit": "2b802c1f3386610b2adbac89b4757fd833e76894",
+  "consumerCompletion": {
+    "item": "FC-02",
+    "implementationCommit": "f773f0d74cb463eb85ec51aa0e465fa94d743951",
+    "frontendImplementationCommit": "5bbd042e3e9895ef307d4fbc04d3443b0bff1e71",
+    "evidence": "design/FC-02-completion.md; design/FC-02-successor-provenance.json; design/FC-02-current-owner-catalogue.json; FE 5bbd042e3e9895ef307d4fbc04d3443b0bff1e71",
+    "reviews": [
+      "reviews/FC-02-office-source-review.md",
+      "reviews/FC-02-case-sort-review.md",
+      "reviews/FC-02-snooze-sort-review.md",
+      "screen-designs/SCR-112/review.md",
+      "screen-designs/SCR-112b/review.md",
+      "screen-designs/SCR-112c/review.md",
+      "screen-designs/SCR-113/review.md",
+      "screen-designs/SCR-114/review.md",
+      "screen-designs/SCR-115/review.md"
+    ]
+  }
 }

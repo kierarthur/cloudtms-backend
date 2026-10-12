@@ -1,0 +1,101 @@
+[
+  {
+    "id": "SCR-115",
+    "file": "FC02-normal-dark.png",
+    "errors": [],
+    "copy": "Snooze payment\nClose\nBethany Clarke · Payment Advance repayment\nSnooze indefinitely\nSnooze until\nChoose a date from 12/10/2026 or snooze indefinitely.\nNote\nApply snooze",
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "Apply snooze",
+          "width": 110.28125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-115",
+    "file": "FC02-normal-device-light.png",
+    "errors": [],
+    "copy": "Snooze payment\nClose\nBethany Clarke · Payment Advance repayment\nSnooze indefinitely\nSnooze until\nChoose a date from 12/10/2026 or snooze indefinitely.\nNote\nApply snooze",
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "Apply snooze",
+          "width": 110.28125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-115",
+    "file": "FC02-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Snooze payment\nClose\nBethany Clarke · Payment Advance repayment\nSnooze indefinitely\nSnooze until\nChoose a date from 12/10/2026 or snooze indefinitely.\nNote\nApply snooze",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "",
+          "width": 338,
+          "height": 41
+        },
+        {
+          "text": "Apply snooze",
+          "width": 104.28125,
+          "height": 44
+        }
+      ]
+    }
+  }
+]
