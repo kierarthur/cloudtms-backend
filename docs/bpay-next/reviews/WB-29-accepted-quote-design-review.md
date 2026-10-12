@@ -1,5 +1,7 @@
 # WB-29 accepted quote composition design review
 
+**Current supplemental verdict: DESIGN PASS for DQ01–03.** The concrete [captured native composer design](../design/WB-29-captured-native-composer-design.md) closes the interface with the2218 scalar helper plus a six-argument native-scope overload, real RunPosition/Included prefix, complete native capture/conservation, Included segment units and same-segment Source qualification. The original review below is retained as finding history. No captured implementation/SOURCE/runtime/whole-card approval is claimed.
+
 12 October 2026, seq140, BD155–157. Independent read-only design/source-boundary review of the saved accepted-join note, final input-quote design and actual2213 implementation. Root alone writes product. No SQL/RPC, business rows, fixtures, tests, remote actions or joined journey was run. Whole WB-29 remains open; this receipt does not pass an unwritten captured composer.
 
 **Verdict: scalar incoming/saved quote design is coherent; accepted composition needs the concrete native scope boundary below before design closure.** The existing four-argument input helper is insufficient for the card's completed INCLUDED segment scope. These are required narrow changes to named WB-29 quote/capture/share/advice seams, not grounds to refuse all multibucket/partial work.
@@ -60,3 +62,9 @@ Store each frozen RunLine's own bounded IDs/versions as required card02:1119; Wo
 * Actual2213 repeatable: `37D3DF35BC6297C1B6695B765476965B5AD024BD28AF469E7BEB49BB469A5C2A`.
 
 This review passes the reuse/authority choice of BD156–157 and identifies the exact remaining accepted composer requirements. It does not claim implemented accepted capture, source-gate/compile success, performance or app acceptance. Existing immutable2213 scalar bodies need a dated successor for the completed native scope; Root decides product bytes and finite attachment ceilings after this design amendment.
+
+## DQ01–03 concrete design closure — 12 October 2026
+
+The new native composer note specifies the actual four/six-argument delegation, full/prefix A/R/H and Included equality, exact real prefix membership and whole captured census before any prefix; only that qualified captured arm replaces scalar residual restrictions. It derives quote units from intact Included segment bucket vectors and retains the exact single-rate quotient proof for partially spent members. All-manual multibucket quote remains valid when R/H belongs to excluded/outside members. Suggested/mixed Source is qualified per same Included segment through unchanged1157 and exact segment Source conservation; no whole-parent attribution, pro-rata or rounding remainder is admitted.
+
+Origin prefixes use that same cumulative component composition and retain final parent Source/target equality.2227 immutable NULL/[]/exact-ID semantics govern both WorkChoice cut and each RunLine subset. **DQ01, DQ02 and DQ03 are therefore closed at DESIGN level.** The author still must implement and independently source-review the native overload/composer/hold/origin/advice joins; whole WB29 and joined financial acceptance remain open/NOT_RUN.

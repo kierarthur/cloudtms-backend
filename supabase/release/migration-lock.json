@@ -1523,6 +1523,10 @@
       "sha256": "2bc1b4e50fed7f33fab5ece420a7c53cdce04f1de92865ddb6db79e8d6efd85d"
     },
     {
+      "path": "supabase/migrations/12102026_2303_banking_pay_next_resolution_independent_audit_keys.sql",
+      "sha256": "720ad72e771f21ab5263f9c0ddc198781a2f88315d968582460260978d54905b"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

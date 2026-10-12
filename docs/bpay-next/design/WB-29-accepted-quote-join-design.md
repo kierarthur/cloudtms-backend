@@ -1,5 +1,7 @@
 # WB-29 accepted decision attachment and shared quote joins
 
+Current concrete interface supplement: [WB-29-captured-native-composer-design.md](WB-29-captured-native-composer-design.md) closes DQ01–03 against final2218 and actual1100/1236/1419/2227 native owners. It supersedes section4's older “qualified representation” wording: the partial quotient itself must be exact, <=six decimals and multiplication/1157-roundtrip qualified; never rounded into admission. This is DESIGN closure only; whole WB29 and captured implementation remain unapproved/NOT_RUN.
+
 12 October 2026, seq140, BD155. Read-only design investigation; Root alone writes product. Whole WB-29 remains open. No SQL/RPC, business data, fixtures, tests, remote action or app journey was run. This note identifies small support for the card's existing accepted-choice, hold, residual quote, origin-share and frozen-advice owners; it does not introduce another selection protocol, store, producer or calculator.
 
 ## 1. Pin at the universal accepted click
@@ -67,3 +69,9 @@ Current registry signatures for the minimum owner matrix are:
 | `public.bpay_next_workbench_page_v1(jsonb)` | `12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql` | Route its existing estimate operands through the same composition, preserving read-only continuation. |
 
 This is a function-specific design census, not a request to change every body: unchanged original guards remain reuse. The only arithmetic authority remains unchanged1157; additional helpers gather native intent/operands and compose its results.
+
+## Concrete captured scope — DQ01–03 closed at DESIGN level
+
+Use the existing2218 four-argument input as a thin delegate to one six-argument overload adding `p_run_position_id uuid,p_through_segment_key text`. Scalar callers retain original admission. Captured callers must qualify the complete native segment-parent census/count/A/R/H/Included/Excluded/recovery/overhang first; a prefix must be an actual positive Included member. Only that captured branch uses native full/prefix totals instead of scalar included<=algebraic-residual assumptions. Its units are actual Included approved-segment bucket vectors, with exact single-rate residual qualification where required.
+
+All-manual intact Included multibucket units work even with aggregate R/H outside their scope. Suggested/mixed bucket Source is qualified per same Included segment through unchanged1157 and exact segment approval conservation. Prefix/parent target outputs use the same cumulative bucket composition and original origin-share final equality; Source reserve is counted once. Current2227 supplies100/32768-byte WorkChoice refs and5/8192-byte line refs with immutable historical NULL versus explicit []/IDs. Complete implementation constraints, exact native fields and owner anchors are in the linked composer note; no unwritten source or runtime path is passed here.

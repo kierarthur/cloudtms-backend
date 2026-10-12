@@ -1,6 +1,7 @@
 /** WB09 pure Office reads. Closed kinds, trusted admin actor, fixed RPC only.
  * No reconstruction, financial calculation, command or automatic page retry. */
 import {normalizeSnoozesInput,validateSnoozesResponse} from './bpay-next-snooze-reader.js';
+import {normalizeResolutionInput,validateResolutionResponse,resolutionNativeFault} from './bpay-next-resolution.js';
 import {normaliseBpayNextSnoozeAction,normaliseBpayNextSnoozeMany,validateBpayNextSnoozeContext,validateBpayNextSnoozeReceipt,validateBpayNextSnoozeManyReceipt,BPAY_NEXT_SNOOZE_REFUSALS} from './bpay-next-snooze.js';
 export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
@@ -523,6 +524,7 @@ function decimalCompare(a,b){const negA=a.startsWith('-'),negB=b.startsWith('-')
 function keyCompare(a,b,kind,sort){if(kind==='CANDIDATE_ESTIMATE'){for(let n=0;n<4;n++){const value=n===0||n===2?BigInt(a[n])<BigInt(b[n])?-1:BigInt(a[n])>BigInt(b[n])?1:0:textCompare(a[n],b[n]);if(value)return value;}return 0;}for(let n=0;n<a.length;n++){const value=typeof a[n]==='number'?a[n]-b[n]:typeof a[n]==='boolean'?Number(a[n])-Number(b[n]):n===1&&(sort.startsWith('AMOUNT_')||kind==='EXPORT_ROWS'&&sort.includes('_AMOUNT_'))?decimalCompare(a[n],b[n]):textCompare(a[n],b[n]);if(value)return sort.endsWith('_DESC')?-value:value;}return 0;}
 function fail(code,status=503,retryable=false,reload=false){return Object.assign(new Error(code),{code,status,retryable,reload});}
 export function normalizeWorkbenchInput(kind,input={}){
+  if(kind==='RESOLUTION_CONTEXT')return normalizeResolutionInput(input);
   if(kind==='SNOOZES')return normalizeSnoozesInput(input);
   if(!KINDS.includes(kind)||!record(input)||Reflect.ownKeys(input).some(k=>typeof k!=='string'||!Object.hasOwn(COMMON,k)))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,selection_memory:null,progress_after:null,estimate:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
@@ -573,6 +575,7 @@ function validateJobProgress(progress,args,actorId,revision){
 }
 
 export function validateWorkbenchResponse(payload,kind,args,actorId=null){
+  if(kind==='RESOLUTION_CONTEXT')return validateResolutionResponse(payload,args,actorId);
   if(kind==='SNOOZES'&&payload?.ok===true)return validateSnoozesResponse(payload,args,actorId);
   const original=payload;
   if(Object.hasOwn(payload??{},'job_progress')){
@@ -640,7 +643,7 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
 export function createBpayNextWorkbenchRpc({baseUrl,headers,fetchImpl=fetch}){
   const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_workbench_page_v1`);
   if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
-  return async(kind,args,options)=>{if((!KINDS.includes(kind)&&!['SNOOZE_CHECK','SNOOZES'].includes(kind))||!field(options?.actorUserId,'uuid')||!options.signal)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
+  return async(kind,args,options)=>{if((!KINDS.includes(kind)&&!['SNOOZE_CHECK','SNOOZES','RESOLUTION_CONTEXT'].includes(kind))||!field(options?.actorUserId,'uuid')||!options.signal)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
     const body=JSON.stringify({p_request:{actor_user_id:options.actorUserId,kind,...(kind==='SNOOZE_CHECK'?{snooze:normaliseBpayNextSnoozeAction('SNOOZE_CHECK',args.snooze)}:normalizeWorkbenchInput(kind,args))}});if(ENCODER.encode(body).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
     const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');h.set('X-CloudTMS-Banking-Pay-Route-Class','READ');
     return fetchImpl(endpoint.href,{method:'POST',headers:h,body,redirect:'error',signal:options.signal});};
@@ -657,6 +660,16 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
     if(request.method!=='GET')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
     const user=await dependencies.requireOfficeUser?.(request,['admin']);if(!user||typeof user.id!=='string'||!UUID.test(user.id.toLowerCase()))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
     const actor=user.id.toLowerCase(),url=new URL(request.url);if(ENCODER.encode(url.search).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+    if(url.searchParams.get('kind')==='RESOLUTION_CONTEXT'){
+      if([...url.searchParams.keys()].length!==2||url.searchParams.getAll('kind').length!==1||url.searchParams.getAll('resolution').length!==1)throw fail('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);
+      let args;try{args=normalizeResolutionInput({resolution:parseUniqueJson(url.searchParams.get('resolution'))});}catch(e){throw e?.code?e:fail('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);}
+      if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+      controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},4000);});
+      return await Promise.race([(async()=>{const response=await dependencies.workbenchRpc('RESOLUTION_CONTEXT',args,{actorUserId:actor,signal:controller.signal});
+        if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+        const value=await readWorkbenchJson(response,controller.signal);if(!response.ok)throw resolutionNativeFault(value);
+        return json(200,validateResolutionResponse(value,args,actor),'RESOLUTION_CONTEXT');})(),timeout]);
+    }
     if(url.searchParams.get('kind')==='SNOOZES'){
       const input={};for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!['candidate_id','client_id','scope_kind','filter','snooze_id','sort','after','limit','view','count_only'].includes(key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
         if(key==='kind')continue;if(key==='after'||key==='count_only'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d?$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}

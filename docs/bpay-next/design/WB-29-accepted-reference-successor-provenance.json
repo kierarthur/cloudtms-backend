@@ -31,7 +31,7 @@
   "sourceReview": "docs/bpay-next/reviews/WB-29-accepted-reference-source-review.md: SOURCE PASS",
   "publicSecurityDefinerMembershipDelta": 0,
   "joinedAppAcceptance": "AUTHORED_NOT_RUN",
-  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "implementationCommit": "0101863fea48019848ad2501d61d7612d8287c57",
   "checks": {
     "dbCheck": "PASS:382 migrations/981 repeatables",
     "sourceGates": "PASS:1539 SQL/157 work signatures",
