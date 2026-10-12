@@ -215,8 +215,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
-  "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)": ["private.bpay_next_work_segment_debt_basis_v1","sum","cardinality","lateral"],
-  "private.bpay_next_work_collection_guard_v1()": ["private.bpay_next_work_collection_observation_v1"],
+  "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_work_segment_debt_basis_v1","sum","cardinality","lateral"],
+  "private.bpay_next_work_collection_guard_v1()": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_work_collection_observation_v1"],
   "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","by","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","convert_from","decode","replace","encode","convert_to","chr","jsonb_set","to_jsonb","lower","left","least","private.bpay_next_snooze_management_row_v1"],
   "private.bpay_next_snooze_management_row_v1(uuid)": ["to_char","private.bpay_next_snooze_revision_basis_v1"],
   "private.bpay_next_snooze_receipt_guard_v1()": ["upper","to_jsonb","jsonb_set","private.bpay_next_snooze_due_receipt_valid_v1","private.bpay_next_snooze_publication_cancel_valid_v1"],
@@ -260,7 +260,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'public.bpay_next_snooze_due_page_v1(jsonb)':['by','private.bpay_next_workbench_require_next_v1','private.bpay_next_receive_command_v1','private.bpay_next_snooze_due_receipt_valid_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','gen_random_uuid','to_jsonb'],
   'public.bpay_next_workbench_week_rollover_page_v1(jsonb)':['lateral','by','private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','substring'],
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
-  'private.bpay_next_case_allocation_plan_v1(jsonb)':['private.bpay_next_case_restructure_origin_v1','private.bpay_next_case_restructure_period_free_v1','private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
+  'private.bpay_next_case_allocation_plan_v1(jsonb)':["private.bpay_next_treatment_approval_revision_v1",'private.bpay_next_case_restructure_origin_v1','private.bpay_next_case_restructure_period_free_v1','private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_retry_prepare_job_v1","private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
   "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
@@ -426,7 +426,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object",
     "pg_catalog.transaction_timestamp"
   ],
-  "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": [
+  "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": ["private.bpay_next_treatment_approval_revision_v1",
     "private.bpay_next_work_collection_observation_v1","private.bpay_next_workbench_refresh_many_v1",
     "private.bpay_next_segment_collection_basis_v1",
     "private.bpay_next_expired_work_collection_scope_v1",
@@ -438,7 +438,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)": [
     "pg_catalog.clock_timestamp"
   ],
-  "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": ["private.bpay_next_segment_collection_basis_v1"],
+  "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_segment_collection_basis_v1"],
   "private.bpay_next_selected_position_keys_v1(uuid,uuid,text,integer)": [],
   "private.bpay_next_run_segment_members_v1(uuid,uuid,text,text,integer)": [],
   "private.bpay_next_capture_segment_page_v1(uuid,integer)": [
