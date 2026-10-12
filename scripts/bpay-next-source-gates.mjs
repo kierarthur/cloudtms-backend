@@ -285,7 +285,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
   "private.bpay_next_workbench_refresh_group_display_v1(text)": ["lateral","private.bpay_next_workbench_require_next_v1","pg_catalog.jsonb_build_array","bool_or","min","array_agg","filter","sum","cardinality"],
   // WB-29: latest native EX08 transition and bounded exact Work/member/bucket join.
-  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_component_resolution_need_publish_v1","private.bpay_next_component_resolution_need_v1","public.pay_banking_official_date_context_v1","private.bpay_next_work_collection_observation_v1","private.bpay_next_source_query_segment_exclusions_v1","private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_treatment_approval_revision_v1","private.bpay_next_component_resolution_need_publish_v1","private.bpay_next_component_resolution_need_v1","public.pay_banking_official_date_context_v1","private.bpay_next_work_collection_observation_v1","private.bpay_next_source_query_segment_exclusions_v1","private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
   "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
   "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","concat_ws","transaction_timestamp"],
   "private.bpay_next_workbench_umbrella_metadata_trigger_v1()": ["private.bpay_next_workbench_schedule_task_v1"],
@@ -304,7 +304,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     'private.bpay_next_workbench_require_next_v1','cardinality','pg_column_size','unnest','sum'],
   'private.bpay_next_workbench_accepted_work_v1(uuid,text,text)': [
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_snooze_at_cut_v1'],
-  'private.bpay_next_workbench_work_members_v1(uuid,uuid)': [
+  'private.bpay_next_workbench_work_members_v1(uuid,uuid)': ["private.bpay_next_treatment_approval_revision_v1",
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_bound_source_snapshot_v1',
     'private.bpay_next_work_segment_gross_balance_v1','sum'],
   'private.bpay_next_workbench_mark_processing_v1(uuid)': [
@@ -456,7 +456,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   ],
   "private.bpay_next_segment_pay_basis_v1(uuid)": ["pg_catalog.sha256","pg_catalog.convert_to"],
   "private.bpay_next_line_pay_basis_v1(uuid)": ["pg_catalog.sha256","pg_catalog.convert_to","jsonb_agg"],
-  "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)": [
+  "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)": ["private.bpay_next_treatment_approval_revision_v1",
     "private.bpay_next_initial_tsfin_bound_assert_v1",
     "private.bpay_next_source_binding_members_v1",
     "private.bpay_next_source_command_id_v1",
@@ -477,7 +477,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)": [
     "private.bpay_next_initial_tsfin_certificate_v1"
   ],
-  "private.bpay_next_initial_tsfin_certificate_v1(uuid)": [
+  "private.bpay_next_initial_tsfin_certificate_v1(uuid)": ["private.bpay_next_treatment_approval_revision_v1",
     "private.bpay_next_source_command_id_v1",
     "private.weekly_source_effective_inventory_v1",
     "private.weekly_source_inventory_approval_basis_v2",

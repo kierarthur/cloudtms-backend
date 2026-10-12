@@ -62,4 +62,3 @@ Current `private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)`
 Current `private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])` final `10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql:354–381` admits100 aggregate inputs/16KiB, discovers genuine work_collection related Cases with limit101, holds Candidate controls then all Work then Cases. For oversized related Case fanout it keeps the original queued-origin continuation. Reuse that native finite discovery/prehold shape; do not hide missing Work locks behind an inner seed call or broaden the case set.
 
 Source-only conclusion: exact existing W2/receipt/clock/publication mechanisms are sufficient with a small discriminated receipt extension and retained per-Work child publication identities. No new Worker command kind, decision store, protocol or calculator is necessary. Implementation/joined/business acceptance remains NOT_RUN.
-

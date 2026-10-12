@@ -1,0 +1,80 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "Six native approval-reader continuity owners; remaining W2/accepted/quote/collection joins pending",
+  "builderDecision": "BD155",
+  "signatures": [
+    "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+    "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+    "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+    "private.bpay_next_source_origin_state_v1(uuid,uuid)",
+    "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+    "private.bpay_next_component_resolution_need_v1(uuid,uuid,uuid,uuid,text,uuid,boolean,date)"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+      "sha256": "560982266cf01ccc9f743f9008e88107013e7831e0acdfa79837eb88afcf9400"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+      "sha256": "86de08dd3bf9a64e7e347e9d41cb1430515e3ed83dc906ecab1ce7940b470a16"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+      "sha256": "08c7ec51a1fcaeac01057f82337682a49b71b19d62cb311a37627337b44f7930"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql",
+      "sha256": "14ed64103b353f681630afb03bfa80590637e016b4e1f53507a5cb43a1388cc2"
+    }
+  ],
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql",
+      "sha256": "4f07a5ab56fd01aa40ccdb9163f3458c66a838af8e056f35987be2c24cb70542"
+    },
+    {
+      "path": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "sha256": "2e9a297ff362e41dbfbadc869b211b37176cf76d06edd3e78808a2e4c2a57340"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "sha256": "df49b9fc467ae9806effb19ec3b39820059fa46980a2f761f62c3f2ef8a96111"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "sha256": "2cfaaea1eee500ea40ed0a60998ab9a40235e0cc50887b6ac292a80f2a912e4f"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+      "sha256": "08d38a37526b459190d27b3fe3a51ab713e0ce39b53be30a606dee647e2125fc"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+      "sha256": "ede3ff15034815163a9fcdbee7b57d236982f667fe87f5d2adc59128d6183719"
+    }
+  ],
+  "sourceReview": "docs/bpay-next/reviews/WB-29-readers-source-review.md: SOURCE PASS",
+  "checks": {
+    "dbCheck": "PASS:380 migrations/977 repeatables",
+    "sourceGates": "PASS:1533 SQL /30 public roots /154 work signatures /37 typed transport",
+    "nodeCheck": "PASS: changed source gate",
+    "localPG17": "PASS:6 new successors /6 exact body/config/owner/ACL/volatility matches",
+    "isolation": "PASS:839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both existing DO verifiers",
+    "contract": "a9ddabc1c0dd5a9274153e38027908583b08a8a8860cfac68e44618ca8b90016",
+    "seal": "PASS",
+    "coupling": "PASS"
+  },
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "PENDING_LOCAL_COMMIT"
+}

@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "5a6cf5f17d40f178286ce2cffd716541c064ebad",
-  "compiledAtUtc": "2026-10-12T20:42:36.677Z",
+  "sourceCommit": "81fcac3dd3ba19a08b9d3497a2f4e73ed4dd491b",
+  "compiledAtUtc": "2026-10-12T20:54:16.239Z",
   "inventory": {
     "migrations": [
       {
@@ -8740,6 +8740,48 @@
         "sha256": "f615211e534b18ee1db4d537cd5ac437175221d509155ba8badda0700c6f131c"
       },
       {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql"
+        ],
+        "sha256": "fc6ee4ad79cbf9e72c372593e2ad45535a64883a420d421f978639bb418668ff"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql"
+        ],
+        "sha256": "be8d2f5397ef935a34831104b2b57f279fbdb828011ab27e1674094db16c6b95"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql"
+        ],
+        "sha256": "cba9c95975c07787594d957542ef342e64214d0770fa68f3900380b1cbcd68e4"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql"
+        ],
+        "sha256": "656363a2840f5584ceed6f5f007e129452fbdeb758c28a2e359b104d8babce15"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql"
+        ],
+        "sha256": "6c2160084ffa2092fa94f356a82aac40f7370c51cfeb307d11be03eea8571004"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql"
+        ],
+        "sha256": "840c87c5b49621b9a57cf91c5db161be26c9a55f17b69c06bd127ad6801ed069"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8749,12 +8791,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/12102026_2135_banking_pay_next_treatment_approval_revision.sql",
-        "sha256": "028428fd61d9a8929e0e600262f84f61be09aaa58f92402b68df693288377d6d"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8778,25 +8815,46 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql"
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql"
         ],
-        "sha256": "2e4ad3220a41aaf3d2d19ce399f46c3356d6eed577d1136074eddebbd57f7748"
+        "sha256": "fc6ee4ad79cbf9e72c372593e2ad45535a64883a420d421f978639bb418668ff"
       },
       {
-        "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql",
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql"
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql"
         ],
-        "sha256": "2dd3aafe6c9a0f516656dda03fb993e3d922a62764b5b3387322e9cd3d82d462"
+        "sha256": "be8d2f5397ef935a34831104b2b57f279fbdb828011ab27e1674094db16c6b95"
       },
       {
-        "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql",
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql"
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql"
         ],
-        "sha256": "f615211e534b18ee1db4d537cd5ac437175221d509155ba8badda0700c6f131c"
+        "sha256": "cba9c95975c07787594d957542ef342e64214d0770fa68f3900380b1cbcd68e4"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql"
+        ],
+        "sha256": "656363a2840f5584ceed6f5f007e129452fbdeb758c28a2e359b104d8babce15"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql"
+        ],
+        "sha256": "6c2160084ffa2092fa94f356a82aac40f7370c51cfeb307d11be03eea8571004"
+      },
+      {
+        "path": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql"
+        ],
+        "sha256": "840c87c5b49621b9a57cf91c5db161be26c9a55f17b69c06bd127ad6801ed069"
       }
     ]
   },

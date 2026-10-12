@@ -5257,19 +5257,21 @@
     },
     {
       "signature": "private.bpay_next_source_origin_state_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
+        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
         "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql"
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_source_origin_state_v1.sql"
       ],
-      "owner": "SP17 seq137 BD151: closed17-key nativeSNOOZE/PENDING and <=100-root existing service read; classifier/witness/money/producers unchanged.",
+      "owner": "WB-29 native approval reader continuity / BD155",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12584,34 +12586,38 @@
     },
     {
       "signature": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
-      "finalRoot": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
-      "finalPhysical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql"
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql"
       ],
-      "owner": "F-06 reviewed carried foundation source",
+      "owner": "WB-29 native approval reader continuity / BD155",
       "baselineSourceHash": "16012163d3329db6060ede2274a1d44683b556c72e4715b6225c2e16e34673ee"
     },
     {
       "signature": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
-      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
-        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
         "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "F-06 reviewed carried foundation source; SP20 BD127 answered Source tax/target guards",
+      "finalClosures": [
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql"
+      ],
+      "owner": "WB-29 native approval reader continuity / BD155",
       "baselineSourceHash": "77e6c0d5996902dc886a479f84448e8dd89bcb76d9be566328ab11af4d242fea"
     },
     {
@@ -13948,19 +13954,21 @@
     },
     {
       "signature": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
         "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql"
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql"
       ],
-      "owner": "WB-08 exact removed Source classification from retained binding line; native Source money owners unchanged"
+      "owner": "WB-29 native approval reader continuity / BD155"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
@@ -14205,9 +14213,21 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
-      "finalRoot": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+        "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+        "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql",
+        "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql",
+        "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
         "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
@@ -14218,20 +14238,10 @@
         "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql",
         "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
-        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-        "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
-        "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
-        "supabase/repeatable/12102026_1858_banking_pay_next_manual_collection_display_tax_v1.sql",
-        "supabase/repeatable/12102026_2116_banking_pay_next_workbench_resolution_needs_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_2123_banking_pay_next_taxable_resolution_notes_v1.sql"
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql"
       ],
-      "owner": "WB-29 explicit needs / review corrections N29-S01–03"
+      "owner": "WB-29 native approval reader continuity / BD155"
     },
     {
       "signature": "private.bpay_next_workbench_snooze_due_trigger_v1()",
@@ -17295,19 +17305,21 @@
     },
     {
       "signature": "private.bpay_next_component_resolution_need_v1(uuid,uuid,uuid,uuid,text,uuid,boolean,date)",
-      "finalRoot": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql",
+        "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql",
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql",
         "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2116_banking_pay_next_resolution_need_owner_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_2123_banking_pay_next_resolution_need_target_v1.sql"
+        "supabase/repeatable/12102026_2146_banking_pay_next_treatment_resolution_need_continuity_v1.sql"
       ],
-      "owner": "WB-29 explicit needs / review corrections N29-S01–03"
+      "owner": "WB-29 native approval reader continuity / BD155"
     },
     {
       "signature": "private.bpay_next_treatment_approval_revision_v1(uuid)",
