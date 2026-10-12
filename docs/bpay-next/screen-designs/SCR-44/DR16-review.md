@@ -83,7 +83,7 @@ No tick/select-all, extra pagination, fake Case Open, invented Newer information
 | 20 | PASS | Vocabulary/IDs | No codes/UUIDs; Payment Advance vocabulary and native human identity only. |
 | 21 | PASS | UK formats/missing | Native UK timestamp formatting, exact grouped two-decimal pound string formatting and data-next-formatted-money; NULL dash/plain PAYE net state. |
 | 22 | PASS | Keyboard/ARIA | Candidate and passive Case row focus/selection/Arrow/Home/End, exact labelled regions/sort roles and native Close/Escape; authored source evidence, not joined keyboard testing. |
-| 23 | PASS | Phone | Eight actual phone top/totals/last-Case/detail PNGs inspected: wrapped cards, no sideways layout, 44px controls and reachable footer/Close. |
+| 23 | PASS | Phone | Seven actual phone top/totals/last-Case/detail PNGs inspected: wrapped cards, no sideways layout, 44px controls and reachable footer/Close. |
 | 24 | PASS | Device light | Four final matching pairs (review, ready, PAYE detail, Umbrella detail) inspected and SHA-256 byte-identical; no device-light theme drift. |
 | 25 | N/A | Spec regeneration | N/A — owner exempts generated specs/pack tools. Actual native local PNGs provide screen evidence. |
 | 26 | N/A | Reader additions | N/A — owner readerAdditions specification step exempt; every displayed fact still mapped to owning server fields. |
