@@ -48,6 +48,9 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  "private.bpay_next_resolution_revision_census_v1(uuid[])",
+  "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)",
+  "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
   "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)",
   "private.bpay_next_resolution_scope_validate_v1(jsonb,text)",
   "private.bpay_next_resolution_offer_context_v1(uuid,uuid)",
@@ -224,6 +227,9 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_resolution_revision_census_v1(uuid[])": ["cardinality","array_position","unnest","octet_length","to_jsonb"],
+  "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)": ["private.bpay_next_bound_source_snapshot_v1","private.bpay_next_source_book_seed_proof_v1","array_agg","cardinality","min"],
+  "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)": ["by","current_setting","octet_length","private.bpay_next_resolution_scope_validate_v1","private.bpay_next_assert_candidate_financial_fence_v1","jsonb_array_elements","array_agg","unnest","private.bpay_next_treatment_approval_revision_v1","array_append","private.bpay_next_resolution_revision_census_v1","to_jsonb","cardinality","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_component_resolution_basis_v1","upper","private.bpay_next_resolution_offer_context_v1","private.bpay_next_resolution_context_v1","private.bpay_next_component_resolution_active_v1","private.bpay_next_resolution_live_snooze_v1","private.bpay_next_component_resolution_input_quote_v1","private.bpay_next_resolution_source_seed_plan_v1","repeat","public.timesheet_financial_retention_mark_v1","private.bpay_next_source_disposition_seed_v1","private.bpay_next_bound_source_snapshot_v1","private.bpay_next_stage_treatment_revision_v1","gen_random_uuid","private.bpay_next_publish_staged_revision_v1","transaction_timestamp","jsonb_populate_record","private.bpay_next_workbench_refresh_many_v1"],
   "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)": ["private.bpay_next_segment_pay_basis_v1"],
   "private.bpay_next_resolution_scope_validate_v1(jsonb,text)": ["jsonb_typeof","octet_length","jsonb_array_length","jsonb_array_elements","array_append","length","upper","btrim","jsonb_build_array","trunc"],
   "private.bpay_next_resolution_offer_context_v1(uuid,uuid)": ["current_setting","public.pay_banking_official_date_context_v1","jsonb_build_object","upper","octet_length"],
@@ -278,7 +284,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
   'private.bpay_next_case_allocation_plan_v1(jsonb)':["private.bpay_next_treatment_approval_revision_v1",'private.bpay_next_case_restructure_origin_v1','private.bpay_next_case_restructure_period_free_v1','private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_retry_prepare_job_v1","private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
-  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
+  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_resolution_command_v1","private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
   "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
 
@@ -1509,6 +1515,11 @@ export function assertRoutineHistoryPoints(source,file,signature){
         and v_effect.case_id=b.case_id and v_effect.original_transfer_id=ce.original_transfer_id
         and (v_effect.source_disposition_ex_vat,v_effect.target_amount_ex_vat,v_effect.target_amount_vat,v_effect.target_amount_inc_vat)
           is not distinct from (-ce.source_amount_ex_vat,-ce.target_amount_ex_vat,-ce.target_amount_vat,-ce.target_amount_inc_vat))`.replace(/\s+/g,' '));
+  // WB29: exact native PK and bounded unfiltered Source-history prefix only.
+  if(signature==='private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)')exact.push(
+    'select x.* into e from private.bpay_next_financial_effect x where x.id=v_pointer;',
+    'select array_agg(x.id) into v_ids from (select id from private.bpay_next_financial_effect where work_id=p_work_id and component_key=p_component_key order by occurred_at_utc,id limit 101) x;',
+    "select count(*),min(x.id::text)::uuid into v_count,v_effect from private.bpay_next_financial_effect x where x.id=any(v_ids) and x.effect_kind='payroll_settled' and x.source_disposition_ex_vat=p.realised_source_ex_vat;");
   for(const clause of exact)code=code.replace(clause,' ');
   const remaining=scanManagedSql(code).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
   for(const match of remaining.matchAll(new RegExp(`\\b(?:private\\s*\\.\\s*)?(?:${HISTORY_RELATIONS.join('|')})\\b`,'g'))){
@@ -1962,7 +1973,14 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
             :argument.length===1?(types.get(argument[0])??(/^\d+$/.test(argument[0])?'NUMERIC':null)):null;
           if(type==='UUID')hazards.add('UUID_AGGREGATE');
           else if(!['TEXT','NUMERIC','BIGINT','INTEGER','SMALLINT','DATE','TIMESTAMPTZ'].includes(type??nativeColumns.get(argument.join(' '))))hazards.add('AGGREGATE_TYPE_UNCLASSIFIED');
-          else if(t[end+1]==='::'&&t[end+2]==='UUID')hazards.add('UUID_CARDINALITY_UNCLASSIFIED');
+          else if(t[end+1]==='::'&&t[end+2]==='UUID'){
+            // WB29: exact installed native seed plan, complete physical prefix
+            // then count=1 refusal before its UUID is used by unchanged1246.
+            const seedSingleton=file==="supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql"&&part.signature==="private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)"
+              &&createHash('sha256').update(part.text.trim()).digest('hex')==="8b80ec84be009ba612ac923e6abd2c6e29c116df8b27894cfdf93c158f0967ca"
+              &&argument.join(' ')==='X . ID :: TEXT'&&t[i]==='MIN';
+            if(!seedSingleton)hazards.add('UUID_CARDINALITY_UNCLASSIFIED');
+          }
         }
       }
       const raw=part.text.slice(row.start,row.end),at=selectAt>=0?raw.search(/\bselect\b/i):-1;

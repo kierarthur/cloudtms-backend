@@ -38,7 +38,7 @@
   "transport": "Existing W1 GET RESOLUTION_CONTEXT, exact native closed decimal-text DTO; no screen or new route",
   "publicSecurityDefinerMembershipDelta": 0,
   "joinedAppAcceptance": "AUTHORED_NOT_RUN",
-  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "implementationCommit": "70f1a25865463857a54acaba8f8b1517de102ee0",
   "builderDecisions": [
     "BD159",
     "BD160",
@@ -51,5 +51,6 @@
     "isolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both isolation DO PASS",
     "nodeCheck": "4 changed BE/FE modules PASS",
     "contractSealAndCoupling": "4b117684b6a92094c6862b5bf2fc727d457a4a9170fff8cd42ff9a7f014a2bfc PASS"
-  }
+  },
+  "frontendImplementationCommit": "7b8e9f90385ac6970d249e8fc7456631fab4ce32"
 }

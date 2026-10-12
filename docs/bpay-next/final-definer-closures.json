@@ -14640,19 +14640,21 @@
     },
     {
       "signature": "public.bpay_next_workbench_command_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
         "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql"
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
       ],
-      "owner": "WB-38 shared snooze controls and bounded native expense receipts"
+      "owner": "WB-38 shared snooze controls and bounded native expense receipts; WB29 native SAVE/CLEAR"
     },
     {
       "signature": "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)",
@@ -17276,17 +17278,21 @@
     },
     {
       "signature": "private.bpay_next_component_resolution_guard_v1()",
-      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2313_banking_pay_next_resolution_exact_carry_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2313_banking_pay_next_resolution_exact_carry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+        "supabase/repeatable/12102026_2313_banking_pay_next_resolution_exact_carry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
         "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      "finalClosures": [
+        "supabase/repeatable/12102026_2313_banking_pay_next_resolution_exact_carry_v1.sql"
       ],
-      "finalClosures": [],
-      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain; WB29 exact independent carry"
     },
     {
       "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
@@ -17464,6 +17470,45 @@
         "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql"
       ],
       "owner": "WB29 live snooze qualification"
+    },
+    {
+      "signature": "private.bpay_next_resolution_revision_census_v1(uuid[])",
+      "finalRoot": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql"
+      ],
+      "owner": "WB29 finite native W2 publication prerequisites"
+    },
+    {
+      "signature": "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql"
+      ],
+      "owner": "WB29 finite native W2 publication prerequisites"
+    },
+    {
+      "signature": "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
+      ],
+      "owner": "WB29 native complete resolution transaction"
     }
   ],
   "editorChains": [
