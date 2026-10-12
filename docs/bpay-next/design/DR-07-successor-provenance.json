@@ -1,0 +1,70 @@
+{
+  "card": "DR-07",
+  "sequence": 125,
+  "decision": "BD139",
+  "status": "PARTLY_BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR28_HANDOFF",
+  "implementationCommit": "2f0b0890a06a67b694bf25c90019116aeacfeb46",
+  "frontendImplementationCommits": [
+    "860144fd134c2d443be85668dce9b720af9e4f40",
+    "b744efb6afe7b810ee4af09094e44c747b05ac0e"
+  ],
+  "built": [
+    "DR-07-D02",
+    "DR-07-D03",
+    "DR-07-D05",
+    "DR-07-D08"
+  ],
+  "blocked": {
+    "D06": "Real Payment Batches host/handoff joins at DR28 sequence155",
+    "ITEM": "D06 future host outstanding"
+  },
+  "files": [
+    {
+      "file": "supabase/migrations/12102026_0718_banking_pay_next_active_preparation_index.sql",
+      "sha256": "d1bebed17f1668e2095ee3783028be28e95164c599c52bfea9e921c6bc7cff2d"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+      "sha256": "d040516eb3ad9f488025493d6d91eaadc99cee780c22e09f7fddb7ecc3eff501"
+    },
+    {
+      "file": "broker/src/bpay-next-preparation.js",
+      "sha256": "80fdcf78fdb3c7e4110d976a7b1c7c7935e4d3ac7029b14176e5c84286b4c527"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "f6538fc7903d2e689ac69473756950d66d440f1cc3b924d8819930b4ec585cec"
+    }
+  ],
+  "frontendFiles": [
+    {
+      "file": "js/bpay-next-office.js",
+      "sha256": "74d040f5e1e46b0656954f4729e96be0e89943aa8dc19b3b6e97f9e4b3d5fbeb"
+    },
+    {
+      "file": "js/bpay-next-workbench.js",
+      "sha256": "60b716265fbb2f775a4869019f8c5b9020c9f32f838777f800ce58f6eb68a77b"
+    },
+    {
+      "file": "css/bpay-next-office.css",
+      "sha256": "e23f81b6f56a83123e04ddb21a2beeee0d95455e267be130a48a400fefa49406"
+    }
+  ],
+  "checks": {
+    "source": "12/12 PASS",
+    "db": "368 migrations/947 repeatables PASS",
+    "syntax": "Changed Worker/Office/Workbench PASS",
+    "local": "Sole PG17 compile; two exact body/config/ACL/volatility owners; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and CandidateDO PASS; publicSECDEF delta0",
+    "seal": "2e204418e67fef2e46d8fd645f0263d50ad15931aea1f0030f2d17ba8f302e45",
+    "coupling": "PASS",
+    "screen": "39 actual native local PNGs; full42-row independent A4 38PASS/0FAIL/4 scopedN/A",
+    "business": "AUTHORED_NOT_RUN; no SQL fixtures/business RPC/queue/hosted acceptance",
+    "timing": "Moved to TEST after installation (owner10October)"
+  },
+  "reviews": [
+    "reviews/DR-07-sql-review.md",
+    "reviews/DR-07-transport-review.md",
+    "reviews/DR-07-office-review.md",
+    "screen-designs/SCR-41b/review.md"
+  ]
+}
