@@ -514,6 +514,66 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_net_cancel_handoff",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_net_cancel_hold_member",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_net_replacement",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_net_staged_case_capacity",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_net_staged_result",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -532,6 +592,18 @@
         "postgres"
       ],
       "table": "bpay_next_pay_method_change_receipt",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_net_replacement_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_paye_net_request_refusal",
       "using": "true",
       "schema": "private",
       "command": "ALL",
@@ -10418,7 +10490,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "9597f781f04e5af02c476f02ee5e60d53047d4f26910eb0fba384bd578a6ddd4"
+      "definition_sha256": "e8bd82fc684ab91016060893b4a7528122b65554fc987df47036da143fcde945"
     },
     {
       "acl": [
@@ -10779,7 +10851,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "55c3249a7512a710f824a235805575d01c55f2dceb1a6eed21ea01527f9d794e"
+      "definition_sha256": "bfa3d07bdcae5a53d985dde215655fe66bf97f1203fdb4c88813e74d0afac7d5"
     },
     {
       "acl": [
@@ -10969,7 +11041,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a59b36d2d735b7c356386b3098f33194e34940a8a9c1ba4fc2661f150c0d593f"
+      "definition_sha256": "dafcde45667d062bcc963307acba1ece147e180bc9571fdd9314ef8c0b31cdea"
     },
     {
       "acl": [
@@ -11045,7 +11117,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2143b7cd02b52db979d7f8e0263832a11129eae2eb56b287645b0a332c9f7974"
+      "definition_sha256": "a56fa41e43253597bbd3628a0dc683df37357d2aa654defb759db09b438109bd"
     },
     {
       "acl": [
@@ -11235,7 +11307,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "4671d7b56959d122a0010fa2433a7279059807aef46af35c1a4b67cc99833207"
+      "definition_sha256": "13940f25aa5e74a5e91da09f55eb23709082a78034ccdd2ce6442082b64ece4f"
     },
     {
       "acl": [
@@ -11311,7 +11383,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5b0a29c1b1faae2015489d2aa7f7891e38c836364016db624d43fc20447d7212"
+      "definition_sha256": "24bce41ef97c34ae8f082182f2ff462838f6d94f5a15b470bb464847db9e4b5e"
     },
     {
       "acl": [
@@ -11349,7 +11421,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "aab56353ef42d3ad73a6efe801d99f8a21e3766aa628a600a75b44febc1b3d85"
+      "definition_sha256": "df5c71cc0a6abd22904890a38dbbe359d5a3f5d6787830e2ea9dfa77875e1bb2"
     },
     {
       "acl": [
@@ -11482,7 +11554,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4ad5941458ab8285109d22c84de4c1adfa1c6f50d75eeba7f42932469c208b0e"
+      "definition_sha256": "21a3f40748a4a0a2f94ba14c4b23f5f3a59727f89d7c565977a2f52204437cee"
     },
     {
       "acl": [
@@ -11501,7 +11573,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "02313996a1b18bb25c2686343a738e707604522f8c284cd3aa462cbb693804b4"
+      "definition_sha256": "70946e4c92340cf8c77d04721e8d858f40b8854fa7d243af41e075ece81c62a9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_cancel_net_replacement_page_v1(p_replacement_id uuid, p_cancel_command_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "5d0fbd2337b087192c30e78d5542ef43d8e334ed18dd17c52a85b7d5d6adf4ec"
     },
     {
       "acl": [
@@ -11805,7 +11896,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b85d3e2c735edef4719a1634d31e9ec0de0a1bb875760372be7b6b7d5734a3ba"
+      "definition_sha256": "6fb0bfc9c7a412838dd4da1061e6dee47b0a9327195c5eaf07bc13dc3269a916"
     },
     {
       "acl": [
@@ -12052,7 +12143,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b17ec1111844cd404cda4cbd9275eee75834fadeddb95d3bde450bd4b37f250f"
+      "definition_sha256": "6c274bb0e6a9b62c76869785a65031e5d9b062fe03ef75be5b6ac7f1d478c41c"
     },
     {
       "acl": [
@@ -12261,7 +12352,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "68e37ad9fcf00cb23475961c7dd4fea443d655356e6eb59b513a91e83bc30031"
+      "definition_sha256": "fac096a33f29622e28046981ec8d6054a7b0017be05b3e12973d69b3daf15bfd"
     },
     {
       "acl": [
@@ -12451,7 +12542,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "4d80b872eb03de404bac3c8f167346072843b55b82485b9af37626480ad46c19"
+      "definition_sha256": "14d8f1dffcb9ffdde66386651ff3c6587bd28e0674f44de8d3687b169f2f63be"
     },
     {
       "acl": [
@@ -12736,7 +12827,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "87db4876157900faddbea47d86f37f22e870f82f11f3bf8e417d80f7147363f5"
+      "definition_sha256": "1836afd79e0795e291cd02cc2f661adefc7065b503d2e05bf10f18cf35aab585"
     },
     {
       "acl": [
@@ -13287,7 +13378,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "30c22c4edd09435f9e6bc2c06b39368a268fea0faede573856fb1d27c3ed6d74"
+      "definition_sha256": "4ef4a7bfbc0505c3b1b5b4041a677a7b374fc1564ba5b718541b1b9efcc71507"
     },
     {
       "acl": [
@@ -13958,11 +14049,277 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_net_cancel_handoff_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bb042a96c0d15b67ce27ef5f43a1c6eacca756b7c5dcf8e58dc959d5ac8f0d72"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_cancel_hold_member_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4e6ddb54c1c8ac30d754fd49ebccd3b905abc76ec499f8cffa9a2afa14e1de79"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_commit_fence_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "d42bbd34d7d95ec3aa3885b9eddf2a445d960d6d9998f6491895dfd87eea72cf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_page_prelock_v1(p_replacement_id uuid, p_limit integer, p_step text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "15efd844c700ecad0136e909b2524069a8ff532395e416b6bc26653c41015a50"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_precheck_page_v1(p_replacement_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "70bf453cb389c0fbab5cfbbce2655363e984069e8ac66c1be9f649a0db6aabf3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_prior_run_page_v1(p_replacement_id uuid, p_limit integer, p_validation boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "0b9408869e0569efe261e227f3c06fc24722fb5023e5d2974a8450972959db34"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_net_projection_guard_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "232aa807768f47d70ad304c4ffaf84d5ec7460ad809ae39e7f288acdbd61b319"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_refusal_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "99734399a4428094f51e5f965199f8214fd71212df6b90d06db2bb0bad9b04a7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_replacement_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "3e7b5282359835f746887f9ef46463d79dce56bc3c8d5ca6eb7a9789cc97b42a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_replacement_job_assert_v1(p_replacement_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "5b9549ea165ce25c5092bc203b1c4c212581a1b12a87f45fc8cda1486c305142"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_replacement_reader_revision_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e177ad66e27633452622873fcf5e53d078691c401d186fd4b8c91112a5cc943b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_replacement_truncate_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "f3a12f73a891bf9babd3eac04ccf9a3ddb8742e36ff4948262deda316379d138"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_staged_capacity_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e45c3898d7260da477a0605ae2018b5bdfc8abcb1faa999def7f8e838ea71d45"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_staged_result_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "0bc382e97eb7cff482190c4225f50fd26e5f66c4d61c782ad09f12873f766437"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_net_terminal_receipt_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "dea5c88387cadd35179e4ad1b7b7954fd7e7dec05b7323b8bd7877d5b35abe50"
     },
     {
       "acl": [
@@ -14019,7 +14376,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "2365dab3cfb9802c84040d13c0f1630d7e3ac694dbcd7a0b001cdf982281bac3"
+      "definition_sha256": "7d6c3135900ab11555c899539644e4c36e34d1a246e8e7a633ffd52f5bc778d5"
     },
     {
       "acl": [
@@ -14152,7 +14509,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "96a7f1f5f698bd3c4a3fb44f994271499fdb01a7ba9808868e0c458f5d142dd6"
+      "definition_sha256": "02890d5e9b0019eaf56886ad78735f81ba497cce0bbdb73ddb0f00b33a75ec6d"
     },
     {
       "acl": [
@@ -15022,6 +15379,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_ready_net_refusal_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "dacd43e4976f80613f548c905eed9aeab2bc933711ba2cb4be4a29cfa38cf6db"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_reauth_consume_v1(p_proof_id uuid, p_actor uuid, p_action text, p_scope_sha256 text, p_command_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15273,7 +15649,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b7fc51d8e6dfb3c1a770868b401866230072284581d16be717bb5f79cbedc04d"
+      "definition_sha256": "c901661ad82644a45b01ee2e6fff5ac2d402f5f5e95fa65acc3245c90345cfc5"
     },
     {
       "acl": [
@@ -15539,7 +15915,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "cb2ad7c05f230ac17df21b4f6a8be0ea410c6388b36550383194bdb77d2c883f"
+      "definition_sha256": "e2b2d0a180e19c85351142e4648c712220ed8e376804e5513d5b89dbd76bc313"
     },
     {
       "acl": [
@@ -17509,6 +17885,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_stage_case_net_page_v1(p_replacement_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "49c5d9d767dca4dd52fc055921a709787c8eef7519f09356af3f0c4cd229701b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -17612,6 +18007,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b11389162a854f13da2da77e47388b16b68baf2b14a11ad299cd45e05ea6feee"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_validate_case_net_page_v1(p_replacement_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c2013a107581a3c14c1db3258cb9807fcd9e4c3b19860fdc56a6aeb800660e3c"
     },
     {
       "acl": [
@@ -18686,7 +19100,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "bc9b3c1184bc93cbac9ec93c2de8b001a89444ff356e7cf9ab9c3673012a475f"
+      "definition_sha256": "06d21f0a05447f14f84eeca97fbd42bf1c28c21821b3f8cd75751d9057135a8c"
     },
     {
       "acl": [
@@ -33541,7 +33955,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "689e4de371a3c8fe145a48b4c9ed4a86a93c6cfead390dfecba4f092b27887b6"
+      "definition_sha256": "21d39844f077c7b514e4fd93a39f056851c3fe4363a6e7b382cddc6b69dbca2e"
     },
     {
       "acl": [
@@ -33565,7 +33979,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b8b5866171f57a596a90184511836e0fb5eb67a7760692c92be50acd1815ae28"
+      "definition_sha256": "2fdb99aaf430d4042c4da5b6786a79451c9220ca5c1683db9f7ff713e7c9a88f"
     },
     {
       "acl": [
@@ -55028,6 +55442,20 @@
       "definition": "CREATE TRIGGER bpay_next_candidate_root_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_root_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
+      "name": "bpay_next_net_commit_fence_guard",
+      "table": "bpay_next_candidate_week_commit_fence",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_commit_fence_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_candidate_week_commit_fence FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_commit_fence_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_candidate_week_commit_fence",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_candidate_week_commit_fence FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
       "name": "bpay_next_case_fact_immutable_v1",
       "table": "bpay_next_case_allocation_result",
       "schema": "private",
@@ -55497,6 +55925,34 @@
       "definition": "CREATE TRIGGER bpay_next_local_detail_seam_truncate_guard BEFORE TRUNCATE ON private.bpay_next_local_detail_seam FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_local_detail_seam_guard_v1()"
     },
     {
+      "name": "bpay_next_net_cancel_handoff_guard",
+      "table": "bpay_next_net_cancel_handoff",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_cancel_handoff_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_net_cancel_handoff FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_cancel_handoff_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_net_cancel_handoff",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_net_cancel_handoff FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_cancel_hold_member_guard",
+      "table": "bpay_next_net_cancel_hold_member",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_cancel_hold_member_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_net_cancel_hold_member FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_cancel_hold_member_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_net_cancel_hold_member",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_net_cancel_hold_member FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
       "name": "bpay_next_destination_state_guard_v1",
       "table": "bpay_next_net_destination_amount",
       "schema": "private",
@@ -55523,6 +55979,62 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_net_projection_guard_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_net_projection FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_projection_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_guard",
+      "table": "bpay_next_net_replacement",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_net_replacement FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_replacement_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_reader_revision",
+      "table": "bpay_next_net_replacement",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_reader_revision AFTER INSERT OR UPDATE ON private.bpay_next_net_replacement FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_replacement_reader_revision_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_net_replacement",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_net_replacement FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_terminal_receipt_guard",
+      "table": "bpay_next_net_replacement",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_net_terminal_receipt_guard AFTER INSERT OR UPDATE ON private.bpay_next_net_replacement DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_terminal_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_net_staged_case_capacity",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_net_staged_case_capacity FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_staged_capacity_guard",
+      "table": "bpay_next_net_staged_case_capacity",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_staged_capacity_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_net_staged_case_capacity FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_staged_capacity_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_net_staged_result",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_net_staged_result FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_staged_result_guard",
+      "table": "bpay_next_net_staged_result",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_staged_result_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_net_staged_result FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_staged_result_guard_v1()"
     },
     {
       "name": "bpay_next_internal_request_guard_v1",
@@ -55593,6 +56105,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_net_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_paye_net_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_net_refusal_guard",
+      "table": "bpay_next_paye_net_request_refusal",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_refusal_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_paye_net_request_refusal FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_refusal_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_replacement_truncate_guard",
+      "table": "bpay_next_paye_net_request_refusal",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_replacement_truncate_guard BEFORE TRUNCATE ON private.bpay_next_paye_net_request_refusal FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_net_replacement_truncate_guard_v1()"
     },
     {
       "name": "bpay_next_policy_input_version_immutable",
@@ -56015,11 +56541,18 @@
       "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_work_segment_parent FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
     },
     {
+      "name": "bpay_next_ready_net_refusal_guard",
+      "table": "bpay_next_run_worker",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_ready_net_refusal_guard BEFORE INSERT OR UPDATE OF status, review_issue_code, net_request_high_water, net_replacement_pending_id, net_request_revision, net_projection_revision ON private.bpay_next_run_worker FOR EACH ROW EXECUTE FUNCTION private.bpay_next_ready_net_refusal_guard_v1()"
+    },
+    {
       "name": "bpay_next_run_channel_totals_v1",
       "table": "bpay_next_run_worker",
       "schema": "private",
       "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_run_channel_totals_v1 AFTER INSERT OR UPDATE OF status, target_pay_channel, gross_ex_vat, gross_vat, gross_inc_vat, entered_paye_net, net_request_revision, net_projection_revision, review_issue_code, captured_line_count, case_instruction_count, case_selection_revision, captured_preparation_revision ON private.bpay_next_run_worker FOR EACH ROW EXECUTE FUNCTION private.bpay_next_run_channel_totals_trigger_v1()"
+      "definition": "CREATE TRIGGER bpay_next_run_channel_totals_v1 AFTER INSERT OR UPDATE OF status, target_pay_channel, gross_ex_vat, gross_vat, gross_inc_vat, entered_paye_net, net_request_revision, net_projection_revision, net_request_high_water, net_replacement_pending_id, review_issue_code, captured_line_count, case_instruction_count, case_selection_revision, captured_preparation_revision ON private.bpay_next_run_worker FOR EACH ROW EXECUTE FUNCTION private.bpay_next_run_channel_totals_trigger_v1()"
     },
     {
       "name": "bpay_next_worker_execution_guard_v1",
@@ -80509,6 +81042,14 @@
           "generated": ""
         },
         {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "run_worker_id",
           "type": "uuid",
           "default": null,
@@ -80625,6 +81166,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (candidate_id, pay_week_start)"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
         },
         {
           "name": "bpay_next_candidate_week_commit_fence_stage_check",
@@ -82061,14 +82610,6 @@
           "definition": "CHECK (net_issue_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text]))"
         },
         {
-          "name": "bpay_next_case_allocation_state_net_stage_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (net_stage = ANY (ARRAY['NOT_CASE_NET'::text, 'WEEK_CAPTURE'::text, 'ALLOCATE'::text, 'COMPLETE'::text, 'REVIEW'::text]))"
-        },
-        {
           "name": "bpay_next_case_allocation_state_owner_epoch_check",
           "type": "c",
           "deferred": false,
@@ -82227,6 +82768,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (candidate_id, pay_week_start) REFERENCES private.bpay_next_worker_week(candidate_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_allocation_stage",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (net_stage = ANY (ARRAY['NOT_CASE_NET'::text, 'WEEK_CAPTURE'::text, 'ALLOCATE'::text, 'PRECHECK'::text, 'STAGING'::text, 'COMMITTING'::text, 'CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text, 'REVIEW'::text]))"
         },
         {
           "name": "bpay_next_net_state_complete",
@@ -95354,6 +95903,562 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_net_cancel_handoff",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "cancel_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cleaned_instruction_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_age_key",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_component_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "draft_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_hold_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_instruction_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "released_hold_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "released_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_cancel_handoff_cancel_command_id_key ON private.bpay_next_net_cancel_handoff USING btree (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_cancel_handoff_pkey ON private.bpay_next_net_cancel_handoff USING btree (replacement_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_candidate_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (cancel_command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (cancel_command_id) REFERENCES private.bpay_next_cancel_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleaned_instruction_count = expected_instruction_count)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_hold_count = expected_hold_count)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_source_total::numeric = expected_source_total::numeric)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cleanup_component_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleanup_component_ordinal > 0)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_completed_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_draft_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (draft_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_original_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (replacement_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_prior_projection_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_prior_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_replacement_id_run_worker_id__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id, run_worker_id, candidate_id) REFERENCES private.bpay_next_net_replacement(id, run_worker_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_target_projection_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_target_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_net_cancel_hold_member",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "allocation_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "instruction_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_amount",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_net_cancel_hold_mem_replacement_id_instruction_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_cancel_hold_mem_replacement_id_instruction_id_key ON private.bpay_next_net_cancel_hold_member USING btree (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_cancel_hold_member_pkey ON private.bpay_next_net_cancel_hold_member USING btree (replacement_id, case_hold_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_net_cancel_hold_mem_replacement_id_instruction_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_allocation_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (allocation_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_case_hold_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_instruction_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (instruction_id) REFERENCES private.bpay_next_run_case_instruction(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (replacement_id, case_hold_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_source_amount_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_amount::numeric > 0::numeric)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_net_destination_amount",
@@ -96263,6 +97368,2272 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (input_kind <> 'UMBRELLA'::text OR gross_ex_vat >= 0::numeric AND gross_vat >= 0::numeric AND gross_inc_vat = (gross_ex_vat + gross_vat) AND entered_paye_net IS NULL AND request_command_id IS NULL AND accepted_gross_additions::numeric = 0::numeric AND accepted_gross_deductions::numeric = 0::numeric AND accepted_net_additions::numeric = 0::numeric AND accepted_recoveries = 0::numeric AND cash_amount = gross_inc_vat)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_net_replacement",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cash_amount",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_age_key",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_component_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cleanup_step",
+          "type": "text",
+          "default": "'INVENTORY'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "commit_cursor",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_deduction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_new_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_new_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_old_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_old_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cursor_age_key",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cursor_case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cursor_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cursor_component_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "draft_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_instruction_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_releasable_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_releasable_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finished_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "gross_additions",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "gross_deductions",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "initial_channel_headroom",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "initial_take_home",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "inventory_age_key",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "inventory_case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "inventory_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "inventory_component_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "inventory_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "metadata_created_at_cursor",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "metadata_pay_date_cursor",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "metadata_run_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "net_additions",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_week_start",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_projection_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "proposed_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "proposed_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "recoveries",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "refusal_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "released_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "released_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "remaining_channel_headroom",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "remaining_take_home",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "stage",
+          "type": "text",
+          "default": "'PRECHECK'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staged_deduction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staged_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staged_old_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staged_old_source_total",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staging_step",
+          "type": "text",
+          "default": "'WEEK'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "validated_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "validation_created_at_cursor",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "validation_cursor",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "validation_pay_date_cursor",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "validation_run_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "validation_step",
+          "type": "text",
+          "default": "'INSTRUCTIONS'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_net_replacement_cancel_command_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_cancel_command_id_key ON private.bpay_next_net_replacement USING btree (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_net_replacement_candidate_idx ON private.bpay_next_net_replacement USING btree (candidate_id, run_worker_id, request_no DESC)"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_run_worker_id_candidate_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_id_run_worker_id_candidate_id_key ON private.bpay_next_net_replacement USING btree (id, run_worker_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_original_job_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_original_job_id_key ON private.bpay_next_net_replacement USING btree (original_job_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_pending_worker_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_pending_worker_idx ON private.bpay_next_net_replacement USING btree (run_worker_id) WHERE (stage <> ALL (ARRAY['COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text]))"
+        },
+        {
+          "name": "bpay_next_net_replacement_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_pkey ON private.bpay_next_net_replacement USING btree (id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_run_worker_id_request_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_run_worker_id_request_no_key ON private.bpay_next_net_replacement USING btree (run_worker_id, request_no)"
+        },
+        {
+          "name": "bpay_next_net_replacement_target_state_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_replacement_target_state_id_key ON private.bpay_next_net_replacement USING btree (target_state_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_net_replacement_accepted_projection_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (accepted_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_cancel_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (cancel_command_id) REFERENCES private.bpay_next_cancel_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_cancel_command_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_cash_amount_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cash_amount::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_projection_no >= 0 AND prior_projection_no < request_no)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((prior_projection_no = 0) = (prior_projection_id IS NULL) AND (prior_state_id IS NULL) = (prior_projection_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check10",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (inventory_age_key IS NULL AND inventory_case_id IS NULL AND inventory_component_ordinal IS NULL AND inventory_component_id IS NULL OR inventory_age_key IS NOT NULL AND inventory_case_id IS NOT NULL AND inventory_component_ordinal IS NOT NULL AND inventory_component_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check11",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (metadata_pay_date_cursor IS NULL AND metadata_created_at_cursor IS NULL AND metadata_run_cursor IS NULL OR metadata_pay_date_cursor IS NOT NULL AND metadata_created_at_cursor IS NOT NULL AND metadata_run_cursor IS NOT NULL AND isfinite(metadata_pay_date_cursor) AND isfinite(metadata_created_at_cursor))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check12",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validation_pay_date_cursor IS NULL AND validation_created_at_cursor IS NULL AND validation_run_cursor IS NULL OR validation_pay_date_cursor IS NOT NULL AND validation_created_at_cursor IS NOT NULL AND validation_run_cursor IS NOT NULL AND isfinite(validation_pay_date_cursor) AND isfinite(validation_created_at_cursor))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check13",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((stage = 'REFUSED'::text) = (refusal_code IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check14",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage <> 'COMPLETE'::text OR accepted_projection_id IS NOT NULL AND cash_amount IS NOT NULL AND committed_instruction_count = expected_instruction_count AND staging_step = 'DONE'::text)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check15",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage <> 'CANCELLED'::text OR cleanup_step = 'DONE'::text AND inventory_instruction_count = expected_instruction_count AND cleanup_instruction_count = expected_instruction_count AND released_hold_count = expected_releasable_hold_count AND released_source_total::numeric = expected_releasable_source_total::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check16",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((stage <> ALL (ARRAY['CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'CANCELLED'::text])) OR cancel_command_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check17",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (updated_at_utc >= created_at_utc AND (finished_at_utc IS NULL OR finished_at_utc >= created_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_instruction_count <= expected_instruction_count AND validated_instruction_count <= staged_instruction_count AND committed_instruction_count <= validated_instruction_count AND cleanup_instruction_count <= expected_instruction_count AND inventory_instruction_count <= expected_instruction_count AND released_hold_count <= expected_releasable_hold_count AND released_source_total::numeric <= expected_releasable_source_total::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (remaining_channel_headroom::numeric <= initial_channel_headroom::numeric AND remaining_take_home::numeric <= initial_take_home::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_deduction_count <= staged_instruction_count AND committed_deduction_count <= staged_deduction_count AND staged_old_hold_count <= staged_deduction_count AND proposed_hold_count <= staged_deduction_count AND committed_old_hold_count <= staged_old_hold_count AND committed_old_source_total::numeric <= staged_old_source_total::numeric AND committed_new_hold_count <= proposed_hold_count AND committed_new_source_total::numeric <= proposed_source_total::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cursor_age_key IS NULL AND cursor_case_id IS NULL AND cursor_component_ordinal IS NULL AND cursor_component_id IS NULL OR cursor_age_key IS NOT NULL AND cursor_case_id IS NOT NULL AND cursor_component_ordinal IS NOT NULL AND cursor_component_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleanup_age_key IS NULL AND cleanup_case_id IS NULL AND cleanup_component_ordinal IS NULL AND cleanup_component_id IS NULL OR cleanup_age_key IS NOT NULL AND cleanup_case_id IS NOT NULL AND cleanup_component_ordinal IS NOT NULL AND cleanup_component_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_replacement_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((stage = ANY (ARRAY['COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text])) = (finished_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((original_job_id IS NULL) = (target_state_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check9",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((stage = ANY (ARRAY['PRECHECK'::text, 'REFUSED'::text])) OR original_job_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_component_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleanup_component_ordinal > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleanup_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_step_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleanup_step = ANY (ARRAY['INVENTORY'::text, 'RELEASE'::text, 'DONE'::text]))"
+        },
+        {
+          "name": "bpay_next_net_replacement_commit_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (commit_cursor >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_deduction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_deduction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_new_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_new_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_new_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_new_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_old_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_old_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_old_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_old_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_created_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(created_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_cursor_component_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cursor_component_ordinal > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_draft_state_id_run_worker_id_can_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (draft_state_id, run_worker_id, candidate_id, preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_releasable_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_releasable_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_releasable_source_tota_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_releasable_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_finished_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(finished_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_gross_additions_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (gross_additions::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_gross_deductions_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (gross_deductions::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (id) REFERENCES private.bpay_next_paye_net_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_run_worker_id_candidate_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, run_worker_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_initial_channel_headroom_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (initial_channel_headroom::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_initial_take_home_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (initial_take_home::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_inventory_component_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (inventory_component_ordinal > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_inventory_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (inventory_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_net_additions_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (net_additions::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_original_job_id_id_candidate_id__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_job_id, id, candidate_id, module_epoch) REFERENCES private.bpay_next_job(id, command_id, candidate_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_original_job_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (original_job_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_pay_week_start_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(pay_week_start) AND EXTRACT(isodow FROM pay_week_start) = 1::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_preparation_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preparation_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_prior_projection_id_run_worker_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_projection_id, run_worker_id) REFERENCES private.bpay_next_net_projection(id, run_worker_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_prior_state_id_run_worker_id_can_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_state_id, run_worker_id, candidate_id, preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_proposed_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (proposed_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_proposed_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (proposed_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_recoveries_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (recoveries::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_refusal_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text]))"
+        },
+        {
+          "name": "bpay_next_net_replacement_released_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_released_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_remaining_channel_headroom_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (remaining_channel_headroom::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_remaining_take_home_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (remaining_take_home::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_request_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_no > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_run_worker_id_request_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_worker_id, request_no)"
+        },
+        {
+          "name": "bpay_next_net_replacement_run_worker_id_run_id_candidate_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_worker_id, run_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, run_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_selection_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_stage_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage = ANY (ARRAY['PRECHECK'::text, 'STAGING'::text, 'COMMITTING'::text, 'CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text]))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_deduction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_deduction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_old_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_old_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_old_source_total_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_old_source_total::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_replacement_staging_step_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staging_step = ANY (ARRAY['WEEK'::text, 'INSTRUCTIONS'::text, 'VALIDATE'::text, 'DONE'::text]))"
+        },
+        {
+          "name": "bpay_next_net_replacement_target_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_target_state_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (target_state_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_updated_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(updated_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_validated_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validated_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_validation_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validation_cursor >= 0)"
+        },
+        {
+          "name": "bpay_next_net_replacement_validation_step_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validation_step = ANY (ARRAY['INSTRUCTIONS'::text, 'PRIOR_RUNS'::text, 'DONE'::text]))"
+        },
+        {
+          "name": "bpay_next_net_terminal_receipt_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_net_staged_case_capacity",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "captured_active_recovery_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_outstanding_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_release_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "committed_reserve_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "proposed_release_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "proposed_reserve_source",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "staged_instruction_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_net_staged_case_capacity_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_staged_case_capacity_pkey ON private.bpay_next_net_staged_case_capacity USING btree (replacement_id, case_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_net_staged_case_ca_captured_active_recovery_sou_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_active_recovery_source::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_cap_captured_outstanding_source_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_outstanding_source::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capaci_staged_instruction_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (staged_instruction_count >= 0)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacit_proposed_release_source_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (proposed_release_source::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacit_proposed_reserve_source_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (proposed_reserve_source::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_captured_case_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_case_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_instruction_count >= 0 AND committed_instruction_count <= staged_instruction_count)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_release_source::numeric >= 0::numeric AND committed_release_source::numeric <= proposed_release_source::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (committed_reserve_source::numeric >= 0::numeric AND committed_reserve_source::numeric <= proposed_reserve_source::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (replacement_id, case_id)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_net_staged_result",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "affordability_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "allocated_source_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allocated_target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allocated_target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allocated_target_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allocation_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cap_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "capacity_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_component_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_period_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "channel_headroom_after",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "channel_headroom_before",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "draft_result_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hold_purpose",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "instruction_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "nominal_target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pass_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_week_start",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "payroll_stage",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_source_amount",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "shortfall_target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "usable_capacity_target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_take_home_after",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_take_home_before",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_net_staged_prior_hold_idx",
+          "definition": "CREATE INDEX bpay_next_net_staged_prior_hold_idx ON private.bpay_next_net_staged_result USING btree (prior_hold_id, replacement_id) WHERE (prior_hold_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_staged_result_pkey ON private.bpay_next_net_staged_result USING btree (id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_instruction_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_staged_result_replacement_id_instruction_id_key ON private.bpay_next_net_staged_result USING btree (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_result_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_net_staged_result_replacement_id_result_no_key ON private.bpay_next_net_staged_result USING btree (replacement_id, result_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_case_allocation_re_usable_capacity_target_ex_va_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (usable_capacity_target_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_affordability_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (affordability_reason = ANY (ARRAY['TAKE_HOME_FLOOR'::text, 'EARNINGS_THRESHOLD'::text, 'PAY_HEADROOM'::text]))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_source_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_target_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_inc_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_target_inc_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_target_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_cap_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cap_reason = ANY (ARRAY['TAKE_HOME_FLOOR'::text, 'EARNINGS_THRESHOLD'::text, 'PAY_HEADROOM'::text, 'CASE_CAPACITY'::text]))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_capacity_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (capacity_reason = 'CASE_CAPACITY'::text)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_channel_headroom_after_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (channel_headroom_after::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_channel_headroom_before_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (channel_headroom_before::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_target_inc_vat::numeric = (allocated_target_ex_vat::numeric + allocated_target_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allocated_target_ex_vat::numeric <= nominal_target_ex_vat::numeric AND allocated_target_ex_vat::numeric <= usable_capacity_target_ex_vat::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (shortfall_target_ex_vat::numeric = (nominal_target_ex_vat::numeric - allocated_target_ex_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (hold_purpose = 'PAYOUT'::text AND channel_headroom_after::numeric = channel_headroom_before::numeric AND worker_take_home_after::numeric = worker_take_home_before::numeric AND cap_reason IS NULL AND affordability_reason IS NULL OR hold_purpose <> 'PAYOUT'::text AND channel_headroom_after::numeric = (channel_headroom_before::numeric - allocated_target_ex_vat::numeric) AND worker_take_home_after::numeric = (worker_take_home_before::numeric - allocated_target_ex_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_hold_purpose_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (hold_purpose = ANY (ARRAY['PAYOUT'::text, 'GROSS_RECOVERY'::text, 'NET_RECOVERY_CAPACITY'::text]))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_nominal_target_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (nominal_target_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_pass_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pass_kind = ANY (ARRAY['PREVIEW'::text, 'DRAFT'::text, 'NET'::text]))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_preparation_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preparation_revision > 0)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_result_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (result_no > 0)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_selection_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_revision > 0)"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_shortfall_target_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (shortfall_target_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_case_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_case_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_component_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_component_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_period_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_period_revision > 0)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_component_id_case_id_cand_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id, pay_week_start) REFERENCES private.bpay_next_case_period(case_component_id, case_id, candidate_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id) REFERENCES private.bpay_next_case_component(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((prior_hold_id IS NULL) = (prior_source_amount::numeric = 0::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_draft_result_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (draft_result_id) REFERENCES private.bpay_next_case_allocation_result(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_instruction_id_run_worker_id_c_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (instruction_id, run_worker_id, candidate_id, preparation_revision, selection_revision, hold_purpose, allocation_channel) REFERENCES private.bpay_next_run_case_instruction(id, run_worker_id, candidate_id, preparation_revision, selection_revision, hold_purpose, allocation_channel) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_payroll_stage_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (payroll_stage = ANY (ARRAY['GROSS_ADD'::text, 'GROSS_DEDUCT'::text, 'NET_ADD'::text, 'NET_DEDUCT'::text]))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_prior_hold_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_prior_source_amount_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_source_amount::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_instruction_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_result_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (replacement_id, result_no)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_state_id_allocation_channel_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (state_id, allocation_channel) REFERENCES private.bpay_next_case_allocation_channel(state_id, allocation_channel) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_state_id_run_worker_id_candida_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (state_id, run_worker_id, candidate_id, preparation_revision, selection_revision, pass_kind) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision, pass_kind) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null
@@ -97988,7 +101359,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (case_draft_state_id IS NULL AND actor_user_id IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND expected_projection_revision IS NULL AND input_kind = 'PAYE_MANUAL'::text OR case_draft_state_id IS NOT NULL AND actor_user_id IS NOT NULL AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL AND expected_projection_revision IS NOT NULL AND request_no = (expected_projection_revision + 1))"
+          "definition": "CHECK (case_draft_state_id IS NULL AND actor_user_id IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND expected_projection_revision IS NULL AND input_kind = 'PAYE_MANUAL'::text OR case_draft_state_id IS NOT NULL AND actor_user_id IS NOT NULL AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL AND expected_projection_revision IS NOT NULL AND request_no > expected_projection_revision)"
         },
         {
           "name": "bpay_next_net_request_case_state_fk",
@@ -98117,6 +101488,176 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (selection_revision > 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_paye_net_request_refusal",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "refusal_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "refused_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_paye_net_request_refusal_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_paye_net_request_refusal_pkey ON private.bpay_next_paye_net_request_refusal USING btree (command_id)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_run_worker_id_request_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_paye_net_request_refusal_run_worker_id_request_no_key ON private.bpay_next_paye_net_request_refusal USING btree (run_worker_id, request_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_paye_net_request_re_command_id_run_worker_id_can_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, run_worker_id, candidate_id) REFERENCES private.bpay_next_net_replacement(id, run_worker_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_refusal_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text]))"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_refused_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(refused_at_utc))"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_request_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_no > 0)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_run_worker_id_request_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_worker_id, request_no)"
         }
       ],
       "view_definition_sha256": null
@@ -111185,6 +114726,22 @@
           "generated": ""
         },
         {
+          "name": "net_replacement_pending_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_request_high_water",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "net_request_revision",
           "type": "bigint",
           "default": "0",
@@ -111277,6 +114834,10 @@
         {
           "name": "bpay_next_pay_method_change_worker_idx",
           "definition": "CREATE INDEX bpay_next_pay_method_change_worker_idx ON private.bpay_next_run_worker USING btree (candidate_id, run_id, id)"
+        },
+        {
+          "name": "bpay_next_ready_net_refusal_header_idx",
+          "definition": "CREATE INDEX bpay_next_ready_net_refusal_header_idx ON private.bpay_next_run_worker USING btree (run_id, target_pay_channel, review_issue_code COLLATE \"C\", id) WHERE ((status = 'READY'::text) AND (net_replacement_pending_id IS NULL) AND (net_request_revision = net_projection_revision) AND (review_issue_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text])))"
         },
         {
           "name": "bpay_next_run_worker_channel_page_idx",
@@ -111424,7 +114985,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (review_issue_code IS NULL OR status = 'REVIEW'::text)"
+          "definition": "CHECK (review_issue_code IS NULL OR status = 'REVIEW'::text OR status = 'READY'::text AND target_pay_channel = 'PAYE'::text AND case_selection_revision > 0 AND net_replacement_pending_id IS NULL AND net_request_revision = net_projection_revision AND net_request_high_water > net_projection_revision AND (review_issue_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text])))"
         },
         {
           "name": "bpay_next_run_worker_check2",
@@ -111489,6 +115050,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (net_projection_revision >= 0)"
+        },
+        {
+          "name": "bpay_next_run_worker_net_request_high_water_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (net_request_high_water >= 0)"
         },
         {
           "name": "bpay_next_run_worker_net_request_revision_check",
@@ -111593,6 +115162,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (captured_managed_position_count <= expected_managed_position_count)"
+        },
+        {
+          "name": "bpay_next_worker_net_replacement_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (net_replacement_pending_id, id, candidate_id) REFERENCES private.bpay_next_net_replacement(id, run_worker_id, candidate_id) ON DELETE RESTRICT"
         },
         {
           "name": "bpay_next_worker_run_candidate_key",
@@ -138333,6 +141910,30 @@
           "generated": ""
         },
         {
+          "name": "net_refused_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_replacement_pending_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "net_request_high_water",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "net_state",
           "type": "text",
           "default": null,
@@ -138397,6 +141998,78 @@
           "generated": ""
         },
         {
+          "name": "replacement_committed_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_cursor",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_expected_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_request_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_stage",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_staged_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "replacement_validated_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "requested_net",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "run_id",
           "type": "uuid",
           "default": null,
@@ -138427,7 +142100,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "c343b6561570b77d1c6b12d90bb9dc4f101f7a59ffe6209a39e6498bcbe79946"
+      "view_definition_sha256": "8d2c71fc47cad0d934392ea7675504a7874ffc85ab703cd38ca0f33f0c5f7688"
     },
     {
       "acl": [

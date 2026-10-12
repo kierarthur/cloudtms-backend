@@ -56,7 +56,7 @@ function channelDraftResult(p,kind,args,actor,shape,bad){
 // DR21: identical closed read contract in Worker and native Office.
 const WORKSHEET_INPUT={run_id:'uuid',pay_channel:'worksheetChannel',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort',after:'worksheetCursor?',limit:'limit'};
 const WORKSHEET_CONTEXT={run_id:'uuid',pay_channel:'worksheetChannel',actor_user_id:'uuid',owner_epoch:'positive',review_revision:'integer',run_status:'worksheetRun',totals_revision:'integer',net_request_sequence:'integer',candidate_id:'uuid?',query:'worksheetQuery',sort:'worksheetSort'};
-const WORKSHEET_ROW={run_worker_id:'uuid',candidate_id:'uuid',candidate_display_name:'label?',candidate_reference:'label?',worker_status:'workerStatus',captured_line_count:'integer',case_instruction_count:'integer',earnings_gross:'worksheetMoney?',payroll_gross:'worksheetMoney',gross_stage_deductions:'worksheetMoney?',advance_repayment:'worksheetMoney?',overpayment_recovery:'worksheetMoney?',gross_manual_debt:'worksheetMoney?',net_manual_debt:'worksheetMoney?',other_repayment:'worksheetMoney?',net_recovery:'worksheetMoney?',net_additions:'worksheetMoney?',deduction_basis:'worksheetBasis?',payout_only:'boolean',applicable_net:'boolean',projection_id:'uuid?',accepted_net:'worksheetMoney?',pending_net:'worksheetMoney?',projection_status:'worksheetProjection',expected_projection_revision:'integer',cash_amount:'worksheetMoney?',input_source:'worksheetSource?',net_state:'worksheetNetState',sort_key:'worksheetKey'};
+const WORKSHEET_ROW={net_replacement_pending_id:'uuid?',replacement_id:'uuid?',replacement_stage:'netReplacementStage?',net_request_high_water:'integer',requested_net:'worksheetMoney?',net_refused_code:'netRefusal?',replacement_request_no:'positive?',replacement_cursor:'positive?',replacement_expected_count:'integer?',replacement_staged_count:'integer?',replacement_validated_count:'integer?',replacement_committed_count:'integer?',run_worker_id:'uuid',candidate_id:'uuid',candidate_display_name:'label?',candidate_reference:'label?',worker_status:'workerStatus',captured_line_count:'integer',case_instruction_count:'integer',earnings_gross:'worksheetMoney?',payroll_gross:'worksheetMoney',gross_stage_deductions:'worksheetMoney?',advance_repayment:'worksheetMoney?',overpayment_recovery:'worksheetMoney?',gross_manual_debt:'worksheetMoney?',net_manual_debt:'worksheetMoney?',other_repayment:'worksheetMoney?',net_recovery:'worksheetMoney?',net_additions:'worksheetMoney?',deduction_basis:'worksheetBasis?',payout_only:'boolean',applicable_net:'boolean',projection_id:'uuid?',accepted_net:'worksheetMoney?',pending_net:'worksheetMoney?',projection_status:'worksheetProjection',expected_projection_revision:'integer',cash_amount:'worksheetMoney?',input_source:'worksheetSource?',net_state:'worksheetNetState',sort_key:'worksheetKey'};
 
 const WORKSHEET_LINE={run_line_id:'uuid',line_no:'positive',original_timesheet_id:'uuid',captured_revision_id:'uuid',component_key:'key',component_kind:'componentKind',work_date:'date?',source_pay_channel:'channel',target_pay_channel:'channel',source_consumed_ex_vat:'money',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',client_display_name:'label',week_ending_date:'date',unit_label:'worksheetText?',approved_quantity:'worksheetDecimal?',approved_unit_rate:'worksheetDecimal?'};
 function worksheetLinesResult(p,args,shape,bad){
@@ -121,7 +121,7 @@ function worksheetResult(p,args,actor,base,shape,bad){
    ||(r.accepted_net!==null&&(r.projection_id===null||r.input_source===null))
    ||(r.projection_status==='ACCEPTED'&&(r.projection_id===null||r.pending_net!==null))
    ||(r.projection_status==='NONE'&&(r.projection_id!==null||r.pending_net!==null))
-   ||(r.pending_net!==null&&!['REQUESTED','APPLYING','REFUSED'].includes(r.projection_status)))bad();
+   ||(r.pending_net!==null&&!['REQUESTED','APPLYING','REFUSED'].includes(r.projection_status))||!validNetReplacement(r))bad();
  }
  if(p.next_cursor!==null&&(!worksheetEqual(p.next_cursor.context,c)||p.next_cursor.candidate_id!==previous?.[2]||p.next_cursor.run_worker_id!==previous?.[3]))bad();
  if(new TextEncoder().encode(JSON.stringify(p)).byteLength>128*1024)bad();
@@ -385,7 +385,7 @@ const ROWS={
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
-  target_pay_channel:'channel',umbrella_id:'uuid?',preparation_revision:'positive',case_selection_revision:'integer',net_request_revision:'integer',net_projection_revision:'integer',net_pending:'boolean',
+  target_pay_channel:'channel',umbrella_id:'uuid?',preparation_revision:'positive',case_selection_revision:'integer',net_request_revision:'integer',net_projection_revision:'integer',net_pending:'boolean',net_replacement_pending_id:'uuid?',replacement_id:'uuid?',replacement_stage:'netReplacementStage?',net_request_high_water:'integer',requested_net:'money?',net_refused_code:'netRefusal?',replacement_request_no:'positive?',replacement_cursor:'positive?',replacement_expected_count:'integer?',replacement_staged_count:'integer?',replacement_validated_count:'integer?',replacement_committed_count:'integer?',
   review_issue_code:'issue?',review_issue_work_id:'uuid?',frozen_gross_ex_vat:'money',frozen_gross_vat:'money',frozen_gross_inc_vat:'money',gross_stage_deductions:'money',net_recovery_reserved:'money',frozen_offer_complete:'boolean',projection_id:'uuid?',
   projection_input_kind:'projectionKind?',entered_paye_net:'money?',accepted_recoveries:'money?',accepted_net_additions:'money?',cash_amount:'money?',reservation_mode:'reservationMode',reservation_projection_id:'uuid?',remaining_reservation_cash:'cashMoney?',reservation_internal_zero:'boolean',reservation_holds_state:'reservationHolds'};
 const RETURN_CASH_HEADER={run_id:'uuid',run_worker_id:'uuid',candidate_id:'uuid',financial_view_revision:'integer'};
@@ -437,7 +437,21 @@ function validReservation(h,row=null){
   return true;
 }
 
+function validNetReplacement(r){
+ const keys=['replacement_stage','replacement_request_no','replacement_expected_count','replacement_staged_count','replacement_validated_count','replacement_committed_count'];
+ if(r.replacement_id===null)return keys.every(k=>r[k]===null)&&r.replacement_cursor===null&&r.net_refused_code===null&&r.net_replacement_pending_id===null;
+ if(keys.some(k=>r[k]===null)||r.replacement_request_no!==r.net_request_high_water||r.net_replacement_pending_id!==null&&r.net_replacement_pending_id!==r.replacement_id)return false;
+ if(['PRECHECK','STAGING','COMMITTING','CANCEL_REQUESTED','CANCELLING'].includes(r.replacement_stage)&&r.net_replacement_pending_id!==r.replacement_id)return false;
+ if(['COMPLETE','REFUSED'].includes(r.replacement_stage)&&r.net_replacement_pending_id!==null)return false;
+ const e=BigInt(r.replacement_expected_count),s=BigInt(r.replacement_staged_count),v=BigInt(r.replacement_validated_count),c=BigInt(r.replacement_committed_count);
+ if(c>v||v>s||s>e||(r.replacement_stage==='REFUSED')!==(r.net_refused_code!==null))return false;
+ if(r.replacement_stage==='COMPLETE'&&c!==e)return false;
+ if(r.replacement_stage==='REFUSED'&&c!==0n)return false;
+ return true;
+}
 function field(v,t){
+ if(t==='netReplacementStage')return ['PRECHECK','STAGING','COMMITTING','CANCEL_REQUESTED','CANCELLING','COMPLETE','REFUSED','CANCELLED'].includes(v);
+ if(t==='netRefusal')return ['CASE_INPUT_UNBOUND','CASE_WEEK_BASIS_UNBOUND','CASE_RETURN_FLOOR_UNBOUND'].includes(v);
     if(t.startsWith('channelDraft'))return t.endsWith('?')?v===null||channelDraftField(v,t.slice(0,-1),field,exact):channelDraftField(v,t,field,exact);
  if(t.startsWith('worksheet')&&!t.endsWith('?'))return worksheetField(v,t,field,exact);
  if(t.startsWith('active')&&!t.endsWith('?'))return activePreparationField(v,t,field,exact);
@@ -976,7 +990,7 @@ function result(payload,call,mutation){
   if(call.kind==='STATUS'){
     const h=payload.header;
     if(!exact(h,STATUS_HEADER)||h.run_id!==call.args.run_id||h.run_worker_id!==call.args.run_worker_id
-      ||h.net_pending!==(h.net_request_revision!==h.net_projection_revision)||!validReservation(h))bad();
+      ||h.net_pending!==(h.net_replacement_pending_id!==null||h.net_request_revision!==h.net_projection_revision)||!validNetReplacement(h)||h.net_replacement_pending_id!==null&&h.net_replacement_pending_id!==h.replacement_id||!validReservation(h))bad();
     const facts=['projection_input_kind','entered_paye_net','accepted_recoveries','accepted_net_additions','cash_amount'];
     if(h.projection_id===null&&facts.some(k=>h[k]!==null))bad();
     if(h.projection_id!==null&&(h.projection_input_kind===null||['accepted_recoveries','accepted_net_additions','cash_amount'].some(k=>h[k]===null)

@@ -1,0 +1,1653 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "dc69eb4cd160f88df5384eae955013be",
+      "installed": {
+        "bodyMd5": "dc69eb4cd160f88df5384eae955013be",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accumulate_net_destination_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "8cb17fed1f617217dab764a2705d25e6",
+      "installed": {
+        "bodyMd5": "8cb17fed1f617217dab764a2705d25e6",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_cancelled_week_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "3222ad24b55a994f7e39e12a7ca85c17",
+      "installed": {
+        "bodyMd5": "3222ad24b55a994f7e39e12a7ca85c17",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "9b1b483e0ec69629d59b951104a430a3",
+      "installed": {
+        "bodyMd5": "9b1b483e0ec69629d59b951104a430a3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_begin_case_transfer_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "c726578205f15c1fc1f8a35ac22aa772",
+      "installed": {
+        "bodyMd5": "c726578205f15c1fc1f8a35ac22aa772",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "c5b77ca78cca34f6087c4d9cabc99029",
+      "installed": {
+        "bodyMd5": "c5b77ca78cca34f6087c4d9cabc99029",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "26709bb05e4c6e767e03f2aa851db7da",
+      "installed": {
+        "bodyMd5": "26709bb05e4c6e767e03f2aa851db7da",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "794c2fe5750a1abf16a66d7fac9f353d",
+      "installed": {
+        "bodyMd5": "794c2fe5750a1abf16a66d7fac9f353d",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_capacity_use_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "23b8e26942cb55f8f62d60d43279fa3c",
+      "installed": {
+        "bodyMd5": "23b8e26942cb55f8f62d60d43279fa3c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_hold_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "5a26db78f0991f62da31ae5ce2fefb94",
+      "installed": {
+        "bodyMd5": "5a26db78f0991f62da31ae5ce2fefb94",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_result_insert_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "77a386c4cc05cca6b4db1cc5ed204417",
+      "installed": {
+        "bodyMd5": "77a386c4cc05cca6b4db1cc5ed204417",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_claim_simple_cancel_job_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "fb9a9771b6b4787f1fabc679bec2d3c8",
+      "installed": {
+        "bodyMd5": "fb9a9771b6b4787f1fabc679bec2d3c8",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_destination_state_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "bee763a8ceaf29589ba302206c8ad39f",
+      "installed": {
+        "bodyMd5": "bee763a8ceaf29589ba302206c8ad39f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "e1acd87d36da4e68da6eb522de2e8e9b",
+      "installed": {
+        "bodyMd5": "e1acd87d36da4e68da6eb522de2e8e9b",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "50c729f2feae53619a4a280fbb18ae6a",
+      "installed": {
+        "bodyMd5": "50c729f2feae53619a4a280fbb18ae6a",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "d4a6c12de129ed50fb6df2781468e898",
+      "installed": {
+        "bodyMd5": "d4a6c12de129ed50fb6df2781468e898",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_original_reservation_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "2ad29fab519112ada95efef2a77131b8",
+      "installed": {
+        "bodyMd5": "2ad29fab519112ada95efef2a77131b8",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_assert_candidate_financial_fence_v1(uuid,uuid,uuid,bigint)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "81ab5b4ee31b245fc17fa87a763ae5ae",
+      "installed": {
+        "bodyMd5": "81ab5b4ee31b245fc17fa87a763ae5ae",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "2dd886ad0c72f7cf5d912a6ca6ec6f3d",
+      "installed": {
+        "bodyMd5": "2dd886ad0c72f7cf5d912a6ca6ec6f3d",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_run_channel_contribution_v1(private.bpay_next_run_worker)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "eb79840620162e16f568ea4ed97793cd",
+      "installed": {
+        "bodyMd5": "eb79840620162e16f568ea4ed97793cd",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_worksheet_page_v1(uuid,uuid,uuid,text,text,jsonb,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "6861c31d026b2fb4d1c26b6446d30fec",
+      "installed": {
+        "bodyMd5": "6861c31d026b2fb4d1c26b6446d30fec",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_channel_draft_summary_apply_v1(uuid,text,private.bpay_next_run_worker,private.bpay_next_run_worker,uuid,boolean,text,text,text,date,timestamp with time zone,text,boolean)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "28fa0997d5ef9a78fc8aee3fd143f39b",
+      "installed": {
+        "bodyMd5": "28fa0997d5ef9a78fc8aee3fd143f39b",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_job_assert_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "66bb3a396bfe7f2d5c911411f332d914",
+      "installed": {
+        "bodyMd5": "66bb3a396bfe7f2d5c911411f332d914",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "97c96dff3bb5ec5eda96fa5b3a2ef7e6",
+      "installed": {
+        "bodyMd5": "97c96dff3bb5ec5eda96fa5b3a2ef7e6",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_staged_result_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "60ac91309e51ce390d20b58f099395dc",
+      "installed": {
+        "bodyMd5": "60ac91309e51ce390d20b58f099395dc",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_staged_capacity_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "9d7719da9e12217282ae39d6c4cf0979",
+      "installed": {
+        "bodyMd5": "9d7719da9e12217282ae39d6c4cf0979",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_refusal_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "48721e2ebf511a03f482a3091fecfb86",
+      "installed": {
+        "bodyMd5": "48721e2ebf511a03f482a3091fecfb86",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_cancel_hold_member_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "21e55a8387d082a9b0e533df6b7dbae7",
+      "installed": {
+        "bodyMd5": "21e55a8387d082a9b0e533df6b7dbae7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_cancel_handoff_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "b7f4962a7eca0f068255eea5318bd056",
+      "installed": {
+        "bodyMd5": "b7f4962a7eca0f068255eea5318bd056",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_truncate_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "7730e0d8af7d87987c7f760155f9c9dc",
+      "installed": {
+        "bodyMd5": "7730e0d8af7d87987c7f760155f9c9dc",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_page_prelock_v1(uuid,integer,text)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "e56506295a5fb030a419e0c82aed188f",
+      "installed": {
+        "bodyMd5": "e56506295a5fb030a419e0c82aed188f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_prior_run_page_v1(uuid,integer,boolean)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "24bd5bb47a48a507e5bcf3710005281a",
+      "installed": {
+        "bodyMd5": "24bd5bb47a48a507e5bcf3710005281a",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_validate_case_net_page_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "c96df7df82f5a21664dc34fc06cc7f85",
+      "installed": {
+        "bodyMd5": "c96df7df82f5a21664dc34fc06cc7f85",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_precheck_page_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "f4c8d718ac7ac01c05c367f8ca15caf7",
+      "installed": {
+        "bodyMd5": "f4c8d718ac7ac01c05c367f8ca15caf7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_stage_case_net_page_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "d19be8e8c941100ad99605cc55190e71",
+      "installed": {
+        "bodyMd5": "d19be8e8c941100ad99605cc55190e71",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_cancel_net_replacement_page_v1(uuid,uuid,integer)",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "af5e1c7dff8794c4aa19967f51bb30fd",
+      "installed": {
+        "bodyMd5": "af5e1c7dff8794c4aa19967f51bb30fd",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_commit_fence_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "91bb59919bf950d20364a1e3b2f024e7",
+      "installed": {
+        "bodyMd5": "91bb59919bf950d20364a1e3b2f024e7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_terminal_receipt_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "bafa6192f53b3eb288e0e5bd29e5e6db",
+      "installed": {
+        "bodyMd5": "bafa6192f53b3eb288e0e5bd29e5e6db",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_reader_revision_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "11426aaf6d2f5a68d924ef5d16741129",
+      "installed": {
+        "bodyMd5": "11426aaf6d2f5a68d924ef5d16741129",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_ready_net_refusal_guard_v1()",
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sourceMd5": "9acb4be45b17fea590478321831c4e15",
+      "installed": {
+        "bodyMd5": "9acb4be45b17fea590478321831c4e15",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_net_replacement",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_net_replacement_accepted_projection_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (accepted_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_cancel_command_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (cancel_command_id) REFERENCES private.bpay_next_cancel_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_cancel_command_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_cash_amount_check",
+          "kind": "c",
+          "definition": "CHECK (((cash_amount)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check",
+          "kind": "c",
+          "definition": "CHECK (((prior_projection_no >= 0) AND (prior_projection_no < request_no)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check1",
+          "kind": "c",
+          "definition": "CHECK ((((prior_projection_no = 0) = (prior_projection_id IS NULL)) AND ((prior_state_id IS NULL) = (prior_projection_id IS NULL))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check10",
+          "kind": "c",
+          "definition": "CHECK ((((inventory_age_key IS NULL) AND (inventory_case_id IS NULL) AND (inventory_component_ordinal IS NULL) AND (inventory_component_id IS NULL)) OR ((inventory_age_key IS NOT NULL) AND (inventory_case_id IS NOT NULL) AND (inventory_component_ordinal IS NOT NULL) AND (inventory_component_id IS NOT NULL))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check11",
+          "kind": "c",
+          "definition": "CHECK ((((metadata_pay_date_cursor IS NULL) AND (metadata_created_at_cursor IS NULL) AND (metadata_run_cursor IS NULL)) OR ((metadata_pay_date_cursor IS NOT NULL) AND (metadata_created_at_cursor IS NOT NULL) AND (metadata_run_cursor IS NOT NULL) AND isfinite(metadata_pay_date_cursor) AND isfinite(metadata_created_at_cursor))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check12",
+          "kind": "c",
+          "definition": "CHECK ((((validation_pay_date_cursor IS NULL) AND (validation_created_at_cursor IS NULL) AND (validation_run_cursor IS NULL)) OR ((validation_pay_date_cursor IS NOT NULL) AND (validation_created_at_cursor IS NOT NULL) AND (validation_run_cursor IS NOT NULL) AND isfinite(validation_pay_date_cursor) AND isfinite(validation_created_at_cursor))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check13",
+          "kind": "c",
+          "definition": "CHECK (((stage = 'REFUSED'::text) = (refusal_code IS NOT NULL)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check14",
+          "kind": "c",
+          "definition": "CHECK (((stage <> 'COMPLETE'::text) OR ((accepted_projection_id IS NOT NULL) AND (cash_amount IS NOT NULL) AND (committed_instruction_count = expected_instruction_count) AND (staging_step = 'DONE'::text))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check15",
+          "kind": "c",
+          "definition": "CHECK (((stage <> 'CANCELLED'::text) OR ((cleanup_step = 'DONE'::text) AND (inventory_instruction_count = expected_instruction_count) AND (cleanup_instruction_count = expected_instruction_count) AND (released_hold_count = expected_releasable_hold_count) AND ((released_source_total)::numeric = (expected_releasable_source_total)::numeric))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check16",
+          "kind": "c",
+          "definition": "CHECK (((stage <> ALL (ARRAY['CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'CANCELLED'::text])) OR (cancel_command_id IS NOT NULL)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check17",
+          "kind": "c",
+          "definition": "CHECK (((updated_at_utc >= created_at_utc) AND ((finished_at_utc IS NULL) OR (finished_at_utc >= created_at_utc))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check2",
+          "kind": "c",
+          "definition": "CHECK (((staged_instruction_count <= expected_instruction_count) AND (validated_instruction_count <= staged_instruction_count) AND (committed_instruction_count <= validated_instruction_count) AND (cleanup_instruction_count <= expected_instruction_count) AND (inventory_instruction_count <= expected_instruction_count) AND (released_hold_count <= expected_releasable_hold_count) AND ((released_source_total)::numeric <= (expected_releasable_source_total)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check3",
+          "kind": "c",
+          "definition": "CHECK ((((remaining_channel_headroom)::numeric <= (initial_channel_headroom)::numeric) AND ((remaining_take_home)::numeric <= (initial_take_home)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check4",
+          "kind": "c",
+          "definition": "CHECK (((staged_deduction_count <= staged_instruction_count) AND (committed_deduction_count <= staged_deduction_count) AND (staged_old_hold_count <= staged_deduction_count) AND (proposed_hold_count <= staged_deduction_count) AND (committed_old_hold_count <= staged_old_hold_count) AND ((committed_old_source_total)::numeric <= (staged_old_source_total)::numeric) AND (committed_new_hold_count <= proposed_hold_count) AND ((committed_new_source_total)::numeric <= (proposed_source_total)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check5",
+          "kind": "c",
+          "definition": "CHECK ((((cursor_age_key IS NULL) AND (cursor_case_id IS NULL) AND (cursor_component_ordinal IS NULL) AND (cursor_component_id IS NULL)) OR ((cursor_age_key IS NOT NULL) AND (cursor_case_id IS NOT NULL) AND (cursor_component_ordinal IS NOT NULL) AND (cursor_component_id IS NOT NULL))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check6",
+          "kind": "c",
+          "definition": "CHECK ((((cleanup_age_key IS NULL) AND (cleanup_case_id IS NULL) AND (cleanup_component_ordinal IS NULL) AND (cleanup_component_id IS NULL)) OR ((cleanup_age_key IS NOT NULL) AND (cleanup_case_id IS NOT NULL) AND (cleanup_component_ordinal IS NOT NULL) AND (cleanup_component_id IS NOT NULL))))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check7",
+          "kind": "c",
+          "definition": "CHECK (((stage = ANY (ARRAY['COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text])) = (finished_at_utc IS NOT NULL)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check8",
+          "kind": "c",
+          "definition": "CHECK (((original_job_id IS NULL) = (target_state_id IS NULL)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_check9",
+          "kind": "c",
+          "definition": "CHECK (((stage = ANY (ARRAY['PRECHECK'::text, 'REFUSED'::text])) OR (original_job_id IS NOT NULL)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_component_ordinal_check",
+          "kind": "c",
+          "definition": "CHECK ((cleanup_component_ordinal > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((cleanup_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_cleanup_step_check",
+          "kind": "c",
+          "definition": "CHECK ((cleanup_step = ANY (ARRAY['INVENTORY'::text, 'RELEASE'::text, 'DONE'::text])))"
+        },
+        {
+          "name": "bpay_next_net_replacement_commit_cursor_check",
+          "kind": "c",
+          "definition": "CHECK ((commit_cursor >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_deduction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((committed_deduction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((committed_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_new_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((committed_new_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_new_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((committed_new_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_old_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((committed_old_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_committed_old_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((committed_old_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_created_at_utc_check",
+          "kind": "c",
+          "definition": "CHECK (isfinite(created_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_cursor_component_ordinal_check",
+          "kind": "c",
+          "definition": "CHECK ((cursor_component_ordinal > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_draft_state_id_run_worker_id_can_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (draft_state_id, run_worker_id, candidate_id, preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((expected_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_releasable_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((expected_releasable_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_expected_releasable_source_tota_check",
+          "kind": "c",
+          "definition": "CHECK (((expected_releasable_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_finished_at_utc_check",
+          "kind": "c",
+          "definition": "CHECK (isfinite(finished_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_gross_additions_check",
+          "kind": "c",
+          "definition": "CHECK (((gross_additions)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_gross_deductions_check",
+          "kind": "c",
+          "definition": "CHECK (((gross_deductions)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_candidate_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (id) REFERENCES private.bpay_next_paye_net_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_id_run_worker_id_candidate_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (id, run_worker_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_initial_channel_headroom_check",
+          "kind": "c",
+          "definition": "CHECK (((initial_channel_headroom)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_initial_take_home_check",
+          "kind": "c",
+          "definition": "CHECK (((initial_take_home)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_inventory_component_ordinal_check",
+          "kind": "c",
+          "definition": "CHECK ((inventory_component_ordinal > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_inventory_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((inventory_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_module_epoch_check",
+          "kind": "c",
+          "definition": "CHECK ((module_epoch > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_net_additions_check",
+          "kind": "c",
+          "definition": "CHECK (((net_additions)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_original_job_id_id_candidate_id__fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (original_job_id, id, candidate_id, module_epoch) REFERENCES private.bpay_next_job(id, command_id, candidate_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_original_job_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (original_job_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_pay_week_start_check",
+          "kind": "c",
+          "definition": "CHECK ((isfinite(pay_week_start) AND (EXTRACT(isodow FROM pay_week_start) = (1)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_replacement_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_preparation_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((preparation_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_prior_projection_id_run_worker_i_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (prior_projection_id, run_worker_id) REFERENCES private.bpay_next_net_projection(id, run_worker_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_prior_state_id_run_worker_id_can_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (prior_state_id, run_worker_id, candidate_id, preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_proposed_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((proposed_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_proposed_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((proposed_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_recoveries_check",
+          "kind": "c",
+          "definition": "CHECK (((recoveries)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_refusal_code_check",
+          "kind": "c",
+          "definition": "CHECK ((refusal_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text])))"
+        },
+        {
+          "name": "bpay_next_net_replacement_released_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((released_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_released_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((released_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_remaining_channel_headroom_check",
+          "kind": "c",
+          "definition": "CHECK (((remaining_channel_headroom)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_remaining_take_home_check",
+          "kind": "c",
+          "definition": "CHECK (((remaining_take_home)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_request_no_check",
+          "kind": "c",
+          "definition": "CHECK ((request_no > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_run_worker_id_request_no_key",
+          "kind": "u",
+          "definition": "UNIQUE (run_worker_id, request_no)"
+        },
+        {
+          "name": "bpay_next_net_replacement_run_worker_id_run_id_candidate_i_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (run_worker_id, run_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, run_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_selection_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((selection_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_stage_check",
+          "kind": "c",
+          "definition": "CHECK ((stage = ANY (ARRAY['PRECHECK'::text, 'STAGING'::text, 'COMMITTING'::text, 'CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text])))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_deduction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((staged_deduction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((staged_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_old_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((staged_old_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staged_old_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((staged_old_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_replacement_staging_step_check",
+          "kind": "c",
+          "definition": "CHECK ((staging_step = ANY (ARRAY['WEEK'::text, 'INSTRUCTIONS'::text, 'VALIDATE'::text, 'DONE'::text])))"
+        },
+        {
+          "name": "bpay_next_net_replacement_target_state_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (target_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_replacement_target_state_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (target_state_id)"
+        },
+        {
+          "name": "bpay_next_net_replacement_updated_at_utc_check",
+          "kind": "c",
+          "definition": "CHECK (isfinite(updated_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_replacement_validated_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((validated_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_validation_cursor_check",
+          "kind": "c",
+          "definition": "CHECK ((validation_cursor >= 0))"
+        },
+        {
+          "name": "bpay_next_net_replacement_validation_step_check",
+          "kind": "c",
+          "definition": "CHECK ((validation_step = ANY (ARRAY['INSTRUCTIONS'::text, 'PRIOR_RUNS'::text, 'DONE'::text])))"
+        },
+        {
+          "name": "bpay_next_net_terminal_receipt_guard",
+          "kind": "t",
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_pkey ON private.bpay_next_net_replacement USING btree (id)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_target_state_id_key ON private.bpay_next_net_replacement USING btree (target_state_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_original_job_id_key ON private.bpay_next_net_replacement USING btree (original_job_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_cancel_command_id_key ON private.bpay_next_net_replacement USING btree (cancel_command_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_id_run_worker_id_candidate_id_key ON private.bpay_next_net_replacement USING btree (id, run_worker_id, candidate_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_run_worker_id_request_no_key ON private.bpay_next_net_replacement USING btree (run_worker_id, request_no)",
+        "CREATE UNIQUE INDEX bpay_next_net_replacement_pending_worker_idx ON private.bpay_next_net_replacement USING btree (run_worker_id) WHERE (stage <> ALL (ARRAY['COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text]))",
+        "CREATE INDEX bpay_next_net_replacement_candidate_idx ON private.bpay_next_net_replacement USING btree (candidate_id, run_worker_id, request_no DESC)"
+      ],
+      "triggers": [
+        "bpay_next_net_replacement_guard",
+        "bpay_next_net_replacement_reader_revision",
+        "bpay_next_net_replacement_truncate_guard",
+        "bpay_next_net_terminal_receipt_guard"
+      ]
+    },
+    {
+      "name": "bpay_next_net_staged_result",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_allocation_re_usable_capacity_target_ex_va_check",
+          "kind": "c",
+          "definition": "CHECK (((usable_capacity_target_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_affordability_reason_check",
+          "kind": "c",
+          "definition": "CHECK ((affordability_reason = ANY (ARRAY['TAKE_HOME_FLOOR'::text, 'EARNINGS_THRESHOLD'::text, 'PAY_HEADROOM'::text])))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_source_ex_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((allocated_source_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_ex_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((allocated_target_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_inc_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((allocated_target_inc_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_allocated_target_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((allocated_target_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_cap_reason_check",
+          "kind": "c",
+          "definition": "CHECK ((cap_reason = ANY (ARRAY['TAKE_HOME_FLOOR'::text, 'EARNINGS_THRESHOLD'::text, 'PAY_HEADROOM'::text, 'CASE_CAPACITY'::text])))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_capacity_reason_check",
+          "kind": "c",
+          "definition": "CHECK ((capacity_reason = 'CASE_CAPACITY'::text))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_channel_headroom_after_check",
+          "kind": "c",
+          "definition": "CHECK (((channel_headroom_after)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_channel_headroom_before_check",
+          "kind": "c",
+          "definition": "CHECK (((channel_headroom_before)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check",
+          "kind": "c",
+          "definition": "CHECK (((allocated_target_inc_vat)::numeric = ((allocated_target_ex_vat)::numeric + (allocated_target_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check1",
+          "kind": "c",
+          "definition": "CHECK ((((allocated_target_ex_vat)::numeric <= (nominal_target_ex_vat)::numeric) AND ((allocated_target_ex_vat)::numeric <= (usable_capacity_target_ex_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check2",
+          "kind": "c",
+          "definition": "CHECK (((shortfall_target_ex_vat)::numeric = ((nominal_target_ex_vat)::numeric - (allocated_target_ex_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_check3",
+          "kind": "c",
+          "definition": "CHECK ((((hold_purpose = 'PAYOUT'::text) AND ((channel_headroom_after)::numeric = (channel_headroom_before)::numeric) AND ((worker_take_home_after)::numeric = (worker_take_home_before)::numeric) AND (cap_reason IS NULL) AND (affordability_reason IS NULL)) OR ((hold_purpose <> 'PAYOUT'::text) AND ((channel_headroom_after)::numeric = ((channel_headroom_before)::numeric - (allocated_target_ex_vat)::numeric)) AND ((worker_take_home_after)::numeric = ((worker_take_home_before)::numeric - (allocated_target_ex_vat)::numeric)))))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_hold_purpose_check",
+          "kind": "c",
+          "definition": "CHECK ((hold_purpose = ANY (ARRAY['PAYOUT'::text, 'GROSS_RECOVERY'::text, 'NET_RECOVERY_CAPACITY'::text])))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_nominal_target_ex_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((nominal_target_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_pass_kind_check",
+          "kind": "c",
+          "definition": "CHECK ((pass_kind = ANY (ARRAY['PREVIEW'::text, 'DRAFT'::text, 'NET'::text])))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_preparation_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((preparation_revision > 0))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_result_no_check",
+          "kind": "c",
+          "definition": "CHECK ((result_no > 0))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_selection_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((selection_revision > 0))"
+        },
+        {
+          "name": "bpay_next_case_allocation_result_shortfall_target_ex_vat_check",
+          "kind": "c",
+          "definition": "CHECK (((shortfall_target_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_case_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((captured_case_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_component_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((captured_component_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_captured_period_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((captured_period_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_component_id_case_id_cand_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id, pay_week_start) REFERENCES private.bpay_next_case_period(case_component_id, case_id, candidate_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_component_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (case_component_id) REFERENCES private.bpay_next_case_component(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_case_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_check",
+          "kind": "c",
+          "definition": "CHECK (((prior_hold_id IS NULL) = ((prior_source_amount)::numeric = (0)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_draft_result_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (draft_result_id) REFERENCES private.bpay_next_case_allocation_result(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_instruction_id_run_worker_id_c_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (instruction_id, run_worker_id, candidate_id, preparation_revision, selection_revision, hold_purpose, allocation_channel) REFERENCES private.bpay_next_run_case_instruction(id, run_worker_id, candidate_id, preparation_revision, selection_revision, hold_purpose, allocation_channel) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_payroll_stage_check",
+          "kind": "c",
+          "definition": "CHECK ((payroll_stage = ANY (ARRAY['GROSS_ADD'::text, 'GROSS_DEDUCT'::text, 'NET_ADD'::text, 'NET_DEDUCT'::text])))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_prior_hold_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (prior_hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_prior_source_amount_check",
+          "kind": "c",
+          "definition": "CHECK (((prior_source_amount)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_instruction_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_replacement_id_result_no_key",
+          "kind": "u",
+          "definition": "UNIQUE (replacement_id, result_no)"
+        },
+        {
+          "name": "bpay_next_net_staged_result_state_id_allocation_channel_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (state_id, allocation_channel) REFERENCES private.bpay_next_case_allocation_channel(state_id, allocation_channel) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_result_state_id_run_worker_id_candida_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (state_id, run_worker_id, candidate_id, preparation_revision, selection_revision, pass_kind) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision, pass_kind) ON DELETE RESTRICT"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_net_staged_result_pkey ON private.bpay_next_net_staged_result USING btree (id)",
+        "CREATE UNIQUE INDEX bpay_next_net_staged_result_replacement_id_instruction_id_key ON private.bpay_next_net_staged_result USING btree (replacement_id, instruction_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_staged_result_replacement_id_result_no_key ON private.bpay_next_net_staged_result USING btree (replacement_id, result_no)",
+        "CREATE INDEX bpay_next_net_staged_prior_hold_idx ON private.bpay_next_net_staged_result USING btree (prior_hold_id, replacement_id) WHERE (prior_hold_id IS NOT NULL)"
+      ],
+      "triggers": [
+        "bpay_next_net_replacement_truncate_guard",
+        "bpay_next_net_staged_result_guard"
+      ]
+    },
+    {
+      "name": "bpay_next_net_staged_case_capacity",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_net_staged_case_ca_captured_active_recovery_sou_check",
+          "kind": "c",
+          "definition": "CHECK (((captured_active_recovery_source)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_cap_captured_outstanding_source_check",
+          "kind": "c",
+          "definition": "CHECK (((captured_outstanding_source)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capaci_staged_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((staged_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacit_proposed_release_source_check",
+          "kind": "c",
+          "definition": "CHECK (((proposed_release_source)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacit_proposed_reserve_source_check",
+          "kind": "c",
+          "definition": "CHECK (((proposed_reserve_source)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_captured_case_revision_check",
+          "kind": "c",
+          "definition": "CHECK ((captured_case_revision > 0))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_case_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check",
+          "kind": "c",
+          "definition": "CHECK (((committed_instruction_count >= 0) AND (committed_instruction_count <= staged_instruction_count)))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check1",
+          "kind": "c",
+          "definition": "CHECK ((((committed_release_source)::numeric >= (0)::numeric) AND ((committed_release_source)::numeric <= (proposed_release_source)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_check2",
+          "kind": "c",
+          "definition": "CHECK ((((committed_reserve_source)::numeric >= (0)::numeric) AND ((committed_reserve_source)::numeric <= (proposed_reserve_source)::numeric)))"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (replacement_id, case_id)"
+        },
+        {
+          "name": "bpay_next_net_staged_case_capacity_replacement_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_net_staged_case_capacity_pkey ON private.bpay_next_net_staged_case_capacity USING btree (replacement_id, case_id)"
+      ],
+      "triggers": [
+        "bpay_next_net_replacement_truncate_guard",
+        "bpay_next_net_staged_capacity_guard"
+      ]
+    },
+    {
+      "name": "bpay_next_paye_net_request_refusal",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_paye_net_request_re_command_id_run_worker_id_can_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (command_id, run_worker_id, candidate_id) REFERENCES private.bpay_next_net_replacement(id, run_worker_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_command_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_refusal_code_check",
+          "kind": "c",
+          "definition": "CHECK ((refusal_code = ANY (ARRAY['CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text])))"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_refused_at_utc_check",
+          "kind": "c",
+          "definition": "CHECK (isfinite(refused_at_utc))"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_request_no_check",
+          "kind": "c",
+          "definition": "CHECK ((request_no > 0))"
+        },
+        {
+          "name": "bpay_next_paye_net_request_refusal_run_worker_id_request_no_key",
+          "kind": "u",
+          "definition": "UNIQUE (run_worker_id, request_no)"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_paye_net_request_refusal_run_worker_id_request_no_key ON private.bpay_next_paye_net_request_refusal USING btree (run_worker_id, request_no)",
+        "CREATE UNIQUE INDEX bpay_next_paye_net_request_refusal_pkey ON private.bpay_next_paye_net_request_refusal USING btree (command_id)"
+      ],
+      "triggers": [
+        "bpay_next_net_refusal_guard",
+        "bpay_next_net_replacement_truncate_guard"
+      ]
+    },
+    {
+      "name": "bpay_next_net_cancel_handoff",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_candidate_i_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (cancel_command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (cancel_command_id) REFERENCES private.bpay_next_cancel_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cancel_command_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (cancel_command_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check",
+          "kind": "c",
+          "definition": "CHECK ((cleaned_instruction_count = expected_instruction_count))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check1",
+          "kind": "c",
+          "definition": "CHECK ((released_hold_count = expected_hold_count))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_check2",
+          "kind": "c",
+          "definition": "CHECK (((released_source_total)::numeric = (expected_source_total)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_cleanup_component_ordinal_check",
+          "kind": "c",
+          "definition": "CHECK ((cleanup_component_ordinal > 0))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_completed_at_utc_check",
+          "kind": "c",
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_draft_state_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (draft_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_hold_count_check",
+          "kind": "c",
+          "definition": "CHECK ((expected_hold_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_instruction_count_check",
+          "kind": "c",
+          "definition": "CHECK ((expected_instruction_count >= 0))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_expected_source_total_check",
+          "kind": "c",
+          "definition": "CHECK (((expected_source_total)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_original_job_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (original_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (replacement_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_prior_projection_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (prior_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_prior_state_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (prior_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_replacement_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_replacement_id_run_worker_id__fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (replacement_id, run_worker_id, candidate_id) REFERENCES private.bpay_next_net_replacement(id, run_worker_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_target_projection_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (target_projection_id) REFERENCES private.bpay_next_net_projection(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_handoff_target_state_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (target_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_net_cancel_handoff_pkey ON private.bpay_next_net_cancel_handoff USING btree (replacement_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_cancel_handoff_cancel_command_id_key ON private.bpay_next_net_cancel_handoff USING btree (cancel_command_id)"
+      ],
+      "triggers": [
+        "bpay_next_net_cancel_handoff_guard",
+        "bpay_next_net_replacement_truncate_guard"
+      ]
+    },
+    {
+      "name": "bpay_next_net_cancel_hold_member",
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forceRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "policies": [
+        {
+          "name": "bpay_next_net_replacement_owner",
+          "roles": "{16385}",
+          "using": "true",
+          "check": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_net_cancel_hold_mem_replacement_id_instruction_id_key",
+          "kind": "u",
+          "definition": "UNIQUE (replacement_id, instruction_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_allocation_state_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (allocation_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_case_hold_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (case_hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_instruction_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (instruction_id) REFERENCES private.bpay_next_run_case_instruction(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_pkey",
+          "kind": "p",
+          "definition": "PRIMARY KEY (replacement_id, case_hold_id)"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_replacement_id_fkey",
+          "kind": "f",
+          "definition": "FOREIGN KEY (replacement_id) REFERENCES private.bpay_next_net_replacement(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_cancel_hold_member_source_amount_check",
+          "kind": "c",
+          "definition": "CHECK (((source_amount)::numeric > (0)::numeric))"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_net_cancel_hold_member_pkey ON private.bpay_next_net_cancel_hold_member USING btree (replacement_id, case_hold_id)",
+        "CREATE UNIQUE INDEX bpay_next_net_cancel_hold_mem_replacement_id_instruction_id_key ON private.bpay_next_net_cancel_hold_member USING btree (replacement_id, instruction_id)"
+      ],
+      "triggers": [
+        "bpay_next_net_cancel_hold_member_guard",
+        "bpay_next_net_replacement_truncate_guard"
+      ]
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

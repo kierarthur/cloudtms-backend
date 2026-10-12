@@ -163,6 +163,9 @@ function field(value, type) {
     case 'csv': return typeof value === 'string' && ENCODER.encode(value).byteLength >= 1
       && ENCODER.encode(value).byteLength <= 120000;
     case 'netPhase': return value === 'ACCEPTED_PENDING_PROJECTION';
+    case 'caseNetReceiptPhase': return ['ACCEPTED_PENDING_PROJECTION','PROJECTED','REFUSED','CANCELLED'].includes(value);
+    case 'netReplacementStage': return ['PRECHECK','STAGING','COMMITTING','CANCEL_REQUESTED','CANCELLING','COMPLETE','REFUSED','CANCELLED'].includes(value);
+    case 'netRefusal': return ['CASE_INPUT_UNBOUND','CASE_WEEK_BASIS_UNBOUND','CASE_RETURN_FLOOR_UNBOUND'].includes(value);
     case 'storedCreditPhase': return value === 'ACCEPTED_PENDING_CASE';
     case 'transferPhase': return TRANSFER_PHASES.includes(value);
     case 'cancelPhase': return ['REQUESTED', 'CANCELLING', 'CANCELLED', 'BLOCKED'].includes(value);
@@ -317,9 +320,16 @@ export async function handleBpayNextReauthPreview(request,dependencies={}) {
   } finally {if(timer!==undefined)clearTimeout(timer);}
 }
 
+function validCaseNetReceipt(p,command){
+ if(p.replacement_id===null)return p.replacement_stage===null&&p.projection_id===null&&p.issue_code===null&&p.replay&&p.phase==='ACCEPTED_PENDING_PROJECTION';
+ if(p.replacement_id.toLowerCase()!==command.toLowerCase()||p.replacement_stage===null)return false;
+ const expected=p.replacement_stage==='COMPLETE'?'PROJECTED':p.replacement_stage==='REFUSED'?'REFUSED':p.replacement_stage==='CANCELLED'?'CANCELLED':'ACCEPTED_PENDING_PROJECTION';
+ return p.phase===expected&&(p.phase==='PROJECTED')===(p.projection_id!==null)&&(p.phase==='REFUSED')===(p.issue_code!==null);
+}
 function commandResult(payload, call) {
   const invalid = () => { throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID', 503, true, true); };
-  const schema = OUTPUTS[call.action];
+  const caseNet=call.action==='CASE_PAYOUT'||call.action==='PAYE_NET'&&Object.hasOwn(call.args,'expected_projection_revision');
+  const schema = caseNet?{...OUTPUTS[call.action],phase:'caseNetReceiptPhase',replacement_id:'uuid?',replacement_stage:'netReplacementStage?',projection_id:'uuid?',issue_code:'netRefusal?'}:OUTPUTS[call.action];
   const keys = Object.keys(schema);
   if (!record(payload) || Object.keys(payload).length !== keys.length
     || keys.some((key) => !Object.hasOwn(payload, key) || !field(payload[key], schema[key]))) invalid();
@@ -332,6 +342,7 @@ function commandResult(payload, call) {
     // even if the caller supplied a different command ID for that same receipt.
     if (call.action !== 'CSV_SETTLEMENT' || !payload.replay) invalid();
   }
+  if(caseNet&&!validCaseNetReceipt(payload,call.args.command_id))invalid();
   if (['BIND_STORED_CREDIT','CASE_CREATE'].includes(call.action)
     && payload.case_id.toLowerCase() !== call.args.command_id.toLowerCase()) invalid();
   if(['CASE_PAUSE','CASE_RESUME'].includes(call.action)&&(payload.action!==call.action||payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()||payload.expected_case_revision!==call.args.expected_case_revision))invalid();

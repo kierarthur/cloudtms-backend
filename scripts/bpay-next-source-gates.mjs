@@ -638,7 +638,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
   ],
   "private.bpay_next_simple_break_page_v1(uuid,uuid,integer,integer)": [],
   "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)": [
-    "pg_catalog.jsonb_build_object( 'run_id',r.id,'run_status',r.status,'selection_state',r.selection_state, 'review_revision',r.review_revision::text,'run_worker_id',w.id, 'candidate_id',w.candidate_id,'worker_status',w.status, 'target_pay_channel',w.target_pay_channel,'umbrella_id',w.target_umbrella_id, 'preparation_revision',w.preparation_revision::text, 'case_selection_revision',w.case_selection_revision::text, 'net_request_revision',w.net_request_revision::text, 'net_projection_revision',w.net_projection_revision::text, 'net_pending',w.net_request_revision<>w.net_projection_revision, 'review_issue_code',w.review_issue_code,'review_issue_work_id',w.review_issue_work_id, 'frozen_gross_ex_vat',w.gross_ex_vat::text,'frozen_gross_vat',w.gross_vat::text, 'frozen_gross_inc_vat',w.gross_inc_vat::text,'gross_stage_deductions',contribution.gross_stage_deductions::text,'net_recovery_reserved',contribution.net_recovery_reserved::text,'frozen_offer_complete',contribution.frozen_offer_complete, 'projection_id',p.id,'projection_input_kind',p.input_kind, 'entered_paye_net',p.entered_paye_net::text, 'accepted_recoveries',p.accepted_recoveries::text, 'accepted_net_additions',p.accepted_net_additions::text, 'cash_amount',p.cash_amount::text, 'reservation_mode',rv.reservation_mode,'reservation_projection_id',rv.reservation_projection_id, 'remaining_reservation_cash',rv.remaining_reservation_cash::text,'reservation_internal_zero',rv.reservation_internal_zero, 'reservation_holds_state',rv.reservation_holds_state )",
+    "pg_catalog.jsonb_build_object( 'run_id',r.id,'run_status',r.status,'selection_state',r.selection_state, 'review_revision',r.review_revision::text,'run_worker_id',w.id, 'candidate_id',w.candidate_id,'worker_status',w.status, 'target_pay_channel',w.target_pay_channel,'umbrella_id',w.target_umbrella_id, 'preparation_revision',w.preparation_revision::text, 'case_selection_revision',w.case_selection_revision::text, 'net_request_revision',w.net_request_revision::text, 'net_projection_revision',w.net_projection_revision::text, 'net_pending',w.net_replacement_pending_id is not null or w.net_request_revision<>w.net_projection_revision, 'net_replacement_pending_id',w.net_replacement_pending_id, 'net_request_high_water',w.net_request_high_water::text,'replacement_id',rep.id,'replacement_stage',rep.stage, 'requested_net',req.entered_paye_net::text,'replacement_request_no',rep.request_no::text, 'replacement_cursor',job.cursor_key,'replacement_expected_count',rep.expected_instruction_count::text, 'replacement_staged_count',rep.staged_instruction_count::text,'replacement_validated_count',rep.validated_instruction_count::text, 'replacement_committed_count',rep.committed_instruction_count::text,'net_refused_code',refusal.refusal_code, 'review_issue_code',w.review_issue_code,'review_issue_work_id',w.review_issue_work_id, 'frozen_gross_ex_vat',w.gross_ex_vat::text,'frozen_gross_vat',w.gross_vat::text, 'frozen_gross_inc_vat',w.gross_inc_vat::text,'gross_stage_deductions',contribution.gross_stage_deductions::text,'net_recovery_reserved',contribution.net_recovery_reserved::text,'frozen_offer_complete',contribution.frozen_offer_complete, 'projection_id',p.id,'projection_input_kind',p.input_kind, 'entered_paye_net',p.entered_paye_net::text, 'accepted_recoveries',p.accepted_recoveries::text, 'accepted_net_additions',p.accepted_net_additions::text, 'cash_amount',p.cash_amount::text, 'reservation_mode',rv.reservation_mode,'reservation_projection_id',rv.reservation_projection_id, 'remaining_reservation_cash',rv.remaining_reservation_cash::text,'reservation_internal_zero',rv.reservation_internal_zero, 'reservation_holds_state',rv.reservation_holds_state )",
     "pg_catalog.jsonb_build_object('header',v_header,'rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
   "public.bpay_next_financial_intake_v1(uuid,text,jsonb)": [
@@ -647,7 +647,9 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('command_id',v_result->>'command_id', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase','requested_scope',v_result->>'requested_scope', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id', 'issue_code',v_result->>'issue_code','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','run_id',v_result->>'run_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'expected_candidates',v_result->>'expected_candidates', 'completed_candidates',v_result->>'completed_candidates', 'replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','request_no',v_result->>'request_no', 'phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('replacement_id',v_result->>'replacement_id', 'replacement_stage',v_result->>'replacement_stage','projection_id',v_result->>'projection_id','issue_code',v_result->>'issue_code')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','request_no',v_result->>'request_no', 'phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('replacement_id',v_result->>'replacement_id', 'replacement_stage',v_result->>'replacement_stage','projection_id',v_result->>'projection_id','issue_code',v_result->>'issue_code')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','transfer_id',v_result->>'transfer_id', 'phase',v_result->>'phase','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'cursor',v_result->>'cursor','released_line_count',v_result->>'released_line_count', 'blocked_code',v_result->>'blocked_code','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'return_cash_id',v_return_cash_id, 'sequence',v_sequence,'transfer_id',v_result->>'transfer_id', 'phase',case when v_result->>'transfer_id' is null then 'ACCEPTED_PENDING_BUILD' else 'TRANSFER_CREATED' end, 'replay',v_result->'replay')",
@@ -670,7 +672,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('phase',case when v_discarded_prepare then 'DISCARDED' else 'EXPIRED' end, 'cursor',v_result->>'cursor','work_cursor',v_result->>'work_cursor', 'component_cursor',v_result->>'component_cursor', 'run_worker_id',v_result->>'run_worker_id','worker_status',v_result->>'worker_status', 'issue_code',v_result->>'issue_code','issue_work_id',v_result->>'issue_work_id', 'rows_visited',v_result->>'rows_visited')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',case when v_job.phase in ('NEW','PINNING','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE','WORKER_RELEASE_WORK','WORKER_RELEASE_CASE','WORKER_RELEASE_FINAL') then v_job.cursor_key else null end, 'work_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_work_cursor else null end, 'component_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_component_cursor else null end, 'run_worker_id',v_worker.id,'worker_status',v_worker.status, 'issue_code',v_worker.review_issue_code,'issue_work_id',v_worker.review_issue_work_id, 'rows_visited',v_result->>'rows_visited')",
     "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','projection_id',v_result->>'projection_id')",
-    "pg_catalog.jsonb_build_object( 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'run_worker_id',v_result->>'run_worker_id','issue_code',v_result->>'issue_code')",
+    "pg_catalog.jsonb_build_object( 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'run_worker_id',v_result->>'run_worker_id','issue_code',v_result->>'issue_code', 'replacement_id',v_result->>'replacement_id','replacement_stage',v_result->>'replacement_stage', 'request_no',v_result->>'request_no','staged_count',v_result->>'staged_count', 'validated_count',v_result->>'validated_count','committed_count',v_result->>'committed_count','expected_count',v_result->>'expected_count')",
     "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','transfer_id',v_result->>'transfer_id', 'transfer_status',coalesce(v_result->>'transfer_status',v_result->>'phase'), 'cursor',v_job.cursor_key,'member_count',v_result->>'member_count', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
     "pg_catalog.jsonb_build_object( 'phase',case when v_job.status='DONE' then 'COMPLETE' else 'MEMBERS' end, 'cursor',v_job.cursor_key,'posted_members',v_result->>'posted_members', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
     "pg_catalog.jsonb_build_object( 'phase',case when v_job.status='DONE' then 'COMPLETE' else 'MEMBERS' end, 'cursor',v_job.cursor_key,'posted_members',v_result->>'posted_members', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
@@ -989,28 +991,19 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_snooze_due_receipt_valid_v1"
   ],
   "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)": [
-    "pg_catalog.hashtextextended",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.pg_advisory_xact_lock",
-    "pg_catalog.transaction_timestamp",
-    "pg_catalog.trunc",
-    "private.bpay_next_receive_command_v1"
+    "pg_catalog.jsonb_build_object('sequence',v_sequence::text,'request_no',v_prior.request_no::text, 'replay',true,'phase','ACCEPTED_PENDING_PROJECTION','run_worker_id',v_worker.id)",
+    "pg_catalog.jsonb_build_object('sequence',v_sequence::text,'request_no',v_prior.request_no::text, 'replay',true,'phase',case v_replacement.stage when 'COMPLETE' then 'PROJECTED' when 'REFUSED' then 'REFUSED' when 'CANCELLED' then 'CANCELLED' else 'ACCEPTED_PENDING_PROJECTION' end, 'run_worker_id',v_worker.id,'replacement_id',v_replacement.id,'replacement_stage',v_replacement.stage, 'projection_id',v_replacement.accepted_projection_id,'issue_code',v_replacement.refusal_code)",
+    "pg_catalog.jsonb_build_object('sequence',v_sequence::text,'request_no',v_request_no::text, 'replay',false,'phase','ACCEPTED_PENDING_PROJECTION','run_worker_id',v_worker.id, 'replacement_id',p_command_id,'replacement_stage','PRECHECK','projection_id',null,'issue_code',null)"
   ],
   "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)": [
-    "private.bpay_next_record_case_hold_transition_v1",
-    "pg_catalog.clock_timestamp",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.transaction_timestamp",
-    "private.bpay_next_accumulate_net_destination_v1",
-    "private.bpay_next_case_allocation_row_v1",
-    "private.bpay_next_seal_net_destination_v1"
+    "pg_catalog.jsonb_build_object('phase',case v_rep.stage when 'COMPLETE' then 'PROJECTED' when 'REFUSED' then 'REFUSED' else 'DONE' end, 'cursor',null,'rows_visited','0','replay',true,'projection_id',v_rep.accepted_projection_id, 'run_worker_id',v_worker.id,'issue_code',v_rep.refusal_code,'replacement_id',v_rep.id,'replacement_stage',v_rep.stage, 'request_no',v_rep.request_no::text,'staged_count',v_rep.staged_instruction_count::text, 'validated_count',v_rep.validated_instruction_count::text,'committed_count',v_rep.committed_instruction_count::text, 'expected_count',v_rep.expected_instruction_count::text)",
+    "pg_catalog.jsonb_build_object('phase',case when v_state.net_stage='COMPLETE' then 'PROJECTED' else 'REVIEW' end, 'cursor',null,'rows_visited','0','replay',true,'projection_id',v_state.projection_id, 'run_worker_id',v_worker.id,'issue_code',v_state.net_issue_code)",
+    "pg_catalog.jsonb_build_object('phase','FINANCE_ALLOCATE','cursor',v_job.cursor_key,'rows_visited','0', 'replay',true,'projection_id',null,'run_worker_id',v_worker.id,'issue_code',null, 'replacement_id',v_rep.id,'replacement_stage',v_rep.stage,'request_no',v_rep.request_no::text, 'staged_count',v_rep.staged_instruction_count::text,'validated_count',v_rep.validated_instruction_count::text, 'committed_count',v_rep.committed_instruction_count::text,'expected_count',v_rep.expected_instruction_count::text)",
+    "pg_catalog.jsonb_build_object('phase',case v_rep.stage when 'REFUSED' then 'REFUSED' when 'COMPLETE' then 'PROJECTED' when 'CANCELLED' then 'DONE' else 'FINANCE_ALLOCATE' end,'cursor',v_job.cursor_key, 'rows_visited',v_seen::text,'replay',false,'projection_id',v_rep.accepted_projection_id,'run_worker_id',v_worker.id,'issue_code',v_rep.refusal_code, 'replacement_id',v_rep.id,'replacement_stage',v_rep.stage,'request_no',v_rep.request_no::text, 'staged_count',v_rep.staged_instruction_count::text,'validated_count',v_rep.validated_instruction_count::text, 'committed_count',v_rep.committed_instruction_count::text,'expected_count',v_rep.expected_instruction_count::text)"
   ],
   "private.bpay_next_begin_case_transfer_v1(uuid,uuid)": [
-    "pg_catalog.hashtextextended",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.pg_advisory_xact_lock",
-    "pg_catalog.transaction_timestamp",
-    "private.bpay_next_receive_command_v1"
+    "pg_catalog.jsonb_build_object('sequence',v_sequence::text,'transfer_id',v_transfer.id, 'phase',v_transfer.status,'replay',true)",
+    "pg_catalog.jsonb_build_object('sequence',v_sequence::text,'transfer_id',v_transfer.id,'phase','BUILDING','replay',false)"
   ],
   "private.bpay_next_build_case_transfer_page_v1(uuid,uuid,bigint,bigint,integer)": [
     "pg_catalog.clock_timestamp",
@@ -1032,19 +1025,15 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_receive_command_v1"
   ],
   "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)": [
-    "private.bpay_next_record_case_hold_transition_v1",
-    "pg_catalog.clock_timestamp",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.make_interval",
-    "pg_catalog.transaction_timestamp",
-    "private.bpay_next_apply_cancelled_week_v1",
-    "private.bpay_next_case_cancel_block_v1",
-    "private.bpay_next_check_destination_cancel_page_v1",
-    "private.bpay_next_finish_destination_cancel_page_v1",
-    "private.bpay_next_reconcile_cancelled_work_collection_v1"
+    "pg_catalog.jsonb_build_object('phase',v_request.status,'run_worker_id',v_worker.id,'cursor',v_job.cursor_key, 'released_line_count',v_request.released_line_count,'blocked_code',v_request.blocked_code,'rows_visited',0,'holds_released',0,'replay',true)",
+    "pg_catalog.jsonb_build_object('phase',v_request.status,'run_worker_id',v_worker.id,'cursor',v_job.cursor_key, 'released_line_count',v_request.released_line_count,'rows_visited',0,'holds_released',0,'replay',true)",
+    "pg_catalog.jsonb_build_object('phase','REQUESTED','run_worker_id',v_worker.id,'cursor',v_checkpoint, 'released_line_count',0,'rows_visited',v_seen,'holds_released',0,'replay',false)",
+    "pg_catalog.jsonb_build_object('phase','BLOCKED','run_worker_id',v_worker.id,'cursor',v_checkpoint, 'released_line_count',0,'blocked_code',v_block,'rows_visited',v_seen,'holds_released',0,'replay',false)",
+    "pg_catalog.jsonb_build_object( 'hold',pg_catalog.to_jsonb(v_hold),'instruction',pg_catalog.to_jsonb(v_instruction), 'result',pg_catalog.to_jsonb(v_result),'use',pg_catalog.to_jsonb(v_use),'audit',pg_catalog.to_jsonb(v_audit))",
+    "pg_catalog.jsonb_build_object('phase',v_binding.status,'run_worker_id',v_worker.id,'cursor',v_checkpoint, 'released_line_count',v_binding.released_work_count,'rows_visited',v_seen,'holds_released',v_holds,'replay',false)"
   ],
   "private.bpay_next_apply_cancelled_week_v1(uuid)": [
-    "pg_catalog.clock_timestamp"
+
   ],
   "private.bpay_next_workbench_refresh_case_v1(uuid)": [
     "private.bpay_next_work_wait_state_v1",

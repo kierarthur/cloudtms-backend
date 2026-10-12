@@ -97,7 +97,9 @@ const EXPIRED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'expiredPhase',
 const DISCARDED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'discardedPhase',
   run_worker_id: 'uuid?', worker_status: 'workerStatus?', issue_code:'retiredPrepareIssue?' };
 const CASE_NET_OUTPUT = { ...COMMON, phase: 'caseNetPhase', projection_id: 'uuid?',
-  cursor: 'positive?', rows_visited: 'pageCount', run_worker_id: 'uuid', issue_code: 'caseNetIssue?' };
+  cursor: 'positive?', rows_visited: 'pageCount', run_worker_id: 'uuid', issue_code: 'caseNetIssue?',
+  replacement_id:'uuid?',replacement_stage:'netReplacementStage?',request_no:'positive?',staged_count:'integer?',
+  validated_count:'integer?',committed_count:'integer?',expected_count:'integer?' };
 const CLAIM_OUTPUT = { job_id: 'uuid', job_kind: 'kind', phase: 'claimPhase', lease_nonce: 'uuid', owner_epoch: 'positive', lease_until_utc: 'timestamp', cursor: 'positive?' };
 const POSITION_CLAIM_OUTPUT = { ...CLAIM_OUTPUT, phase: 'positionClaimPhase', cursor: 'component?' };
 const PREPARE_CLAIM_OUTPUT = { ...CLAIM_OUTPUT, phase: 'prepareClaimPhase', work_cursor: 'uuid?', component_cursor: 'component?' };
@@ -148,7 +150,8 @@ function field(value, type) {
     case 'retiredPrepareIssue': return value==='PF08_NEEDS_ATTENTION'||PREPARE_ISSUES.includes(value);
     case 'workerStatus': return ['PREPARING', 'READY', 'REVIEW', 'DRAFT', 'ISSUED', 'COMPLETE', 'CANCELLING', 'CANCELLED'].includes(value);
     case 'netPhase': return value === 'PROJECTED';
-    case 'caseNetPhase': return ['FINANCE_ALLOCATE', 'PROJECTED', 'REVIEW'].includes(value);
+    case 'caseNetPhase': return ['FINANCE_ALLOCATE', 'PROJECTED', 'REVIEW','REFUSED','DONE'].includes(value);
+    case 'netReplacementStage': return ['PRECHECK','STAGING','COMMITTING','CANCEL_REQUESTED','CANCELLING','COMPLETE','REFUSED','CANCELLED'].includes(value);
     case 'caseNetIssue': return ['CASE_INPUT_UNBOUND', 'CASE_WEEK_BASIS_UNBOUND', 'CASE_RETURN_FLOOR_UNBOUND'].includes(value);
     case 'transferPhase': return ['BUILDING', 'MEMBERS_READY'].includes(value);
     case 'transferStatus': return ['BUILDING', 'MEMBERS_READY', 'DRAFT', 'SCHEDULED', 'ISSUED_CSV',
@@ -247,11 +250,21 @@ function resultInput(payload, call, unknown) {
   }
   if (caseNet && (payload.done !== (payload.phase !== 'FINANCE_ALLOCATE')
     || (payload.phase === 'PROJECTED') !== (payload.projection_id !== null)
-    || (payload.phase === 'REVIEW') !== (payload.issue_code !== null)
+    || (['REVIEW','REFUSED'].includes(payload.phase)) !== (payload.issue_code !== null)
     || (payload.done && payload.cursor !== null)
     || (!payload.done && payload.cursor === null)
     || BigInt(payload.rows_visited) > BigInt(call.args.limit)
     || (payload.replay && payload.rows_visited !== '0'))) invalid();
+  if(caseNet){
+    const keys=['replacement_stage','request_no','staged_count','validated_count','committed_count','expected_count'];
+    if(payload.replacement_id===null){if(keys.some(k=>payload[k]!==null)||!payload.done||!payload.replay||!['PROJECTED','REVIEW'].includes(payload.phase))invalid();}
+    else{
+      if(keys.some(k=>payload[k]===null))invalid();
+      const e=BigInt(payload.expected_count),s=BigInt(payload.staged_count),v=BigInt(payload.validated_count),c=BigInt(payload.committed_count);
+      const phase=payload.replacement_stage==='COMPLETE'?'PROJECTED':payload.replacement_stage==='REFUSED'?'REFUSED':payload.replacement_stage==='CANCELLED'?'DONE':'FINANCE_ALLOCATE';
+      if(payload.phase!==phase||c>v||v>s||s>e||phase==='PROJECTED'&&c!==e||phase==='REFUSED'&&c!==0n)invalid();
+    }
+  }
   if (call.jobKind==='REISSUE_CANCEL' && (payload.phase==='BLOCKED')!==(payload.blocked_code!==null)) invalid();
   if (call.jobKind === 'TRANSFER_BUILD') {
     if (payload.done !== (payload.phase === 'MEMBERS_READY')

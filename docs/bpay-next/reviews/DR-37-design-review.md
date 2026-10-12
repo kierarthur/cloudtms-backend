@@ -1,0 +1,36 @@
+# DR-37 independent design review
+
+12 October 2026. **DESIGN PASS on the proposed architecture, with the precise page-bound and continuation conditions below.** This is a saved-source/design review, not product, installation, runtime or whole-ITEM approval. Root authors product. No product/checklist edits, SQL execution, fixtures, tests, captures or hosted calls were performed.
+
+## Authority and reviewed bytes
+
+- Full approved card `03_DRAFT_PAYE_NET_BATCHES_FINANCE_CASES.md:716–738`; all DR-37 ITEM/D01–D19 checklist rows at `IMPLEMENTATION_CHECKLIST.md:3819–3850`; binding `addendum/R2_EXACT_CONNECTIONS.md:27–46`. Card lines 723–726 and R2 lines 33–42 require bounded staged replacement, immutable results, exact Candidate-wide fencing, retained accepted authority and original-job cancellation cleanup.
+- Root design `design/DR-37.md:3–45`, SHA256 `3506c825de845cbb7482b110611b3bd4115fba2646904e324354fd4bd02fe4de`.
+- Current NET owner `supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql`, SHA256 `cdfd284bf1026875c30b8b472719dc31650e5a4f783e50ce9e241024407c84a8`: bounded week capture 1089–1119, frozen instruction order 1127–1132, exact current own hold 1143–1149, capacity/kernel 1167–1201, hold/use/counter replacement 1203–1237.
+- Current owner and cancellation investigations, current final-definer registry, and `design/DR-37-screen-contract-investigation.md` (SHA256 `eb74ef6507aa830a60ddacffe4999ed2cf66141075fc693d0b818686c98c76c3`). The latter records the original STATUS/worksheet assumptions which the new typed pending/refusal facts must replace.
+
+## Allocation and shared-Case carry
+
+The proposed carry preserves the existing economics if it mirrors the original sequential owner. For instruction n, current 2129 adds back **that instruction's own hold only** (1191–1195), calls the sole 0290 kernel (1199–1201), then releases/replaces that hold and changes native Case/component/period counters (1205–1237). Earlier instructions have already changed those counters; later instructions have not. Thus staging uses captured Case capacity adjusted by previous staged `−old hold + proposed new hold` changes, plus the current own-hold addback. Component/period limits and the frozen Draft allocation ceiling remain separate. It must not add back all future own holds or reinterpret rules.
+
+My earlier message suggesting a full prior-hold release before allocation was incorrect and is superseded here. The current source does not perform such a pass. No new full-release economic rule or inventory is required to correct that message.
+
+Repeated Case instructions require the small typed carry; append-only proposed results and the immutable cleanup handoff are justified supporting objects. Native captured instruction identities/order, accepted preparation/selection, tax/channel, gross/additions, E/H and original own-bank/external destination accounting remain authoritative. Real zero is valid and counts as an instruction/result without creating a positive hold.
+
+## Precise bounds and commit conditions
+
+**D37-B01 — required precision:** design line 21 names encoded-byte bounds but does not yet give the number. Root has explicitly selected **1–100 visited rows and at most 65,536 encoded bytes per page**, measured from the fixed typed native/staged payload. Record that choice in the design and enforce it before each corresponding mutation/checkpoint. Stop before the row that would exceed the budget, retain the last actually processed cursor, and continue; do not mark an incomplete prefix complete. A single oversized typed row must fail explicitly without partial page mutation. Once destructive commit has begun, this remains an infrastructure/invariant failure of the same resumable operation, never a late business REFUSED. There is no total instruction admission cap. Validation, commit and cleanup each need these bounds; final publication uses maintained counts/totals, not an unbounded scan.
+
+**D37-C01 — continuation invariant:** all captured dependency validation finishes under the persistent Candidate-wide fence before COMMITTING. Commit pages must distinguish the replacement's own Case/component/period revision increments from a foreign change. Compare the exact expected continuation identity/revisions derived from already committed own pages; repeatedly comparing later shared-Case rows to the original precommit revision would falsely strand a valid replacement. Current checkpoints, exact staged membership and native own deltas are sufficient; no new global clock or policy witness is needed. Foreign/invariant changes after first swap retain the operation for infrastructure recovery.
+
+The proposed module/Run/Candidate/Worker admission order, persistent unique active Candidate ownership across weeks, short ordered NOWAIT locks, exact current lease/epoch takeover and same-transaction row/counter/cursor updates are consistent with R2. The fence must protect every validated dependency for the full bounded commit, including floor/week and other-week shared capacity. A persistent fence is not a connection retained between RPCs. Exact result insertion while BUILDING immediately before its corresponding hold preserves the guard contract; source review must verify each actual lifecycle CHECK and guard owner, not only the new replacement table.
+
+## Refusal, publication and cancellation
+
+Independent high-water request numbering, immutable exact terminal replay and explicit pending pointer meet the card. Before commit, refusal leaves accepted results, holds/capacity and display authority untouched, appends the native refusal, restores request/projection equality and READY. No accepted NET remains Awaiting NET, distinct from zero. STATUS, worksheet and DR16 contribution must use these identities rather than their current REVIEW/pointer-inequality assumptions; stage/refusal-only changes also need the existing native reader-generation seam. Retain the old accepted projection through bounded commit until the atomic final pointer switch.
+
+The original NET job's bounded CANCELLING cleanup followed by an immutable exact handoff and DONE is the correct command-order solution. It must certify surviving Draft/prior/target membership and exact released counts/amounts, including any already published contribution, without recreating released rows. The later SIMPLE_CANCEL uses its own genuine RELEASE lease and 0430 certificate; no NET lease adoption or queue overtake. Unknown/submitted/realised cash remains protected.
+
+The design honestly leaves DR22 deliberate Retry, EX27 cancel-intent/admission, DR28/29 real hosts and the fixed future writer fence joins with their owning cards. Those are **whole-feature/final-release barriers**, not evidence that the screen can already complete or cancel every unfinished replacement. Current native screen integration may expose truthful accepted/pending/refused facts, but must not offer an unavailable action. Early D14/D18 alone is not full DR37 approval. Card app checks, interruption/contention/cancellation behavior and A4 when actual hosts render remain NOT_RUN.
+
+No other design-level scope expansion is required. Product source review must close B01/C01 and verify the concrete merged owners, guards, finite counters and reader contracts before SOURCE PASS.

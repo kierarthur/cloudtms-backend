@@ -2251,20 +2251,21 @@
     },
     {
       "signature": "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2376,16 +2377,19 @@
     },
     {
       "signature": "private.bpay_next_accumulate_net_destination_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2484,20 +2488,21 @@
     },
     {
       "signature": "private.bpay_next_apply_cancelled_week_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2519,21 +2524,23 @@
     },
     {
       "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2704,37 +2711,40 @@
     },
     {
       "signature": "private.bpay_next_begin_case_transfer_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0120_banking_pay_next_simple_transfer_begin_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0120_banking_pay_next_simple_transfer_begin_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0120_banking_pay_next_simple_transfer_begin_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2822,40 +2832,44 @@
     },
     {
       "signature": "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "PS-01 stored ordinary Umbrella bridge; DY-09 verified exact reuse; next DR-38 -> DR-22 -> CM-13a",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3017,16 +3031,19 @@
     },
     {
       "signature": "private.bpay_next_case_capacity_use_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3045,16 +3062,19 @@
     },
     {
       "signature": "private.bpay_next_case_hold_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3077,16 +3097,19 @@
     },
     {
       "signature": "private.bpay_next_case_result_insert_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3259,16 +3282,19 @@
     },
     {
       "signature": "private.bpay_next_claim_simple_cancel_job_v1(uuid,integer)",
-      "finalRoot": "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3634,16 +3660,19 @@
     },
     {
       "signature": "private.bpay_next_destination_state_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5541,21 +5570,23 @@
     },
     {
       "signature": "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)",
-      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
         "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
         "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
-        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable.",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "successorChain": [
         "0580",
@@ -7532,9 +7563,19 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
@@ -7543,24 +7584,16 @@
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
-        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "FC-10 sequence108 native ordered recovery status; BD120",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
@@ -7569,7 +7602,8 @@
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
         "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-        "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql"
+        "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
@@ -7578,14 +7612,13 @@
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
-      ],
-      "finalClosures": [
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
         "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
         "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql"
       ],
-      "owner": "FC-10 sequence108 native ordered recovery status; BD120; PF08 BD124 bounded recovery/exact execution retry; WB36/WB44 owner A2 BD128",
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13007,16 +13040,19 @@
     },
     {
       "signature": "private.bpay_next_original_reservation_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "PS-14 bounded native reservation read support",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15395,16 +15431,19 @@
     },
     {
       "signature": "private.bpay_next_assert_candidate_financial_fence_v1(uuid,uuid,uuid,bigint)",
-      "finalRoot": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "DR37 early D18 prerequisite; DR11seq86/owedDR08 admission",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change.",
       "baselineSource": null
     },
     {
@@ -16025,19 +16064,20 @@
     {
       "signature": "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
       "predecessors": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "allowedPhysical": [
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121; PF08 BD124 bounded recovery/exact execution retry"
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
     },
     {
       "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
@@ -16351,16 +16391,19 @@
     },
     {
       "signature": "private.bpay_next_run_channel_contribution_v1(private.bpay_next_run_worker)",
-      "finalPhysical": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "DR16 seq121 maintained channel totals and bounded frozen review only; public reader merges0414, worker STATUS mergesPS14 0639; DR13/DR37 merge0442 as applicable."
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
     },
     {
       "signature": "private.bpay_next_run_channel_totals_trigger_v1()",
@@ -16480,29 +16523,35 @@
     },
     {
       "signature": "private.bpay_next_paye_worksheet_page_v1(uuid,uuid,uuid,text,text,jsonb,integer)",
-      "finalPhysical": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "DR21 seq127 BD141 frozen PAYE worksheet only; publicpreparation merges0718, all existing branches retained; laterDR27/DR37 merge1019."
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
     },
     {
       "signature": "private.bpay_next_channel_draft_summary_apply_v1(uuid,text,private.bpay_next_run_worker,private.bpay_next_run_worker,uuid,boolean,text,text,text,date,timestamp with time zone,text,boolean)",
-      "finalPhysical": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql"
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
       ],
-      "owner": "DR27 seq128 BD142 same DR16 totals owner, directory/count/Confirm only; publicpreparation merges1019 retaining all olderbranches; latercurrentregistryowner merges1125."
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
     },
     {
       "signature": "private.bpay_next_channel_draft_directory_commit_v1()",
@@ -16529,6 +16578,240 @@
         "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql"
       ],
       "owner": "DR27 seq128 BD142 same DR16 totals owner, directory/count/Confirm only; publicpreparation merges1019 retaining all olderbranches; latercurrentregistryowner merges1125."
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_job_assert_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_staged_result_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_staged_capacity_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_refusal_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_cancel_hold_member_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_cancel_handoff_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_truncate_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_page_prelock_v1(uuid,integer,text)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_prior_run_page_v1(uuid,integer,boolean)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_validate_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_precheck_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_stage_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_cancel_net_replacement_page_v1(uuid,uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_commit_fence_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_terminal_receipt_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_net_replacement_reader_revision_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
+    },
+    {
+      "signature": "private.bpay_next_ready_net_refusal_guard_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ],
+      "owner": "DR37 seq130 bounded staged replacement and exact original-NET/later-SIMPLE_CANCEL handoff; merges current chain including PS14/DR16 STATUS and DR27 header; later named writer cards consume existing fence. No producer change."
     }
   ],
   "editorChains": [
