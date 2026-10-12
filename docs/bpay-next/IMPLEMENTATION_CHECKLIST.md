@@ -4147,7 +4147,7 @@ Dependencies: F-04, F-06, WB-06, WB-08, WB-19, EX-08, DR-38, WB-45; successor po
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-29-D20 | DOC: EX-08 Candidate channel/Umbrella event → WB-29 exact durable needs | MISSING | Explicit need event/version and exact finite current scope; A→B→A/Umbrella-change transitions deterministic; mismatch alone is not need and compatible move/source differences remain resolver Ready. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-29-D20 | DOC: EX-08 Candidate channel/Umbrella event → WB-29 exact durable needs | PARTLY_DONE | Explicit need event/version and exact finite current scope; A→B→A/Umbrella-change transitions deterministic; mismatch alone is not need and compatible move/source differences remain resolver Ready. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4185,6 +4185,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Work moved by a Contract move onto an Umbrella Contract (GBP 20/h) for a PAYE Candidate is not a resolution need: it stays Ready at the `_pay_convert_umbrella_to_paye_ex` value with the chip 'Pay channel changed – resolver value' (OD-02). Office may replace it with a manual PAYE selection (e.g. GBP 17), which then governs at capture ahead of the resolver value (OR-23, precedence rule); no resolution row appears for it in Action Required.
   - A GBP 25 mileage component raises no resolution need and keeps GBP 25.00 when the work's channel is resolved (OD-03).
   - No missing-rate case ever appears here; such a Timesheet was refused at authorisation (J1c, WB-01).
+
+First explicit-need batch implementation 8ae064e947d1552926d8aef0f78271cc985cc9a2; SOURCE PASS reviews/WB-29-needs-source-review.md. ITEM/D20 PARTLY_DONE: own-treatment mapping and W2/context/accepted/quote/snooze joins remain; all app acceptance AUTHORED_NOT_RUN.
 
 ## WB-30 — Review suggested rates window (bucket groups, linked Timesheets)
 
