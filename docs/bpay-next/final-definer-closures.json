@@ -17164,6 +17164,104 @@
       "finalPhysical": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
       "finalRoot": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
       "owner": "SP17 seq137 BD151: closed17-key nativeSNOOZE/PENDING and <=100-root existing service read; classifier/witness/money/producers unchanged."
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_active_v1(uuid,uuid,uuid,text,text,text,uuid,boolean,uuid,date)",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_audit_guard_v1()",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_basis_v1(uuid,uuid,text,text)",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_event_audit_guard_v1()",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_event_guard_v1()",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_guard_v1()",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
+      "finalRoot": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+        "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql"
+      ],
+      "finalClosures": [],
+      "owner": "WB-45 / BD153 independent store and quote; WB-29 consumes in assigned runtime chain"
     }
   ],
   "editorChains": [

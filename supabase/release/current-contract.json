@@ -490,6 +490,30 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_component_resolution",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_component_resolution_event",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -13322,6 +13346,139 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "4fe71b352906b5b6e22d875e03e93011219349349db9f970e0fe79f6737382b1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_active_v1(p_work_id uuid, p_boundary_revision_id uuid, p_line_id uuid, p_family text, p_code text, p_target_channel text, p_target_umbrella_id uuid, p_target_vat boolean, p_policy_id uuid, p_valuation_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "0adda8fcd45c417aa15ee96d0ffe1b6fc82d02228781a6db18985520ffb8401c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_audit_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "187024cffaf43c4974b94c62dac01c8bd83d128038d818a71d4035cb813caae1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_basis_v1(p_revision_id uuid, p_line_id uuid, p_family text, p_code text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "82b13658722b0e6134b8e910bacbe3e532e7bc69c723e6e764cd7a823e76c08f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_event_audit_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "f7b3420c232bb8023a2fe714cc8db7591bd0164c7ece01fef9173db88b16c241"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_event_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "2b6d1767dfa68f5915b537345ab3b9a882659d40729c81224bec697fc02cab03"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "904ecc6197903aa629bf4cd7d8a5d8c7910f4d1b756fe6f5391467ccf2c4ade4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_quote_v1(p_decision_id uuid, p_version bigint, p_boundary_revision_id uuid, p_run_position_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f04602023191960e5d8834f2d18008f1755a116f8ea552039c3ed5094a2fce11"
     },
     {
       "acl": [
@@ -56153,6 +56310,48 @@
       "definition": "CREATE TRIGGER bpay_next_case_transfer_build_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_transfer_build FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_transfer_build_guard_v1()"
     },
     {
+      "name": "bpay_next_component_resolution_audit_guard",
+      "table": "bpay_next_component_resolution",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_component_resolution_audit_guard AFTER INSERT OR UPDATE ON private.bpay_next_component_resolution DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_audit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_component_resolution_guard",
+      "table": "bpay_next_component_resolution",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_component_resolution_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_component_resolution FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_guard_v1()"
+    },
+    {
+      "name": "bpay_next_component_resolution_no_truncate",
+      "table": "bpay_next_component_resolution",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_component_resolution_no_truncate BEFORE TRUNCATE ON private.bpay_next_component_resolution FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_component_resolution_guard_v1()"
+    },
+    {
+      "name": "bpay_next_component_resolution_event_audit_guard",
+      "table": "bpay_next_component_resolution_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_component_resolution_event_audit_guard AFTER INSERT ON private.bpay_next_component_resolution_event DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_event_audit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_component_resolution_event_guard",
+      "table": "bpay_next_component_resolution_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_component_resolution_event_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_component_resolution_event FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_event_guard_v1()"
+    },
+    {
+      "name": "bpay_next_component_resolution_event_no_truncate",
+      "table": "bpay_next_component_resolution_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_component_resolution_event_no_truncate BEFORE TRUNCATE ON private.bpay_next_component_resolution_event FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_component_resolution_event_guard_v1()"
+    },
+    {
       "name": "bpay_next_component_page_guard",
       "table": "bpay_next_component_selection_page",
       "schema": "private",
@@ -93055,6 +93254,898 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (command_id, candidate_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_component_resolution",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "based_on_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "decision_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manual_amount_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "manual_replacement_rate",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_basis",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_position_basis",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "published_basis",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "published_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "published_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "rate_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rate_family",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolution_mode",
+          "type": "pay_finance_component_resolution_mode_enum",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "saved_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": "'ACTIVE'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_vat_chargeable",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "valuation_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "valuation_policy_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_component_resolution_active_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_active_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE (state = 'ACTIVE'::text)"
+        },
+        {
+          "name": "bpay_next_component_resolution_boundary_idx",
+          "definition": "CREATE INDEX bpay_next_component_resolution_boundary_idx ON private.bpay_next_component_resolution USING btree (work_id, based_on_revision_id, approved_line_id, rate_family, rate_code) WHERE (state = 'ACTIVE'::text)"
+        },
+        {
+          "name": "bpay_next_component_resolution_id_decision_version_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_id_decision_version_key ON private.bpay_next_component_resolution USING btree (id, decision_version)"
+        },
+        {
+          "name": "bpay_next_component_resolution_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_pkey ON private.bpay_next_component_resolution USING btree (id)"
+        },
+        {
+          "name": "bpay_next_component_resolution_published_active_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_published_active_idx ON private.bpay_next_component_resolution USING btree (published_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE ((state = 'ACTIVE'::text) AND (published_line_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_component_resolution_published_idx",
+          "definition": "CREATE INDEX bpay_next_component_resolution_published_idx ON private.bpay_next_component_resolution USING btree (work_id, published_revision_id, published_line_id, rate_family, rate_code) WHERE (state = 'ACTIVE'::text)"
+        },
+        {
+          "name": "bpay_next_component_resolution_version_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_version_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date, decision_version) NULLS NOT DISTINCT"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_component_resolutio_based_on_revision_id_approve_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (based_on_revision_id, approved_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolutio_published_revision_id_publis_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (published_revision_id, published_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolutio_work_id_based_on_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, based_on_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolutio_work_id_published_revision_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, published_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_audit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_component_resolution_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (published_revision_id IS NULL AND published_line_id IS NULL AND published_basis IS NULL OR published_revision_id IS NOT NULL AND published_revision_id <> based_on_revision_id AND published_line_id IS NOT NULL AND published_basis IS NOT NULL AND jsonb_typeof(published_basis) = 'object'::text AND octet_length(published_basis::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_component_resolution_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = 'PAYE'::text AND target_umbrella_id IS NULL AND target_umbrella_vat_chargeable IS NULL OR target_pay_channel = 'UMBRELLA'::text AND target_umbrella_id IS NOT NULL AND target_umbrella_vat_chargeable IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_component_resolution_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::pay_finance_component_resolution_mode_enum AND manual_replacement_rate IS NULL AND manual_amount_ex_vat IS NULL OR resolution_mode = 'MANUAL_REPLACEMENT_RATE'::pay_finance_component_resolution_mode_enum AND manual_replacement_rate IS NOT NULL AND (manual_replacement_rate::text <> ALL (ARRAY['NaN'::text, 'Infinity'::text, '-Infinity'::text])) AND manual_replacement_rate >= 0::numeric AND manual_replacement_rate < '1000000000000'::bigint::numeric AND manual_replacement_rate = trunc(manual_replacement_rate, 6) AND manual_amount_ex_vat IS NULL AND NULLIF(btrim(reason), ''::text) IS NOT NULL OR resolution_mode = 'MANUAL_AMOUNT'::pay_finance_component_resolution_mode_enum AND manual_amount_ex_vat IS NOT NULL AND manual_amount_ex_vat::numeric >= 0::numeric AND manual_amount_ex_vat::numeric < '10000000000000000'::bigint::numeric AND manual_replacement_rate IS NULL AND NULLIF(btrim(reason), ''::text) IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_component_resolution_command_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_component_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(component_key) >= 1 AND length(component_key) <= 256)"
+        },
+        {
+          "name": "bpay_next_component_resolution_decision_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (decision_version > 0 AND decision_version < '9223372036854775807'::bigint)"
+        },
+        {
+          "name": "bpay_next_component_resolution_id_decision_version_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, decision_version)"
+        },
+        {
+          "name": "bpay_next_component_resolution_original_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(original_basis) = 'object'::text AND octet_length(original_basis::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_component_resolution_original_position_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(original_position_basis) = 'object'::text AND octet_length(original_position_basis::text) <= 2048)"
+        },
+        {
+          "name": "bpay_next_component_resolution_physical_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_component_resolution_rate_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(rate_code) >= 1 AND length(rate_code) <= 256)"
+        },
+        {
+          "name": "bpay_next_component_resolution_rate_family_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rate_family = ANY (ARRAY['STANDARD'::text, 'ADDITIONAL'::text, 'ADJUSTMENT'::text]))"
+        },
+        {
+          "name": "bpay_next_component_resolution_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(reason) <= 2000)"
+        },
+        {
+          "name": "bpay_next_component_resolution_request_body_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text AND octet_length(request_body::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_component_resolution_saved_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(saved_at_utc))"
+        },
+        {
+          "name": "bpay_next_component_resolution_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['ACTIVE'::text, 'CLEARED'::text]))"
+        },
+        {
+          "name": "bpay_next_component_resolution_target_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_component_resolution_target_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_valuation_date_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(valuation_date) AND valuation_date >= '0001-01-01'::date AND valuation_date <= '9999-12-31'::date)"
+        },
+        {
+          "name": "bpay_next_component_resolution_valuation_policy_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (valuation_policy_id) REFERENCES private.bpay_next_valuation_policy(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_work_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_component_resolution_event",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "decision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "decision_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "event_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "need_member_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "need_operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "need_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "occurred_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rate_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rate_family",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_component_resolution_event_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_event_pkey ON private.bpay_next_component_resolution_event USING btree (id)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_request_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_event_request_idx ON private.bpay_next_component_resolution_event USING btree (command_id, event_kind, approved_line_id, rate_family, rate_code) WHERE (command_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_version_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_event_version_idx ON private.bpay_next_component_resolution_event USING btree (decision_id, decision_version, event_kind) WHERE (decision_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_work_idx",
+          "definition": "CREATE INDEX bpay_next_component_resolution_event_work_idx ON private.bpay_next_component_resolution_event USING btree (work_id, revision_id, approved_line_id, rate_family, rate_code)"
+        },
+        {
+          "name": "bpay_next_component_resolution_need_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_need_idx ON private.bpay_next_component_resolution_event USING btree (need_operation_id, need_member_key, approved_line_id, rate_family, rate_code, need_version) WHERE (event_kind = 'NEED'::text)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_component_resolutio_decision_id_decision_version_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (decision_id, decision_version) REFERENCES private.bpay_next_component_resolution(id, decision_version) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolutio_need_operation_id_need_membe_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (need_operation_id, need_member_key) REFERENCES private.bpay_next_pay_method_change_member(operation_id, member_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolutio_revision_id_approved_line_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (revision_id, approved_line_id) REFERENCES private.bpay_next_approved_line(revision_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_eve_command_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_audit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_kind = 'NEED'::text AND decision_id IS NULL AND decision_version IS NULL AND command_id IS NULL AND need_operation_id IS NOT NULL AND need_member_key IS NOT NULL AND need_version IS NOT NULL AND need_version > 0 OR (event_kind = ANY (ARRAY['SAVED'::text, 'CLEARED'::text])) AND decision_id IS NOT NULL AND decision_version IS NOT NULL AND command_id IS NOT NULL AND need_operation_id IS NULL AND need_member_key IS NULL AND need_version IS NULL)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_event_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_kind = ANY (ARRAY['NEED'::text, 'SAVED'::text, 'CLEARED'::text]))"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_occurred_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(occurred_at_utc))"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_rate_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(rate_code) >= 1 AND length(rate_code) <= 256)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_rate_family_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rate_family = ANY (ARRAY['STANDARD'::text, 'ADDITIONAL'::text, 'ADJUSTMENT'::text]))"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(reason) >= 1 AND octet_length(reason) <= 2000)"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_work_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_work_id_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

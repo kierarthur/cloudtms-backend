@@ -1,0 +1,66 @@
+{
+  "item": "WB-45",
+  "sequence": 139,
+  "builderDecision": "BD153",
+  "owningRows": [
+    "WB-45-D05",
+    "WB-45-D06",
+    "WB-45-D07",
+    "WB-45-D09"
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/12102026_2044_banking_pay_next_independent_component_resolutions.sql",
+      "sha256": "3a33a223a94a8bc2d532921503adeda95e9bcf6cdc1fc4b2878643b11c29408b"
+    },
+    {
+      "path": "supabase/migrations/12102026_2100_banking_pay_next_resolution_remaining_basis.sql",
+      "sha256": "a1741e391a0dc79f1b178c1e6d5e0a11db117c5c1f87257e582ab3bceec3a400"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2044_banking_pay_next_independent_resolution_quote_v1.sql",
+      "sha256": "95a148488dc878eadba258c17f8d7ba0319aa9d56dd6c565f10808c574282a7d"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sha256": "54a3b81cf74d1f86f7547b8948bca3d24a48493b23ed47e9cb949f9142b2f556"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_component_resolution_basis_v1(uuid,uuid,text,text)",
+    "private.bpay_next_component_resolution_guard_v1()",
+    "private.bpay_next_component_resolution_event_guard_v1()",
+    "private.bpay_next_component_resolution_audit_guard_v1()",
+    "private.bpay_next_component_resolution_event_audit_guard_v1()",
+    "private.bpay_next_component_resolution_active_v1(uuid,uuid,uuid,text,text,text,uuid,boolean,uuid,date)",
+    "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)"
+  ],
+  "publicSecurityDefinerDelta": 0,
+  "scope": "Two new private tables; seven necessary private native basis/lookup/quote/audit guards. Existing money and Source producers unchanged.",
+  "futureOwningJoins": [
+    "WB-29 commands/need classifier/publication/accepted associations/estimate and preparation parent-share consumption",
+    "WB-30/WB-31/WB-33/WB-34 screens and adoption"
+  ],
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "checks": {
+    "dbCheck": "PASS 378 migrations / 962 repeatables",
+    "sourceGates": "PASS final reread:1516 SQL /29 public roots /154 work signatures /37 typed transport; frozen7 files /18 triggers /45 tables /24 protected signatures",
+    "localPG17": "PASS exact new2044 + additive2100 schema/definitions",
+    "catalogue": "PASS seven exact body/owner/ACL/config/volatility matches; two tables forcedRLS, native constraints/indexes, six audit guards",
+    "browserIsolation": "PASS both existing DO blocks; 839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "nodeCheck": "N/A no product JS changed",
+    "seal": "0e0b7bcb0355391937dda974755b5487badf3162968564393789bda918d02f68",
+    "coupling": "PASS",
+    "businessCalls": "NOT_RUN"
+  },
+  "reviews": [
+    {
+      "path": "docs/bpay-next/design/WB-45-design-review-notes.md",
+      "sha256": "3249ff8284b71a51a3157095e2d700c4f937be1880c1c23ae62c9d8ddfc6b256"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-45-source-review.md",
+      "sha256": "ec893c453c98bbe658eeaef727f330fe9bdd08ccac705a737b5ae6065304f033"
+    }
+  ]
+}
