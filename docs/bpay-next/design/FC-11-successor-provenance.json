@@ -2,7 +2,7 @@
   "item": "FC-11",
   "sequence": 132,
   "decision": "BD146",
-  "status": "BUILT_SOURCE_A4_REVIEWED",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "repository": "BE",
@@ -103,5 +103,7 @@
     "contract": "720b8cdbf562e3b8ebdbaa5b750b1540978604891b1061c527908b2b7e50846f export/seal/coupling PASS",
     "a4": "Independent A4 APPROVED: 30 native Case captures + 10 phone-bottom + 3 existingEX01password previews; every supplied-design difference/control explained; full42 policy in eachscreen review (34PASS/0FAIL/8scopedNA). No actual auth/code/email/business execution.",
     "business": "AUTHORED_NOT_RUN; no fixture, business SQL/RPC, hosted/queue/payment/auth action"
-  }
+  },
+  "implementationCommit": "8a688d90a4533e38888680f7843c9ac80ba617c1",
+  "frontendCommit": "02ace1232c302eefb578f51c827d24518962271d"
 }
