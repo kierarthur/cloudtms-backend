@@ -198860,6 +198860,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       });
       const weeklySourceResponse = await dispatchWeeklySourceRequest(req, env, ctx, {
         requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),
+        bpayNextOwnerStatusRpc: (runtimeEnv) => bpayNextOwnerStatusRpc(runtimeEnv)(),
         rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
         previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,

@@ -147,5 +147,14 @@
     "business": "AUTHORED_NOT_RUN",
     "timing": "Timing check moved to TEST after installation (owner10/10/2026)",
     "screens": "A4 PASS:19actualPNG/all42policy (38PASS/0FAIL/4N/A per scoped screen)"
+  },
+  "sp10AcceptedRemovalCorrection": {
+    "signature": "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
+    "file": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
+    "sha256": "c52b03c259630bfed375cd3e21e6e25ee0668b5a1a64e73b42979198787c3020",
+    "design": "design/SP-10-partial-removal-design.md",
+    "review": "reviews/SP-10-removed-component-sql-review.md",
+    "contractHash": "81ead2decd33c7a5f8dacfc4ba9cab304538f06a36f7c0e1ed12a9696d9482b0",
+    "remaining": "Only unqualified/moved-two-book/representation authority and immutableD06 remain open; positively qualified explicitREMOVEDsingleton gap closed."
   }
 }

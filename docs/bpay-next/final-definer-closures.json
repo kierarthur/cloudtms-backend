@@ -17131,18 +17131,20 @@
     {
       "signature": "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
       "predecessors": [
-        "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
-      ],
-      "allowedPhysical": [
         "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
         "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql"
       ],
-      "finalClosures": [
-        "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql"
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+        "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+        "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql"
       ],
-      "finalPhysical": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
-      "finalRoot": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
-      "owner": "FC15 seq135 BD149 classified PAYE recovery and owner12October manual retention, original frozen/Source/CM13a boundaries preserved."
+      "finalClosures": [
+        "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
+      "owner": "SP10 seq136 / FC15 owner12Oct correction: explicit accepted REMOVED single-book component qualifies unchanged native manual net liability; no producer or money formula changes."
     }
   ],
   "editorChains": [

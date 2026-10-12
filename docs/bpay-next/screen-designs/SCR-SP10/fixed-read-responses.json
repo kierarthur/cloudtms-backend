@@ -1,0 +1,3030 @@
+{
+  "details": {
+    "timesheet": {
+      "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "booking_id": "TS-6111",
+      "version": 1,
+      "sheet_scope": "WEEKLY",
+      "submission_mode": "ELECTRONIC",
+      "candidate_id": "f3000000-0000-4000-8000-000000000001",
+      "candidate_name": "Jane Smith",
+      "client_id": "f2000000-0000-4000-8000-000000000001",
+      "client_name": "North Park Trust",
+      "week_ending_date": "2026-10-25",
+      "authorised_at_server": "2026-10-22T10:00:00Z",
+      "is_authorised": true,
+      "is_invoiced": false
+    },
+    "tsfin": {
+      "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "processing_status": "PROCESSED",
+      "total_hours": "7.50",
+      "total_pay_ex_vat": "100.00",
+      "total_pay_inc_vat": "100.00",
+      "total_charge_ex_vat": "150.00",
+      "total_charge_inc_vat": "150.00",
+      "locked_by_invoice_id": null,
+      "paid_at_utc": null,
+      "invoice_breakdown_json": {
+        "mode": "SEGMENTS",
+        "segments": []
+      }
+    },
+    "validations": [],
+    "shifts": [],
+    "weekly_source_presentation": {
+      "route": "CLIENT_PROVIDED_HOURS",
+      "scope": "WEEKLY",
+      "totals": {
+        "complete": false,
+        "pay_excluding_vat": "£0.00",
+        "pay_including_vat": "£0.00",
+        "charge_excluding_vat": "£0.00",
+        "charge_including_vat": "£0.00"
+      },
+      "contract": "WEEKLY_SOURCE_OFFICE_PRESENTATION_V1",
+      "proposal": {
+        "state": "PROPOSED",
+        "change": {
+          "added": [],
+          "changed": [
+            {
+              "work_date": "2026-10-20",
+              "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+              "proposed_total_hours": 7.5,
+              "currently_approved_total_hours": 8
+            }
+          ],
+          "removed": [],
+          "added_count": 0,
+          "changed_count": 1,
+          "removed_count": 0,
+          "unchanged_count": 0
+        },
+        "reason": null,
+        "members": [
+          {
+            "proposed": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": "0.000000",
+                  "hours_day": "7.500000",
+                  "hours_sat": "0.000000",
+                  "hours_sun": "0.000000",
+                  "hours_night": "0.000000",
+                  "total_hours": "7.500000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": "g9-r08"
+                }
+              ],
+              "reason": null,
+              "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+              "available": true,
+              "row_count": 1
+            },
+            "contract_id": "f4000000-0000-4000-8000-000000000001",
+            "root_ordinal": 1,
+            "authority_kind": "LOCKED_FINAL_SOURCE",
+            "family_booking_id": null,
+            "is_requested_root": true,
+            "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+            "currently_approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "root_timesheet_version": null,
+            "proposed_certified_zero": false,
+            "proposed_component_count": 1,
+            "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+            "currently_approved_authority": "HEAD",
+            "currently_approved_component_count": 1
+          }
+        ],
+        "present": true,
+        "decision": {
+          "owner": "public.weekly_source_later_change_decide_atomic_v1",
+          "actions": [
+            {
+              "label": "Approve updated hours",
+              "action": "APPROVE_UPDATED_HOURS",
+              "reason_required": false
+            },
+            {
+              "label": "Keep currently approved hours",
+              "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+              "reason_required": false
+            }
+          ],
+          "endpoint": "/api/weekly-source/v1/commands",
+          "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+          "command_payload": {
+            "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+            "bundle_revision": 1,
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+            "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+          }
+        },
+        "proposed": {
+          "rows": [
+            {
+              "state": "ENTITLED",
+              "row_key": "entitlement-1",
+              "day_date": "Tue 20 Oct 2026",
+              "hours_bh": "0.000000",
+              "hours_day": "7.500000",
+              "hours_sat": "0.000000",
+              "hours_sun": "0.000000",
+              "hours_night": "0.000000",
+              "total_hours": "7.500000",
+              "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+              "expense_code": null,
+              "work_event_id": "f9000000-0000-4000-8000-000000000008",
+              "component_kind": "WORKED_TIME",
+              "reference_number": "g9-r08"
+            }
+          ],
+          "reason": null,
+          "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+          "available": true,
+          "row_count": 1
+        },
+        "bundle_kind": "SINGLE_ROOT",
+        "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+        "member_count": 1,
+        "pending_state": null,
+        "cross_contract": null,
+        "bundle_revision": 1,
+        "decision_reason": {
+          "source_change": {
+            "reason": "INITIAL_FINALISATION",
+            "revision_number": 1,
+            "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+          },
+          "current_position": {
+            "head_id": "e8000000-0000-4000-8000-000000000008",
+            "authority": "HEAD",
+            "authority_kind": "LOCKED_FINAL_SOURCE",
+            "committed_at_utc": "2026-12-30T10:00:00+00:00",
+            "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+          }
+        },
+        "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+        "pending_bundle_id": null,
+        "currently_approved": {
+          "rows": [
+            {
+              "state": "ENTITLED",
+              "row_key": "entitlement-1",
+              "day_date": "Tue 20 Oct 2026",
+              "hours_bh": null,
+              "hours_day": "8.000000",
+              "hours_sat": null,
+              "hours_sun": null,
+              "hours_night": null,
+              "total_hours": "8.000000",
+              "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+              "expense_code": null,
+              "work_event_id": "f9000000-0000-4000-8000-000000000008",
+              "component_kind": "WORKED_TIME",
+              "reference_number": null
+            }
+          ],
+          "reason": null,
+          "source": "EFFECTIVE_INVENTORY_HEAD",
+          "available": true,
+          "row_count": 1
+        },
+        "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+        "primary_root_ordinal": 1,
+        "proposed_certified_zero": false,
+        "request_digest_verified": true,
+        "proposed_component_count": 1,
+        "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+        "currently_approved_authority": "HEAD",
+        "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+        "currently_approved_component_count": 1
+      },
+      "authority": "CLIENT_SYSTEM",
+      "freshness": "CURRENT",
+      "lifecycle": {
+        "ok": true,
+        "note": null,
+        "errors": [],
+        "heading": "Currently approved hours",
+        "payment": {
+          "ok": true,
+          "state": "NONE",
+          "reason": null,
+          "batches": [],
+          "live_item_count": 0,
+          "voided_item_count": 0
+        },
+        "surface": "OFFICE",
+        "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+        "overlays": [],
+        "proposal": {
+          "state": "PROPOSED",
+          "change": {
+            "added": [],
+            "changed": [
+              {
+                "work_date": "2026-10-20",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "proposed_total_hours": 7.5,
+                "currently_approved_total_hours": 8
+              }
+            ],
+            "removed": [],
+            "added_count": 0,
+            "changed_count": 1,
+            "removed_count": 0,
+            "unchanged_count": 0
+          },
+          "reason": null,
+          "members": [
+            {
+              "proposed": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": "0.000000",
+                    "hours_day": "7.500000",
+                    "hours_sat": "0.000000",
+                    "hours_sun": "0.000000",
+                    "hours_night": "0.000000",
+                    "total_hours": "7.500000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": "g9-r08"
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                "available": true,
+                "row_count": 1
+              },
+              "contract_id": "f4000000-0000-4000-8000-000000000001",
+              "root_ordinal": 1,
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "family_booking_id": null,
+              "is_requested_root": true,
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "root_timesheet_version": null,
+              "proposed_certified_zero": false,
+              "proposed_component_count": 1,
+              "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+              "currently_approved_authority": "HEAD",
+              "currently_approved_component_count": 1
+            }
+          ],
+          "present": true,
+          "decision": {
+            "owner": "public.weekly_source_later_change_decide_atomic_v1",
+            "actions": [
+              {
+                "label": "Approve updated hours",
+                "action": "APPROVE_UPDATED_HOURS",
+                "reason_required": false
+              },
+              {
+                "label": "Keep currently approved hours",
+                "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                "reason_required": false
+              }
+            ],
+            "endpoint": "/api/weekly-source/v1/commands",
+            "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+            "command_payload": {
+              "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+              "bundle_revision": 1,
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+            }
+          },
+          "proposed": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": "0.000000",
+                "hours_day": "7.500000",
+                "hours_sat": "0.000000",
+                "hours_sun": "0.000000",
+                "hours_night": "0.000000",
+                "total_hours": "7.500000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": "g9-r08"
+              }
+            ],
+            "reason": null,
+            "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+            "available": true,
+            "row_count": 1
+          },
+          "bundle_kind": "SINGLE_ROOT",
+          "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+          "member_count": 1,
+          "pending_state": null,
+          "cross_contract": null,
+          "bundle_revision": 1,
+          "decision_reason": {
+            "source_change": {
+              "reason": "INITIAL_FINALISATION",
+              "revision_number": 1,
+              "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+            },
+            "current_position": {
+              "head_id": "e8000000-0000-4000-8000-000000000008",
+              "authority": "HEAD",
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "committed_at_utc": "2026-12-30T10:00:00+00:00",
+              "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+            }
+          },
+          "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+          "pending_bundle_id": null,
+          "currently_approved": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": null,
+                "hours_day": "8.000000",
+                "hours_sat": null,
+                "hours_sun": null,
+                "hours_night": null,
+                "total_hours": "8.000000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": null
+              }
+            ],
+            "reason": null,
+            "source": "EFFECTIVE_INVENTORY_HEAD",
+            "available": true,
+            "row_count": 1
+          },
+          "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+          "primary_root_ordinal": 1,
+          "proposed_certified_zero": false,
+          "request_digest_verified": true,
+          "proposed_component_count": 1,
+          "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+          "currently_approved_authority": "HEAD",
+          "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+          "currently_approved_component_count": 1
+        },
+        "ui_state": "UI-008",
+        "schedules": {
+          "approved": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": null,
+                "hours_day": "8.000000",
+                "hours_sat": null,
+                "hours_sun": null,
+                "hours_night": null,
+                "total_hours": "8.000000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": null
+              }
+            ],
+            "reason": null,
+            "source": "EFFECTIVE_INVENTORY_HEAD",
+            "available": true,
+            "row_count": 1
+          },
+          "submitted": {
+            "rows": [
+              {
+                "hours": "09:00-17:00",
+                "state": "SUBMITTED",
+                "row_key": "submitted-all-1",
+                "day_date": "Tue 20 Oct 2026",
+                "break_text": "30 min"
+              }
+            ],
+            "reason": null,
+            "source": "CANDIDATE_SUBMITTED_SCHEDULE",
+            "available": true,
+            "row_count": 1
+          },
+          "processing": {
+            "rows": [],
+            "reason": "NO_PAYMENT_IN_FLIGHT",
+            "source": null,
+            "available": false,
+            "row_count": 0
+          },
+          "current_paid": {
+            "rows": [],
+            "reason": "NO_SETTLEMENT",
+            "source": null,
+            "available": false,
+            "row_count": 0
+          },
+          "paid_to_date": {
+            "rows": [],
+            "reason": "NO_SETTLEMENT",
+            "source": null,
+            "available": false,
+            "row_count": 0
+          },
+          "latest_source": {
+            "rows": [
+              {
+                "hours": "09:00-17:00",
+                "state": "MATCH",
+                "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                "day_date": "Tue 20 Oct 2026",
+                "break_text": "30 min",
+                "issue_text": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "additional_units": [
+                  {
+                    "key": "day",
+                    "label": "Day",
+                    "state": "MATCH",
+                    "value": "7.50 hours"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "source": "WEEKLY_SOURCE_LATEST_SOURCE",
+            "available": true,
+            "row_count": 1
+          },
+          "currently_approved": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": null,
+                "hours_day": "8.000000",
+                "hours_sat": null,
+                "hours_sun": null,
+                "hours_night": null,
+                "total_hours": "8.000000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": null
+              }
+            ],
+            "reason": null,
+            "source": "EFFECTIVE_INVENTORY_HEAD",
+            "available": true,
+            "row_count": 1
+          },
+          "hours_to_authorise": {
+            "rows": [],
+            "reason": "NOT_IN_A_FIRST_AUTHORISATION_PHASE",
+            "source": null,
+            "available": false,
+            "row_count": 0
+          }
+        },
+        "settlement": {
+          "ok": true,
+          "state": "NO_SETTLEMENT",
+          "reason": null,
+          "batch_count": 0,
+          "settlements": [],
+          "reason_detail": null,
+          "settlement_count": 0,
+          "family_booking_id": "G9-T08",
+          "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+          "unavailable_class": null,
+          "last_settled_at_utc": null,
+          "first_settled_at_utc": null,
+          "member_timesheet_ids": [
+            "fa000000-0000-4000-8000-000000000008"
+          ],
+          "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008"
+        },
+        "current_head": {
+          "head_id": "e8000000-0000-4000-8000-000000000008",
+          "head_revision": 1,
+          "prior_head_id": null,
+          "authority_kind": "LOCKED_FINAL_SOURCE",
+          "certified_zero": false,
+          "component_count": 1,
+          "committed_at_utc": "2026-12-30T10:00:00+00:00"
+        },
+        "server_phase": "LATER_CHANGE_PENDING_UNPAID",
+        "heading_source": "SERVER",
+        "overlay_states": [],
+        "primary_schedule": "currently_approved",
+        "invoice_movements": {
+          "ok": true,
+          "reason": null,
+          "movements": [
+            {
+              "note": "Invoice movement history. Never Candidate paid hours.",
+              "binding": null,
+              "movement_role": "POSITIVE",
+              "work_event_id": "f9000000-0000-4000-8000-000000000008",
+              "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+              "invoice_status": null,
+              "placement_state": "UNPLACED",
+              "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+              "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+            }
+          ],
+          "movement_count": 1,
+          "bound_line_count": 0,
+          "invoiced_from_source": false,
+          "ordinary_invoice_line_count": 0
+        },
+        "permitted_actions": [
+          "APPROVE_UPDATED_HOURS",
+          "KEEP_CURRENTLY_APPROVED_HOURS"
+        ],
+        "right_pane_status": "Proposal not current",
+        "authorisation_state": "AUTHORISED",
+        "forbidden_inference": "Do not label proposal approved",
+        "member_timesheet_ids": [
+          "fa000000-0000-4000-8000-000000000008"
+        ],
+        "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "authorisation_generations": {
+          "live": 1,
+          "withdrawn": 0
+        }
+      },
+      "applicable": true,
+      "comparison": {
+        "rows": [],
+        "state": "MATCH",
+        "source_rows": [
+          {
+            "hours": "09:00-17:00",
+            "state": "MATCH",
+            "row_key": "source-fb000000-0000-4000-8000-000000000008",
+            "day_date": "Tue 20 Oct 2026",
+            "break_text": "30 min",
+            "issue_text": null,
+            "work_event_id": "f9000000-0000-4000-8000-000000000008",
+            "additional_units": [
+              {
+                "key": "day",
+                "label": "Day",
+                "state": "MATCH",
+                "value": "7.50 hours"
+              }
+            ]
+          }
+        ],
+        "submitted_rows": []
+      },
+      "action_state": {
+        "unauthorise": {
+          "reason": "NONE",
+          "available": false,
+          "permanent": true,
+          "retryable": false,
+          "withdrawn": false,
+          "owner_error": "NONE",
+          "refusal_code": "WEEKLY_SOURCE_UNAUTHORISE_ENTITLEMENT_HEAD_COMMITTED",
+          "owner_sqlstate": "NONE",
+          "refusal_nature": "PERMANENT",
+          "authorisation_state": "AUTHORISED",
+          "availability_source": "WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAW_AVAILABLE_V1"
+        },
+        "blocked_reason": "",
+        "authorise_allowed": true,
+        "unauthorise_allowed": false,
+        "manage_approved_hours_allowed": false,
+        "add_additional_expense_timesheet_allowed": true
+      },
+      "approved_rows": [
+        {
+          "hours": "09:00-17:00",
+          "state": "READY",
+          "row_key": "approved-fb000000-0000-4000-8000-000000000008",
+          "day_date": "Tue 20 Oct 2026",
+          "break_text": "30 min",
+          "status_text": "Ready"
+        }
+      ],
+      "record_version": "6b44f04e7ac1c5f7c673d1190687ed32cca2bc928165bcb496fb2e7e38d6ee75",
+      "candidate_lifecycle": {
+        "ok": false,
+        "note": null,
+        "errors": [
+          {
+            "code": "CANDIDATE_VIEW_PRODUCER_FAILED",
+            "detail": "The Candidate payload producer did not answer for this week."
+          }
+        ],
+        "heading": null,
+        "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+        "ui_state": null,
+        "server_phase": null,
+        "heading_source": "NONE",
+        "overlay_states": [],
+        "primary_schedule": null,
+        "permitted_actions": [],
+        "right_pane_status": null,
+        "forbidden_inference": null
+      },
+      "source_expense_policy": "SEPARATE_ADDITIONAL_TIMESHEET",
+      "invoice_movement_history": {
+        "ok": true,
+        "reason": null,
+        "movements": [
+          {
+            "note": "Invoice movement history. Never Candidate paid hours.",
+            "binding": null,
+            "movement_role": "POSITIVE",
+            "work_event_id": "f9000000-0000-4000-8000-000000000008",
+            "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+            "invoice_status": null,
+            "placement_state": "UNPLACED",
+            "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+            "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+          }
+        ],
+        "movement_count": 1,
+        "bound_line_count": 0,
+        "invoiced_from_source": false,
+        "ordinary_invoice_line_count": 0
+      },
+      "submitted_timesheet_complete": true,
+      "submitted_timesheet_available": true
+    },
+    "action_flags": {
+      "can_authorise": false,
+      "can_unauthorise": false,
+      "can_manage_evidence": false,
+      "can_edit_timesheet_data": false,
+      "is_archived": false,
+      "read_only": true
+    },
+    "booking_id": "TS-6111",
+    "requested_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+    "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+    "current_version": 1,
+    "was_stale": false,
+    "sheet_scope": "WEEKLY",
+    "ready_to_pay": false
+  },
+  "bulkReads": {
+    "row": {
+      "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "booking_id": "TS-6111",
+      "version": 1,
+      "sheet_scope": "WEEKLY",
+      "submission_mode": "ELECTRONIC",
+      "candidate_id": "f3000000-0000-4000-8000-000000000001",
+      "candidate_name": "Jane Smith",
+      "client_id": "f2000000-0000-4000-8000-000000000001",
+      "client_name": "North Park Trust",
+      "week_ending_date": "2026-10-25",
+      "authorised_at_server": "2026-10-22T10:00:00Z",
+      "is_authorised": true,
+      "is_invoiced": false,
+      "row_key": "source-row-1",
+      "stable_row_id": "source-row-1",
+      "requested_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "expected_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+      "row_signature": "local-read-1",
+      "backend_row_signature": "local-read-1",
+      "candidate_display_name": "Jane Smith",
+      "period_type": "WEEKLY",
+      "summary_stage": "Authorised",
+      "tools_stage": "Authorised",
+      "processing_status": "PROCESSED",
+      "bulk_authorise_section": "authorised_eligible",
+      "weekly_source_category": "CLIENT_PROVIDED_HOURS",
+      "bulk_authorise_classification": "HR",
+      "route_type": "WEEKLY_HEALTHROSTER",
+      "route_family": "IMPORT_AUTHORITATIVE",
+      "route_subfamily": "HEALTHROSTER_NO_TIMESHEET",
+      "can_bulk_authorise": false,
+      "can_bulk_unauthorise": false,
+      "review_only": true,
+      "locked": false,
+      "weekly_source_presentation": {
+        "route": "CLIENT_PROVIDED_HOURS",
+        "scope": "WEEKLY",
+        "totals": {
+          "complete": false,
+          "pay_excluding_vat": "£0.00",
+          "pay_including_vat": "£0.00",
+          "charge_excluding_vat": "£0.00",
+          "charge_including_vat": "£0.00"
+        },
+        "contract": "WEEKLY_SOURCE_OFFICE_PRESENTATION_V1",
+        "proposal": {
+          "state": "PROPOSED",
+          "change": {
+            "added": [],
+            "changed": [
+              {
+                "work_date": "2026-10-20",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "proposed_total_hours": 7.5,
+                "currently_approved_total_hours": 8
+              }
+            ],
+            "removed": [],
+            "added_count": 0,
+            "changed_count": 1,
+            "removed_count": 0,
+            "unchanged_count": 0
+          },
+          "reason": null,
+          "members": [
+            {
+              "proposed": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": "0.000000",
+                    "hours_day": "7.500000",
+                    "hours_sat": "0.000000",
+                    "hours_sun": "0.000000",
+                    "hours_night": "0.000000",
+                    "total_hours": "7.500000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": "g9-r08"
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                "available": true,
+                "row_count": 1
+              },
+              "contract_id": "f4000000-0000-4000-8000-000000000001",
+              "root_ordinal": 1,
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "family_booking_id": null,
+              "is_requested_root": true,
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "root_timesheet_version": null,
+              "proposed_certified_zero": false,
+              "proposed_component_count": 1,
+              "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+              "currently_approved_authority": "HEAD",
+              "currently_approved_component_count": 1
+            }
+          ],
+          "present": true,
+          "decision": {
+            "owner": "public.weekly_source_later_change_decide_atomic_v1",
+            "actions": [
+              {
+                "label": "Approve updated hours",
+                "action": "APPROVE_UPDATED_HOURS",
+                "reason_required": false
+              },
+              {
+                "label": "Keep currently approved hours",
+                "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                "reason_required": false
+              }
+            ],
+            "endpoint": "/api/weekly-source/v1/commands",
+            "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+            "command_payload": {
+              "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+              "bundle_revision": 1,
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+            }
+          },
+          "proposed": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": "0.000000",
+                "hours_day": "7.500000",
+                "hours_sat": "0.000000",
+                "hours_sun": "0.000000",
+                "hours_night": "0.000000",
+                "total_hours": "7.500000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": "g9-r08"
+              }
+            ],
+            "reason": null,
+            "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+            "available": true,
+            "row_count": 1
+          },
+          "bundle_kind": "SINGLE_ROOT",
+          "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+          "member_count": 1,
+          "pending_state": null,
+          "cross_contract": null,
+          "bundle_revision": 1,
+          "decision_reason": {
+            "source_change": {
+              "reason": "INITIAL_FINALISATION",
+              "revision_number": 1,
+              "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+            },
+            "current_position": {
+              "head_id": "e8000000-0000-4000-8000-000000000008",
+              "authority": "HEAD",
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "committed_at_utc": "2026-12-30T10:00:00+00:00",
+              "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+            }
+          },
+          "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+          "pending_bundle_id": null,
+          "currently_approved": {
+            "rows": [
+              {
+                "state": "ENTITLED",
+                "row_key": "entitlement-1",
+                "day_date": "Tue 20 Oct 2026",
+                "hours_bh": null,
+                "hours_day": "8.000000",
+                "hours_sat": null,
+                "hours_sun": null,
+                "hours_night": null,
+                "total_hours": "8.000000",
+                "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                "expense_code": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "component_kind": "WORKED_TIME",
+                "reference_number": null
+              }
+            ],
+            "reason": null,
+            "source": "EFFECTIVE_INVENTORY_HEAD",
+            "available": true,
+            "row_count": 1
+          },
+          "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+          "primary_root_ordinal": 1,
+          "proposed_certified_zero": false,
+          "request_digest_verified": true,
+          "proposed_component_count": 1,
+          "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+          "currently_approved_authority": "HEAD",
+          "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+          "currently_approved_component_count": 1
+        },
+        "authority": "CLIENT_SYSTEM",
+        "freshness": "CURRENT",
+        "lifecycle": {
+          "ok": true,
+          "note": null,
+          "errors": [],
+          "heading": "Currently approved hours",
+          "payment": {
+            "ok": true,
+            "state": "NONE",
+            "reason": null,
+            "batches": [],
+            "live_item_count": 0,
+            "voided_item_count": 0
+          },
+          "surface": "OFFICE",
+          "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+          "overlays": [],
+          "proposal": {
+            "state": "PROPOSED",
+            "change": {
+              "added": [],
+              "changed": [
+                {
+                  "work_date": "2026-10-20",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "proposed_total_hours": 7.5,
+                  "currently_approved_total_hours": 8
+                }
+              ],
+              "removed": [],
+              "added_count": 0,
+              "changed_count": 1,
+              "removed_count": 0,
+              "unchanged_count": 0
+            },
+            "reason": null,
+            "members": [
+              {
+                "proposed": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": "0.000000",
+                      "hours_day": "7.500000",
+                      "hours_sat": "0.000000",
+                      "hours_sun": "0.000000",
+                      "hours_night": "0.000000",
+                      "total_hours": "7.500000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": "g9-r08"
+                    }
+                  ],
+                  "reason": null,
+                  "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                  "available": true,
+                  "row_count": 1
+                },
+                "contract_id": "f4000000-0000-4000-8000-000000000001",
+                "root_ordinal": 1,
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "family_booking_id": null,
+                "is_requested_root": true,
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "currently_approved": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": null,
+                      "hours_day": "8.000000",
+                      "hours_sat": null,
+                      "hours_sun": null,
+                      "hours_night": null,
+                      "total_hours": "8.000000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": null
+                    }
+                  ],
+                  "reason": null,
+                  "source": "EFFECTIVE_INVENTORY_HEAD",
+                  "available": true,
+                  "row_count": 1
+                },
+                "root_timesheet_version": null,
+                "proposed_certified_zero": false,
+                "proposed_component_count": 1,
+                "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+                "currently_approved_authority": "HEAD",
+                "currently_approved_component_count": 1
+              }
+            ],
+            "present": true,
+            "decision": {
+              "owner": "public.weekly_source_later_change_decide_atomic_v1",
+              "actions": [
+                {
+                  "label": "Approve updated hours",
+                  "action": "APPROVE_UPDATED_HOURS",
+                  "reason_required": false
+                },
+                {
+                  "label": "Keep currently approved hours",
+                  "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                  "reason_required": false
+                }
+              ],
+              "endpoint": "/api/weekly-source/v1/commands",
+              "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+              "command_payload": {
+                "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                "bundle_revision": 1,
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+              }
+            },
+            "proposed": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": "0.000000",
+                  "hours_day": "7.500000",
+                  "hours_sat": "0.000000",
+                  "hours_sun": "0.000000",
+                  "hours_night": "0.000000",
+                  "total_hours": "7.500000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": "g9-r08"
+                }
+              ],
+              "reason": null,
+              "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+              "available": true,
+              "row_count": 1
+            },
+            "bundle_kind": "SINGLE_ROOT",
+            "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+            "member_count": 1,
+            "pending_state": null,
+            "cross_contract": null,
+            "bundle_revision": 1,
+            "decision_reason": {
+              "source_change": {
+                "reason": "INITIAL_FINALISATION",
+                "revision_number": 1,
+                "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              },
+              "current_position": {
+                "head_id": "e8000000-0000-4000-8000-000000000008",
+                "authority": "HEAD",
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "committed_at_utc": "2026-12-30T10:00:00+00:00",
+                "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              }
+            },
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "pending_bundle_id": null,
+            "currently_approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+            "primary_root_ordinal": 1,
+            "proposed_certified_zero": false,
+            "request_digest_verified": true,
+            "proposed_component_count": 1,
+            "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+            "currently_approved_authority": "HEAD",
+            "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+            "currently_approved_component_count": 1
+          },
+          "ui_state": "UI-008",
+          "schedules": {
+            "approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "submitted": {
+              "rows": [
+                {
+                  "hours": "09:00-17:00",
+                  "state": "SUBMITTED",
+                  "row_key": "submitted-all-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "break_text": "30 min"
+                }
+              ],
+              "reason": null,
+              "source": "CANDIDATE_SUBMITTED_SCHEDULE",
+              "available": true,
+              "row_count": 1
+            },
+            "processing": {
+              "rows": [],
+              "reason": "NO_PAYMENT_IN_FLIGHT",
+              "source": null,
+              "available": false,
+              "row_count": 0
+            },
+            "current_paid": {
+              "rows": [],
+              "reason": "NO_SETTLEMENT",
+              "source": null,
+              "available": false,
+              "row_count": 0
+            },
+            "paid_to_date": {
+              "rows": [],
+              "reason": "NO_SETTLEMENT",
+              "source": null,
+              "available": false,
+              "row_count": 0
+            },
+            "latest_source": {
+              "rows": [
+                {
+                  "hours": "09:00-17:00",
+                  "state": "MATCH",
+                  "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                  "day_date": "Tue 20 Oct 2026",
+                  "break_text": "30 min",
+                  "issue_text": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "additional_units": [
+                    {
+                      "key": "day",
+                      "label": "Day",
+                      "state": "MATCH",
+                      "value": "7.50 hours"
+                    }
+                  ]
+                }
+              ],
+              "reason": null,
+              "source": "WEEKLY_SOURCE_LATEST_SOURCE",
+              "available": true,
+              "row_count": 1
+            },
+            "currently_approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "hours_to_authorise": {
+              "rows": [],
+              "reason": "NOT_IN_A_FIRST_AUTHORISATION_PHASE",
+              "source": null,
+              "available": false,
+              "row_count": 0
+            }
+          },
+          "settlement": {
+            "ok": true,
+            "state": "NO_SETTLEMENT",
+            "reason": null,
+            "batch_count": 0,
+            "settlements": [],
+            "reason_detail": null,
+            "settlement_count": 0,
+            "family_booking_id": "G9-T08",
+            "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+            "unavailable_class": null,
+            "last_settled_at_utc": null,
+            "first_settled_at_utc": null,
+            "member_timesheet_ids": [
+              "fa000000-0000-4000-8000-000000000008"
+            ],
+            "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008"
+          },
+          "current_head": {
+            "head_id": "e8000000-0000-4000-8000-000000000008",
+            "head_revision": 1,
+            "prior_head_id": null,
+            "authority_kind": "LOCKED_FINAL_SOURCE",
+            "certified_zero": false,
+            "component_count": 1,
+            "committed_at_utc": "2026-12-30T10:00:00+00:00"
+          },
+          "server_phase": "LATER_CHANGE_PENDING_UNPAID",
+          "heading_source": "SERVER",
+          "overlay_states": [],
+          "primary_schedule": "currently_approved",
+          "invoice_movements": {
+            "ok": true,
+            "reason": null,
+            "movements": [
+              {
+                "note": "Invoice movement history. Never Candidate paid hours.",
+                "binding": null,
+                "movement_role": "POSITIVE",
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+                "invoice_status": null,
+                "placement_state": "UNPLACED",
+                "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+                "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+              }
+            ],
+            "movement_count": 1,
+            "bound_line_count": 0,
+            "invoiced_from_source": false,
+            "ordinary_invoice_line_count": 0
+          },
+          "permitted_actions": [
+            "APPROVE_UPDATED_HOURS",
+            "KEEP_CURRENTLY_APPROVED_HOURS"
+          ],
+          "right_pane_status": "Proposal not current",
+          "authorisation_state": "AUTHORISED",
+          "forbidden_inference": "Do not label proposal approved",
+          "member_timesheet_ids": [
+            "fa000000-0000-4000-8000-000000000008"
+          ],
+          "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+          "authorisation_generations": {
+            "live": 1,
+            "withdrawn": 0
+          }
+        },
+        "applicable": true,
+        "comparison": {
+          "rows": [],
+          "state": "MATCH",
+          "source_rows": [
+            {
+              "hours": "09:00-17:00",
+              "state": "MATCH",
+              "row_key": "source-fb000000-0000-4000-8000-000000000008",
+              "day_date": "Tue 20 Oct 2026",
+              "break_text": "30 min",
+              "issue_text": null,
+              "work_event_id": "f9000000-0000-4000-8000-000000000008",
+              "additional_units": [
+                {
+                  "key": "day",
+                  "label": "Day",
+                  "state": "MATCH",
+                  "value": "7.50 hours"
+                }
+              ]
+            }
+          ],
+          "submitted_rows": []
+        },
+        "action_state": {
+          "unauthorise": {
+            "reason": "NONE",
+            "available": false,
+            "permanent": true,
+            "retryable": false,
+            "withdrawn": false,
+            "owner_error": "NONE",
+            "refusal_code": "WEEKLY_SOURCE_UNAUTHORISE_ENTITLEMENT_HEAD_COMMITTED",
+            "owner_sqlstate": "NONE",
+            "refusal_nature": "PERMANENT",
+            "authorisation_state": "AUTHORISED",
+            "availability_source": "WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAW_AVAILABLE_V1"
+          },
+          "blocked_reason": "",
+          "authorise_allowed": true,
+          "unauthorise_allowed": false,
+          "manage_approved_hours_allowed": false,
+          "add_additional_expense_timesheet_allowed": true
+        },
+        "approved_rows": [
+          {
+            "hours": "09:00-17:00",
+            "state": "READY",
+            "row_key": "approved-fb000000-0000-4000-8000-000000000008",
+            "day_date": "Tue 20 Oct 2026",
+            "break_text": "30 min",
+            "status_text": "Ready"
+          }
+        ],
+        "record_version": "6b44f04e7ac1c5f7c673d1190687ed32cca2bc928165bcb496fb2e7e38d6ee75",
+        "candidate_lifecycle": {
+          "ok": false,
+          "note": null,
+          "errors": [
+            {
+              "code": "CANDIDATE_VIEW_PRODUCER_FAILED",
+              "detail": "The Candidate payload producer did not answer for this week."
+            }
+          ],
+          "heading": null,
+          "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+          "ui_state": null,
+          "server_phase": null,
+          "heading_source": "NONE",
+          "overlay_states": [],
+          "primary_schedule": null,
+          "permitted_actions": [],
+          "right_pane_status": null,
+          "forbidden_inference": null
+        },
+        "source_expense_policy": "SEPARATE_ADDITIONAL_TIMESHEET",
+        "invoice_movement_history": {
+          "ok": true,
+          "reason": null,
+          "movements": [
+            {
+              "note": "Invoice movement history. Never Candidate paid hours.",
+              "binding": null,
+              "movement_role": "POSITIVE",
+              "work_event_id": "f9000000-0000-4000-8000-000000000008",
+              "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+              "invoice_status": null,
+              "placement_state": "UNPLACED",
+              "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+              "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+            }
+          ],
+          "movement_count": 1,
+          "bound_line_count": 0,
+          "invoiced_from_source": false,
+          "ordinary_invoice_line_count": 0
+        },
+        "submitted_timesheet_complete": true,
+        "submitted_timesheet_available": true
+      },
+      "action_flags": {
+        "can_authorise": false,
+        "can_unauthorise": false,
+        "can_manage_evidence": false,
+        "can_edit_timesheet_data": false,
+        "is_archived": false,
+        "read_only": true,
+        "can_bulk_authorise": false,
+        "can_bulk_unauthorise": false,
+        "lifecycle_authority_complete": true,
+        "permission_state_patch_complete": true,
+        "priority_badges_patch_complete": true,
+        "refresh_required": false
+      }
+    },
+    "context": {
+      "ok": true,
+      "row_key": "source-row-1",
+      "row_signature": "local-read-1",
+      "backend_row_signature": "local-read-1",
+      "data_row": {
+        "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "booking_id": "TS-6111",
+        "version": 1,
+        "sheet_scope": "WEEKLY",
+        "submission_mode": "ELECTRONIC",
+        "candidate_id": "f3000000-0000-4000-8000-000000000001",
+        "candidate_name": "Jane Smith",
+        "client_id": "f2000000-0000-4000-8000-000000000001",
+        "client_name": "North Park Trust",
+        "week_ending_date": "2026-10-25",
+        "authorised_at_server": "2026-10-22T10:00:00Z",
+        "is_authorised": true,
+        "is_invoiced": false,
+        "row_key": "source-row-1",
+        "stable_row_id": "source-row-1",
+        "requested_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "expected_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "row_signature": "local-read-1",
+        "backend_row_signature": "local-read-1",
+        "candidate_display_name": "Jane Smith",
+        "period_type": "WEEKLY",
+        "summary_stage": "Authorised",
+        "tools_stage": "Authorised",
+        "processing_status": "PROCESSED",
+        "bulk_authorise_section": "authorised_eligible",
+        "weekly_source_category": "CLIENT_PROVIDED_HOURS",
+        "bulk_authorise_classification": "HR",
+        "route_type": "WEEKLY_HEALTHROSTER",
+        "route_family": "IMPORT_AUTHORITATIVE",
+        "route_subfamily": "HEALTHROSTER_NO_TIMESHEET",
+        "can_bulk_authorise": false,
+        "can_bulk_unauthorise": false,
+        "review_only": true,
+        "locked": false,
+        "weekly_source_presentation": {
+          "route": "CLIENT_PROVIDED_HOURS",
+          "scope": "WEEKLY",
+          "totals": {
+            "complete": false,
+            "pay_excluding_vat": "£0.00",
+            "pay_including_vat": "£0.00",
+            "charge_excluding_vat": "£0.00",
+            "charge_including_vat": "£0.00"
+          },
+          "contract": "WEEKLY_SOURCE_OFFICE_PRESENTATION_V1",
+          "proposal": {
+            "state": "PROPOSED",
+            "change": {
+              "added": [],
+              "changed": [
+                {
+                  "work_date": "2026-10-20",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "proposed_total_hours": 7.5,
+                  "currently_approved_total_hours": 8
+                }
+              ],
+              "removed": [],
+              "added_count": 0,
+              "changed_count": 1,
+              "removed_count": 0,
+              "unchanged_count": 0
+            },
+            "reason": null,
+            "members": [
+              {
+                "proposed": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": "0.000000",
+                      "hours_day": "7.500000",
+                      "hours_sat": "0.000000",
+                      "hours_sun": "0.000000",
+                      "hours_night": "0.000000",
+                      "total_hours": "7.500000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": "g9-r08"
+                    }
+                  ],
+                  "reason": null,
+                  "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                  "available": true,
+                  "row_count": 1
+                },
+                "contract_id": "f4000000-0000-4000-8000-000000000001",
+                "root_ordinal": 1,
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "family_booking_id": null,
+                "is_requested_root": true,
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "currently_approved": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": null,
+                      "hours_day": "8.000000",
+                      "hours_sat": null,
+                      "hours_sun": null,
+                      "hours_night": null,
+                      "total_hours": "8.000000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": null
+                    }
+                  ],
+                  "reason": null,
+                  "source": "EFFECTIVE_INVENTORY_HEAD",
+                  "available": true,
+                  "row_count": 1
+                },
+                "root_timesheet_version": null,
+                "proposed_certified_zero": false,
+                "proposed_component_count": 1,
+                "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+                "currently_approved_authority": "HEAD",
+                "currently_approved_component_count": 1
+              }
+            ],
+            "present": true,
+            "decision": {
+              "owner": "public.weekly_source_later_change_decide_atomic_v1",
+              "actions": [
+                {
+                  "label": "Approve updated hours",
+                  "action": "APPROVE_UPDATED_HOURS",
+                  "reason_required": false
+                },
+                {
+                  "label": "Keep currently approved hours",
+                  "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                  "reason_required": false
+                }
+              ],
+              "endpoint": "/api/weekly-source/v1/commands",
+              "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+              "command_payload": {
+                "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                "bundle_revision": 1,
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+              }
+            },
+            "proposed": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": "0.000000",
+                  "hours_day": "7.500000",
+                  "hours_sat": "0.000000",
+                  "hours_sun": "0.000000",
+                  "hours_night": "0.000000",
+                  "total_hours": "7.500000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": "g9-r08"
+                }
+              ],
+              "reason": null,
+              "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+              "available": true,
+              "row_count": 1
+            },
+            "bundle_kind": "SINGLE_ROOT",
+            "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+            "member_count": 1,
+            "pending_state": null,
+            "cross_contract": null,
+            "bundle_revision": 1,
+            "decision_reason": {
+              "source_change": {
+                "reason": "INITIAL_FINALISATION",
+                "revision_number": 1,
+                "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              },
+              "current_position": {
+                "head_id": "e8000000-0000-4000-8000-000000000008",
+                "authority": "HEAD",
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "committed_at_utc": "2026-12-30T10:00:00+00:00",
+                "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              }
+            },
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "pending_bundle_id": null,
+            "currently_approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+            "primary_root_ordinal": 1,
+            "proposed_certified_zero": false,
+            "request_digest_verified": true,
+            "proposed_component_count": 1,
+            "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+            "currently_approved_authority": "HEAD",
+            "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+            "currently_approved_component_count": 1
+          },
+          "authority": "CLIENT_SYSTEM",
+          "freshness": "CURRENT",
+          "lifecycle": {
+            "ok": true,
+            "note": null,
+            "errors": [],
+            "heading": "Currently approved hours",
+            "payment": {
+              "ok": true,
+              "state": "NONE",
+              "reason": null,
+              "batches": [],
+              "live_item_count": 0,
+              "voided_item_count": 0
+            },
+            "surface": "OFFICE",
+            "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+            "overlays": [],
+            "proposal": {
+              "state": "PROPOSED",
+              "change": {
+                "added": [],
+                "changed": [
+                  {
+                    "work_date": "2026-10-20",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "proposed_total_hours": 7.5,
+                    "currently_approved_total_hours": 8
+                  }
+                ],
+                "removed": [],
+                "added_count": 0,
+                "changed_count": 1,
+                "removed_count": 0,
+                "unchanged_count": 0
+              },
+              "reason": null,
+              "members": [
+                {
+                  "proposed": {
+                    "rows": [
+                      {
+                        "state": "ENTITLED",
+                        "row_key": "entitlement-1",
+                        "day_date": "Tue 20 Oct 2026",
+                        "hours_bh": "0.000000",
+                        "hours_day": "7.500000",
+                        "hours_sat": "0.000000",
+                        "hours_sun": "0.000000",
+                        "hours_night": "0.000000",
+                        "total_hours": "7.500000",
+                        "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                        "expense_code": null,
+                        "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                        "component_kind": "WORKED_TIME",
+                        "reference_number": "g9-r08"
+                      }
+                    ],
+                    "reason": null,
+                    "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                    "available": true,
+                    "row_count": 1
+                  },
+                  "contract_id": "f4000000-0000-4000-8000-000000000001",
+                  "root_ordinal": 1,
+                  "authority_kind": "LOCKED_FINAL_SOURCE",
+                  "family_booking_id": null,
+                  "is_requested_root": true,
+                  "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                  "currently_approved": {
+                    "rows": [
+                      {
+                        "state": "ENTITLED",
+                        "row_key": "entitlement-1",
+                        "day_date": "Tue 20 Oct 2026",
+                        "hours_bh": null,
+                        "hours_day": "8.000000",
+                        "hours_sat": null,
+                        "hours_sun": null,
+                        "hours_night": null,
+                        "total_hours": "8.000000",
+                        "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                        "expense_code": null,
+                        "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                        "component_kind": "WORKED_TIME",
+                        "reference_number": null
+                      }
+                    ],
+                    "reason": null,
+                    "source": "EFFECTIVE_INVENTORY_HEAD",
+                    "available": true,
+                    "row_count": 1
+                  },
+                  "root_timesheet_version": null,
+                  "proposed_certified_zero": false,
+                  "proposed_component_count": 1,
+                  "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+                  "currently_approved_authority": "HEAD",
+                  "currently_approved_component_count": 1
+                }
+              ],
+              "present": true,
+              "decision": {
+                "owner": "public.weekly_source_later_change_decide_atomic_v1",
+                "actions": [
+                  {
+                    "label": "Approve updated hours",
+                    "action": "APPROVE_UPDATED_HOURS",
+                    "reason_required": false
+                  },
+                  {
+                    "label": "Keep currently approved hours",
+                    "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                    "reason_required": false
+                  }
+                ],
+                "endpoint": "/api/weekly-source/v1/commands",
+                "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                "command_payload": {
+                  "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                  "bundle_revision": 1,
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                  "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+                }
+              },
+              "proposed": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": "0.000000",
+                    "hours_day": "7.500000",
+                    "hours_sat": "0.000000",
+                    "hours_sun": "0.000000",
+                    "hours_night": "0.000000",
+                    "total_hours": "7.500000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": "g9-r08"
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                "available": true,
+                "row_count": 1
+              },
+              "bundle_kind": "SINGLE_ROOT",
+              "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+              "member_count": 1,
+              "pending_state": null,
+              "cross_contract": null,
+              "bundle_revision": 1,
+              "decision_reason": {
+                "source_change": {
+                  "reason": "INITIAL_FINALISATION",
+                  "revision_number": 1,
+                  "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+                },
+                "current_position": {
+                  "head_id": "e8000000-0000-4000-8000-000000000008",
+                  "authority": "HEAD",
+                  "authority_kind": "LOCKED_FINAL_SOURCE",
+                  "committed_at_utc": "2026-12-30T10:00:00+00:00",
+                  "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+                }
+              },
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "pending_bundle_id": null,
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+              "primary_root_ordinal": 1,
+              "proposed_certified_zero": false,
+              "request_digest_verified": true,
+              "proposed_component_count": 1,
+              "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+              "currently_approved_authority": "HEAD",
+              "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+              "currently_approved_component_count": 1
+            },
+            "ui_state": "UI-008",
+            "schedules": {
+              "approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "submitted": {
+                "rows": [
+                  {
+                    "hours": "09:00-17:00",
+                    "state": "SUBMITTED",
+                    "row_key": "submitted-all-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "break_text": "30 min"
+                  }
+                ],
+                "reason": null,
+                "source": "CANDIDATE_SUBMITTED_SCHEDULE",
+                "available": true,
+                "row_count": 1
+              },
+              "processing": {
+                "rows": [],
+                "reason": "NO_PAYMENT_IN_FLIGHT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "current_paid": {
+                "rows": [],
+                "reason": "NO_SETTLEMENT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "paid_to_date": {
+                "rows": [],
+                "reason": "NO_SETTLEMENT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "latest_source": {
+                "rows": [
+                  {
+                    "hours": "09:00-17:00",
+                    "state": "MATCH",
+                    "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                    "day_date": "Tue 20 Oct 2026",
+                    "break_text": "30 min",
+                    "issue_text": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "additional_units": [
+                      {
+                        "key": "day",
+                        "label": "Day",
+                        "state": "MATCH",
+                        "value": "7.50 hours"
+                      }
+                    ]
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_LATEST_SOURCE",
+                "available": true,
+                "row_count": 1
+              },
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "hours_to_authorise": {
+                "rows": [],
+                "reason": "NOT_IN_A_FIRST_AUTHORISATION_PHASE",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              }
+            },
+            "settlement": {
+              "ok": true,
+              "state": "NO_SETTLEMENT",
+              "reason": null,
+              "batch_count": 0,
+              "settlements": [],
+              "reason_detail": null,
+              "settlement_count": 0,
+              "family_booking_id": "G9-T08",
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "unavailable_class": null,
+              "last_settled_at_utc": null,
+              "first_settled_at_utc": null,
+              "member_timesheet_ids": [
+                "fa000000-0000-4000-8000-000000000008"
+              ],
+              "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008"
+            },
+            "current_head": {
+              "head_id": "e8000000-0000-4000-8000-000000000008",
+              "head_revision": 1,
+              "prior_head_id": null,
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "certified_zero": false,
+              "component_count": 1,
+              "committed_at_utc": "2026-12-30T10:00:00+00:00"
+            },
+            "server_phase": "LATER_CHANGE_PENDING_UNPAID",
+            "heading_source": "SERVER",
+            "overlay_states": [],
+            "primary_schedule": "currently_approved",
+            "invoice_movements": {
+              "ok": true,
+              "reason": null,
+              "movements": [
+                {
+                  "note": "Invoice movement history. Never Candidate paid hours.",
+                  "binding": null,
+                  "movement_role": "POSITIVE",
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+                  "invoice_status": null,
+                  "placement_state": "UNPLACED",
+                  "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+                  "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+                }
+              ],
+              "movement_count": 1,
+              "bound_line_count": 0,
+              "invoiced_from_source": false,
+              "ordinary_invoice_line_count": 0
+            },
+            "permitted_actions": [
+              "APPROVE_UPDATED_HOURS",
+              "KEEP_CURRENTLY_APPROVED_HOURS"
+            ],
+            "right_pane_status": "Proposal not current",
+            "authorisation_state": "AUTHORISED",
+            "forbidden_inference": "Do not label proposal approved",
+            "member_timesheet_ids": [
+              "fa000000-0000-4000-8000-000000000008"
+            ],
+            "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+            "authorisation_generations": {
+              "live": 1,
+              "withdrawn": 0
+            }
+          },
+          "applicable": true,
+          "comparison": {
+            "rows": [],
+            "state": "MATCH",
+            "source_rows": [
+              {
+                "hours": "09:00-17:00",
+                "state": "MATCH",
+                "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                "day_date": "Tue 20 Oct 2026",
+                "break_text": "30 min",
+                "issue_text": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "additional_units": [
+                  {
+                    "key": "day",
+                    "label": "Day",
+                    "state": "MATCH",
+                    "value": "7.50 hours"
+                  }
+                ]
+              }
+            ],
+            "submitted_rows": []
+          },
+          "action_state": {
+            "unauthorise": {
+              "reason": "NONE",
+              "available": false,
+              "permanent": true,
+              "retryable": false,
+              "withdrawn": false,
+              "owner_error": "NONE",
+              "refusal_code": "WEEKLY_SOURCE_UNAUTHORISE_ENTITLEMENT_HEAD_COMMITTED",
+              "owner_sqlstate": "NONE",
+              "refusal_nature": "PERMANENT",
+              "authorisation_state": "AUTHORISED",
+              "availability_source": "WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAW_AVAILABLE_V1"
+            },
+            "blocked_reason": "",
+            "authorise_allowed": true,
+            "unauthorise_allowed": false,
+            "manage_approved_hours_allowed": false,
+            "add_additional_expense_timesheet_allowed": true
+          },
+          "approved_rows": [
+            {
+              "hours": "09:00-17:00",
+              "state": "READY",
+              "row_key": "approved-fb000000-0000-4000-8000-000000000008",
+              "day_date": "Tue 20 Oct 2026",
+              "break_text": "30 min",
+              "status_text": "Ready"
+            }
+          ],
+          "record_version": "6b44f04e7ac1c5f7c673d1190687ed32cca2bc928165bcb496fb2e7e38d6ee75",
+          "candidate_lifecycle": {
+            "ok": false,
+            "note": null,
+            "errors": [
+              {
+                "code": "CANDIDATE_VIEW_PRODUCER_FAILED",
+                "detail": "The Candidate payload producer did not answer for this week."
+              }
+            ],
+            "heading": null,
+            "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+            "ui_state": null,
+            "server_phase": null,
+            "heading_source": "NONE",
+            "overlay_states": [],
+            "primary_schedule": null,
+            "permitted_actions": [],
+            "right_pane_status": null,
+            "forbidden_inference": null
+          },
+          "source_expense_policy": "SEPARATE_ADDITIONAL_TIMESHEET",
+          "invoice_movement_history": {
+            "ok": true,
+            "reason": null,
+            "movements": [
+              {
+                "note": "Invoice movement history. Never Candidate paid hours.",
+                "binding": null,
+                "movement_role": "POSITIVE",
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+                "invoice_status": null,
+                "placement_state": "UNPLACED",
+                "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+                "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+              }
+            ],
+            "movement_count": 1,
+            "bound_line_count": 0,
+            "invoiced_from_source": false,
+            "ordinary_invoice_line_count": 0
+          },
+          "submitted_timesheet_complete": true,
+          "submitted_timesheet_available": true
+        },
+        "action_flags": {
+          "can_authorise": false,
+          "can_unauthorise": false,
+          "can_manage_evidence": false,
+          "can_edit_timesheet_data": false,
+          "is_archived": false,
+          "read_only": true,
+          "can_bulk_authorise": false,
+          "can_bulk_unauthorise": false,
+          "lifecycle_authority_complete": true,
+          "permission_state_patch_complete": true,
+          "priority_badges_patch_complete": true,
+          "refresh_required": false
+        }
+      },
+      "row_patch": {},
+      "evidence": [],
+      "left_pane": {},
+      "compare_payload": {
+        "required": false,
+        "rows": [],
+        "imported_detail_refs": {}
+      },
+      "details": {
+        "timesheet": {
+          "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+          "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+          "booking_id": "TS-6111",
+          "version": 1,
+          "sheet_scope": "WEEKLY",
+          "submission_mode": "ELECTRONIC",
+          "candidate_id": "f3000000-0000-4000-8000-000000000001",
+          "candidate_name": "Jane Smith",
+          "client_id": "f2000000-0000-4000-8000-000000000001",
+          "client_name": "North Park Trust",
+          "week_ending_date": "2026-10-25",
+          "authorised_at_server": "2026-10-22T10:00:00Z",
+          "is_authorised": true,
+          "is_invoiced": false
+        },
+        "tsfin": {
+          "timesheet_id": "fa000000-0000-4000-8000-000000000008",
+          "processing_status": "PROCESSED",
+          "total_hours": "7.50",
+          "total_pay_ex_vat": "100.00",
+          "total_pay_inc_vat": "100.00",
+          "total_charge_ex_vat": "150.00",
+          "total_charge_inc_vat": "150.00",
+          "locked_by_invoice_id": null,
+          "paid_at_utc": null,
+          "invoice_breakdown_json": {
+            "mode": "SEGMENTS",
+            "segments": []
+          }
+        },
+        "validations": [],
+        "shifts": [],
+        "weekly_source_presentation": {
+          "route": "CLIENT_PROVIDED_HOURS",
+          "scope": "WEEKLY",
+          "totals": {
+            "complete": false,
+            "pay_excluding_vat": "£0.00",
+            "pay_including_vat": "£0.00",
+            "charge_excluding_vat": "£0.00",
+            "charge_including_vat": "£0.00"
+          },
+          "contract": "WEEKLY_SOURCE_OFFICE_PRESENTATION_V1",
+          "proposal": {
+            "state": "PROPOSED",
+            "change": {
+              "added": [],
+              "changed": [
+                {
+                  "work_date": "2026-10-20",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "proposed_total_hours": 7.5,
+                  "currently_approved_total_hours": 8
+                }
+              ],
+              "removed": [],
+              "added_count": 0,
+              "changed_count": 1,
+              "removed_count": 0,
+              "unchanged_count": 0
+            },
+            "reason": null,
+            "members": [
+              {
+                "proposed": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": "0.000000",
+                      "hours_day": "7.500000",
+                      "hours_sat": "0.000000",
+                      "hours_sun": "0.000000",
+                      "hours_night": "0.000000",
+                      "total_hours": "7.500000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": "g9-r08"
+                    }
+                  ],
+                  "reason": null,
+                  "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                  "available": true,
+                  "row_count": 1
+                },
+                "contract_id": "f4000000-0000-4000-8000-000000000001",
+                "root_ordinal": 1,
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "family_booking_id": null,
+                "is_requested_root": true,
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "currently_approved": {
+                  "rows": [
+                    {
+                      "state": "ENTITLED",
+                      "row_key": "entitlement-1",
+                      "day_date": "Tue 20 Oct 2026",
+                      "hours_bh": null,
+                      "hours_day": "8.000000",
+                      "hours_sat": null,
+                      "hours_sun": null,
+                      "hours_night": null,
+                      "total_hours": "8.000000",
+                      "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                      "expense_code": null,
+                      "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                      "component_kind": "WORKED_TIME",
+                      "reference_number": null
+                    }
+                  ],
+                  "reason": null,
+                  "source": "EFFECTIVE_INVENTORY_HEAD",
+                  "available": true,
+                  "row_count": 1
+                },
+                "root_timesheet_version": null,
+                "proposed_certified_zero": false,
+                "proposed_component_count": 1,
+                "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+                "currently_approved_authority": "HEAD",
+                "currently_approved_component_count": 1
+              }
+            ],
+            "present": true,
+            "decision": {
+              "owner": "public.weekly_source_later_change_decide_atomic_v1",
+              "actions": [
+                {
+                  "label": "Approve updated hours",
+                  "action": "APPROVE_UPDATED_HOURS",
+                  "reason_required": false
+                },
+                {
+                  "label": "Keep currently approved hours",
+                  "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                  "reason_required": false
+                }
+              ],
+              "endpoint": "/api/weekly-source/v1/commands",
+              "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+              "command_payload": {
+                "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                "bundle_revision": 1,
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+              }
+            },
+            "proposed": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": "0.000000",
+                  "hours_day": "7.500000",
+                  "hours_sat": "0.000000",
+                  "hours_sun": "0.000000",
+                  "hours_night": "0.000000",
+                  "total_hours": "7.500000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": "g9-r08"
+                }
+              ],
+              "reason": null,
+              "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+              "available": true,
+              "row_count": 1
+            },
+            "bundle_kind": "SINGLE_ROOT",
+            "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+            "member_count": 1,
+            "pending_state": null,
+            "cross_contract": null,
+            "bundle_revision": 1,
+            "decision_reason": {
+              "source_change": {
+                "reason": "INITIAL_FINALISATION",
+                "revision_number": 1,
+                "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              },
+              "current_position": {
+                "head_id": "e8000000-0000-4000-8000-000000000008",
+                "authority": "HEAD",
+                "authority_kind": "LOCKED_FINAL_SOURCE",
+                "committed_at_utc": "2026-12-30T10:00:00+00:00",
+                "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+              }
+            },
+            "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+            "pending_bundle_id": null,
+            "currently_approved": {
+              "rows": [
+                {
+                  "state": "ENTITLED",
+                  "row_key": "entitlement-1",
+                  "day_date": "Tue 20 Oct 2026",
+                  "hours_bh": null,
+                  "hours_day": "8.000000",
+                  "hours_sat": null,
+                  "hours_sun": null,
+                  "hours_night": null,
+                  "total_hours": "8.000000",
+                  "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                  "expense_code": null,
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "component_kind": "WORKED_TIME",
+                  "reference_number": null
+                }
+              ],
+              "reason": null,
+              "source": "EFFECTIVE_INVENTORY_HEAD",
+              "available": true,
+              "row_count": 1
+            },
+            "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+            "primary_root_ordinal": 1,
+            "proposed_certified_zero": false,
+            "request_digest_verified": true,
+            "proposed_component_count": 1,
+            "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+            "currently_approved_authority": "HEAD",
+            "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+            "currently_approved_component_count": 1
+          },
+          "authority": "CLIENT_SYSTEM",
+          "freshness": "CURRENT",
+          "lifecycle": {
+            "ok": true,
+            "note": null,
+            "errors": [],
+            "heading": "Currently approved hours",
+            "payment": {
+              "ok": true,
+              "state": "NONE",
+              "reason": null,
+              "batches": [],
+              "live_item_count": 0,
+              "voided_item_count": 0
+            },
+            "surface": "OFFICE",
+            "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+            "overlays": [],
+            "proposal": {
+              "state": "PROPOSED",
+              "change": {
+                "added": [],
+                "changed": [
+                  {
+                    "work_date": "2026-10-20",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "proposed_total_hours": 7.5,
+                    "currently_approved_total_hours": 8
+                  }
+                ],
+                "removed": [],
+                "added_count": 0,
+                "changed_count": 1,
+                "removed_count": 0,
+                "unchanged_count": 0
+              },
+              "reason": null,
+              "members": [
+                {
+                  "proposed": {
+                    "rows": [
+                      {
+                        "state": "ENTITLED",
+                        "row_key": "entitlement-1",
+                        "day_date": "Tue 20 Oct 2026",
+                        "hours_bh": "0.000000",
+                        "hours_day": "7.500000",
+                        "hours_sat": "0.000000",
+                        "hours_sun": "0.000000",
+                        "hours_night": "0.000000",
+                        "total_hours": "7.500000",
+                        "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                        "expense_code": null,
+                        "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                        "component_kind": "WORKED_TIME",
+                        "reference_number": "g9-r08"
+                      }
+                    ],
+                    "reason": null,
+                    "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                    "available": true,
+                    "row_count": 1
+                  },
+                  "contract_id": "f4000000-0000-4000-8000-000000000001",
+                  "root_ordinal": 1,
+                  "authority_kind": "LOCKED_FINAL_SOURCE",
+                  "family_booking_id": null,
+                  "is_requested_root": true,
+                  "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                  "currently_approved": {
+                    "rows": [
+                      {
+                        "state": "ENTITLED",
+                        "row_key": "entitlement-1",
+                        "day_date": "Tue 20 Oct 2026",
+                        "hours_bh": null,
+                        "hours_day": "8.000000",
+                        "hours_sat": null,
+                        "hours_sun": null,
+                        "hours_night": null,
+                        "total_hours": "8.000000",
+                        "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                        "expense_code": null,
+                        "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                        "component_kind": "WORKED_TIME",
+                        "reference_number": null
+                      }
+                    ],
+                    "reason": null,
+                    "source": "EFFECTIVE_INVENTORY_HEAD",
+                    "available": true,
+                    "row_count": 1
+                  },
+                  "root_timesheet_version": null,
+                  "proposed_certified_zero": false,
+                  "proposed_component_count": 1,
+                  "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+                  "currently_approved_authority": "HEAD",
+                  "currently_approved_component_count": 1
+                }
+              ],
+              "present": true,
+              "decision": {
+                "owner": "public.weekly_source_later_change_decide_atomic_v1",
+                "actions": [
+                  {
+                    "label": "Approve updated hours",
+                    "action": "APPROVE_UPDATED_HOURS",
+                    "reason_required": false
+                  },
+                  {
+                    "label": "Keep currently approved hours",
+                    "action": "KEEP_CURRENTLY_APPROVED_HOURS",
+                    "reason_required": false
+                  }
+                ],
+                "endpoint": "/api/weekly-source/v1/commands",
+                "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                "command_payload": {
+                  "schema_version": "WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1",
+                  "bundle_revision": 1,
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+                  "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8"
+                }
+              },
+              "proposed": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": "0.000000",
+                    "hours_day": "7.500000",
+                    "hours_sat": "0.000000",
+                    "hours_sun": "0.000000",
+                    "hours_night": "0.000000",
+                    "total_hours": "7.500000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": "g9-r08"
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_ENTITLEMENT_COMPOSER",
+                "available": true,
+                "row_count": 1
+              },
+              "bundle_kind": "SINGLE_ROOT",
+              "decision_id": "88a304d5-d660-d7e4-1ded-dd5eb0850564",
+              "member_count": 1,
+              "pending_state": null,
+              "cross_contract": null,
+              "bundle_revision": 1,
+              "decision_reason": {
+                "source_change": {
+                  "reason": "INITIAL_FINALISATION",
+                  "revision_number": 1,
+                  "finalised_at_utc": "2026-09-10T10:00:00+00:00",
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "finalised_by_user_id": "d1000000-0000-4000-8000-000000000001"
+                },
+                "current_position": {
+                  "head_id": "e8000000-0000-4000-8000-000000000008",
+                  "authority": "HEAD",
+                  "authority_kind": "LOCKED_FINAL_SOURCE",
+                  "committed_at_utc": "2026-12-30T10:00:00+00:00",
+                  "decided_by_user_id": "d1000000-0000-4000-8000-000000000001"
+                }
+              },
+              "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+              "pending_bundle_id": null,
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "decision_bundle_id": "a70b332d-235e-c801-221b-de22914d3fe8",
+              "primary_root_ordinal": 1,
+              "proposed_certified_zero": false,
+              "request_digest_verified": true,
+              "proposed_component_count": 1,
+              "currently_approved_head_id": "e8000000-0000-4000-8000-000000000008",
+              "currently_approved_authority": "HEAD",
+              "currently_approved_authority_kind": "LOCKED_FINAL_SOURCE",
+              "currently_approved_component_count": 1
+            },
+            "ui_state": "UI-008",
+            "schedules": {
+              "approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "submitted": {
+                "rows": [
+                  {
+                    "hours": "09:00-17:00",
+                    "state": "SUBMITTED",
+                    "row_key": "submitted-all-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "break_text": "30 min"
+                  }
+                ],
+                "reason": null,
+                "source": "CANDIDATE_SUBMITTED_SCHEDULE",
+                "available": true,
+                "row_count": 1
+              },
+              "processing": {
+                "rows": [],
+                "reason": "NO_PAYMENT_IN_FLIGHT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "current_paid": {
+                "rows": [],
+                "reason": "NO_SETTLEMENT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "paid_to_date": {
+                "rows": [],
+                "reason": "NO_SETTLEMENT",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              },
+              "latest_source": {
+                "rows": [
+                  {
+                    "hours": "09:00-17:00",
+                    "state": "MATCH",
+                    "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                    "day_date": "Tue 20 Oct 2026",
+                    "break_text": "30 min",
+                    "issue_text": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "additional_units": [
+                      {
+                        "key": "day",
+                        "label": "Day",
+                        "state": "MATCH",
+                        "value": "7.50 hours"
+                      }
+                    ]
+                  }
+                ],
+                "reason": null,
+                "source": "WEEKLY_SOURCE_LATEST_SOURCE",
+                "available": true,
+                "row_count": 1
+              },
+              "currently_approved": {
+                "rows": [
+                  {
+                    "state": "ENTITLED",
+                    "row_key": "entitlement-1",
+                    "day_date": "Tue 20 Oct 2026",
+                    "hours_bh": null,
+                    "hours_day": "8.000000",
+                    "hours_sat": null,
+                    "hours_sun": null,
+                    "hours_night": null,
+                    "total_hours": "8.000000",
+                    "component_id": "cfa21199-9d0e-7477-67e7-9f3c56eacb3b",
+                    "expense_code": null,
+                    "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                    "component_kind": "WORKED_TIME",
+                    "reference_number": null
+                  }
+                ],
+                "reason": null,
+                "source": "EFFECTIVE_INVENTORY_HEAD",
+                "available": true,
+                "row_count": 1
+              },
+              "hours_to_authorise": {
+                "rows": [],
+                "reason": "NOT_IN_A_FIRST_AUTHORISATION_PHASE",
+                "source": null,
+                "available": false,
+                "row_count": 0
+              }
+            },
+            "settlement": {
+              "ok": true,
+              "state": "NO_SETTLEMENT",
+              "reason": null,
+              "batch_count": 0,
+              "settlements": [],
+              "reason_detail": null,
+              "settlement_count": 0,
+              "family_booking_id": "G9-T08",
+              "root_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+              "unavailable_class": null,
+              "last_settled_at_utc": null,
+              "first_settled_at_utc": null,
+              "member_timesheet_ids": [
+                "fa000000-0000-4000-8000-000000000008"
+              ],
+              "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008"
+            },
+            "current_head": {
+              "head_id": "e8000000-0000-4000-8000-000000000008",
+              "head_revision": 1,
+              "prior_head_id": null,
+              "authority_kind": "LOCKED_FINAL_SOURCE",
+              "certified_zero": false,
+              "component_count": 1,
+              "committed_at_utc": "2026-12-30T10:00:00+00:00"
+            },
+            "server_phase": "LATER_CHANGE_PENDING_UNPAID",
+            "heading_source": "SERVER",
+            "overlay_states": [],
+            "primary_schedule": "currently_approved",
+            "invoice_movements": {
+              "ok": true,
+              "reason": null,
+              "movements": [
+                {
+                  "note": "Invoice movement history. Never Candidate paid hours.",
+                  "binding": null,
+                  "movement_role": "POSITIVE",
+                  "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                  "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+                  "invoice_status": null,
+                  "placement_state": "UNPLACED",
+                  "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+                  "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                  "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+                  "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+                }
+              ],
+              "movement_count": 1,
+              "bound_line_count": 0,
+              "invoiced_from_source": false,
+              "ordinary_invoice_line_count": 0
+            },
+            "permitted_actions": [
+              "APPROVE_UPDATED_HOURS",
+              "KEEP_CURRENTLY_APPROVED_HOURS"
+            ],
+            "right_pane_status": "Proposal not current",
+            "authorisation_state": "AUTHORISED",
+            "forbidden_inference": "Do not label proposal approved",
+            "member_timesheet_ids": [
+              "fa000000-0000-4000-8000-000000000008"
+            ],
+            "canonical_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+            "authorisation_generations": {
+              "live": 1,
+              "withdrawn": 0
+            }
+          },
+          "applicable": true,
+          "comparison": {
+            "rows": [],
+            "state": "MATCH",
+            "source_rows": [
+              {
+                "hours": "09:00-17:00",
+                "state": "MATCH",
+                "row_key": "source-fb000000-0000-4000-8000-000000000008",
+                "day_date": "Tue 20 Oct 2026",
+                "break_text": "30 min",
+                "issue_text": null,
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "additional_units": [
+                  {
+                    "key": "day",
+                    "label": "Day",
+                    "state": "MATCH",
+                    "value": "7.50 hours"
+                  }
+                ]
+              }
+            ],
+            "submitted_rows": []
+          },
+          "action_state": {
+            "unauthorise": {
+              "reason": "NONE",
+              "available": false,
+              "permanent": true,
+              "retryable": false,
+              "withdrawn": false,
+              "owner_error": "NONE",
+              "refusal_code": "WEEKLY_SOURCE_UNAUTHORISE_ENTITLEMENT_HEAD_COMMITTED",
+              "owner_sqlstate": "NONE",
+              "refusal_nature": "PERMANENT",
+              "authorisation_state": "AUTHORISED",
+              "availability_source": "WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAW_AVAILABLE_V1"
+            },
+            "blocked_reason": "",
+            "authorise_allowed": true,
+            "unauthorise_allowed": false,
+            "manage_approved_hours_allowed": false,
+            "add_additional_expense_timesheet_allowed": true
+          },
+          "approved_rows": [
+            {
+              "hours": "09:00-17:00",
+              "state": "READY",
+              "row_key": "approved-fb000000-0000-4000-8000-000000000008",
+              "day_date": "Tue 20 Oct 2026",
+              "break_text": "30 min",
+              "status_text": "Ready"
+            }
+          ],
+          "record_version": "6b44f04e7ac1c5f7c673d1190687ed32cca2bc928165bcb496fb2e7e38d6ee75",
+          "candidate_lifecycle": {
+            "ok": false,
+            "note": null,
+            "errors": [
+              {
+                "code": "CANDIDATE_VIEW_PRODUCER_FAILED",
+                "detail": "The Candidate payload producer did not answer for this week."
+              }
+            ],
+            "heading": null,
+            "contract": "WEEKLY_SOURCE_OFFICE_LIFECYCLE_V1",
+            "ui_state": null,
+            "server_phase": null,
+            "heading_source": "NONE",
+            "overlay_states": [],
+            "primary_schedule": null,
+            "permitted_actions": [],
+            "right_pane_status": null,
+            "forbidden_inference": null
+          },
+          "source_expense_policy": "SEPARATE_ADDITIONAL_TIMESHEET",
+          "invoice_movement_history": {
+            "ok": true,
+            "reason": null,
+            "movements": [
+              {
+                "note": "Invoice movement history. Never Candidate paid hours.",
+                "binding": null,
+                "movement_role": "POSITIVE",
+                "work_event_id": "f9000000-0000-4000-8000-000000000008",
+                "created_at_utc": "2026-09-18T07:56:58.034913+00:00",
+                "invoice_status": null,
+                "placement_state": "UNPLACED",
+                "source_line_kind": "NHSP_PHYSICAL_POSITIVE",
+                "final_revision_id": "f1000000-0000-4000-8000-000000000001",
+                "billing_movement_id": "e0000000-0000-4000-8000-000000000008",
+                "source_profile_kind": "NHSP_TRUST_BACKING_REPORT"
+              }
+            ],
+            "movement_count": 1,
+            "bound_line_count": 0,
+            "invoiced_from_source": false,
+            "ordinary_invoice_line_count": 0
+          },
+          "submitted_timesheet_complete": true,
+          "submitted_timesheet_available": true
+        },
+        "action_flags": {
+          "can_authorise": false,
+          "can_unauthorise": false,
+          "can_manage_evidence": false,
+          "can_edit_timesheet_data": false,
+          "is_archived": false,
+          "read_only": true
+        },
+        "booking_id": "TS-6111",
+        "requested_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "current_timesheet_id": "fa000000-0000-4000-8000-000000000008",
+        "current_version": 1,
+        "was_stale": false,
+        "sheet_scope": "WEEKLY",
+        "ready_to_pay": false
+      }
+    }
+  },
+  "displayStates": {
+    "normal": "",
+    "unknown": "The decision could not be confirmed; try again to check the same decision.",
+    "refused": "This decision was not saved; close and reopen the Timesheet."
+  },
+  "notice": "A4 fixed visual states only; no command dispatched or joined acceptance"
+}

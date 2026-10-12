@@ -375,3 +375,5 @@ FC15seq135 BD149 current exact parents -> 12102026_1822 classified work collecti
 FC15 S06 observation/work projection1822 ->1849: retained known manual WITHDRAWN approval; original WAIT and A/C/H rows retained, exact manual display nominal only.
 
 FC15 nativeWorkprojection1849 ->1858: immutable original tax for manual informational labels; unknown tax remains NULL, no automatic offer.
+
+SP10seq136 / FC15 owner12Oct accepted-removal correction: private.bpay_next_work_collection_observation_v1(uuid,text,uuid)1822 ->1849 ->12102026_1934. Only explicit accepted REMOVED singleton/current native binding qualifies original typed zero, including SHIFT-to-FIXED siblings and matching nullable tax. Existing net liability/conservation,1849reconciler,1858core,1246binding and native Source/Position producers are unchanged. Future named editors merge1934 for this helper; no future automatic Source/CM13a owner is promoted. Native1534decision unchanged; current WeeklySource handleCommand adds only its existing LATER_CHANGE_DECISION branch.
