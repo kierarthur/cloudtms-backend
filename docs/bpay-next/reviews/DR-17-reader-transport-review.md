@@ -46,3 +46,9 @@ The reviewer performed only saved-file reads, static source comparison and hash 
 | FE Office, after R17-01/02 fixes | `fd6640d1218eb84e59270ec4b4bf38942b1311cc4518bf59d6cbffee2e68894c` |
 | FE Office CSS | `3c6e8faeea37f90d4b830733d27deedf9aba816a762edfb217c65d742dfd2c64` |
 | BD137 scope | `cc43f49920e1b8a8b0f6b4bce0368c8c3532e939302df6d089e57ea360831357` |
+
+## Final scoped phone-caret CSS amendment
+
+12 October 2026, after root reported product commits BE92a49f6d/FEb29255e. **SOURCE PASS retained.** Re-read the five appended CSS lines: the <=700px rule targets only the existing NEXT read modal, native worker-review card table and its review caret. Explicit width/height/min-height44px, zero padding and flex-shrink0 override the native fit-content button sizing without `!important`, additional controls or behavior changes. The native table and other modal buttons retain their original rules. No remaining source defect identified in this amendment.
+
+Current `css/bpay-next-office.css` SHA-256: `3f7a7a4663561092fa3ff95d3599aeb82831fbb74ed0dea06385d36b27fa4522`. This supersedes the earlier CSS hash only. Root's reported actual44x44 capture and final29-image A4 review belong to the separate screen receipt; this amendment is source-only and does not claim independent pixel inspection or joined acceptance.

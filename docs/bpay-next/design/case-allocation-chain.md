@@ -351,3 +351,5 @@ DR13seq122 BD135: private Case review reader0442 ->12102026_0552; private instru
 WB40 owner11Oct A9 / BD136: private.bpay_next_pay_hold_control_trigger_v1() 11102026_0426 ->12102026_0611. Existing public trigger bindings retained. Only missing-control early return changes; financial command guards, all money owners and F25 parked objects unchanged.
 
 DR17seq123 BD137: private captured-origin/public frozen-detail1005 ->12102026_0620 ->later exactregistryowner. Only sealedsourcekind+guardedapprovedlineoperands/budget changed. Private detail0025/shift1134, originalimmutable1342/fourbindings0718, capture0005/ordinary1001 remain untouched. DR31seq158 consumes existingnativechild/initialtab; D06host+ITEMopen untilthen. No money-chain change.
+
+DR18seq124: confirm0847 ->0645; factualchannels0236 ->0645; WB08 STEP/runtime1429 ->0645. New exact immutable Work/Case CONFIRM task membership uses existing WB08 queue/finish and stable original addresses, no financial inputs. Later editors merge final0645 in final-definer registry; futureDR07 publicpreparationpage merges0442, not0645. D02 actualDR28handoff remainsopen.

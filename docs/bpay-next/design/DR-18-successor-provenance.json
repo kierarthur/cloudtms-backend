@@ -1,0 +1,60 @@
+{
+  "card": "DR-18",
+  "sequence": 124,
+  "status": "PARTLY_BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR28_HANDOFF",
+  "decision": "BD138",
+  "implementationCommit": "6280db41d59d2c19f4d231512510a27d5bd3d4e1",
+  "frontendImplementationCommit": "68222f12bf409559757de30ead641b9b4e95f2a8",
+  "frontendCommits": [
+    "b5678df35e95d78a8411909d162daf63f46d9dab",
+    "1cc6b072038e36c16b87b885f07389692277fef0",
+    "68222f12bf409559757de30ead641b9b4e95f2a8"
+  ],
+  "exactDeliverables": [
+    "D01/D05 full state-only confirm and finite original refresh membership",
+    "D03 existing controls with exact revision/dialog/receipt/unknown recovery"
+  ],
+  "blocked": {
+    "D02": "Actual NEXT Payment Batches host/handoff joins at DR28 seq155",
+    "ITEM": "D02 real host outstanding; no fake whole-card tick"
+  },
+  "files": [
+    {
+      "file": "supabase/migrations/12102026_0645_banking_pay_next_confirm_refresh_membership.sql",
+      "sha256": "28785f633847c5fecfd937793d8cdc841299f7847975da779b8019a89a345763"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql",
+      "sha256": "5c1e24129cf8a14c97c80d4a7027eaf7f434bfffec2ff58872a159fe824552a1"
+    },
+    {
+      "file": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "eb9fd85c7f6a6f7a4fc0f34bacaa069826e20d4b7943a218d39da0069f0117c9"
+    },
+    {
+      "file": "broker/src/bpay-next-preparation.js",
+      "sha256": "542d55d3cb71fb718d230279f39c3eb3516cf4bd09de607b05f6968130a8154b"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "8442b15412b89f4c8c20d8afc0bd7ae3dbdd1727e184d5db30da1337e72f0642"
+    }
+  ],
+  "checks": {
+    "source": "12/12 PASS at DR18 product boundary",
+    "dbCheck": "367 migrations/946 repeatables PASS",
+    "syntax": "Changed Worker/Office node --check PASS",
+    "local": "SolePG17 compile/four exact body/config/ACL/volatility owners; owner-only forcedRLS/nativePK/FKs/closedunion/two immutable attachments; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and CandidateDO PASS; publicSECDEF membershipdelta0",
+    "seal": "41f0d5ee0d64253f7adb3018ad1b4cd8f7a92075322b5eaa21348e5857b6d03c",
+    "coupling": "PASS",
+    "screen": "24 actual native local fixed-response PNGs; each full42-row A4 33PASS/0FAIL/9 scopedN/A",
+    "business": "AUTHORED_NOT_RUN; no rows/businessRPC/hosted/queue acceptance",
+    "timing": "Moved to TEST after installation (owner10October)"
+  },
+  "reviews": [
+    "reviews/DR-18-sql-review.md",
+    "reviews/DR-18-office-review.md",
+    "screen-designs/SCR-48/review.md",
+    "screen-designs/SCR-49/review.md"
+  ]
+}
