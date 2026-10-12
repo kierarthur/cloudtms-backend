@@ -1,5 +1,5 @@
 {
-  "status": "BUILT_SOURCE_A4_REVIEWED",
+  "status": "BUILT_REVIEWED",
   "parents": [
     {
       "signature": "private.bpay_next_claim_case_pause_job_v1(uuid,integer)",
@@ -367,5 +367,7 @@
     "contract": "a59e7fc45cafa9f90d6256d6b68f64450ce22b5c1b0f48a00c1bc630064b7aad export/seal/coupling PASS",
     "a4": "Independent full42policy PASS / APPROVED on40actual local nativePNG (30dark/device-light/phone states+10phonebottom), supplieddesign side-by-side/everydifference/controlpurpose documented; no financialdispatch",
     "business": "AUTHORED_NOT_RUN; compile/catalogue/source/A4 only; no business SQL/RPC/queue/hosted/payment/timing/auth/email"
-  }
+  },
+  "implementationCommit": "b8a296e9a54c00f2dfcbc7b6140fd883234d3168",
+  "frontendCommit": "2c81400267d7375ac1a4a1322b316ea4d79a9151"
 }
