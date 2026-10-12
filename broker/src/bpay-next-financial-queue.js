@@ -1,10 +1,11 @@
 /**
  * Native identity wakes only: the database owns every lease, phase and cursor.
- * Each delivery takes a fresh metadata CLAIM and executes one bounded STEP.
+ * Each delivery takes a fresh metadata CLAIM for every bounded STEP. DR20
+ * economic PREPARE may perform a finite turn; other kinds keep one STEP.
  * No active lease is adopted. An unknown reply retries this identity; native
  * expiry and fresh CLAIM recover the committed cursor without repricing.
  * Await continuation publication before ACK. Failure recording remains the
- * original closed, durable callback; no financial or provider drain here.
+ * original closed, durable callback; no provider or execution drain here.
  * Policy X: accepted inputs and original money owners remain authoritative.
  */
 
@@ -16,6 +17,8 @@ export const BPAY_NEXT_FINANCIAL_QUEUE_LIMITS = Object.freeze({
   retrySeconds: 30,
   claimWaitSeconds: 120
 });
+export const BPAY_NEXT_PREPARATION_TURN_LIMITS=Object.freeze({steps:16,startBudgetMs:10000});
+const PREPARATION_TURN_PHASES=Object.freeze(['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE']);
 
 /** @typedef {import('./bpay-next-job-step.js').FinancialJobClaim|import('./bpay-next-job-step.js').FinancialJobSingleStep|import('./bpay-next-job-step.js').FinancialJobPageStep|import('./bpay-next-job-step.js').FinancialJobPositionStep|import('./bpay-next-job-step.js').FinancialJobPinStep|import('./bpay-next-job-step.js').FinancialJobPreparePageStep|import('./bpay-next-job-step.js').FinancialJobPrepareCompleteStep|import('./bpay-next-job-step.js').FinancialJobCaseNetPageStep} FinancialCall */
 /** @typedef {{id:string,kind:string}} FinancialQueueEnvelope */
@@ -148,7 +151,7 @@ function prepareContinuation(call, result) {
           limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows } : {}) });
 }
 
-/** Fresh metadata CLAIM, then at most one bounded financial STEP. */
+/** Fresh CLAIM for each page; finite economic PREPARE turn, other kinds one page. */
 export async function handleBpayNextFinancialQueueMessage(message, dependencies = {}) {
   if (!message || typeof message.ack !== 'function' || typeof message.retry !== 'function') {
     throw new TypeError('BPAY_NEXT_QUEUE_MESSAGE_INTERFACE_INVALID');
@@ -163,21 +166,34 @@ export async function handleBpayNextFinancialQueueMessage(message, dependencies 
   }
   const claim = Object.freeze({action:'CLAIM',job_id:wake.id,job_kind:wake.kind,lease_seconds:120});
   const adapter = {financialJobRpc:dependencies.financialJobRpc,onStepMeasurement:dependencies.onStepMeasurement};
-  const claimed = await stepBpayNextFinancialJob(claim, adapter);
-  if (!claimed.ok) {
-    if(claimed.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}
-    if (claimed.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
-      message.ack(); return {disposition:'ACK',reason:'TERMINAL'};
+  const deadline=Math.min(Date.now()+BPAY_NEXT_PREPARATION_TURN_LIMITS.startBudgetMs,
+    Number.isFinite(dependencies.prepareTurnDeadline)?dependencies.prepareTurnDeadline:Infinity);
+  const steps=wake.kind==='PREPARE'?BPAY_NEXT_PREPARATION_TURN_LIMITS.steps:1;
+  for(let page=0;page<steps;page+=1) {
+    // Only start another CLAIM inside the budget. Once a fresh lease is
+    // obtained its one original STEP/failure path must never be abandoned.
+    if(Date.now()>=deadline)break;
+    const claimed = await stepBpayNextFinancialJob(claim, adapter);
+    if (!claimed.ok) {
+      if(claimed.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}
+      if (claimed.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
+        message.ack(); return {disposition:'ACK',reason:'TERMINAL'};
+      }
+      return failure(message, claim, claimed, dependencies);
     }
-    return failure(message, claim, claimed, dependencies);
-  }
-  const call = continuation(claim, claimed.result);
-  if (!call) return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
-  const outcome = await stepBpayNextFinancialJob(call,adapter);
-  if (!outcome.ok) {if(outcome.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}return failure(message,call,outcome,dependencies);}
-  if (outcome.result.done) {message.ack();return {disposition:'ACK',reason:'DONE'};}
-  if (!continuation(call,outcome.result)) {
-    return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
+    const call = continuation(claim, claimed.result);
+    if (!call) return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
+    const outcome = await stepBpayNextFinancialJob(call,adapter);
+    if (!outcome.ok) {if(outcome.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}return failure(message,call,outcome,dependencies);}
+    if (outcome.result.done) {message.ack();return {disposition:'ACK',reason:'DONE'};}
+    if (!continuation(call,outcome.result)) {
+      return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
+    }
+    // A release can share projection phase names. Its existing CANCELLED
+    // receipt, plus the claimed and next phases, forbids extra cleanup pages.
+    if(wake.kind!=='PREPARE'||!PREPARATION_TURN_PHASES.includes(claimed.result.phase)
+      ||!PREPARATION_TURN_PHASES.includes(outcome.result.phase)
+      ||outcome.result.worker_status==='CANCELLED')break;
   }
   try {await dependencies.sendContinuation(wake);} catch {
     return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_SEND_UNKNOWN',true,true,'WAIT_FOR_LEASE_EXPIRY'));

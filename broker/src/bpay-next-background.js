@@ -1,8 +1,9 @@
 /**
  * Small metadata wakes for the NEXT owner. Database jobs/commands are durable
- * authority; the queue is transport only. No Candidate/history rebuild, inline
- * financial drain, provider action, caller clock, or batch-wide money payload.
- * One wake claims fresh metadata and executes at most one bounded page. Every continuation is
+ * authority; the queue is transport only. No Candidate/history rebuild,
+ * provider action, caller financial clock, or batch-wide money payload.
+ * DR20 enrolls one bounded original-command metadata page; economic PREPARE
+ * uses finite fresh-CLAIM turns. Every continuation is
  * awaited before acknowledgement; missed messages are rediscovered by bounded
  * server recovery pages. Neither an uncertain send nor a lost SQL reply is a
  * completed financial operation. Actual Worker wiring supplies fresh ownership.
@@ -10,11 +11,12 @@
 import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows,
   readBpayNextWorkbenchWakePage,recoverBpayNextSnoozeDuePage,recoverBpayNextWeekRolloverPage,claimBpayNextWorkbenchTask,stepBpayNextWorkbenchTask } from './bpay-next-runtime-rpc.js';
 import { receiveBpayNextPreparationExpiry } from './bpay-next-preparation-expiry-rpc.js';
-import { handleBpayNextFinancialQueueMessage,bpayNextQueueIdentity } from './bpay-next-financial-queue.js';
+import { handleBpayNextFinancialQueueMessage,bpayNextQueueIdentity,BPAY_NEXT_PREPARATION_TURN_LIMITS } from './bpay-next-financial-queue.js';
 
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ENROLL=Object.freeze({id:'1',kind:'ENROLL'});
-export const BPAY_NEXT_BACKGROUND_LIMITS=Object.freeze({pageRows:100,retrySeconds:30,leaseSeconds:120,duePages:2});
+export const BPAY_NEXT_BACKGROUND_LIMITS=Object.freeze({pageRows:100,retrySeconds:30,leaseSeconds:120,duePages:2,
+  acceptedEnrollmentPages:2,acceptedPrepareJobs:2});
 const claim=item=>Object.freeze({id:item.job_id,kind:item.job_kind});
 const expiry=item=>Object.freeze({id:item.run_id,kind:'EXPIRY'});
 const workbenchClaim=item=>Object.freeze({id:item.task_id,kind:'WORKBENCH'});
@@ -34,10 +36,46 @@ async function enroll(deps) {
   if(!outcome.ok) return outcome;
   if(outcome.result.blocked_command_id!==null) return {ok:false,error_code:'BPAY_NEXT_ENROLLMENT_BLOCKED'};
   const messages=[];
-  if(outcome.result.job_status==='READY') messages.push(claim(outcome.result));
+  for(const job of outcome.result.jobs)if(job.job_status==='READY')messages.push(claim(job));
   if(outcome.result.progressed) messages.push(ENROLL);
   await publish(deps,messages);
-  return {ok:true,published:messages.length,progressed:outcome.result.progressed};
+  return {ok:true,published:messages.length,progressed:outcome.result.progressed,
+    jobs:outcome.result.jobs};
+}
+function financialDependencies(deps,prepareTurnDeadline) {
+  return {financialJobRpc:deps.financialJobRpc,onStepMeasurement:deps.onStepMeasurement,
+    sendContinuation:envelope=>publish(deps,[envelope]),onFailure:deps.onFailure,
+    ...(prepareTurnDeadline===undefined?{}:{prepareTurnDeadline})};
+}
+
+/** Optional accepted-SEAL latency support, always backed by original durable
+ * wakes. At most two metadata pages and two jobs; never discover a Run array.
+ * The caller qualifies the already-accepted closed SEAL response. No Office
+ * choices, money amount, phase/cursor/lease or economic input enters here.
+ */
+export async function runBpayNextAcceptedPreparationTurn(deps) {
+  binding(deps);
+  const deadline=Date.now()+BPAY_NEXT_PREPARATION_TURN_LIMITS.startBudgetMs;
+  const jobs=[];const seen=new Set();
+  for(let page=0;page<BPAY_NEXT_BACKGROUND_LIMITS.acceptedEnrollmentPages&&Date.now()<deadline;page+=1) {
+    const outcome=await enroll(deps);
+    if(!outcome.ok)return outcome;
+    // enroll has awaited every READY identity before optional local attempts.
+    // Multi-entry pages are possible only for the qualified original PREPARE.
+    // A single-entry other action/reprepare/cleanup is published, never drained
+    // here. A one-Candidate original page simply uses its normal queued turn.
+    for(const job of outcome.jobs)if(outcome.jobs.length>1&&job.job_kind==='PREPARE'&&job.job_status==='READY'
+      &&jobs.length<BPAY_NEXT_BACKGROUND_LIMITS.acceptedPrepareJobs&&!seen.has(job.job_id.toLowerCase())) {
+      seen.add(job.job_id.toLowerCase());jobs.push(claim(job));
+    }
+    if(!outcome.progressed)break;
+  }
+  if(Date.now()>=deadline)return {ok:true,attempted:0};
+  const outcomes=await Promise.allSettled(jobs.map(body=>handleBpayNextFinancialQueueMessage(
+    {body,ack(){},retry(){}},financialDependencies(deps,deadline))));
+  // ACK/retry here acknowledges no platform delivery; the real queued wakes
+  // already exist. Unknown, thrown and deferred results retain native recovery.
+  return {ok:outcomes.every(outcome=>outcome.status==='fulfilled'),attempted:jobs.length};
 }
 function retry(message,code) {
   message.retry({delaySeconds:BPAY_NEXT_BACKGROUND_LIMITS.retrySeconds});
@@ -86,12 +124,7 @@ export async function handleBpayNextBackgroundMessage(message,deps) {
       await publish(deps,[ENROLL]);
       message.ack();return {disposition:'ACK',reason:'EXPIRY_RECEIVED_ENROLLMENT_WAKE_PERSISTED'};
     }
-    return await handleBpayNextFinancialQueueMessage(message,{
-      financialJobRpc:deps.financialJobRpc,
-      onStepMeasurement:deps.onStepMeasurement,
-      sendContinuation:envelope=>publish(deps,[envelope]),
-      onFailure:deps.onFailure
-    });
+    return await handleBpayNextFinancialQueueMessage(message,financialDependencies(deps));
   } catch {
     // Token-free; never echo a provider, SQL, JWT or Message body to logs.
     return retry(message,'BPAY_NEXT_BACKGROUND_DEPENDENCY_OR_SEND_FAILED');

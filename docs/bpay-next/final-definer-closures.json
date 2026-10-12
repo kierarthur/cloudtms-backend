@@ -7492,23 +7492,23 @@
     },
     {
       "signature": "public.bpay_next_enroll_service_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql"
+        "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql",
+        "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained",
+      "finalClosures": [
+        "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql"
+      ],
+      "owner": "DR20 seq126 BD140 bounded same-original-command metadata enrollment page;0541 successor; private2041 unchanged",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

@@ -7,7 +7,7 @@
  * reports recovery direction and never silently retries or sends a message.
  */
 export const BPAY_NEXT_RUNTIME_LIMITS = Object.freeze({
-  requestBytes: 1024, responseBytes: 32 * 1024, timeoutMs: 8000, pageRows: 100
+  requestBytes: 1024, responseBytes: 32 * 1024, timeoutMs: 8000, pageRows: 100, enrollmentJobs:20
 });
 export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
   'PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE',
@@ -221,8 +221,19 @@ function parseUniqueJson(text) {
   return JSON.parse(text);
 }
 function enrollmentResult(value) {
-  if (!exact(value, ['progressed', 'last_enrolled_sequence', 'job_id', 'job_kind', 'job_status','blocked_command_id','enrollment_error_code'])
-      || typeof value.progressed !== 'boolean' || !integer(value.last_enrolled_sequence)) throw new Error();
+  if (!exact(value, ['progressed', 'last_enrolled_sequence', 'job_id', 'job_kind', 'job_status','jobs','blocked_command_id','enrollment_error_code'])
+      || typeof value.progressed !== 'boolean' || !integer(value.last_enrolled_sequence)
+      || !Array.isArray(value.jobs)||value.jobs.length>BPAY_NEXT_RUNTIME_LIMITS.enrollmentJobs) throw new Error();
+  const seen=new Set(),jobs=value.jobs.map(item=>{
+    if(!exact(item,['job_id','job_kind','job_status'])||!uuid(item.job_id)
+      ||!BPAY_NEXT_RUNTIME_JOB_KINDS.includes(item.job_kind)||!['READY','DONE'].includes(item.job_status)
+      ||seen.has(item.job_id.toLowerCase()))throw new Error();
+    seen.add(item.job_id.toLowerCase());return Object.freeze({...item});
+  });
+  const last=jobs.at(-1);
+  if(last?value.job_id!==last.job_id||value.job_kind!==last.job_kind||value.job_status!==last.job_status
+    :value.job_id!==null||value.job_kind!==null||value.job_status!==null)throw new Error();
+  if(jobs.length>1&&jobs.some(item=>item.job_kind!=='PREPARE'||item.job_status!=='READY'))throw new Error();
   if ((value.blocked_command_id === null) !== (value.enrollment_error_code === null)
     || (value.blocked_command_id !== null && (!uuid(value.blocked_command_id)
       || typeof value.enrollment_error_code !== 'string' || !/^[0-9A-Z]{5}$/.test(value.enrollment_error_code)
@@ -234,7 +245,7 @@ function enrollmentResult(value) {
     // job. Never turn its progressed:true into false or manufacture a worker.
   } else if (!uuid(value.job_id) || !BPAY_NEXT_RUNTIME_JOB_KINDS.includes(value.job_kind)
       || !['READY', 'DONE'].includes(value.job_status) || !value.progressed) throw new Error();
-  return Object.freeze({ ...value });
+  return Object.freeze({ ...value,jobs:Object.freeze(jobs) });
 }
 function pageResult(value, call) {
   if (!exact(value, ['lane', 'items']) || value.lane !== call.lane || !Array.isArray(value.items)
@@ -398,7 +409,7 @@ async function call(action, input, dependencies) {
   }
 }
 
-/** Exactly one ordered enrollment; no input, claim, STEP or inline drain. */
+/** One ordered metadata page; <=20 jobs for one original PREPARE, other kinds one. */
 export function enrollBpayNextOne(...args) { return call('ENROLL', args.length === 1 ? {} : null, args[0]); }
 /** One server-rotated wake page; metadata mutation despite the reader name. */
 export function readBpayNextJobWakePage(...args) { return call('WAKE_PAGE', args.length === 2 ? args[0] : null, args[1]); }

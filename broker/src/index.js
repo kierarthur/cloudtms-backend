@@ -54,7 +54,7 @@ import { bpayNextCapabilities, bpayNextEnvironmentFailure } from './bpay-next-en
 import { createBpayNextRuntimeRpc } from './bpay-next-runtime-rpc.js';
 import { createBpayNextPreparationExpiryRpc } from './bpay-next-preparation-expiry-rpc.js';
 import { createBpayNextFinancialJobRpc, recordBpayNextPrepareFailure } from './bpay-next-job-rpc.js';
-import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick } from './bpay-next-background.js';
+import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick, runBpayNextAcceptedPreparationTurn } from './bpay-next-background.js';
 import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './bpay-next-legacy-retirement.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
@@ -199066,18 +199066,27 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
     });
     if (preparationResponse.ok
         && preparationResponse.headers.get('x-bpay-next-preparation-wake') === 'ENROLL') {
-      // Only the closed handler's accepted SEAL_ENQUEUE result requests this
-      // hint. Selection pages and reads do not drain or rebuild anything.
-      const wake = Promise.resolve().then(() => {
+      // Existing accepted wakes all remain. Only a closed accepted SEAL may
+      // add optional DR20 latency support after publishing its durable wake.
+      const preparationReceipt=preparationResponse.clone();
+      let inlineAllowed=false;
+      const wake = Promise.resolve().then(async () => {
         if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
           throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
         }
-        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
+        await env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
+        const accepted=await preparationReceipt.json();
+        if(inlineAllowed&&accepted.ok===true&&accepted.action==='SEAL_ENQUEUE') {
+          const turn=await runBpayNextAcceptedPreparationTurn(bpayNextBackgroundDependencies(env));
+          if(!turn.ok)console.warn('[banking-pay-next] accepted preparation awaits recovery',{
+            error_code:'BPAY_NEXT_PREPARATION_TURN_DEFERRED'
+          });
+        }
       }).catch(() => console.warn('[banking-pay-next] accepted preparation awaits recovery', {
         error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
       }));
       if (typeof ctx?.waitUntil === 'function') {
-        try { ctx.waitUntil(wake); } catch { await wake; }
+        try { ctx.waitUntil(wake); inlineAllowed=true; } catch { await wake; }
       } else await wake;
     }
     return withCORS(env, req, preparationResponse);
