@@ -3755,6 +3755,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows DR
 
 A PAYE Draft with 150 Candidates shows all 150 across pages (RQ-122, LUI-101); filtering by one Candidate shows only them; a Candidate with no net shows a blank box, never the gross (RQ-123); the expanded Candidate shows "GBP 100 earning − GBP 30 recovery = GBP 70 gross to payroll, before payroll deductions" with no per-Timesheet net (RQ-274); a Draft holding only Payment Advance payouts offers no worksheet (RQ-121); a payout-only worker in a mixed Draft shows "Payout only — accept payout projection" and is not counted in "Net entered x of y"; the batch PAYE Worksheet tab shows the same rows (LUI-105).
 
+DR21 implemented slice: D02/D03/D05/D08 [x] BUILT [x] REVIEWED; D06 component SOURCE/PIXEL PASS but actual DR22/29 joins and ITEM stay open. BE d11c23f454cb3cafd9f6f4edf5dcc04a469963fa; FE ccb8d6e17093436c6dad4189ee10e93ec072568a. Source12/db369949/JSsyntax/solePG17 four exact owners/isolation/seal9c8e2b0c/coupling PASS. Fourteen native PNGs, 42-row A4 38PASS/4 scopedN/A/0FAIL. Whole104/288 unchanged; nextDR27seq128.
+
 ## DR-27 — Payment Batches list reader (every channel Draft) with status filters and no hidden ceiling
 
 Seq 128; Batches · D2-E; reviewer R3; current requested-feature status PARTLY_DONE.

@@ -1,0 +1,58 @@
+{
+  "card": "DR-21",
+  "sequence": 127,
+  "decision": "BD141",
+  "implementationCommit": "d11c23f454cb3cafd9f6f4edf5dcc04a469963fa",
+  "frontendCommit": "ccb8d6e17093436c6dad4189ee10e93ec072568a",
+  "completedDeliverables": [
+    "DR-21-D02",
+    "DR-21-D03",
+    "DR-21-D05",
+    "DR-21-D08"
+  ],
+  "openDeliverables": [
+    "DR-21-D06 actual DR22/29 joins",
+    "DR-21 ITEM"
+  ],
+  "files": [
+    {
+      "file": "supabase/migrations/12102026_1019_banking_pay_next_worksheet_label_indexes.sql",
+      "sha256": "3c94d86f70d4b94037773f351d939a1bc5a200087a4a2dad57225f41137bbc97"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+      "sha256": "0eeb65839d0f97760ab04a3b87a5d6d3230a261b406f37f78f2179d1512006e5"
+    },
+    {
+      "file": "broker/src/bpay-next-preparation.js",
+      "sha256": "3c004788d23a8ca6fa8690d19313f184b368ad8ef84aa16588e94c159c9d0578"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "25e5acbd971ee6c8d1439bf52e236cec451c60b9ac94493d88942fe5f42169c4"
+    }
+  ],
+  "currentPublicParent": "12102026_0718 retained outside two early read branches",
+  "localSchema": {
+    "migrations": 369,
+    "repeatables": 949,
+    "exactOwners": 4,
+    "publicDefinerDelta": 0,
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "seal": "9c8e2b0c0079523e53f0e30fec242bd95fb5afdc4cbb53b85c4ffbe8d4757c8c",
+    "coupling": "PASS"
+  },
+  "checks": {
+    "source": "12/12 PASS",
+    "syntax": "Worker/Office PASS",
+    "screen": "14 native PNGs; A4 38PASS/4 scopedN/A/0FAIL",
+    "review": "Independent design/SQL/transport SOURCEPASS",
+    "business": "AUTHORED_NOT_RUN"
+  },
+  "reviewReceiptSha256": "59f446dbcafa8ade8385306d69879c329b93d9b1461d9104641ca0d01d5d8849",
+  "wholeItems": {
+    "built": 104,
+    "reviewed": 104,
+    "total": 288
+  }
+}
