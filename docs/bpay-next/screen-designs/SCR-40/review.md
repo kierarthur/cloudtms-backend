@@ -295,3 +295,8 @@ Final per-file actual capture/response SHA-256 manifest follows.
 ## DR-15 current diagnostic slice — 12 October 2026
 
 The original receipt above is preserved. Current DR-15 A4 is APPROVED within its diagnostic scope; see [the full DR15 receipt](DR15-review.md) and [consolidated review](../../reviews/DR-15-screen-review.md) for all 42 policy results, actual final PNG/source hashes and every visible difference/control purpose. Later DR14/DR16 composition is deferred; joined/native-child/action/queue/large-list acceptance remains NOT_RUN.
+
+
+## DR-14 current waiting/common-capacity slice — 12 October 2026
+
+The historical receipts above are preserved. Current DR14 scoped A4 is PASS / APPROVED: 36 PASS, 0 FAIL, 6 N/A across all 42 checks; see [the full DR14 receipt](DR14-review.md) and [consolidated review](../../reviews/DR-14-screen-review.md). Exact per-repayment D07 remains OPEN through DR16; D05 remains BLOCKED_ON_DR37. Joined/business/action/queue/large-list acceptance remains NOT_RUN.

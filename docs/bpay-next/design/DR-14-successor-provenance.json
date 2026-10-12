@@ -2,7 +2,7 @@
   "item": "DR-14",
   "sequence": 120,
   "decision": "BD133",
-  "status": "PARTLY_BUILT_SOURCE_LOCAL_PASS_A4_PENDING_BLOCKED_ON_DR16_DR37",
+  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_DR16_DR37",
   "exactDeliverables": [
     "D02 retained0310",
     "D03 retained0310",
@@ -172,7 +172,7 @@
     "syntax": "changed Worker/Office PASS",
     "local": "solePG17 compile +7exact body/security/config/ACL owner matches +General839/76/0/membershipdelta0 +General/Candidate isolationDO PASS",
     "contract": "3fb3c7a4b95d4d8d00825e069a6290e7060ed06b74d9371ce49ffcbb4ce1a3ad export/seal/coupling PASS",
-    "screen": "eight actual local minimal-response captures; A4pending",
+    "screen": "Eight actual local minimal-response captures; two independent42-row scoped A4 PASS (36 PASS /0FAIL /6N/A each).",
     "businessQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
   },
   "screenEvidence": [
@@ -187,7 +187,10 @@
     "screen-designs/SCR-43c/DR14-review-dark.png",
     "screen-designs/SCR-43c/DR14-review-device-light.png",
     "screen-designs/SCR-43c/DR14-review-phone-dark.png",
-    "screen-designs/SCR-43c/DR14-review-replies.json"
+    "screen-designs/SCR-43c/DR14-review-replies.json",
+    "screen-designs/SCR-40/DR14-review.md",
+    "screen-designs/SCR-43c/DR14-review.md",
+    "reviews/DR-14-screen-review.md"
   ],
   "scope": "Named existing native owners plus nullable captured metadata and exact private seek support; no new public SECDEF membership, command, protocol, producer, public trigger or money kernel.",
   "implementationCommit": "114130a049bf09c70f025e17c27e89db1b258c53",
