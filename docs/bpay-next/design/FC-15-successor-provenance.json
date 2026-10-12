@@ -2,8 +2,8 @@
   "item": "FC-15",
   "sequence": 135,
   "builderDecision": "BD149",
-  "implementationCommit": null,
-  "frontendCommit": null,
+  "implementationCommit": "6fd46d98b8a87870afd6c0f5bced54798c48973b",
+  "frontendCommit": "991933d0fe7d7465a283e3be8768855764d79cad",
   "ownerRuling": "12October FC15/SP10; one net difference, unsupportedautomatic retainedmanual; frozenunchanged; futurecorrectionchain notbuilt",
   "parents": [
     {
@@ -145,6 +145,7 @@
     "sourceGates": "PASS final1858:1510 SQL sources/28 roots/154 routine work signatures/37 typed transport signatures",
     "localContract": "1bfc1b6fc7450efa0ca0ae640fd7933d450f61cdeacfc4b81ab5ca95f88432c7",
     "business": "AUTHORED_NOT_RUN",
-    "timing": "Timing check moved to TEST after installation (owner10/10/2026)"
+    "timing": "Timing check moved to TEST after installation (owner10/10/2026)",
+    "screens": "A4 PASS:19actualPNG/all42policy (38PASS/0FAIL/4N/A per scoped screen)"
   }
 }
