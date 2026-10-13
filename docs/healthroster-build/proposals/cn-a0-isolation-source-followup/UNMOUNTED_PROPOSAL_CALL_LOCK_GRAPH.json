@@ -1,0 +1,1316 @@
+{
+  "contract": "A0_UNMOUNTED_PROPOSAL_CALL_LOCK_GRAPH_V1",
+  "status": "INPUT_ONLY_NO_COMPLETE_EXECUTABLE_ROOT_COMPOSITION",
+  "rootHead": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "proposalPaths": [
+    "cn-a0-lock-fence/canonical-input-assert.sqlinc",
+    "cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+    "cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+    "cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+    "cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+    "cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+    "cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+    "cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc"
+  ],
+  "proposalNodes": [
+    {
+      "id": "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "name": "private.timesheet_correction_canonical_input_assert_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/canonical-input-assert.sqlinc",
+      "definitionSha256": "b070daf83e30b09dc5b530a621808556cf47a646690aa5e16f1e5b071f5bbcb3",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_snapshot_identity_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 11,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_clock_scope_v1(uuid)",
+      "name": "private.timesheet_correction_a0_clock_scope_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+      "definitionSha256": "bee469c4378f6833c225cb5b33abc92f09defa3030011e1a3fbdd3635e978ce9",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 20,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 21,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private._timesheet_settings_authority_frozen_v1",
+          "targetIds": [
+            "private._timesheet_settings_authority_frozen_v1(uuid)"
+          ],
+          "bodyLine": 60,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 108,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_native_input_witness_v1(uuid)",
+      "name": "private.timesheet_correction_a0_native_input_witness_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+      "definitionSha256": "b031aa825c79a163b7e4f278fcbd273fc2958b0e06a387c92dda6125d249d4dd",
+      "calls": [
+        {
+          "calleeName": "public.tsfin_load_context_batch",
+          "targetIds": [
+            "public.tsfin_load_context_batch(uuid[])"
+          ],
+          "bodyLine": 11,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_component_negate_v1(jsonb,text[])",
+      "name": "private.timesheet_correction_component_negate_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "6236c659d6aa3e49c1788461629512df2f8ba6f8501e8a129451db8af591bd26",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_component_negate_v1",
+          "targetIds": [
+            "private.timesheet_correction_component_negate_v1(jsonb,text[])"
+          ],
+          "bodyLine": 9,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_component_negate_v1",
+          "targetIds": [
+            "private.timesheet_correction_component_negate_v1(jsonb,text[])"
+          ],
+          "bodyLine": 15,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_native_original_reversal_v1(jsonb,uuid)",
+      "name": "private.timesheet_correction_native_original_reversal_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "742707242e3461c6bec8907189be9e8962213247180a59bb3a2d0ebc1d354fdb",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_component_negate_v1",
+          "targetIds": [
+            "private.timesheet_correction_component_negate_v1(jsonb,text[])"
+          ],
+          "bodyLine": 25,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_component_negate_v1",
+          "targetIds": [
+            "private.timesheet_correction_component_negate_v1(jsonb,text[])"
+          ],
+          "bodyLine": 26,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "name": "private.timesheet_correction_snapshot_identity_assert_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "553372cec3e8d692137b2b66b2b94299b776bc0d38203c1a4062034c1c33ff59",
+      "calls": [],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])",
+      "name": "private.timesheet_correction_reversal_component_assert_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "628cdc33b1c43b26437225f25f702f9e374182aa3f504ad958242c37516bf890",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_reversal_component_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])"
+          ],
+          "bodyLine": 16,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_reversal_component_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])"
+          ],
+          "bodyLine": 24,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)",
+      "name": "private.timesheet_correction_reversal_assert_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "3b78069ced74f885c8a25d4b62aacb8f278622cfbd5b95ae9cc57a5b12bbc273",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_reversal_component_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])"
+          ],
+          "bodyLine": 28,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_reversal_component_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])"
+          ],
+          "bodyLine": 29,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_prepare_v1(uuid,uuid)",
+      "name": "public.timesheet_correction_prepare_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "86da044d0e3a0fe64b2240e3235dfa939726b48dd56880058ce09640e64efb67",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_actor_allowed_v1",
+          "targetIds": [
+            "private.timesheet_correction_actor_allowed_v1(uuid)"
+          ],
+          "bodyLine": 7,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_origin_v1",
+          "targetIds": [
+            "private.timesheet_correction_origin_v1(uuid)"
+          ],
+          "bodyLine": 16,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 19,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 20,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 22,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 39,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 43,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 52,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_clock_scope_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_clock_scope_v1(uuid)"
+          ],
+          "bodyLine": 61,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_native_input_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_native_input_witness_v1(uuid)"
+          ],
+          "bodyLine": 62,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_authorise_atomic_v1(uuid,bigint,jsonb,uuid,timestamp with time zone)",
+      "name": "public.timesheet_correction_authorise_atomic_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "definitionSha256": "bf79eb605fda9f71811670dcfae5706d0fd83713301671ab1530c6cbe084c461",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_actor_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_actor_assert_v1(uuid)"
+          ],
+          "bodyLine": 8,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_native_lock_fence_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)"
+          ],
+          "bodyLine": 15,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_correction_prepare_v1",
+          "targetIds": [
+            "public.timesheet_correction_prepare_v1(uuid,uuid)"
+          ],
+          "bodyLine": 31,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_draft_round_trip_v1",
+          "targetIds": [
+            "private.timesheet_correction_draft_round_trip_v1(uuid,text,uuid)"
+          ],
+          "bodyLine": 42,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_canonical_input_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 46,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.tsfin_write_current_snapshot_single_bounded",
+          "targetIds": [
+            "public.tsfin_write_current_snapshot_single_bounded(uuid,integer,jsonb,uuid,timestamp with time zone)"
+          ],
+          "bodyLine": 48,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_snapshot_identity_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 58,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_canonical_input_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 63,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.tsfin_write_current_snapshot_single_bounded",
+          "targetIds": [
+            "public.tsfin_write_current_snapshot_single_bounded(uuid,integer,jsonb,uuid,timestamp with time zone)"
+          ],
+          "bodyLine": 65,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_snapshot_identity_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 71,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_leg_create_v1",
+          "targetIds": [
+            "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)"
+          ],
+          "bodyLine": 73,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_native_original_reversal_v1",
+          "targetIds": [
+            "private.timesheet_correction_native_original_reversal_v1(jsonb,uuid)"
+          ],
+          "bodyLine": 77,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_snapshot_identity_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)"
+          ],
+          "bodyLine": 79,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_reversal_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)"
+          ],
+          "bodyLine": 81,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.enqueue_ts_financials",
+          "targetIds": [
+            "public.enqueue_ts_financials(uuid,public.ts_fin_reason_enum)"
+          ],
+          "bodyLine": 85,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.tsfin_dequeue_specific",
+          "targetIds": [
+            "public.tsfin_dequeue_specific(uuid[],integer)"
+          ],
+          "bodyLine": 87,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.tsfin_write_snapshots_and_complete",
+          "targetIds": [
+            "public.tsfin_write_snapshots_and_complete(jsonb)"
+          ],
+          "bodyLine": 94,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_reversal_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)"
+          ],
+          "bodyLine": 105,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 111,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 112,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 114,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 117,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 120,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 122,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_authorise_bulk_atomic",
+          "targetIds": [
+            "public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamp with time zone)"
+          ],
+          "bodyLine": 136,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 152,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_timesheet_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 154,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 155,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_draft_round_trip_v1",
+          "targetIds": [
+            "private.timesheet_correction_draft_round_trip_v1(uuid,text,uuid)"
+          ],
+          "bodyLine": 160,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [
+        {
+          "bodyLine": 17,
+          "tokens": "for update ; perform pg_advisory_xact_lock ( hashtextextended ("
+        },
+        {
+          "bodyLine": 19,
+          "tokens": "for update ; if v_request . state <"
+        },
+        {
+          "bodyLine": 25,
+          "tokens": "for update ; perform 1 from public ."
+        },
+        {
+          "bodyLine": 26,
+          "tokens": "for update ; perform 1 from public ."
+        },
+        {
+          "bodyLine": 28,
+          "tokens": "for update ; perform 1 from public ."
+        },
+        {
+          "bodyLine": 30,
+          "tokens": "for update ; v_prepare : = public ."
+        }
+      ],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "name": "private.timesheet_correction_a0_send_family_fence_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+      "definitionSha256": "390774562934db2f6d57194bdf44ecdca16c7b29251b06b78fc56ba183823960",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_origin_v1",
+          "targetIds": [
+            "private.timesheet_correction_origin_v1(uuid)"
+          ],
+          "bodyLine": 12,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 15,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_correction_chain_scope_v1",
+          "targetIds": [
+            "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)"
+          ],
+          "bodyLine": 23,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 28,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_candidate_serial_gate_v1",
+          "targetIds": [
+            "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)"
+          ],
+          "bodyLine": 31,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_lock_family_rows_v1",
+          "targetIds": [
+            "private.weekly_source_lock_family_rows_v1(uuid[],uuid)"
+          ],
+          "bodyLine": 36,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 42,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_correction_chain_scope_v1",
+          "targetIds": [
+            "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)"
+          ],
+          "bodyLine": 43,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 45,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 49,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_origin_v1",
+          "targetIds": [
+            "private.timesheet_correction_origin_v1(uuid)"
+          ],
+          "bodyLine": 57,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.tsfin_load_context_batch",
+          "targetIds": [
+            "public.tsfin_load_context_batch(uuid[])"
+          ],
+          "bodyLine": 60,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": true,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+      "name": "private.timesheet_correction_a0_signed_precursor_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "definitionSha256": "5dcec85bf84b29dff1e964c9d6d2bb111a1880bc88a396a9a2b962f2c8c9f0fe",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_origin_v1",
+          "targetIds": [
+            "private.timesheet_correction_origin_v1(uuid)"
+          ],
+          "bodyLine": 7,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 8,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+      "name": "private.timesheet_correction_a0_writer_admit_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "definitionSha256": "f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f",
+      "calls": [
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 44,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_candidate_serial_gate_v1",
+          "targetIds": [
+            "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)"
+          ],
+          "bodyLine": 49,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_lock_family_rows_v1",
+          "targetIds": [
+            "private.weekly_source_lock_family_rows_v1(uuid[],uuid)"
+          ],
+          "bodyLine": 57,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 63,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 88,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_signed_precursor_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_signed_precursor_v1(uuid)"
+          ],
+          "bodyLine": 101,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [
+        {
+          "bodyLine": 66,
+          "tokens": "for share nowait ; select jsonb_agg ( jsonb_build_object"
+        },
+        {
+          "bodyLine": 104,
+          "tokens": "for key share nowait ; end if ;"
+        }
+      ],
+      "nonRcRefusal": true,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_reference_before_v1()",
+      "name": "private.timesheet_correction_a0_reference_before_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "definitionSha256": "f2d7da1041ce597b297db122d97ae80119191da3c9aacfe46fcf84c16520df6e",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_a0_writer_admit_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)"
+          ],
+          "bodyLine": 16,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_booking_before_v1()",
+      "name": "private.timesheet_correction_a0_booking_before_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "definitionSha256": "abf554cb4aa709e028058b06cfe00514acbdf9bd2da54ca11fa03d68c8c0f23b",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_a0_writer_admit_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)"
+          ],
+          "bodyLine": 10,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_candidate_before_v1()",
+      "name": "private.timesheet_correction_a0_candidate_before_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "definitionSha256": "56cf26fb2d5ec4a2fa746ba452c4ac494581327f46cdbc8749ca4161002c8be1",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_a0_signed_precursor_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_signed_precursor_v1(uuid)"
+          ],
+          "bodyLine": 14,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_writer_admit_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)"
+          ],
+          "bodyLine": 19,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamp with time zone)",
+      "name": "private.timesheet_correction_week_allocate_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "c5f030444562a02a6885c261fecb6c5a74a762e18971fe543dfef94f1b489fd0",
+      "calls": [],
+      "locks": [
+        {
+          "bodyLine": 6,
+          "tokens": "for update ; select coalesce ( max ("
+        }
+      ],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_workflow_projection_v1(uuid,uuid)",
+      "name": "public.timesheet_correction_workflow_projection_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "769fb71da588f74e29899a89a899e556fb39a25a1dc8a0594099c27b4c867060",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_projection_by_request_v1",
+          "targetIds": [
+            "private.timesheet_correction_projection_by_request_v1(uuid,uuid)"
+          ],
+          "bodyLine": 12,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "name": "private.timesheet_correction_leg_create_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_week_allocate_v1",
+          "targetIds": [
+            "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamp with time zone)"
+          ],
+          "bodyLine": 21,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "name": "public.timesheet_correction_send_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_actor_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_actor_assert_v1(uuid)"
+          ],
+          "bodyLine": 8,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_send_family_fence_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_send_family_fence_v1(uuid)"
+          ],
+          "bodyLine": 37,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_correction_chain_scope_v1",
+          "targetIds": [
+            "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)"
+          ],
+          "bodyLine": 41,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public.timesheet_correction_chain_scope_v1",
+          "targetIds": [
+            "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)"
+          ],
+          "bodyLine": 47,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_origin_v1",
+          "targetIds": [
+            "private.timesheet_correction_origin_v1(uuid)"
+          ],
+          "bodyLine": 60,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_signed_witness_v1",
+          "targetIds": [
+            "private.timesheet_correction_signed_witness_v1(uuid,boolean)"
+          ],
+          "bodyLine": 62,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_financial_authority_hash_v1",
+          "targetIds": [
+            "private.timesheet_correction_financial_authority_hash_v1(jsonb)"
+          ],
+          "bodyLine": 94,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_week_allocate_v1",
+          "targetIds": [
+            "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamp with time zone)"
+          ],
+          "bodyLine": 107,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_leg_create_v1",
+          "targetIds": [
+            "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)"
+          ],
+          "bodyLine": 112,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [
+        {
+          "bodyLine": 40,
+          "tokens": "for update ; v_chain : = public ."
+        },
+        {
+          "bodyLine": 54,
+          "tokens": "for update ; end if ; select t"
+        },
+        {
+          "bodyLine": 56,
+          "tokens": "for update ; if not v_ts . is_current"
+        },
+        {
+          "bodyLine": 63,
+          "tokens": "for update ; select summary . candidate_id ,"
+        }
+      ],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_projection_by_request_v1(uuid,uuid)",
+      "name": "private.timesheet_correction_projection_by_request_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "03764c08819bfa3f2c938c4316b2369d8bbbd6569c326f3b797421f7f9f3d970",
+      "calls": [],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+      "name": "public.timesheet_correction_request_projection_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "946f8db3f61de501320af3f91bf5639d0a89335c4901e2c41c70b190297fe723",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_projection_by_request_v1",
+          "targetIds": [
+            "private.timesheet_correction_projection_by_request_v1(uuid,uuid)"
+          ],
+          "bodyLine": 9,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+      "name": "public.timesheet_correction_create_projection_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "definitionSha256": "475c7d89f9ba05da4a80218b3ec218a1ec4ddf8277b0d26d6191aecb108c523c",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_projection_by_request_v1",
+          "targetIds": [
+            "private.timesheet_correction_projection_by_request_v1(uuid,uuid)"
+          ],
+          "bodyLine": 27,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [],
+      "nonRcRefusal": false,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    },
+    {
+      "id": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "name": "private.timesheet_correction_a0_native_lock_fence_v1",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc",
+      "definitionSha256": "d9979f3a2ee5bad9586311658ed96d8a916148243dfdf0396160338469e1ec79",
+      "calls": [
+        {
+          "calleeName": "private.timesheet_correction_actor_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_actor_assert_v1(uuid)"
+          ],
+          "bodyLine": 8,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_clock_scope_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_clock_scope_v1(uuid)"
+          ],
+          "bodyLine": 12,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 20,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_candidate_serial_gate_v1",
+          "targetIds": [
+            "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)"
+          ],
+          "bodyLine": 27,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.weekly_source_lock_family_rows_v1",
+          "targetIds": [
+            "private.weekly_source_lock_family_rows_v1(uuid[],uuid)"
+          ],
+          "bodyLine": 34,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 43,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "public._pay_timesheet_rotation_scope",
+          "targetIds": [
+            "public._pay_timesheet_rotation_scope(uuid[])"
+          ],
+          "bodyLine": 47,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_a0_clock_scope_v1",
+          "targetIds": [
+            "private.timesheet_correction_a0_clock_scope_v1(uuid)"
+          ],
+          "bodyLine": 126,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        },
+        {
+          "calleeName": "private.timesheet_correction_actor_assert_v1",
+          "targetIds": [
+            "private.timesheet_correction_actor_assert_v1(uuid)"
+          ],
+          "bodyLine": 129,
+          "status": "STATIC_CALL_EXPRESSION_UNMOUNTED_BRANCH_NOT_EXECUTED",
+          "observedInvoked": false
+        }
+      ],
+      "locks": [
+        {
+          "bodyLine": 52,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 55,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 56,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 57,
+          "tokens": "for update nowait ; select c . umbrella_id"
+        },
+        {
+          "bodyLine": 59,
+          "tokens": "for share nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 60,
+          "tokens": "for share nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 61,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 62,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 63,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 64,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 65,
+          "tokens": "for update nowait ; select array_agg ( distinct"
+        },
+        {
+          "bodyLine": 69,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 72,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 73,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 75,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 78,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 79,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 80,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 82,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 83,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 86,
+          "tokens": "for update nowait ; perform 1 from public"
+        },
+        {
+          "bodyLine": 89,
+          "tokens": "for update nowait ; if current_setting ( 'session_replication_role'"
+        }
+      ],
+      "nonRcRefusal": true,
+      "status": "UNMOUNTED_PREDECESSOR_SOURCE_BODY_NOT_CURRENT_ROOT_REPLACEMENT_AUTHORITY"
+    }
+  ],
+  "note": "These exact frozen bodies augment the saved root graph for review. Later root owner changes require guarded composition; the graph does not install, replace or certify those bodies.",
+  "observedNativeInvokedEdges": []
+}

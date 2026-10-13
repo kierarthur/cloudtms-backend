@@ -1,0 +1,40 @@
+{
+  "status": "SOURCE_ONLY_PASSED_ALL_NATIVE_HOLDS_RETAINED",
+  "commands": [
+    "node --test tests/healthroster-cn-a0-isolation-source-followup.test.mjs tests/healthroster-cn-a0-creator-census-forward.test.mjs tests/healthroster-cn-a0-phantom-writers.test.mjs tests/healthroster-cn-a0-lock-fence.test.mjs tests/healthroster-cn-a0-producers.test.mjs tests/healthroster-cn-a0-callbacks.test.mjs tests/healthroster-cn-a0-clock-scope.test.mjs"
+  ],
+  "tests": 123,
+  "passed": 123,
+  "failed": 0,
+  "skipped": 0,
+  "supplementalRerun": {
+    "command": "node --test tests/healthroster-cn-a0-isolation-source-followup.test.mjs",
+    "tests": 11,
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "reason": "Full lock-statement/source-key context added and meaningful archived-guard source assertion strengthened."
+  },
+  "syntaxChecks": [
+    {
+      "file": "sql-function-source-index.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "build-source-successor.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "build-caller-review.mjs",
+      "exitCode": 0
+    },
+    {
+      "file": "freeze-source-followup.mjs",
+      "exitCode": 0
+    }
+  ],
+  "fullCensusEqual": true,
+  "scannerByteReverseEqual": true,
+  "databaseExecuted": false,
+  "nativeSchedulesExecuted": false
+}

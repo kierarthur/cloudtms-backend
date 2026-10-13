@@ -47,6 +47,14 @@ Owner authority: SEND_5_TO_HEALTHROSTER_BUILD_STAGE_NONSTOP.md, 13 October 2026.
 
 Each completed package will append exact commits, checks, installations and remaining gates here. Static/source checks never stand in for installed, financial, document, API or phone acceptance.
 
+## A0 creator isolation source checkpoint — 13 October 2026
+
+Protection lane source-only follow-up against root `ab26a5ff22200be037d215b1100c969d6c0bae73`: adjacent quoted-`"char"` scanner successor, exact byte reversal and complete unchanged census (2,270 identities, 70 writer candidates, 30 first creators) passed. Seven focused Node suites passed 123/123 with no skips; the strengthened 11-case suite was rerun after complete lock-statement contexts were added and passed. The source credential scan passed. The finite static source graph records 122 roots/605 routines; no edge is claimed natively invoked. All six frozen manifests and 205 listed artifacts remain exact. Packet manifest: `proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json`, SHA-256 `f031b83e3b17c609260ae34508e4f859f8d49f91277ca49c5f43c84851fc7e50`.
+
+Hidden-P0 repeatable-read and VALIDATION_FIRST_INSERT, INVOICE_FIRST_INSERT, CANDIDATE_ALIAS_RANK, RAW_BOOKING_SIBLING, NATIVE_FIN_LATE_HOOKS remain unexecuted engineering holds. The report supplies actual native owner paths, lock/callee dependencies and refined recipes; no invented FK/mutex/version bump, global ordinary isolation change, reduced verifier assertion or new business question. All nine mandatory RR roots and snapshot guards are preserved; the 170 verifier closures contain no correction SEND/atomic invocation. Eventual root composition must union FOUR preceding normalization/fence helpers plus SIX creator helpers with all current owners, never creator6 alone. No root SQL/runtime/contract/registry change or new SQL interface was made.
+
+Banking install is supplied as IN PROGRESS with its turn retained; no Banking chat/worktree, database/lab/probe/browser/credential/deployment/release/cleanup or external-effect action occurred. Source/evidence is committed and pushed only to this lane's owner-authorized feature branch; no TEST promotion or final Part B verdict is issued. Existing root pre-existing untracked verifier census is preserved. Release/native/API/financial/document/app/NEXT/phone gates remain.
+
 ## Records
 
 - TEST setup: TEST_SETUP_MANIFEST.md. No mutation before verified vacant identifiers and exact before/after manifest.
