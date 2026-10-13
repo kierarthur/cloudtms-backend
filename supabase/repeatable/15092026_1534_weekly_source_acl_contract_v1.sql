@@ -729,11 +729,11 @@ begin
     into v_contract_count,v_distinct_contract_count
   from private._weekly_source_acl_table_contract_v1();
 
-  if v_contract_count<>102
-     or v_distinct_contract_count<>102 then
+  if v_contract_count<>105
+     or v_distinct_contract_count<>105 then
     raise exception 'WEEKLY_SOURCE_ACL_CONTRACT_INVALID'
       using errcode='55000',
-            detail='The table ACL contract must contain exactly 102 unique relations.';
+            detail='The table ACL contract must contain exactly 105 unique relations.';
   end if;
 
   -- A private helper is never part of the granted RPC surface. Listing one in

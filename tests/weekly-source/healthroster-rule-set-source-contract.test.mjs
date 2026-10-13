@@ -36,7 +36,9 @@ test('new public owners self-reassert service-only grants and same-closure ACL u
   assert.match(sql,/revoke all on function public\.[\s\S]*from public,anon,authenticated,service_role;/);
   assert.doesNotMatch(sql,/\\ir 15092026_1534_weekly_source_acl_contract_v1\.sql/);
   assert.match(sql,/notify pgrst, 'reload schema';\ncommit;/);
-  assert.match(acl,/v_contract_count<>102/);assert.match(verifier,/v_immutable_count<>37[\s\S]*v_stateful_count<>46/);
+  // The full integration adds the two Report stores and Money hold ledger to
+  // F1's102, with the same strict independently classified ACL check retained.
+  assert.match(acl,/v_contract_count<>105/);assert.match(verifier,/v_immutable_count<>39[\s\S]*v_stateful_count<>47/);
 });
 test('blank NEW migration never requires a helper installed in a later repeatable',()=>{
   assert.doesNotMatch(schema,/create trigger/i);

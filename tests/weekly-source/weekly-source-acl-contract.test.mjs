@@ -11,6 +11,9 @@ const migrationPaths = [
   '15092026_1534_weekly_source_plan6_schema.sql',
   '15092026_2310_weekly_source_delivery_targets.sql',
   '15092026_2335_weekly_source_finalisation_pay_orchestration.sql',
+  '13102026_1133_weekly_source_rule_sets_schema.sql',
+  '13102026_1344_weekly_source_self_bill_report_schema.sql',
+  '13102026_1430_weekly_source_invoice_money_origins.sql',
 ].map((name) => path.join(root, 'supabase', 'migrations', name));
 
 function contractTables(sql) {
@@ -18,7 +21,7 @@ function contractTables(sql) {
   const end = sql.indexOf('create or replace function private._weekly_source_acl_lifecycle_column_contract_v1', start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
-  return [...sql.slice(start, end).matchAll(/\('([^']+)','(?:IMMUTABLE_APPEND_ONLY|IMMUTABLE_FACTS_WITH_LIFECYCLE|STATEFUL_SERVER_OWNED)'\)/g)]
+  return [...sql.slice(start, end).matchAll(/\('([^']+)',\s*'(?:IMMUTABLE_APPEND_ONLY|IMMUTABLE_FACTS_WITH_LIFECYCLE|STATEFUL_SERVER_OWNED)'\)/g)]
     .map((match) => match[1]);
 }
 
@@ -53,7 +56,9 @@ function declaredArray(sql, declaration) {
 const verificationSignatures = (sql) => declaredArray(sql, 'v_expected_service_rpcs text[]:=array[');
 const verificationPrivateHelpers = (sql) => declaredArray(sql, 'v_expected_private_helpers text[]:=array[');
 
-const canonical = (value) => String(value).replaceAll(/\s+/g, '').toLowerCase();
+// PostgreSQL renders timestamptz as timestamp with time zone in its native
+// function identity. Compare the same actual type, never invent an overload.
+const canonical = (value) => String(value).replaceAll(/\s+/g, '').toLowerCase().replaceAll('timestampwithtimezone','timestamptz');
 
 // GRANT EXECUTE can name several routines. Split only outside their parameter
 // lists, so a grouped grant is checked as each real signature, not one invented
@@ -77,6 +82,8 @@ function grantSignatures(list) {
 test('service-grant parser retains every grouped signature and parameter comma',()=>{
   assert.deepEqual(grantSignatures('public.a(jsonb), private.b(uuid, text), public.c()'),
     ['public.a(jsonb)','private.b(uuid,text)','public.c()']);
+  assert.deepEqual(grantSignatures('public.a(timestamp with time zone), public.a(timestamptz)'),
+    ['public.a(timestamptz)','public.a(timestamptz)']);
 });
 
 test('central Weekly Source ACL and independent verifier seal the same exact service surface', async () => {
@@ -105,7 +112,9 @@ test('central Weekly Source ACL and independent verifier seal the same exact ser
   // The sealed Weekly Source service surface currently contains 132 exact
   // signatures. Keep this literal coupled to both independent lists so an
   // unnoticed addition or removal fails locally before a database release.
-  assert.equal(actual.length, 132);
+  // Current integrated F1/Report/Money/Protection/Window/F4 owner inventory.
+  // Every original signature remains; the independent SQL verifier is exact.
+  assert.equal(actual.length, 142);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
 });
@@ -135,7 +144,7 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // owner-only entries, not new service or browser RPCs.
   // The qualified pay facts, exact covered-incident predicate and contact
   // retirement helper add three owner-only entries, never browser RPCs.
-  assert.equal(actual.length, 96);
+  assert.equal(actual.length, 218);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a
@@ -163,9 +172,11 @@ test('central Weekly Source ACL classifies every Plan 6 table exactly once', asy
   // publication bundle) + decision D8's per-root authorisation record. The
   // private publication receipt is not a public table and is governed by
   // proof/32 section 9 directly.
-  assert.equal(actual.length, 99);
+  // Original99 plus three Rule tables, two Report tables and one hold ledger.
+  assert.equal(actual.length, 105);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
+  assert.match(repeatable,/v_contract_count<>105\s+or v_distinct_contract_count<>105/);
 });
 
 test('every direct Plan 6 service grant covered by the central ACL remains covered', async () => {
