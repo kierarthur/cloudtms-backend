@@ -38,8 +38,8 @@ begin
     ('private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)','37cb2de5cf4038903079a965171540cb08be6277d3f8ba038bcf9643ca2d3923'),
     ('private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)','037b250753c5230362737684061bef25e9f1e3673155326784b76240213be711')
   ) expected(signature,body_sha256) loop
-    if not exists(select 1 from pg_catalog.pg_proc p where p.oid=pg_catalog.to_regprocedure(r.signature)
-      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p.prosrc,'UTF8')),'hex')=r.body_sha256) then
+    if not exists(select 1 from pg_catalog.pg_proc retained_proc where retained_proc.oid=pg_catalog.to_regprocedure(r.signature)
+      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(retained_proc.prosrc,'UTF8')),'hex')=r.body_sha256) then
       raise exception 'AUTOMATIC_NATIVE_EXISTING_OWNER_BODY_CHANGED' using errcode='55000',detail=r.signature;
     end if;
   end loop;
