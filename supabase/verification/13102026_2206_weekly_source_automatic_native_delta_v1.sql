@@ -62,18 +62,24 @@ begin
     if sqlerrm<>'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' then raise; end if; refused:=true;
   end;
   if not refused then raise exception 'AUTOMATIC_NATIVE_NULL_DELTA_NOT_REFUSED'; end if;
-  -- Prove the missing selector before calling SELECT STRICT; never touch a real request.
+  -- Prove the missing selector before calling the complete owner; it maps
+  -- SELECT STRICT no_data_found to its closed 55000 unavailable refusal.
+  -- Never touch a real request or accept an arbitrary exception.
   if exists(select 1 from public.weekly_exceptional_c1_publication_requests where id=missing_id) then
     raise exception 'AUTOMATIC_NATIVE_VERIFIER_SENTINEL_COLLISION'; end if;
   refused:=false;
   begin
     perform private.weekly_source_staged_publication_context_v1(missing_id,missing_id);
-  exception when no_data_found then refused:=true; end;
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' then raise; end if; refused:=true;
+  end;
   if not refused then raise exception 'AUTOMATIC_NATIVE_MISSING_STAGE_NOT_REFUSED'; end if;
   refused:=false;
   begin
     perform private.weekly_source_automatic_reconcile_delta_assert_v1(missing_id,missing_id);
-  exception when no_data_found then refused:=true; end;
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' then raise; end if; refused:=true;
+  end;
   if not refused then raise exception 'AUTOMATIC_NATIVE_MISSING_DELTA_NOT_REFUSED'; end if;
   -- Presence is never readiness. Only exercise the proven missing-dependency arm.
   if pg_catalog.to_regprocedure('private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)') is null then

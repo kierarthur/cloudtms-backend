@@ -1,0 +1,31 @@
+import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {fileURLToPath,pathToFileURL} from 'node:url';
+
+
+const root='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026',out=path.dirname(fileURLToPath(import.meta.url));
+const commit='cdaf300c62a0d94b0fd0f5a57b41a42d1c7f2b83';
+const {canonical,digest,scanManagedSql}=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')));
+const {mapExecutableSqlSource}=await import(pathToFileURL(path.join(root,'scripts/cloudtms-db-release-lib.mjs')));
+const git=args=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],{cwd:root,encoding:'utf8',maxBuffer:3000000});
+if(git(['ls-remote','origin','refs/heads/codex/healthroster-v2-backend-13102026']).trim().split(/\s+/)[0]!==commit)throw Error('PUSHED_SOURCE_CHANGED');
+process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
+const inputs=[];
+function source(file){const raw=git(['show',commit+':'+file]);inputs.push({file,committedBlobSha256:digest(raw)});return mapExecutableSqlSource(canonical(raw),file);}
+const names=JSON.parse(git(['show',commit+':docs/healthroster-build/proposals/automatic-native-delta/SOURCE_MANIFEST.json'])).newPrivateSignatures;
+const guard="do $hr_auto_guard$ begin if current_database()<>'cloudtms_test_clone' or not exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST') or not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1) or exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then raise exception 'HR_AUTO_TEST_IDENTITY_REFUSED'; end if; if exists(select 1 from unnest(array["+names.map(n=>"'"+n+"'").join(',')+"]) s where to_regprocedure(s) is not null) then raise exception 'HR_AUTO_NEW_HELPER_ALREADY_PRESENT'; end if; end; $hr_auto_guard$;\n";
+const fingerprint="select current_database() physical_database, (select md5(string_agg(n.nspname||'.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')'||coalesce(p.prosrc,'')||coalesce(p.probin,'')||p.proowner::text||coalesce(p.proacl::text,'')||coalesce(p.proconfig::text,'')||p.prolang::text||p.prosecdef::text||p.provolatile::text,'|' order by p.oid)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private')) functions_hash, exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST') identity_test, (select active_owner||':'||owner_epoch::text from private.bpay_next_module_control where id=1) module, (select count(*) from unnest(array["+names.map(n=>"'"+n+"'").join(',')+"]) s where to_regprocedure(s) is not null) automatic_helper_count;\n";
+let sql=guard+fingerprint;
+// Whole source-owned assertion definitions, solely to exercise proven missing
+// dependency refusals. No READY implementation or classifier is fabricated.
+const dependencies=[
+ ['supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc','private.weekly_source_bulk_source_cas_assert_v1','uuid,uuid[]'],
+ ['supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc','private.weekly_source_automatic_reconcile_capability_assert_v1','uuid']
+];
+for(const [file,name,args] of dependencies){const text=source(file),p=scanManagedSql(text);const statements=p.statements.map(s=>p.source.slice(s.start,s.end)).filter(s=>s.startsWith('create or replace function '+name+'('));if(statements.length!==1)throw Error('COMPLETE_DEPENDENCY_OWNER_REQUIRED');sql+=statements[0]+`\nalter function ${name}(${args}) owner to CURRENT_USER;\nrevoke all on function ${name}(${args}) from public,anon,authenticated,service_role;\n`;}
+const folder='supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/';
+for(const name of ['01_staged_source_documents.sqlinc','02_staged_publication_context.sqlinc','03_approved_detail_evidence.sqlinc','04_native_receipt_successors.sqlinc','05_staged_prior_wait_receipt.sqlinc','06_expense_evidence.sqlinc','07_staged_entitlement_components.sqlinc','08_complete_automatic_reconcile_delta_forward.sqlinc','09_complete_local_successor.sqlinc','15_final_automatic_private_acl.sqlinc'])sql+=source(folder+name)+'\n';
+const verifier=source('supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql');const parsed=scanManagedSql(verifier);let neutral=verifier;
+const strips=[...parsed.meta.filter(m=>/^\\set ON_ERROR_STOP on$/i.test(m.text)),...parsed.statements.filter(s=>['BEGIN','ROLLBACK'].includes(s.tokens[0])&&s.tokens.length===1)];for(const s of strips.sort((a,b)=>b.start-a.start))neutral=neutral.slice(0,s.start)+neutral.slice(s.end);sql+=neutral+'\n';
+const checked=scanManagedSql(sql);if(checked.meta.length||checked.statements.length>250||Buffer.byteLength(sql)>2000000)throw Error('SHORT_COMPILE_ENVELOPE_REFUSED');
+const plan={status:'PREPARED_ONLY_TURN_AND_EXACT_INSTALLED_OWNER_FENCES_REQUIRED',commit,physicalDatabase:'cloudtms_test_clone',sqlSha256:digest(sql),bytes:Buffer.byteLength(sql),statements:checked.statements.length,inputs,newPrivateSignatures:names,dependencyOwners:dependencies.map(([file,name,args])=>({file,name,identity_types:args})),scope:'Exact committed definitions/ACL/data-free2206 only; omits both complete central ACL pages because final105-table schema is not installed. No table/business/financial/queue/activation/API action. This is not the full2205closure or generated contract proof.',freshVerification:'Fingerprint from the pre-DDL SELECT must equal the fresh identical SELECT; automatic_helper_count must return0, physicalTEST/LEGACY:1. Exact prior named definitions also fenced under held turn before replacement.'};
+fs.writeFileSync(path.join(out,'AUTOMATIC_SHORT_COMPILE_TRIAL_2_PLAN.json'),JSON.stringify(plan,null,2)+'\n');fs.writeFileSync(path.join(out,'AUTOMATIC_SHORT_COMPILE_TRIAL_2.sql'),sql);fs.writeFileSync(path.join(out,'AUTOMATIC_SHORT_COMPILE_TRIAL_2_FRESH.sql'),fingerprint);
+console.log(JSON.stringify({prepared:true,bytes:plan.bytes,statements:plan.statements,sqlSha256:plan.sqlSha256,nativeProof:'NOT_RUN'}));

@@ -1,0 +1,708 @@
+{
+  "sourceCommit": "cdaf300c62a0d94b0fd0f5a57b41a42d1c7f2b83",
+  "turn": {
+    "takenAt": "2026-10-13T21:37:50.179Z",
+    "releasedAt": "2026-10-13T21:38:51.427Z",
+    "ownedPostgresPid": 475466,
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "scope": "Subset definitions/ACL/data-free verifier only; no full financial/contract/closure/API qualification.",
+  "result": {
+    "accepted": false,
+    "database": "cloudtms_test_clone",
+    "label": "HR_AUTOMATIC_COMMITTED_DEFINITIONS_NULL_PRIVATE_ACL_2",
+    "sqlSha256": "543eec4a2a1f66aadbe1863e92b3abfe3e17ae077cb97b339a57271e2dcf18f5",
+    "statementCount": 79,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "functions_hash",
+          "identity_test",
+          "module",
+          "automatic_helper_count"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+            "identity_test": true,
+            "module": "LEGACY:1",
+            "automatic_helper_count": "0"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 21,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 22,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 23,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 24,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 25,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 26,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 27,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 28,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 29,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 30,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 31,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 32,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 33,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 34,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 35,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 36,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 37,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 38,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 39,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 40,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 41,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 42,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 43,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 44,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 45,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 46,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 47,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 48,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 49,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 50,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 51,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 52,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 53,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 54,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 55,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 56,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 57,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 58,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 59,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 60,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 61,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 62,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 63,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 64,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 65,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 66,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 67,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 68,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 69,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 70,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 71,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 72,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 73,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 74,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 75,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 76,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 77,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 78,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 79,
+        "error": {
+          "message": "WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE",
+          "code": "55000",
+          "where": "PL/pgSQL function private.weekly_source_staged_publication_context_v1(uuid,uuid) line 188 at RAISE\nSQL statement \"SELECT private.weekly_source_staged_publication_context_v1(missing_id,missing_id)\"\nPL/pgSQL function inline_code_block line 23 at PERFORM",
+          "routine": "exec_stmt_raise"
+        }
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "functions_hash",
+            "identity_test",
+            "module",
+            "automatic_helper_count"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+              "identity_test": true,
+              "module": "LEGACY:1",
+              "automatic_helper_count": "0"
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ],
+    "fatalError": {
+      "message": "WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE",
+      "code": "55000",
+      "where": "PL/pgSQL function private.weekly_source_staged_publication_context_v1(uuid,uuid) line 188 at RAISE\nSQL statement \"SELECT private.weekly_source_staged_publication_context_v1(missing_id,missing_id)\"\nPL/pgSQL function inline_code_block line 23 at PERFORM",
+      "routine": "exec_stmt_raise"
+    }
+  }
+}
+
