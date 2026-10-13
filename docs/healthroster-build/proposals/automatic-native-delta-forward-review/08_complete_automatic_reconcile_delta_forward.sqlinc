@@ -1,0 +1,189 @@
+-- Actual sealed native stage -> complete native I1 line/component proof.
+-- Seven-field certificate stays compatible with Source27. The qualification
+-- digest commits to every component, frozen detail, source and expense proof.
+create or replace function private.weekly_source_automatic_reconcile_delta_assert_v1(p_request_id uuid,p_actor_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_exceptional_c1_publication_requests%rowtype; g public.weekly_exceptional_pay_generations%rowtype;
+  run public.weekly_exceptional_orchestration_runs%rowtype; event public.weekly_exceptional_pay_family_events%rowtype;
+  old_approval public.weekly_exceptional_payment_approvals%rowtype; approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_produced jsonb; v_context jsonb; v_proof jsonb; v_wait jsonb; v_prior_receipt jsonb; v_current jsonb; v_before jsonb;
+  v_detail jsonb; v_expenses_before jsonb; v_snapshot jsonb; v_components jsonb; v_before_component jsonb; v_next_component jsonb;
+  v_old_raw jsonb; v_raw jsonb; v_source jsonb; v_before_rate jsonb; v_before_charge_rate jsonb; v_key text;
+  v_prior_work_count integer; v_count integer; v_component_proofs jsonb:='[]'; v_expense_proofs jsonb:='[]'; v_policy jsonb;
+  v_rules jsonb; v_cas jsonb; v_facts jsonb; v_qualification jsonb; v_before_expense jsonb; v_next_expense jsonb;
+begin
+  if p_request_id is null or p_actor_id is null then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='22023'; end if;
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select * into strict g from public.weekly_exceptional_pay_generations where id=r.generation_id and family_id=r.family_id;
+  select * into strict run from public.weekly_exceptional_orchestration_runs where id=r.orchestration_run_id and family_id=r.family_id;
+  v_proof:=g.complete_next_vector_json->'automatic_reconcile_proof'; v_wait:=v_proof->'qualified_wait';
+  -- Same actor/date/rules/release owner as native Source27, never a parallel capability classifier.
+  perform private.weekly_source_automatic_reconcile_capability_assert_v1((v_proof->>'source_cycle_id')::uuid);
+  v_produced:=private.weekly_source_staged_entitlement_components_v1(r.id,p_actor_id);
+  v_context:=v_produced->'context'; v_before:=v_context->'prior_inventory'; v_components:=v_produced->'components';
+  v_snapshot:=v_context#>'{target_snapshot,tsfin_snapshot_json}';
+  select * into strict event from public.weekly_exceptional_pay_family_events where id=(v_context->>'family_event_id')::uuid;
+  select * into strict approval from public.weekly_exceptional_payment_approvals where id=(v_context->>'approval_id')::uuid;
+  select * into strict old_approval from public.weekly_exceptional_payment_approvals where id=(v_wait->>'approval_id')::uuid;
+  if run.request_kind is distinct from 'RECONCILE' or event.state is distinct from 'ACCEPTED_SOURCE'
+    or not private.weekly_exceptional_json_keys_exact_v1(v_proof,array['schema_version','eligible','actor_user_id','source_cycle_id',
+      'work_event_id','qualified_wait','rule_set_version_id','rule_values_sha256','source_proposal','self_bill_facts','source_cas',
+      'approved_inventory_basis','selection_sha256'])
+    or not(v_proof ?& array['schema_version','eligible','actor_user_id','source_cycle_id','work_event_id','qualified_wait',
+      'rule_set_version_id','rule_values_sha256','source_proposal','self_bill_facts','source_cas','approved_inventory_basis','selection_sha256'])
+    or v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1'
+    or v_proof->>'eligible' is distinct from 'true' or v_proof->>'actor_user_id' is distinct from p_actor_id::text
+    or v_proof->>'source_cycle_id' is distinct from v_context->>'source_cycle_id'
+    or v_proof->>'work_event_id' is distinct from v_context->>'work_event_id'
+    or v_proof->'source_proposal' is distinct from v_context->'source_proposal'
+    or v_proof->'approved_inventory_basis' is distinct from v_before->'approval_basis'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1',v_proof-'selection_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'selection_sha256')
+    or v_wait->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_V1' or v_wait->>'state' is distinct from 'QUALIFIED_WAIT'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_V1',v_wait-'qualification_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_wait->>'qualification_sha256')
+    or v_wait->>'root_timesheet_id' is distinct from r.root_timesheet_id::text or v_wait->>'family_id' is distinct from r.family_id::text
+    or v_wait->>'work_event_id' is distinct from event.durable_work_event_id::text
+    or v_wait->>'candidate_id' is distinct from v_context#>>'{scope,candidate_id}'
+    or v_wait->>'client_id' is distinct from v_context#>>'{scope,client_id}' or v_wait->>'contract_id' is distinct from r.contract_id::text
+    or v_wait->>'family_bound_version' is distinct from v_context->>'before_bound_version'
+    or v_wait->>'current_generation_id' is distinct from g.prior_generation_id::text
+    or (v_wait->>'current_generation_number')::integer is distinct from g.generation_number-1
+    or old_approval.withdrawn_at_utc is not null or old_approval.pay_target_family_id is distinct from r.family_id
+    or old_approval.work_event_id is distinct from event.durable_work_event_id
+    or old_approval.contract_rate_policy_source_fingerprint is distinct from approval.contract_rate_policy_source_fingerprint
+    or (old_approval.protected_work_date,old_approval.protected_start_at_local,old_approval.protected_end_at_local,old_approval.protected_break_minutes)
+      is distinct from (approval.protected_work_date,approval.protected_start_at_local,approval.protected_end_at_local,approval.protected_break_minutes) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  v_prior_receipt:=private.weekly_source_staged_prior_wait_receipt_v1(r.id,p_actor_id);
+  if v_prior_receipt is null or v_prior_receipt->'accepted_receipt' is distinct from v_wait->'accepted_receipt' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_PRIOR_WAIT_UNAVAILABLE' using errcode='55000'; end if;
+  -- Source CAS deliberately excludes pending protected stage mutations. Do not
+  -- normalize any Source/export/report/economic/expense/hold authority changes.
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1((v_proof->>'source_cycle_id')::uuid,array[(v_context#>>'{scope,client_id}')::uuid]);
+  v_rules:=private.weekly_source_effective_rule_set_v1((v_context#>>'{scope,client_id}')::uuid,(v_proof->>'source_cycle_id')::uuid);
+  v_facts:=private.weekly_source_shift_on_self_bill_v1((v_proof->>'work_event_id')::uuid,(v_proof->>'source_cycle_id')::uuid);
+  if v_cas is distinct from v_proof->'source_cas' or v_rules->'rule_set_version_id' is distinct from v_proof->'rule_set_version_id'
+    or v_rules->'values_sha256' is distinct from v_proof->'rule_values_sha256' or v_facts is distinct from v_proof->'self_bill_facts' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_CHANGED' using errcode='40001'; end if;
+  -- Read the real current approved position at K+1, qualified above against the
+  -- sealed K position. Passing a hand-normalized inventory to approval_basis
+  -- would be a false proof, so only staged_context performs the K adjustment.
+  v_current:=private.weekly_source_effective_inventory_v1(r.root_timesheet_id);
+  v_detail:=private.weekly_source_approved_detail_evidence_v1(r.root_timesheet_id,v_current);
+  v_expenses_before:=private.weekly_source_approved_expense_evidence_v1(r.root_timesheet_id,v_current);
+  if v_detail#>>'{approval_basis,detail_digest}' is distinct from v_before#>>'{approval_basis,detail_digest}'
+    or jsonb_array_length(v_components) is distinct from jsonb_array_length(v_before->'components') then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_COMPONENT_DELTA_NONZERO' using errcode='40001'; end if;
+  select count(*) into v_prior_work_count from jsonb_array_elements(v_before->'components') c where c->>'component_kind'='WORKED_TIME';
+  if v_current#>>'{approval_basis,origin,kind}'='INITIAL_AUTHORISED_TSFIN_V1'
+    and (v_snapshot->'policy_snapshot_json' is distinct from v_detail->'policy'
+      or v_snapshot->'rate_source_refs_json' is distinct from v_detail#>'{details,rate_source_refs}') then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_FROZEN_POLICY_CHANGED' using errcode='40001'; end if;
+  for v_before_component in select value from jsonb_array_elements(v_before->'components') loop
+    select value into strict v_next_component from jsonb_array_elements(v_components)
+      where value->>'component_id'=v_before_component->>'component_id';
+    v_before_component:=private.weekly_source_publication_component_canonical_v1(v_before_component-'component_sha256','automatic.before');
+    v_next_component:=private.weekly_source_publication_component_canonical_v1(v_next_component,'automatic.next');
+    foreach v_key in array array['component_kind','economic_key_type','economic_key_value','component_member_identity','segment_id','segment_key','segment_stable_key',
+      'work_date','reference_number','additional_code_raw','expense_code','exclude_from_pay','origin','movement_id','movement_group_id'] loop
+      if v_before_component->v_key is distinct from v_next_component->v_key then
+        raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_COMPONENT_IDENTITY_CHANGED' using errcode='40001'; end if;
+    end loop;
+    foreach v_key in array array['hours_day','hours_night','hours_sat','hours_sun','hours_bh','unit_count','unit_pay_rate','unit_charge_rate','pay_ex_vat','charge_ex_vat'] loop
+      if (v_before_component->>v_key)::numeric is distinct from (v_next_component->>v_key)::numeric then
+        raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_COMPONENT_DELTA_NONZERO' using errcode='40001',
+          detail=jsonb_build_object('component_id',v_before_component->'component_id','field',v_key)::text; end if;
+    end loop;
+    v_old_raw:=null; v_source:=null;
+    if v_before_component->>'component_kind'='WORKED_TIME' then
+      select value into strict v_raw from jsonb_array_elements(v_snapshot#>'{invoice_breakdown_json,segments}')
+        where value->>'segment_id'=v_next_component->>'segment_id';
+      if v_current#>>'{approval_basis,origin,kind}'='INITIAL_AUTHORISED_TSFIN_V1' then
+        select value into strict v_old_raw from jsonb_array_elements(v_detail#>'{details,segments}')
+          where value->>'segment_id'=v_before_component->>'segment_id';
+        foreach v_key in array array['date','start','end','overnight','break_mins','breaks','start_utc','end_utc'] loop
+          if v_old_raw->v_key is distinct from v_raw->v_key then
+            raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_APPROVED_DETAIL_CHANGED' using errcode='40001'; end if;
+        end loop;
+      else
+        select value->'detail' into strict v_old_raw from jsonb_array_elements(v_detail->'details')
+          where value->>'component_id'=v_before_component->>'component_id';
+        if v_old_raw->>'work_date' is distinct from v_raw->>'date' or v_old_raw->>'start' is distinct from v_raw->>'start'
+          or v_old_raw->>'end' is distinct from v_raw->>'end' or v_old_raw->'overnight' is distinct from v_raw->'overnight'
+          or v_old_raw->'breaks' is distinct from v_raw->'breaks'
+          or (jsonb_array_length(v_raw->'breaks')=0 and (v_old_raw->>'break_minutes')::integer is distinct from (v_raw->>'break_mins')::integer)
+          or (jsonb_array_length(v_raw->'breaks')>0 and (v_raw->>'break_mins')::integer is distinct from 0)
+          or v_old_raw->'start_utc' is distinct from v_raw->'start_utc' or v_old_raw->'end_utc' is distinct from v_raw->'end_utc' then
+          raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_APPROVED_DETAIL_CHANGED' using errcode='40001'; end if;
+      end if;
+      -- Native Local capture uses the sealed snapshot's band rates; initial
+      -- approved basis uses its own exact Source vectors/single frozen TSFIN.
+      -- HEAD basis uses the real chosen-detail row qualified by approval_basis.
+      foreach v_key in array array['day','night','sat','sun','bh'] loop
+        if v_current#>>'{approval_basis,origin,kind}'='INITIAL_AUTHORISED_TSFIN_V1' then
+          v_before_rate:=case when jsonb_typeof(v_old_raw->'weekly_source')='object' then v_old_raw#>array['weekly_source','pay_vector','rates',v_key]
+            when v_prior_work_count=1 then v_detail#>array['financial_rate_evidence','pay',v_key] else null end;
+          v_before_charge_rate:=case when jsonb_typeof(v_old_raw->'weekly_source')='object' then v_old_raw#>array['weekly_source','charge_vector','rates',v_key]
+            when v_prior_work_count=1 then v_detail#>array['financial_rate_evidence','charge',v_key] else null end;
+        else v_before_rate:=v_old_raw#>array['rates',v_key]; v_before_charge_rate:=v_old_raw#>array['charge_rates',v_key]; end if;
+        if ((v_next_component->>('hours_'||v_key))::numeric<>0 and ((v_before_rate#>>'{}')::numeric is null
+            and not (v_next_component->>'exclude_from_pay')::boolean or (v_before_charge_rate#>>'{}')::numeric is null))
+          or (v_before_rate#>>'{}')::numeric is distinct from (v_snapshot->>('pay_'||v_key))::numeric
+          or (v_before_charge_rate#>>'{}')::numeric is distinct from (v_snapshot->>('charge_'||v_key))::numeric then
+          raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_APPROVED_RATE_CHANGED' using errcode='40001'; end if;
+      end loop;
+      -- This selected shift is now ACCEPTED_SOURCE. Its actual immutable
+      -- Source economics must equal the saved producer output, not only clocks.
+      if v_next_component->>'component_member_identity'=v_context->>'work_event_id' then
+        select value into strict v_source from jsonb_array_elements(v_context->'next_source_segments')
+          where value#>>'{weekly_source,work_event_id}'=v_context->>'work_event_id';
+        if v_source->>'segment_id' is distinct from v_raw->>'segment_id' or v_source->>'date' is distinct from v_raw->>'date'
+          or v_source->>'start' is distinct from v_raw->>'start' or v_source->>'end' is distinct from v_raw->>'end'
+          or (v_source->>'break_mins')::integer is distinct from (v_raw->>'break_mins')::integer
+          or (v_source->>'pay_amount')::numeric is distinct from (v_raw->>'pay_amount')::numeric
+          or (v_source->>'charge_amount')::numeric is distinct from (v_raw->>'charge_amount')::numeric
+          or v_source->'weekly_source' is distinct from v_raw->'weekly_source' then
+          raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_VECTOR_CHANGED' using errcode='40001'; end if;
+        foreach v_key in array array['day','night','sat','sun','bh'] loop
+          if (v_source->>('hours_'||v_key))::numeric is distinct from (v_raw->>('hours_'||v_key))::numeric
+            or (v_source#>>array['weekly_source','pay_vector','rates',v_key])::numeric is distinct from (v_snapshot->>('pay_'||v_key))::numeric
+            or (v_source#>>array['weekly_source','charge_vector','rates',v_key])::numeric is distinct from (v_snapshot->>('charge_'||v_key))::numeric then
+            raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_VECTOR_CHANGED' using errcode='40001'; end if;
+        end loop;
+      end if;
+    elsif v_before_component->>'component_kind' not in ('ADDITIONAL_UNIT','SOURCE_FIXED_EXPENSE') then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_COMPONENT_UNMAPPED' using errcode='55000';
+    end if;
+    v_component_proofs:=v_component_proofs||jsonb_build_array(jsonb_build_object('before',v_before_component,'next',v_next_component,
+      'approved_detail',v_old_raw,'next_detail',case when v_before_component->>'component_kind'='WORKED_TIME' then v_raw else null end,
+      'source_evidence',v_source));
+  end loop;
+  if jsonb_array_length(v_expenses_before) is distinct from jsonb_array_length(v_produced->'expense_evidence') then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_POLICY_CHANGED' using errcode='40001'; end if;
+  for v_before_expense in select value from jsonb_array_elements(v_expenses_before) loop
+    select value into strict v_next_expense from jsonb_array_elements(v_produced->'expense_evidence')
+      where value->>'work_event_id'=v_before_expense->>'work_event_id';
+    if v_before_expense->'policy' is distinct from v_next_expense->'policy'
+      or v_before_expense->'source_observation_kind' is distinct from v_next_expense->'source_observation_kind' then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_POLICY_CHANGED' using errcode='40001'; end if;
+    v_expense_proofs:=v_expense_proofs||jsonb_build_array(jsonb_build_object('before',v_before_expense,'next',v_next_expense));
+  end loop;
+  -- The outer certificate reports zero only after every actual native component
+  -- passed its identity/quantity/rate/money/policy comparison independently.
+  v_qualification:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_QUALIFICATION_V1',
+    'publication_request_id',r.id,'actor_user_id',p_actor_id,'stage_context',v_context,'automatic_selection',v_proof,
+    'prior_wait_receipt',v_prior_receipt,'approved_basis',v_detail,'source_cas',v_cas,'component_proofs',v_component_proofs,
+    'expense_proofs',v_expense_proofs,'native_next_components',v_components);
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_V1','publication_request_id',r.id,
+    'actor_user_id',p_actor_id,'prior_inventory_digest',v_before->'inventory_digest',
+    'complete_next_vector_sha256',encode(g.complete_next_vector_hash,'hex'),'delta_pay_ex_vat','0.00',
+    'qualification_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_QUALIFICATION_V1',v_qualification),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid) from public,anon,authenticated,service_role;

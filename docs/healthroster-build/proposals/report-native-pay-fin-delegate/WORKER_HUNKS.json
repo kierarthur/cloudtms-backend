@@ -1,0 +1,127 @@
+[
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "import { XLSX_BINARY64_SAME_VALUE_PENCE_V1 } from './money.js';",
+    "after": "import { REPORT_PROFILE, assertReportUploadRequest, selfBillReportRows } from './report-upload-provenance.mjs';\nimport { XLSX_BINARY64_SAME_VALUE_PENCE_V1 } from './money.js';"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "function normalisedRow(parsed, row, context) {",
+    "after": "function normalisedRow(parsed, row, context) {\n  if (parsed.profileId === REPORT_PROFILE) {\n    const dto = selfBillReportRows({ ...parsed, rows: [row], report: { ...parsed.report,\n      lineCount: 1, netPence: row.pricingEvidence.netPence, vatPence: row.pricingEvidence.vatPence,\n      grossPence: row.pricingEvidence.grossPence } }, context)[0];\n    return { ...dto, break_minutes: null, actual_net_minutes: null, row_finalisation_state: 'SOURCE_REPORT_LINE',\n      finalised_by: null, role_band_source: null, source_commission_pence: null, source_total_cost_pence: null,\n      source_money_parse_state: 'VALID', source_qualification_profile_version: 'SOURCE_INVOICE_MONEY_PENCE_V1',\n      source_expense_pence: null, source_expense_parse_state: 'NOT_APPLICABLE' };\n  }\n"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "function coverage(parsed, body) {",
+    "after": "function coverage(parsed, body) {\n  if (parsed.profileId === REPORT_PROFILE) return {\n    suggested_coverage_start_local_date: null, suggested_coverage_end_local_date: null,\n    confirmed_coverage_start_local_date: null, confirmed_coverage_end_local_date: null,\n    coverage_timezone: null, coverage_confirmation_version: null, coverage_confirmed_at_utc: null,\n    coverage_shrink_acknowledged: null, coverage_state: 'COMPLETE', coverage_proof_kind: 'SELF_BILL_REPORT_SCOPE',\n  };\n"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "  assertWeeklySourceCoverageFloor(parsed, body, context);",
+    "after": "\n  if (parsed.profileId === REPORT_PROFILE) {\n    // actor_user_id was injected by the authenticated owner before this pure adapter.\n    assertReportUploadRequest(Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'actor_user_id')));\n    selfBillReportRows(parsed, context);\n  }\n  assertWeeklySourceCoverageFloor(parsed, body, context);"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "  const importUse = body.import_use ?? (parsed.profileId === 'NHSP_FINAL_BACKING_V1'",
+    "after": "  const importUse = body.import_use ?? (parsed.profileId === REPORT_PROFILE || parsed.profileId === 'NHSP_FINAL_BACKING_V1'"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "  const headerMap = Object.fromEntries(",
+    "after": "\n  if (parsed.profileId === REPORT_PROFILE) Object.assign(metadata, {\n    self_bill_report_id: context.self_bill_report_id, report_number: parsed.report.reportNumber,\n    invoice_date: parsed.report.invoiceDate, report_layout: parsed.report.layout,\n  });\n  const headerMap = Object.fromEntries("
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "      money_lexical_authority_version: NHSP.has(parsed.profileId) ? XLSX_BINARY64_SAME_VALUE_PENCE_V1 : null,",
+    "after": "      money_lexical_authority_version: parsed.profileId === REPORT_PROFILE ? 'SOURCE_INVOICE_MONEY_PENCE_V1'\n        : NHSP.has(parsed.profileId) ? XLSX_BINARY64_SAME_VALUE_PENCE_V1 : null,"
+  },
+  {
+    "file": "worker/upload-staging-adapter.mjs",
+    "before": "    moneyEvidence: NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed)",
+    "after": "\n    moneyEvidence: parsed.profileId === REPORT_PROFILE ? (parsed.rows ?? []).flatMap(row => [\n      ['SOURCE_NET', 'net', row.pricingEvidence.netPence], ['SOURCE_VAT', 'vat', row.pricingEvidence.vatPence],\n      ['SOURCE_GROSS', 'gross', row.pricingEvidence.grossPence],\n    ].map(([kind, field, money]) => ({ ...evidenceRecord(parsed, row.physicalRow, field,\n      row.pricingEvidence.components[field], money, 'VALID'), money_field_kind: kind })))\n      : NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed)"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "import { assertMagnitContractPricing, assertMagnitWholeShiftResult } from './magnit-contract-price-admission.js';",
+    "after": "import { REPORT_PROFILE, assertReportUploadRequest, assertReportRuleContext, reportScopeRequest,\n  assertReportScopeReceipt, assertReportPublicationContext, assertReportStageRowsReceipt,\n  assertReportProjectionRowsReceipt } from './report-upload-provenance.mjs';\nimport { assertMagnitContractPricing, assertMagnitWholeShiftResult } from './magnit-contract-price-admission.js';"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "function parserOptions(body, context) {",
+    "after": "function parserOptions(body, context) {\n  if (text(body.profile_id || body.parser_options?.profileId) === REPORT_PROFILE) {\n    assertReportUploadRequest(body); const values = assertReportRuleContext(context);\n    return { profileId: REPORT_PROFILE, expectedClient: context.client_name,\n      effectiveRuleSet: context.effective_rule_set, ruleValues: values };\n  }\n"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "function nhspFinalTrust(parsed) {",
+    "after": "async function prepareReportScope(dependencies, body, parsed, context, actorUserId) {\n  if (parsed?.ok !== true || parsed.profileId !== REPORT_PROFILE) return { body, context };\n  assertReportUploadRequest(body); assertReportRuleContext(context);\n  const resolved = assertReportScopeReceipt(await rpc(dependencies,\n    'weekly_source_self_bill_report_scope_resolve_atomic_v1', reportScopeRequest(parsed, context, actorUserId)), context);\n  const nextBody = { ...body, report_scope_id: resolved.report_scope_id, import_use: 'PREPARE_FINALISATION' };\n  const next = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', scopeRequest(nextBody, actorUserId)));\n  assertReportRuleContext(next);\n  if (next.authority_scope_kind !== 'SELF_BILL_REPORT_SCOPE' || next.self_bill_report_id !== resolved.self_bill_report_id\n    || next.report_scope_id !== resolved.report_scope_id || next.source_cycle_id !== context.source_cycle_id\n    || next.source_group_id !== context.source_group_id || next.client_id !== context.client_id\n    || Number(next.authority_scope_version) !== Number(resolved.authority_scope_version)\n    || JSON.stringify(stable(next.effective_rule_set)) !== JSON.stringify(stable(context.effective_rule_set))) {\n    fail('WEEKLY_SOURCE_REPORT_SCOPE_CHANGED', 'The report scope changed before staging.', 409);\n  }\n  return { body: nextBody, context: next };\n}\n\nfunction nhspFinalTrust(parsed) {"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "export function buildWeeklySourceProjectionRows(context, body = {}) {",
+    "after": "export function buildWeeklySourceProjectionRows(context, body = {}) {\n  if (context?.profile_id === REPORT_PROFILE || context?.authority_scope_kind === 'SELF_BILL_REPORT_SCOPE') {\n    assertReportPublicationContext(context, { ...context, upload_id: context.upload_id });\n    return []; // Native Report owner binds existing export authority; no price/contract calculator.\n  }\n"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "      await rpc(dependencies, 'weekly_source_upload_stage_rows_atomic_v1', {\n        actor_user_id: actorUserId,\n        upload_id: uploadId,\n        physical_rows: physical[index] ?? [],\n        normalised_rows: rows[index] ?? [],\n        money_evidence: money[index] ?? [],\n        expense_evidence: expenses[index] ?? [],\n      });",
+    "after": "      const stageRowsReceipt = await rpc(dependencies, 'weekly_source_upload_stage_rows_atomic_v1', {\n        actor_user_id: actorUserId,\n        upload_id: uploadId,\n        physical_rows: physical[index] ?? [],\n        normalised_rows: rows[index] ?? [],\n        money_evidence: money[index] ?? [],\n        expense_evidence: expenses[index] ?? [],\n      });\n      if (parsed.profileId === REPORT_PROFILE) assertReportStageRowsReceipt(stageRowsReceipt, uploadId);"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "  await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {\n    p_actor_user_id: actorUserId,\n    p_publication_id: begun.publication_id,\n    p_rows: rows,\n  }, { request: false });",
+    "after": "  const projectionRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {\n    p_actor_user_id: actorUserId,\n    p_publication_id: begun.publication_id,\n    p_rows: rows,\n  }, { request: false });\n  if (context.profile_id === REPORT_PROFILE) assertReportProjectionRowsReceipt(projectionRowsReceipt, begun.publication_id);"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "        await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {\n          p_actor_user_id: request.actor_user_id,\n          p_publication_id: begun.publication_id,\n          p_rows: buildWeeklySourceProjectionRows(context),\n        }, { request: false });",
+    "after": "        const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {\n          p_actor_user_id: request.actor_user_id,\n          p_publication_id: begun.publication_id,\n          p_rows: buildWeeklySourceProjectionRows(context),\n        }, { request: false });\n        if (context.profile_id === REPORT_PROFILE) assertReportProjectionRowsReceipt(reportRecheckRowsReceipt, begun.publication_id);"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "  const publishedContext = body.purpose === 'FINAL_SOURCE_CORRECTION'",
+    "after": "  const publishedContext = (body.purpose === 'FINAL_SOURCE_CORRECTION' || parsed.profileId === REPORT_PROFILE)"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "  return { adapted, started, sealed, published, publishedContext, uploadId, version };",
+    "after": "\n  if (parsed.profileId === REPORT_PROFILE) {\n    assertReportPublicationContext(publishedContext, { ...context, upload_id: uploadId });\n    if (published.status !== 'CURRENT' || publishedContext.projection_state !== 'CURRENT'\n      || publishedContext.projection_publication_id !== published.publication_id\n      || publishedContext.row_manifest_hash !== (sealed.row_manifest_hash ?? started.row_manifest_hash)) {\n      fail('WEEKLY_SOURCE_REPORT_PUBLICATION_STALE', 'The accepted report publication could not be proved.', 409);\n    }\n    requiredSha256(publishedContext.comparison_manifest_hash, 'Report comparison proof');\n    requiredSha256(publishedContext.issue_set_hash, 'Report issue proof');\n  }\n  return { adapted, started, sealed, published, publishedContext, uploadId, version };"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "      const duplicate = parsed?.ok === true ? duplicateSourceKey(parsed) : null;",
+    "after": "\n      ({ body, context } = await prepareReportScope(dependencies, body, parsed, context, actorUserId));\n      const duplicate = parsed?.ok === true ? duplicateSourceKey(parsed) : null;"
+  },
+  {
+    "file": "worker/upload-publication-owner.mjs",
+    "before": "    async acceptUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {\n      const actorUserId = requiredUuid(actor?.id, 'Office user');\n      const context = validateContext(await rpc(\n        dependencies,\n        'weekly_source_upload_context_v1',\n        scopeRequest(body, actorUserId),\n      ));\n      requireSelectedClient(context);\n      if (typeof parseWeeklySourceFile !== 'function') {\n        fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);\n      }\n      const parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));\n      const result = await stageParsed(dependencies, body, parsed, context, actorUserId);\n      return {\n        ok: true,\n        status: result.published.status,\n        upload_id: result.uploadId,\n        authority_scope_version: result.version,\n        publication_id: result.published.publication_id,\n        idempotent: result.started.status === 'DUPLICATE' || result.published.idempotent === true,\n        source_profile: parsed.profileId,\n      };\n    },\n\n",
+    "after": "    async acceptUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {\n      const actorUserId = requiredUuid(actor?.id, 'Office user');\n      let context = validateContext(await rpc(\n        dependencies,\n        'weekly_source_upload_context_v1',\n        scopeRequest(body, actorUserId),\n      ));\n      requireSelectedClient(context);\n      if (typeof parseWeeklySourceFile !== 'function') {\n        fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);\n      }\n      const parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));\n      ({ body, context } = await prepareReportScope(dependencies, body, parsed, context, actorUserId));\n      const result = await stageParsed(dependencies, body, parsed, context, actorUserId);\n      return {\n        ok: true,\n        status: result.published.status,\n        upload_id: result.uploadId,\n        authority_scope_version: result.version,\n        publication_id: result.published.publication_id,\n        idempotent: result.started.status === 'DUPLICATE' || result.published.idempotent === true,\n        source_profile: parsed.profileId,\n        ...(parsed.profileId === REPORT_PROFILE ? {\n          authority_scope_kind: 'SELF_BILL_REPORT_SCOPE', report_scope_id: context.report_scope_id,\n          self_bill_report_id: context.self_bill_report_id, invoice_only: true,\n          row_manifest_hash: result.publishedContext.row_manifest_hash,\n          comparison_manifest_hash: result.publishedContext.comparison_manifest_hash,\n          issue_set_hash: result.publishedContext.issue_set_hash,\n        } : {}),\n      };\n    },\n\n"
+  },
+  {
+    "file": "08_complete_upload_context.sqlinc",
+    "before": "    return jsonb_build_object('ok',true,'context_version','WEEKLY_SOURCE_UPLOAD_CONTEXT_V1',\n      'source_group_id',v_group.id,'source_cycle_id',v_cycle.id,'report_scope_id',v_scope.id,\n      'client_id',v_client_id,'client_name',v_client_name,'upload_id',v_upload.id,\n      'self_bill_report_id',v_scope.self_bill_report_id,'invoice_only',true,'rows','[]'::jsonb);",
+    "after": "    select * into strict v_publication from public.weekly_source_projection_publications\r\n      where upload_id=v_upload.id and authority_scope_kind='SELF_BILL_REPORT_SCOPE'\r\n        and report_scope_id=v_scope.id and authority_scope_version=v_scope.version and state in ('BUILDING','CURRENT');\r\n    return jsonb_build_object('ok',true,'context_version','WEEKLY_SOURCE_UPLOAD_CONTEXT_V1',\r\n      'environment',v_group.environment,'agency_id',v_group.agency_id,'source_family',v_group.source_family,\r\n      'source_group_id',v_group.id,'source_cycle_id',v_cycle.id,'report_scope_id',v_scope.id,\r\n      'client_id',v_client_id,'client_name',v_client_name,'upload_id',v_upload.id,\r\n      'authority_scope_kind','SELF_BILL_REPORT_SCOPE','authority_scope_version',v_scope.version,\r\n      'profile_id','ACACIUM_SELF_BILL_REPORT_V1','self_bill_report_id',v_scope.self_bill_report_id,\r\n      'effective_rule_set',private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle.id),\r\n      'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),\r\n      'projection_publication_id',v_publication.id,'projection_state',v_publication.state,\r\n      'comparison_manifest_hash',encode(v_publication.comparison_manifest_hash,'hex'),\r\n      'issue_set_hash',encode(v_publication.issue_set_hash,'hex'),'invoice_only',true,'rows','[]'::jsonb);"
+  },
+  {
+    "file": "08_complete_upload_context.sqlinc",
+    "before": "    )||case when v_coverage_context is null then '{}'::jsonb",
+    "after": "    )||case when v_scope.self_bill_report_id is null then '{}'::jsonb\r\n      else jsonb_build_object('self_bill_report_id',v_scope.self_bill_report_id) end\r\n      ||case when v_coverage_context is null then '{}'::jsonb"
+  },
+  {
+    "file": "09_complete_report_projection_rows_forwardfix.sqlinc",
+    "before": "coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+",
+    "after": "coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+$'"
+  },
+  {
+    "file": "09_complete_report_projection_rows_forwardfix.sqlinc",
+    "before": "coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+",
+    "after": "coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+$'"
+  },
+  {
+    "file": "10_complete_m1_projection_rows_forwardfix.sqlinc",
+    "before": "coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+",
+    "after": "coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+$'"
+  },
+  {
+    "file": "10_complete_m1_projection_rows_forwardfix.sqlinc",
+    "before": "coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+",
+    "after": "coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+$'"
+  }
+]

@@ -1,0 +1,1538 @@
+{
+  "contract": "HEALTHROSTER_VERIFIER_REHEARSAL_SAFETY_V1",
+  "status": "SOURCE_SAFETY_REVIEW_ONLY",
+  "rootCommit": "547c74da5f0a05b09297c042bc7f3cc0c0105b85",
+  "release": {
+    "file": "supabase/release/current-release.json",
+    "sha256": "e3e94adc74a404f1f600a8e2843bdce00c6dcaf1ca14ec3f3e9f7511b20cb31d"
+  },
+  "range": {
+    "first": 56,
+    "last": 111,
+    "count": 56
+  },
+  "counts": {
+    "eligible": 51,
+    "excluded": 5
+  },
+  "method": "Full source bodies and nested include loaded; executable control flow/call references distinguished from quoted function-definition inspections. Concrete queue/APPLYING exclusions retained. No SQL or hosted action executed. This is rehearsal eligibility, not runtime acceptance.",
+  "harnessRequirements": [
+    "Expand includes preserving file boundaries/source hashes.",
+    "Suppress only outer BEGIN/COMMIT/ROLLBACK and ON_ERROR_STOP directives when joining the single owned transaction; preserve PL/pgSQL BEGIN blocks and nested exception/savepoint semantics.",
+    "Reapply jit=off, pg_show_plans.is_enabled=off, statement_timeout=0 after verifier-local settings as required by SEND5B; do not introduce a harness time limit.",
+    "Never fabricate APPLYING context, substitute a real release or weaken a verifier to qualify it.",
+    "Redact result/error payloads; retain only data-free file/statement/object/error code and approved bounded diagnosis.",
+    "Fresh connection catalogue/ledger/marker/LEGACY:1 rollback verification remains root-owned."
+  ],
+  "calleeInputs": [
+    {
+      "file": "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+      "sha256": "682445ae51d19f04a82eeae239d2b75e95d477872e703a3bdf1b69b9677b2189"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1420_candidate_finalisation_single_flight_v1.sql",
+      "sha256": "98d88b42ea50d66a21fd146c9277b2748b88da35ecf9e1f95c36c47e86f1a8c0"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+    },
+    {
+      "file": "supabase/repeatable/01092026_1647_banking_pay_signed_recovery_classifier_v1.sql",
+      "sha256": "9893aeeb74487261b12b33aca80a5ded4fb4b95b9012cf47fefaefffbe3afe1d"
+    },
+    {
+      "file": "supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql",
+      "sha256": "fd5bc5ed576d81d02aade82b0111bb560e3ce51707259b76871b469f29e1fb9c"
+    }
+  ],
+  "files": [
+    {
+      "index": 56,
+      "file": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+      "sha256": "d54b8f3bd086719186e279658debaaca2daac7fa8ec05906984fe3692dfec03b",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic empty-carrier inserts; primary-action and invocation projections only.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+          "sha256": "d54b8f3bd086719186e279658debaaca2daac7fa8ec05906984fe3692dfec03b",
+          "bytes": 6019,
+          "includes": [],
+          "calls": [
+            "private._candidate_action_invocation_v1",
+            "private._candidate_timesheet_primary_action_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 57,
+      "file": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+      "sha256": "8e8294dbecd274df714ec4f771c55f018b622b4f39c9c0eabaf97c5ed242b6de",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic expense carrier, actual database finalise/cleanup/cancel owners; no external render or send and no outbox drain. Success fixture writes canonical financial rows inside the rollback unit.",
+      "closure": [
+        {
+          "file": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+          "sha256": "8e8294dbecd274df714ec4f771c55f018b622b4f39c9c0eabaf97c5ed242b6de",
+          "bytes": 17906,
+          "includes": [],
+          "calls": [
+            "private._candidate_audit_v1",
+            "private._candidate_empty_provisional_expense_cleanup_v1",
+            "private._candidate_policy_resolve_v1",
+            "private._candidate_provisional_expense_carrier_v1",
+            "private._candidate_record_capabilities_v1",
+            "private._candidate_sha256_jsonb_v1",
+            "public.candidate_app_timesheet_page_v1",
+            "public.candidate_office_expense_reservations_v1",
+            "public.candidate_submission_finalize_single_flight_v1",
+            "public.candidate_workflow_cancel_atomic_v2",
+            "public.expense_placement_resolve_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 58,
+      "file": "supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql",
+      "sha256": "0277e4251fd48b52fa9e4e6707f7a4e791237ea5a77cb400b1bcbec6d7661bf3",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic duplicate-expense fixture invokes Office authorisation owners, not payment execution. Includes rollback-only conditional reduced-catalogue helpers and an unconditional bulk row-patch reader replacement; do not mistake this for full native reader acceptance.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql",
+          "sha256": "0277e4251fd48b52fa9e4e6707f7a4e791237ea5a77cb400b1bcbec6d7661bf3",
+          "bytes": 18415,
+          "includes": [],
+          "calls": [
+            "private._candidate_finalisation_issue_codes_v1",
+            "private._expense_duplicate_review_v1",
+            "private._timesheet_duplicate_expense_review_v1",
+            "public.bulk_authorise_dataset_v1",
+            "public.timesheet_authorise_bulk_atomic",
+            "public.timesheet_authorise_generic_atomic",
+            "public.timesheet_authorise_reviewed_atomic"
+          ],
+          "dynamicExecutePresent": true,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 59,
+      "file": "supabase/verification/31082026_0925_candidate_workflow_mutation_receipt_lookup_verification.sql",
+      "sha256": "f0b2a398bdbab3fe33df6ae8bf739d62a64066099f9cb0f4bab2058f51b37f8d",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Catalogue index definition only.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_0925_candidate_workflow_mutation_receipt_lookup_verification.sql",
+          "sha256": "f0b2a398bdbab3fe33df6ae8bf739d62a64066099f9cb0f4bab2058f51b37f8d",
+          "bytes": 711,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 60,
+      "file": "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
+      "sha256": "9948633c9d9a5b36607ab1ca5f19ae5e92fc44274f2143835798e70a0a473977",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Catalogue/ACL plus missing-session negative read.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
+          "sha256": "9948633c9d9a5b36607ab1ca5f19ae5e92fc44274f2143835798e70a0a473977",
+          "bytes": 2731,
+          "includes": [],
+          "calls": [
+            "public.pay_workbench_session_get_candidate_ready_group_page_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 61,
+      "file": "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+      "sha256": "deba21b8960fb4edd7e695bf4e31609759fe8af5cf88231479295f824f80cdc4",
+      "decision": "EXCLUDE",
+      "category": "GENUINE_APPLYING_RELEASE_REQUIRED",
+      "reason": "Nested selection fixture requires exactly one matching real unfinished APPLYING release outside banking_modal_v2_test; rollback rehearsal cannot create or impersonate that release.",
+      "closure": [
+        {
+          "file": "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+          "sha256": "deba21b8960fb4edd7e695bf4e31609759fe8af5cf88231479295f824f80cdc4",
+          "bytes": 6554,
+          "includes": [
+            "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql"
+          ],
+          "calls": [
+            "private.pay_workbench_modal_scope_hash_v2",
+            "public.pay_workbench_session_get_candidate_ready_group_page_v1",
+            "public.pay_workbench_session_get_candidate_ready_page_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        },
+        {
+          "file": "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql",
+          "sha256": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea",
+          "bytes": 8370,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": []
+        }
+      ]
+    },
+    {
+      "index": 62,
+      "file": "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+      "sha256": "bdeedbd409687dbf48bef5eab14e36b7da8ba4dd547cbb77bfa9953113d98e60",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic federated membership/session projection and authority reads.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+          "sha256": "bdeedbd409687dbf48bef5eab14e36b7da8ba4dd547cbb77bfa9953113d98e60",
+          "bytes": 4650,
+          "includes": [],
+          "calls": [
+            "private._candidate_session_context_v1",
+            "public.candidate_app_federated_membership_link_set_v1",
+            "public.candidate_app_federated_session_project_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 63,
+      "file": "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
+      "sha256": "7c15efb889771bbe02ff670b67899c23d20219e82b69927506ad9d69735ae3d2",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic monotonic session projection and stale/conflicting negative admission.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
+          "sha256": "7c15efb889771bbe02ff670b67899c23d20219e82b69927506ad9d69735ae3d2",
+          "bytes": 5582,
+          "includes": [],
+          "calls": [
+            "private._candidate_session_context_v1",
+            "public.candidate_app_federated_membership_link_set_v1",
+            "public.candidate_app_federated_session_project_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 64,
+      "file": "supabase/verification/01092026_2032_candidate_federated_session_family_projection_verification.sql",
+      "sha256": "582da91929f7f5746f73f35d05d5539e58f4e9f2e00e2d36386bb70548939d3e",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic independent session-family projection and uniqueness/ACL checks.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_2032_candidate_federated_session_family_projection_verification.sql",
+          "sha256": "582da91929f7f5746f73f35d05d5539e58f4e9f2e00e2d36386bb70548939d3e",
+          "bytes": 7167,
+          "includes": [],
+          "calls": [
+            "public.candidate_app_federated_membership_link_set_v1",
+            "public.candidate_app_federated_session_project_v1",
+            "public.candidate_app_federated_session_project_v2"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 65,
+      "file": "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
+      "sha256": "d3e38d5e47878c5201e864f7accc157cae10724d73c621baed12313e6acbd620",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Reads installed function definitions/ACLs; financial-looking source strings are not invoked.",
+      "closure": [
+        {
+          "file": "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
+          "sha256": "d3e38d5e47878c5201e864f7accc157cae10724d73c621baed12313e6acbd620",
+          "bytes": 3004,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 66,
+      "file": "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+      "sha256": "95c3a5bea1bec630fd6078bd27f8d48238443ea36c20dfd68dc687153d7c7968",
+      "decision": "EXCLUDE",
+      "category": "GENUINE_APPLYING_RELEASE_REQUIRED",
+      "reason": "Same exact nested APPLYING-release/identity/commit/mode gate as index 61. Reader calls themselves do not execute a payment.",
+      "closure": [
+        {
+          "file": "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+          "sha256": "95c3a5bea1bec630fd6078bd27f8d48238443ea36c20dfd68dc687153d7c7968",
+          "bytes": 7797,
+          "includes": [
+            "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql"
+          ],
+          "calls": [
+            "private.pay_workbench_modal_eligible_rows_v2",
+            "private.pay_workbench_modal_scope_hash_v2",
+            "public.pay_workbench_session_get_candidate_ready_group_page_v1",
+            "public.pay_workbench_session_get_candidate_ready_page_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        },
+        {
+          "file": "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql",
+          "sha256": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea",
+          "bytes": 8370,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": []
+        }
+      ]
+    },
+    {
+      "index": 67,
+      "file": "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+      "sha256": "7c5771d95b3574b74ba1621951f296ca805edaf5c0bb3f6dabcb0220e8d77921",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic paper-generation cancellation and stored SENT-mail fixtures. Cancellation retires live generation; neither sends nor claims those stored delivery rows.",
+      "closure": [
+        {
+          "file": "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+          "sha256": "7c5771d95b3574b74ba1621951f296ca805edaf5c0bb3f6dabcb0220e8d77921",
+          "bytes": 17105,
+          "includes": [],
+          "calls": [
+            "pg_temp.verify_legacy_orphan_cancel",
+            "private._candidate_sha256_jsonb_v1",
+            "public.candidate_workflow_cancel_atomic_v2"
+          ],
+          "dynamicExecutePresent": true,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 68,
+      "file": "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
+      "sha256": "4ae4200f80de12fc7235312519c8da45d561c2c941151a8a03e4bf5bed47eb83",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic no-work capability/action and no_work_atomic owners; worked case refuses, empty week is transactionally removed.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
+          "sha256": "4ae4200f80de12fc7235312519c8da45d561c2c941151a8a03e4bf5bed47eb83",
+          "bytes": 6458,
+          "includes": [],
+          "calls": [
+            "private._candidate_record_capabilities_v1",
+            "private._candidate_timesheet_action_contract_v1",
+            "public.candidate_no_work_atomic_v1"
+          ],
+          "dynamicExecutePresent": true,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 69,
+      "file": "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
+      "sha256": "73f65a8c30ec53e0c99164c6f9b7347fc147bcd9e76ec5da5cf15466a4d0e07e",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Catalogue/ACL plus pure JSON signed non-charge recovery classifier; no finalizer invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
+          "sha256": "73f65a8c30ec53e0c99164c6f9b7347fc147bcd9e76ec5da5cf15466a4d0e07e",
+          "bytes": 7748,
+          "includes": [],
+          "calls": [
+            "private.pay_batch_signed_non_charge_recovery_evidence_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 70,
+      "file": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+      "sha256": "9cc1a6d050fe7d7ea9e6515cf2a06d2acee1a26e348170297a3ae0cf6f392c9e",
+      "decision": "EXCLUDE",
+      "category": "GENUINE_APPLYING_RELEASE_REQUIRED_AND_DRAFT_FINANCIAL_FINALISATION",
+      "reason": "Same nested genuine APPLYING gate, plus actual pay_batch_finalize_reservations_and_markers call on the synthetic Draft. Exclude the whole root; catalogue/pure recovery tests 69/71 remain eligible.",
+      "closure": [
+        {
+          "file": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+          "sha256": "9cc1a6d050fe7d7ea9e6515cf2a06d2acee1a26e348170297a3ae0cf6f392c9e",
+          "bytes": 17144,
+          "includes": [
+            "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql"
+          ],
+          "calls": [
+            "public._pay_batch_item_economic_components",
+            "public.pay_batch_finalize_reservations_and_markers"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        },
+        {
+          "file": "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql",
+          "sha256": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea",
+          "bytes": 8370,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": []
+        }
+      ]
+    },
+    {
+      "index": 71,
+      "file": "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+      "sha256": "97e624c284317d59f7206d0697d09f9c18bed80bb471fc5f6c680a6197e52b6f",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Catalogue/ACL plus pure JSON recovery classifier and duplicate-component refusal.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+          "sha256": "97e624c284317d59f7206d0697d09f9c18bed80bb471fc5f6c680a6197e52b6f",
+          "bytes": 6490,
+          "includes": [],
+          "calls": [
+            "private.pay_batch_signed_non_charge_recovery_evidence_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='45s';",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 72,
+      "file": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+      "sha256": "3dae01af0dc970a5540213c0e95e1cfc86986bbd8b831782311939534145e119",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic source-build repair/enqueue jobs; native repair terminalises/rebinds source jobs, never executes Draft/provider/payment/settlement. No source-build worker claim/drain is invoked.",
+      "closure": [
+        {
+          "file": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+          "sha256": "3dae01af0dc970a5540213c0e95e1cfc86986bbd8b831782311939534145e119",
+          "bytes": 34861,
+          "includes": [],
+          "calls": [
+            "public.pay_workbench_enqueue_candidate_refresh",
+            "public.pay_workbench_repair_orphaned_pending_source_build"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "SET LOCAL statement_timeout='60s';",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 73,
+      "file": "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+      "sha256": "65de66c1135816de1de6ba99a26cfffad055a76f56a68a4cb733916e662980a7",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Settled-certificate metadata/ACL/index catalogue; no certificate claim or settlement invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+          "sha256": "65de66c1135816de1de6ba99a26cfffad055a76f56a68a4cb733916e662980a7",
+          "bytes": 10007,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 74,
+      "file": "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+      "sha256": "7a76bac4bc0a7f9105cc57c852021e00dc85425015b04d0d68154a08d08df9ce",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Certified-Draft routine/table/index definitions and ACLs; no Draft operation invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+          "sha256": "7a76bac4bc0a7f9105cc57c852021e00dc85425015b04d0d68154a08d08df9ce",
+          "bytes": 11448,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 75,
+      "file": "supabase/verification/05092026_0311_banking_pay_draft_integrity_setwise_v8_verification.sql",
+      "sha256": "e1cf2e5f8215b518a05cf72a3ce289820ab3ce028b394d3c5ea90dc31807a45f",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Integrity helper installed-definition/metadata/ACL checks only.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_0311_banking_pay_draft_integrity_setwise_v8_verification.sql",
+          "sha256": "e1cf2e5f8215b518a05cf72a3ce289820ab3ce028b394d3c5ea90dc31807a45f",
+          "bytes": 3808,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 76,
+      "file": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+      "sha256": "f126afc09e0efc21adf8db990de9eb508bf2cfb3335a6bcc702e0efc4c501e2c",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Cancellation-selection/process routine definitions and ACLs only; no selection/process execution.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+          "sha256": "f126afc09e0efc21adf8db990de9eb508bf2cfb3335a6bcc702e0efc4c501e2c",
+          "bytes": 4928,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 77,
+      "file": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+      "sha256": "3e6aec635c9f97d2462cf9e531f8591c2f47b094d36ad333bd9eb14f6c4b7dc0",
+      "decision": "EXCLUDE",
+      "category": "ACTUAL_QUEUE_CLAIM",
+      "reason": "Executes settled-certificate due_claim/build_start/append/seal and certified Draft operation_start, not merely their definition inspection. Exclude this queue lifecycle; keep separate catalogue verifiers 73/74/75/76/78.",
+      "closure": [
+        {
+          "file": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+          "sha256": "3e6aec635c9f97d2462cf9e531f8591c2f47b094d36ad333bd9eb14f6c4b7dc0",
+          "bytes": 53132,
+          "includes": [],
+          "calls": [
+            "pg_temp.h1_v8_clone_due_session",
+            "private.pay_workbench_settled_certificate_constituent_json_v8",
+            "private.pay_workbench_settled_certificate_operation_admit_v8",
+            "private.pay_workbench_settled_certificate_sha256_text_v8",
+            "private.pay_workbench_settled_certificate_stable_stringify_v8",
+            "public.banking_pay_draft_certified_operation_start_v8",
+            "public.pay_workbench_scope_current_generation_v1",
+            "public.pay_workbench_settled_certificate_build_append_page_v8",
+            "public.pay_workbench_settled_certificate_build_start_v8",
+            "public.pay_workbench_settled_certificate_component_page_v8",
+            "public.pay_workbench_settled_certificate_current_reference_issue_v8",
+            "public.pay_workbench_settled_certificate_due_claim_v8",
+            "public.pay_workbench_settled_certificate_entry_page_v8",
+            "public.pay_workbench_settled_certificate_filter_manifest_v8",
+            "public.pay_workbench_settled_certificate_lifecycle_v8",
+            "public.pay_workbench_settled_certificate_partition_page_v8",
+            "public.pay_workbench_settled_certificate_seal_v8",
+            "public.pay_workbench_settled_certificate_status_v8"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "SET LOCAL statement_timeout = '60s';",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 78,
+      "file": "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+      "sha256": "17eb4894f0e18d80360939562b924b560531529d758bc755359157352fb08174",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Draft item writer definition/alias/ACL inspection only; no writer call.",
+      "closure": [
+        {
+          "file": "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+          "sha256": "17eb4894f0e18d80360939562b924b560531529d758bc755359157352fb08174",
+          "bytes": 5010,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 79,
+      "file": "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql",
+      "sha256": "fc0f9d2930be5f4b5a0f754d9383255ce17351beb17cd3f96664ec98107fb325",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic break-entry context read; no paper delivery.",
+      "closure": [
+        {
+          "file": "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql",
+          "sha256": "fc0f9d2930be5f4b5a0f754d9383255ce17351beb17cd3f96664ec98107fb325",
+          "bytes": 4255,
+          "includes": [],
+          "calls": [
+            "private._candidate_break_entry_context_core_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 80,
+      "file": "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+      "sha256": "984d883a0c2be3c71d6bf9d82c0766e9501a0695d7cc4d8b3b2a80225d8dbc85",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Paper mail authority definition and existing-row invariant reads only.",
+      "closure": [
+        {
+          "file": "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+          "sha256": "984d883a0c2be3c71d6bf9d82c0766e9501a0695d7cc4d8b3b2a80225d8dbc85",
+          "bytes": 1403,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 81,
+      "file": "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+      "sha256": "6f8a4c33e4f6c769f505eb2b912ec2f3f62fba48cd0ae7e3cc47cb5f277bc36f",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic certified-source preview publication and wrong-target refusal; no payment, provider, settlement, mail send or worker drain.",
+      "closure": [
+        {
+          "file": "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+          "sha256": "6f8a4c33e4f6c769f505eb2b912ec2f3f62fba48cd0ae7e3cc47cb5f277bc36f",
+          "bytes": 8860,
+          "includes": [],
+          "calls": [
+            "private.pay_workbench_publish_certified_source_preview_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "SET LOCAL statement_timeout='60s';",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 82,
+      "file": "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+      "sha256": "fc7aa4649eaf5a6a9d441cc5bba77db500de24783e5c70797e6efddcf49964bf",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic pre-route break context reads.",
+      "closure": [
+        {
+          "file": "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+          "sha256": "fc7aa4649eaf5a6a9d441cc5bba77db500de24783e5c70797e6efddcf49964bf",
+          "bytes": 6476,
+          "includes": [],
+          "calls": [
+            "private._candidate_break_entry_context_core_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 83,
+      "file": "supabase/verification/28092026_1111_candidate_source_self_entry_break_context_verification.sql",
+      "sha256": "10c94dde60b3c38bcf0d5de8aa19ef137c07d8dd75425c0b40440b01c4250328",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic import-source break context reads.",
+      "closure": [
+        {
+          "file": "supabase/verification/28092026_1111_candidate_source_self_entry_break_context_verification.sql",
+          "sha256": "10c94dde60b3c38bcf0d5de8aa19ef137c07d8dd75425c0b40440b01c4250328",
+          "bytes": 4551,
+          "includes": [],
+          "calls": [
+            "private._candidate_break_entry_context_core_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 84,
+      "file": "tests/04092026_0130_candidate_finalisation_lock_budget_verification.sql",
+      "sha256": "bff68de405603577a46342c44231822cbbe04582658b825b4b661d41d8c433f2",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Finalizer function configuration catalogue only.",
+      "closure": [
+        {
+          "file": "tests/04092026_0130_candidate_finalisation_lock_budget_verification.sql",
+          "sha256": "bff68de405603577a46342c44231822cbbe04582658b825b4b661d41d8c433f2",
+          "bytes": 642,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 85,
+      "file": "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
+      "sha256": "4525b8f7d82e47b0b687db83edd2ab2cd14f97c8ee7027f472dee65016be2a10",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic native expense-apply materialisation and final-state guard; database financial write only, no payment/provider/settlement/mail sender or queue drain.",
+      "closure": [
+        {
+          "file": "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
+          "sha256": "4525b8f7d82e47b0b687db83edd2ab2cd14f97c8ee7027f472dee65016be2a10",
+          "bytes": 17270,
+          "includes": [],
+          "calls": [
+            "private._candidate_import_authoritative_v1",
+            "private._candidate_sha256_jsonb_v1",
+            "private._candidate_weekly_final_state_guard_v1",
+            "public.timesheet_expense_apply_atomic_v1",
+            "public.timesheet_lifecycle_guard_signature_v1"
+          ],
+          "dynamicExecutePresent": true,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 86,
+      "file": "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
+      "sha256": "0cf9be478318c9f94457300430ee06fc50783e15c3ed04078e775081e97b4328",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Single-flight wrapper definition/ACL inspection only.",
+      "closure": [
+        {
+          "file": "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
+          "sha256": "0cf9be478318c9f94457300430ee06fc50783e15c3ed04078e775081e97b4328",
+          "bytes": 1705,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 87,
+      "file": "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
+      "sha256": "6e22356b38b580733ad4c127c96d519cc69a679b948090f39de01018fc722efc",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic frozen-settings authority fixture with policy/context/impact-preview/import-review/VAT-policy reads; no financial execution or delivery.",
+      "closure": [
+        {
+          "file": "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
+          "sha256": "6e22356b38b580733ad4c127c96d519cc69a679b948090f39de01018fc722efc",
+          "bytes": 24955,
+          "includes": [],
+          "calls": [
+            "private._candidate_break_entry_context_core_v1",
+            "private._candidate_import_authoritative_v1",
+            "private._candidate_policy_resolve_v1",
+            "private._candidate_submission_mode_v1",
+            "private._candidate_weekly_final_state_guard_v1",
+            "private._contract_settings_effective_core_v1",
+            "private._invoice_generation_vat_policy_batch",
+            "private._timesheet_settings_authority_frozen_v1",
+            "public._import_review_effective_authority_core_v1",
+            "public.import_auto_authorise_policy_resolve_v2",
+            "public.pay_timesheet_impact_preview",
+            "public.settings_finance_pick",
+            "public.tsfin_load_context_batch"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 88,
+      "file": "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+      "sha256": "f25f52b22c97f26ea5cb9b26c4dfeaffcf697d7fc82060aedcb2845faf07e887",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic email-admission capabilities and placement reads; no email action.",
+      "closure": [
+        {
+          "file": "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+          "sha256": "f25f52b22c97f26ea5cb9b26c4dfeaffcf697d7fc82060aedcb2845faf07e887",
+          "bytes": 7468,
+          "includes": [],
+          "calls": [
+            "private._candidate_record_capabilities_v1",
+            "public.expense_placement_resolve_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 89,
+      "file": "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+      "sha256": "34a686e83b485bece81da5f94bb63ebe6b59ba87bd319e6990cd4bfb7a09e209",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic carrier resolve/create and workflow CREATE/recovery/rejection transitions; native intent writes may occur transactionally, no mail claim/send.",
+      "closure": [
+        {
+          "file": "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+          "sha256": "34a686e83b485bece81da5f94bb63ebe6b59ba87bd319e6990cd4bfb7a09e209",
+          "bytes": 8564,
+          "includes": [],
+          "calls": [
+            "public.candidate_workflow_transition_atomic_v1",
+            "public.expense_carrier_resolve_or_create_atomic_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 90,
+      "file": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+      "sha256": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Bank movement constraint and ingest definition only; no bank-event ingestion.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+          "sha256": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846",
+          "bytes": 2463,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": []
+        }
+      ]
+    },
+    {
+      "index": 91,
+      "file": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+      "sha256": "33b46b26124e1f46d4e25f970f5bc5e9231e842f16ddeea90be99d807312b0d5",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "No-money unwind definition/result-arity inspection only; no unwind invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+          "sha256": "33b46b26124e1f46d4e25f970f5bc5e9231e842f16ddeea90be99d807312b0d5",
+          "bytes": 4564,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 92,
+      "file": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+      "sha256": "8b22c09e81139e3cc3032e71a46206fc77a7e91011fdf651aa5d7da54a064298",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic protected additional/expense primary-action and action-contract projections.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+          "sha256": "8b22c09e81139e3cc3032e71a46206fc77a7e91011fdf651aa5d7da54a064298",
+          "bytes": 7650,
+          "includes": [],
+          "calls": [
+            "private._candidate_timesheet_action_contract_v1",
+            "private._candidate_timesheet_primary_action_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 93,
+      "file": "supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql",
+      "sha256": "540a2ce881326e2db0f31b27e91799d62a5012205329cd7871f1a4849f2a1f1d",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic carrier/create workflow sequencing and primary action; no manager mail dispatch.",
+      "closure": [
+        {
+          "file": "supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql",
+          "sha256": "540a2ce881326e2db0f31b27e91799d62a5012205329cd7871f1a4849f2a1f1d",
+          "bytes": 8801,
+          "includes": [],
+          "calls": [
+            "private._candidate_timesheet_primary_action_v1",
+            "public.candidate_workflow_transition_atomic_v1",
+            "public.expense_carrier_resolve_or_create_atomic_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 94,
+      "file": "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
+      "sha256": "85598fcd848f15d1d7ac5e0b28e37711c5041596bc88a9f95160222e09738ef2",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic targetless paper preparation/replay and manifest promotion; creates held native outbox intent without claim, lease, rendered attachment or delivery.",
+      "closure": [
+        {
+          "file": "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
+          "sha256": "85598fcd848f15d1d7ac5e0b28e37711c5041596bc88a9f95160222e09738ef2",
+          "bytes": 14068,
+          "includes": [],
+          "calls": [
+            "private._candidate_sha256_jsonb_v1",
+            "public.candidate_paper_manifest_v2_promote_v1",
+            "public.candidate_weekly_paper_prepare_atomic_v1",
+            "public.candidate_workflow_transition_atomic_v1",
+            "public.expense_carrier_resolve_or_create_atomic_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 95,
+      "file": "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+      "sha256": "d6469494ff2f828cb1b7c3ce1f65a40f22b5d6a43ee94abcc36ebfaef569c35c",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Route-family context reads for existing Contract Weeks (up to 500) and catalogue checks; do not retain raw payload/error data.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+          "sha256": "d6469494ff2f828cb1b7c3ce1f65a40f22b5d6a43ee94abcc36ebfaef569c35c",
+          "bytes": 2811,
+          "includes": [],
+          "calls": [
+            "private._candidate_route_family_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout='120s';",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 96,
+      "file": "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
+      "sha256": "6536b48249d08d021224321335ee4c73dda6c1fbf72696af6aba6541200d9f75",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Unified outbox list reads and bad-sort negative admission; no claim or sender.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
+          "sha256": "6536b48249d08d021224321335ee4c73dda6c1fbf72696af6aba6541200d9f75",
+          "bytes": 8422,
+          "includes": [],
+          "calls": [
+            "public.outbox_unified_list_v2"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "set local statement_timeout = '120s';",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 97,
+      "file": "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+      "sha256": "e3809e5cd92a6fa4cd17483ac992fbd3eb77c2f0453e63c1895e7a32018ae4ac",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic native deletion/reject guards and apply/reject calls; retire workflow/queued intent only, no sender or queue draining.",
+      "closure": [
+        {
+          "file": "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+          "sha256": "e3809e5cd92a6fa4cd17483ac992fbd3eb77c2f0453e63c1895e7a32018ae4ac",
+          "bytes": 24547,
+          "includes": [],
+          "calls": [
+            "private._candidate_office_reject_preview_v1",
+            "public.candidate_submission_reject_atomic_v1",
+            "public.timesheet_candidate_submission_delete_guard_preview_v1",
+            "public.timesheet_delete_with_candidate_submission_guard_apply_v1",
+            "public.timesheet_lifecycle_guard_signature_v1",
+            "public.timesheet_pending_expense_delete_preview_v1",
+            "public.timesheet_weekly_chain_delete_preview"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 98,
+      "file": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "sha256": "86817ae1154349f82e39a25fd03329f7746d158b5764b371f4fb780281a57c39",
+      "decision": "EXCLUDE",
+      "category": "ACTUAL_EMAIL_AND_RENDER_QUEUE_CLAIM",
+      "reason": "Executes email_outbox_claim_ready_batch plus candidate_expense_summary_claim_v1/render_begin/complete. A rollback does not make queue-draining commands eligible under SEND5B. Exclude the whole root.",
+      "closure": [
+        {
+          "file": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+          "sha256": "86817ae1154349f82e39a25fd03329f7746d158b5764b371f4fb780281a57c39",
+          "bytes": 108288,
+          "includes": [],
+          "calls": [
+            "private._candidate_expense_component_action_v1",
+            "private._candidate_expense_component_json_v1",
+            "private._candidate_expense_component_status_v1",
+            "private._candidate_expense_components_sync_v1",
+            "private._candidate_expense_effective_payment_v1",
+            "private._candidate_expense_summary_queue_v1",
+            "private._candidate_office_projection_identity_v1",
+            "private._candidate_office_service_context_close_v1",
+            "private._candidate_office_service_context_open_v1",
+            "private._candidate_paper_delivery_retire_v1",
+            "private._candidate_record_capabilities_v1",
+            "private._candidate_sha256_jsonb_v1",
+            "private._candidate_timesheet_delete_retire_workflows_v1",
+            "private._candidate_whole_claim_action_v1",
+            "private._candidate_whole_claim_scope_v1",
+            "public._pay_current_timesheet_entitlement_components",
+            "public.candidate_expense_category_resubmit_atomic_v1",
+            "public.candidate_expense_component_action_atomic_v1",
+            "public.candidate_expense_component_projection_v1",
+            "public.candidate_expense_paper_update_receipt_commit_v1",
+            "public.candidate_expense_summary_claim_v1",
+            "public.candidate_expense_summary_complete_v1",
+            "public.candidate_expense_summary_render_begin_v1",
+            "public.candidate_expense_update_begin_atomic_v1",
+            "public.candidate_expense_update_manager_hold_v1",
+            "public.candidate_expense_update_rebind_atomic_v1",
+            "public.candidate_office_expense_category_adapter_v1",
+            "public.candidate_office_expense_category_projection_v1",
+            "public.candidate_office_expense_category_reject_atomic_v1",
+            "public.candidate_paper_manifest_v2_promote_v1",
+            "public.candidate_whole_claim_action_atomic_v1",
+            "public.candidate_workflow_transition_atomic_v1",
+            "public.email_outbox_claim_ready_batch",
+            "public.timesheet_weekly_manual_adjustment_delete_preview"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 99,
+      "file": "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
+      "sha256": "6fdf0ac0ff4a1b3a2d3be662a8a67fb408a36e8eb9fa62b2e9c1b354c69d7206",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Historical settings-authority/backfill absence invariants only; no backfill execution.",
+      "closure": [
+        {
+          "file": "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
+          "sha256": "6fdf0ac0ff4a1b3a2d3be662a8a67fb408a36e8eb9fa62b2e9c1b354c69d7206",
+          "bytes": 1401,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 100,
+      "file": "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
+      "sha256": "3b0382a1d768dea01b5bc8032c7f786cbef9fb25058759b5ad33cd929990f355",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Receipt prepare owner definition, ACL and index inspection only.",
+      "closure": [
+        {
+          "file": "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
+          "sha256": "3b0382a1d768dea01b5bc8032c7f786cbef9fb25058759b5ad33cd929990f355",
+          "bytes": 5134,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 101,
+      "file": "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+      "sha256": "af6c0ae67eaddadc7fc92d966bbcf45ed33a54699e56274502a4f5a464a24f99",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Synthetic receipt prepare/complete and workflow submit/reuse negatives, temporary wrapper functions and dynamic EXPLAIN SELECT only. Native upload/intent metadata is transactional; no Worker render/send/drain.",
+      "closure": [
+        {
+          "file": "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+          "sha256": "af6c0ae67eaddadc7fc92d966bbcf45ed33a54699e56274502a4f5a464a24f99",
+          "bytes": 46580,
+          "includes": [],
+          "calls": [
+            "pg_temp.candidate_receipt_complete",
+            "pg_temp.candidate_receipt_prepare",
+            "pg_temp.expect_candidate_receipt_identity_block",
+            "pg_temp.expect_candidate_receipt_live_block",
+            "public.candidate_component_prepare_atomic_v1",
+            "public.candidate_workflow_transition_atomic_v1"
+          ],
+          "dynamicExecutePresent": true,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 102,
+      "file": "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+      "sha256": "dd577c016084f95792bc235597655d57ed1f057fa54b5150352071829656afde",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Receipt reupload owner/index/trigger definitions and current-row duplicate invariants only.",
+      "closure": [
+        {
+          "file": "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+          "sha256": "dd577c016084f95792bc235597655d57ed1f057fa54b5150352071829656afde",
+          "bytes": 11383,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 103,
+      "file": "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+      "sha256": "bd19af9ad73649964403bf593d75dd3d9b858b748ec84e121627737cbf0cfa66",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Source-less cancellation routines are strings passed to catalogue readers; active cutover counts are read-only, no cancellation apply.",
+      "closure": [
+        {
+          "file": "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+          "sha256": "bd19af9ad73649964403bf593d75dd3d9b858b748ec84e121627737cbf0cfa66",
+          "bytes": 11509,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 104,
+      "file": "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+      "sha256": "5987309458ec22ac181af50e0a86611133ca16e958850b569511fa752cd09214",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Canonical producer definition/ACL plus pure preview JSON contract classification.",
+      "closure": [
+        {
+          "file": "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+          "sha256": "5987309458ec22ac181af50e0a86611133ca16e958850b569511fa752cd09214",
+          "bytes": 4474,
+          "includes": [],
+          "calls": [
+            "public.pay_workbench_preview_line_contract_ok"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 105,
+      "file": "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+      "sha256": "5d68c277e982d798f5dd43103602d7c04a61f9237ffa227e9b3ad1274c38ef3f",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "PURE_OR_TRANSACTIONAL_DATABASE_FIXTURE",
+      "reason": "Five intentionally invalid cancellation-notice calls: conflicting mode, half cursor, prohibited external cursor, excessive limit, unsupported template. Controlling 07092026_2301 rejects each before mode selection/first row lock/write. No valid reconciliation path is called.",
+      "closure": [
+        {
+          "file": "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+          "sha256": "5d68c277e982d798f5dd43103602d7c04a61f9237ffa227e9b3ad1274c38ef3f",
+          "bytes": 17154,
+          "includes": [],
+          "calls": [
+            "public.pay_payment_cancellation_notice_reconcile_v1"
+          ],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 106,
+      "file": "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+      "sha256": "446f69450173160d79f74a57f2c95a0fe77c4300f934404016d2111b01a81d37",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Correction request-start definition/ACL/index and active legacy cutover counts only; no PREPARE/START invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+          "sha256": "446f69450173160d79f74a57f2c95a0fe77c4300f934404016d2111b01a81d37",
+          "bytes": 4413,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 107,
+      "file": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+      "sha256": "436157abd5c8b4ee980af8705da256b8ee6488f068354d3f458fe744f4d66a2d",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Dirty cohort helper/processor metadata, ACL, installed definitions/indexes only; no processor execution.",
+      "closure": [
+        {
+          "file": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+          "sha256": "436157abd5c8b4ee980af8705da256b8ee6488f068354d3f458fe744f4d66a2d",
+          "bytes": 9379,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "SET LOCAL statement_timeout = '30s';",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 108,
+      "file": "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+      "sha256": "55d56128944832843dd3e8449ccdd9ed5ec579e80a61c7b5db5928562bee4ab0",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Scope invalidator/caller/trigger census only; no invalidation invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+          "sha256": "55d56128944832843dd3e8449ccdd9ed5ec579e80a61c7b5db5928562bee4ab0",
+          "bytes": 9788,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "BEGIN;",
+            "SET LOCAL statement_timeout = '30s';",
+            "ROLLBACK;"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 109,
+      "file": "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+      "sha256": "7e65b7dbe77cdc09156d394fbaf27c9fda12f66d452b626bb3a49eba199afe69",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Cancel-return and preview-publication routine definitions/ACL/index only.",
+      "closure": [
+        {
+          "file": "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+          "sha256": "7e65b7dbe77cdc09156d394fbaf27c9fda12f66d452b626bb3a49eba199afe69",
+          "bytes": 4093,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 110,
+      "file": "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+      "sha256": "fc95f4009bf2507947d99583978181ade0fd49c44f736d3ce63c7aadf15e0826",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "No-money process owner definition/config/ACL only; no process invocation.",
+      "closure": [
+        {
+          "file": "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+          "sha256": "fc95f4009bf2507947d99583978181ade0fd49c44f736d3ce63c7aadf15e0826",
+          "bytes": 2384,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on"
+          ]
+        }
+      ]
+    },
+    {
+      "index": 111,
+      "file": "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
+      "sha256": "1eb752ba8b04100354ce7dc45b4dd1f005062712af23e0963f8b2f35a9306e34",
+      "decision": "ELIGIBLE_ROLLBACK_REHEARSAL",
+      "category": "CATALOGUE_OR_READ_INVARIANT",
+      "reason": "Duplicate-expense anchor owner hash/config/ACL only.",
+      "closure": [
+        {
+          "file": "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
+          "sha256": "1eb752ba8b04100354ce7dc45b4dd1f005062712af23e0963f8b2f35a9306e34",
+          "bytes": 2804,
+          "includes": [],
+          "calls": [],
+          "dynamicExecutePresent": false,
+          "transactionDirectives": [
+            "\\set ON_ERROR_STOP on",
+            "begin;",
+            "rollback;"
+          ]
+        }
+      ]
+    }
+  ]
+}

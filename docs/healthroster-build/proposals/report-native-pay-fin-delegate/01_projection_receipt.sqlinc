@@ -1,0 +1,30 @@
+-- Review-only private read. Reproduce the controlling receipt owner's exact
+-- domain and field set; never interpret a TSFIN status as a receipt.
+create or replace function private.weekly_source_report_projection_receipt_assert_v1(
+  p_receipt public.weekly_source_ordinary_pay_projection_receipts
+) returns boolean language sql stable set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select p_receipt.receipt_hash is not null
+    and p_receipt.source_unit_count=jsonb_array_length(p_receipt.source_unit_outcomes_json)
+    and p_receipt.source_unit_manifest_hash=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_UNIT_MANIFEST_V1',p_receipt.source_unit_outcomes_json)
+    and p_receipt.source_expense_manifest_hash=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_SOURCE_EXPENSE_MANIFEST_V1',p_receipt.source_expense_authorities_json)
+    and p_receipt.receipt_hash=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_ORDINARY_PAY_PROJECTION_RECEIPT_V1',jsonb_build_object(
+        'final_revision_id',p_receipt.final_revision_id,'source_cycle_id',p_receipt.source_cycle_id,
+        'client_id',p_receipt.client_id,'root_timesheet_id',p_receipt.root_timesheet_id,
+        'published_timesheet_financial_id',p_receipt.published_timesheet_financial_id,
+        'source_profile_kind',p_receipt.source_profile_kind,'source_mode',p_receipt.source_mode,
+        'outcome',p_receipt.outcome,'source_units',p_receipt.source_unit_outcomes_json,
+        'source_unit_manifest_hash',encode(p_receipt.source_unit_manifest_hash,'hex'),
+        'source_expense_authorities',p_receipt.source_expense_authorities_json,
+        'source_expense_manifest_hash',encode(p_receipt.source_expense_manifest_hash,'hex'),
+        'final_manifest_hash',encode(p_receipt.final_manifest_hash,'hex'),
+        'final_policy_fingerprint',encode(p_receipt.final_policy_fingerprint,'hex'),
+        'service_snapshot_hash',encode(p_receipt.service_snapshot_hash,'hex'),
+        'server_calculation_fingerprint',encode(p_receipt.server_calculation_fingerprint,'hex'),
+        'root_before_hash',encode(p_receipt.root_before_hash,'hex'),
+        'root_after_hash',encode(p_receipt.root_after_hash,'hex'),
+        'request_hash',encode(p_receipt.request_hash,'hex'),'actor_user_id',p_receipt.actor_user_id));
+$function$;

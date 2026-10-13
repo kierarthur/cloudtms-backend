@@ -1,0 +1,295 @@
+{
+  "schema_version": "REPORT_NATIVE_FIN_WORKER_SOURCE_MANIFEST_V1",
+  "status": "FROZEN_SOURCE_ONLY_FOR_ROOT_INDEPENDENT_REVIEW",
+  "authoritative_lane": "healthroster-v2-report-build-13102026",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "artifact_count": 52,
+  "artifacts": [
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/01_projection_receipt.sqlinc",
+      "bytes": 2340,
+      "sha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/02_pay_authority.sqlinc",
+      "bytes": 23242,
+      "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/03_pay_witness.sqlinc",
+      "bytes": 1071,
+      "sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/04_complete_fin_overload.sqlinc",
+      "bytes": 103685,
+      "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/05_complete_report_finalise.sqlinc",
+      "bytes": 20419,
+      "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/06_complete_report_shift_facts.sqlinc",
+      "bytes": 4790,
+      "sha256": "cc2b36cbdd54b28643d3beac0c7d0e39d1b5b76e8d94b772b657a5c475b40277"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/07_private_acl.sqlinc",
+      "bytes": 2493,
+      "sha256": "7bdfc266230363d6b03125ac4f7779cd76b43b8937d70ca24cd28eabe3fe2357"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/08_complete_upload_context.sqlinc",
+      "bytes": 27489,
+      "sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/09_complete_report_projection_rows_forwardfix.sqlinc",
+      "bytes": 67335,
+      "sha256": "8218421d0732c10c3b2c2b3f49c2b5a982956d9d70d7920db846d7cdb1cd44e1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/10_complete_m1_projection_rows_forwardfix.sqlinc",
+      "bytes": 67432,
+      "sha256": "f137d7b0cb918dd79f7d9cbe102ee3ee8f217548ed07cd62b3f186be0f960e48"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/CONTROLLING_INPUTS.json",
+      "bytes": 6769,
+      "sha256": "5dee4be4eaf073749f1f003b67b1be2029a68fd0718a19ca5b13cf084f26b9f1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/FIN_HUNKS.json",
+      "bytes": 2080,
+      "sha256": "a6b937b2d2379cc3c4dabc70b12779861e4269a9b75bdc8b79a61a353b7b0851"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/INTEGRATION_HUNKS.md",
+      "bytes": 4961,
+      "sha256": "763087558b5f634d6032950cb9cd87617dd5d4d68f926d45ab9f4eb8968a7619"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/NATIVE_PROOF_RECIPE.md",
+      "bytes": 8957,
+      "sha256": "0852d1943f07b7e5e14aee69962f0e9677080f1c2d85efb2175f9e4e9d050452"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/READ_CALL_GRAPH.json",
+      "bytes": 2253,
+      "sha256": "536bc88abb975d9ad19a7b1a50c6d5310b8d0b362dccdf9f3312e1ddcff29a78"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/REVIEW.md",
+      "bytes": 9965,
+      "sha256": "ec596b5b5436c96333f9840f5d6ed1720593c75bb0b92f90e50f91861cf99a7b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/WORKER_HUNKS.json",
+      "bytes": 17329,
+      "sha256": "bd26de93b42648b00f70087b7f81bacf085905fcf7fca046ae806615bd3b701d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/WORKER_INPUTS.json",
+      "bytes": 6602,
+      "sha256": "36decfbd23287b7d1afe16613a2451e091620811c1e443b2af7ac8b0ddfe3b2a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/build-proposal.mjs",
+      "bytes": 7026,
+      "sha256": "97a2edbbbb28651dd9e48079d13d2fec19ad32ec6f5cd013499d5a1aa2ed3628"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/build-worker-proposal.mjs",
+      "bytes": 20121,
+      "sha256": "103a1eac1d77445bf190c943bde8818d82a28a9a91ab20c44a15d1df7ca176b0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/freeze-source.mjs",
+      "bytes": 3610,
+      "sha256": "fccad6e8dc16188bf264be65dcecb77d4c053c97bab208eb4119543629abb920"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/native-dependency-loader.mjs",
+      "bytes": 980,
+      "sha256": "72c357e1c4051b9161e83b961643c618a7f0c9788fd1f9121befa8073688eb43"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/native-report-parser-regression.test.mjs",
+      "bytes": 5115,
+      "sha256": "03a4340a14fa0a1fb3a9b931f1dd1d792ed95b6a7e4d543b0052441fc97cc9d0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/native-upload-publication-regression.test.mjs",
+      "bytes": 42644,
+      "sha256": "18dbbf4e390b7c5212afe2180e34c864196723fa26274b4a3dfd1dbdd5a7be60"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/source-shape.test.mjs",
+      "bytes": 13147,
+      "sha256": "fee5b60ae1d36c94bffd36fed555cc7731759e49904e8c43131e0bce2e4fa11f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker-protocol.test.mjs",
+      "bytes": 12849,
+      "sha256": "d2bc2396dc2cdf29cbbcef7bb92ea3715c7964c521841f4201a42d6812c38015"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/acacium-report-normalise.js",
+      "bytes": 6379,
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/csv-evidence.js",
+      "bytes": 5014,
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/healthroster-normalise.js",
+      "bytes": 8831,
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/html-evidence.js",
+      "bytes": 5649,
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/index.js",
+      "bytes": 6275,
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/manager-email.js",
+      "bytes": 15252,
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/nhsp-normalise.js",
+      "bytes": 15260,
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/profiles.js",
+      "bytes": 14652,
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/protected-target-schedule.js",
+      "bytes": 6387,
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/report-upload-provenance.mjs",
+      "bytes": 12480,
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/roster-summary-normalise.js",
+      "bytes": 7516,
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/shared.js",
+      "bytes": 8080,
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/source-finalised-time.js",
+      "bytes": 2786,
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/source-invoice-money.js",
+      "bytes": 6221,
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/report-native-pay-fin-delegate/worker/xlsx-evidence.js",
+      "bytes": 11671,
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    }
+  ],
+  "package_sha256": "a3cf0ad2b531e2b8cc8db00e220ff079fb7157fe73b4ad3dc6d60c517479c196",
+  "local_checks": {
+    "passed": 57,
+    "failed": 0,
+    "skipped": 0,
+    "combined_passed": 62,
+    "node_syntax": "PASS_THREE_CHANGED_WORKER_MODULES",
+    "evidence": "Offline actual-parser/source/hunk/closure/protocol/adversarial checks. Transport stubs are not native acceptance."
+  },
+  "database_compile": "NOT_RUN_LANE_FORBIDDEN",
+  "runtime_native_acceptance": "HELD_ROOT_SEND_7_AFTER_BANK_FIRST_INSTALL",
+  "exposure": "UNMOUNTED",
+  "root_or_frozen_edits": 0,
+  "root_gates": [
+    "Exact PostgreSQL 17 staged-blob compile and canonical +3 routine contract/final ACL fingerprint",
+    "Banking first install recorded and root SEND_7 lock for serial controlled rehearsal",
+    "Actual S12 permitted Report upload date and native Office/rule/source authority",
+    "Actual native Worker Report stage/seal/current publication/binding and preserved ordinary/NHSP/M1 journeys",
+    "Real ordinary/protected pay-run/task/receipt/approved inventory/current publication positive and negative journeys",
+    "Internal separate A/B native FIN/admission/render/zero-pay qualification then release-bound deterministic operational variant",
+    "Protected reconcile-only current publisher has no proved latest WAIT producer",
+    "Correct-final-source pay-run provenance must be supplied by controlling native orchestration",
+    "Prepared saved amount unavailable without exact retained normalized writer output",
+    "Actual NEXT active/withheld caller-owned amount join remains unproved",
+    "Native schema cache/API/runtime proof before mounting existing route"
+  ]
+}

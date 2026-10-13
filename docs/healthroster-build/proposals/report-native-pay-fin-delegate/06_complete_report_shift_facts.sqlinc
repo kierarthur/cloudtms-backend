@@ -1,0 +1,56 @@
+create or replace function private.weekly_source_report_shift_facts_v1(p_work_event_id uuid,p_cycle_or_report uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare e public.weekly_work_events%rowtype; c public.weekly_source_cycles%rowtype; s public.weekly_source_report_scopes%rowtype;
+  v_on boolean:=false; v_bound boolean:=false; v_ready boolean:=false; v_protected boolean:=false; v_wait jsonb;
+  v_pay_export_worked boolean:=false;
+begin
+  select * into e from public.weekly_work_events where id=p_work_event_id;
+  if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_EVENT_NOT_FOUND' using errcode='22023'; end if;
+  select * into c from public.weekly_source_cycles where id=p_cycle_or_report;
+  if not found then
+    select * into s from public.weekly_source_report_scopes where id=p_cycle_or_report and self_bill_report_id is not null;
+    if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_NOT_FOUND' using errcode='22023'; end if;
+    if s.client_id is distinct from e.client_id then
+      raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+    select * into strict c from public.weekly_source_cycles where id=s.source_cycle_id;
+  end if;
+  if e.first_source_group_id is distinct from c.source_group_id
+    or (c.scope_client_id is not null and c.scope_client_id is distinct from e.client_id)
+    or (s.id is not null and (s.source_group_id is distinct from c.source_group_id
+      or not exists(select 1 from public.weekly_source_groups source_group where source_group.id=c.source_group_id
+        and source_group.agency_id=s.agency_id and source_group.environment=s.environment))) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+  -- The actual event's client is the F1 helper's first parameter.
+  if private.weekly_source_effective_rule_set_v1(e.client_id,c.id)#>>'{values,self_bill_source}' is distinct from 'SEPARATE_FINAL_REPORT' then
+    return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',false,'invoice_ready',false,'s25_pay_selected',false); end if;
+  select coalesce(bool_or(true),false),coalesce(bool_or(b.id is not null and er.row_finalisation_state='SOURCE_WORKED'
+      and nullif(btrim(er.finalised_by),'') is not null),false),
+    coalesce(bool_or(b.id is not null and er.row_finalisation_state='SOURCE_WORKED' and nullif(btrim(er.finalised_by),'') is not null
+      and private.weekly_source_self_bill_report_pay_witness_v1(b.id) is not null),false)
+    into v_on,v_bound,v_ready
+    from public.weekly_source_report_scopes rs
+    join public.weekly_source_projection_publications rp on rp.id=rs.current_projection_publication_id
+      and rp.upload_id=rs.current_complete_upload_id and rp.report_scope_id=rs.id and rp.state='CURRENT'
+      and rp.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and rp.authority_scope_version=rs.version
+    join public.weekly_source_uploads ru on ru.id=rp.upload_id and ru.state='CURRENT'
+    join public.weekly_source_upload_rows rr on rr.upload_id=ru.id and rr.row_finalisation_state='SOURCE_REPORT_LINE'
+    left join public.weekly_source_self_bill_report_line_bindings b on b.report_row_id=rr.id and b.state='CURRENT'
+    left join public.weekly_source_upload_rows er on er.id=b.export_upload_row_id
+    where rs.source_group_id=c.source_group_id and rs.client_id=e.client_id
+      and (s.id is null or rs.id=s.id) and (b.work_event_id=e.id
+        or (e.profile_external_key is not null and rr.external_source_key=e.profile_external_key));
+  v_wait:=private.weekly_source_protected_wait_witness_v1(e.id,c.id);
+  v_protected:=v_wait is not null and v_wait->>'state'='QUALIFIED_WAIT';
+  select exists(select 1 from public.weekly_source_projection_publications ep
+    join public.weekly_source_uploads eu on eu.id=ep.upload_id and eu.state='CURRENT'
+    join public.weekly_source_upload_rows er on er.upload_id=eu.id and er.row_finalisation_state='SOURCE_WORKED'
+      and nullif(btrim(er.finalised_by),'') is not null and er.work_date<=c.finalisation_week_ending
+    join public.weekly_source_row_resolutions rr on rr.upload_row_id=er.id and rr.mapping_state='RESOLVED'
+      and rr.work_event_id=e.id and rr.client_id=e.client_id and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+    where ep.id=c.current_projection_publication_id and ep.upload_id=c.current_complete_upload_id
+      and ep.authority_scope_kind='CYCLE' and ep.state='CURRENT') into v_pay_export_worked;
+  return jsonb_build_object('on_accepted_report',v_on,'bound_to_finalised_export',v_bound,
+    'invoice_ready',v_bound and v_ready,'s25_pay_selected',v_protected or (v_bound and v_pay_export_worked));
+end;
+$function$;

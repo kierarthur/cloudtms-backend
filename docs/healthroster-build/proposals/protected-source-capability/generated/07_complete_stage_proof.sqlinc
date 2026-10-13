@@ -1,0 +1,47 @@
+-- Complete isolated source proposal. Root review and native proofs pending.
+create or replace function private.weekly_source_bulk_stage_proof_v1(p_stage jsonb,p_financial_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_request jsonb:=p_stage->'bulk_signed_selection_proof'; v_context jsonb; v_selection jsonb; v_item jsonb; v_proof jsonb;
+  v_count integer; v_original_clients uuid[]; v_run public.weekly_exceptional_orchestration_runs%rowtype;
+begin
+  if not private.weekly_exceptional_json_keys_exact_v1(v_request,array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or not(v_request ?& array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or coalesce(v_request->>'expected_selection_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(v_request->>'expected_source_cas_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(v_request->>'bulk_request_key','') !~ '^[A-Za-z0-9:_-]{16,120}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='22023'; end if;
+  select * into strict v_run from public.weekly_exceptional_orchestration_runs where id=(p_stage->>'orchestration_run_id')::uuid;
+  if v_run.request_kind not in ('APPROVE','AMEND') or v_run.state is distinct from 'RUNNING'
+    or v_run.requested_by_user_id::text is distinct from p_stage->>'actor_user_id' then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='55000'; end if;
+  v_context:=private.weekly_source_bulk_own_stage_context_v1((p_stage->>'source_cycle_id')::uuid,(p_stage->>'actor_user_id')::uuid,
+    v_request->>'bulk_request_key',v_request->>'expected_selection_sha256',v_request->>'expected_source_cas_sha256');
+  if v_context is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_ROUND_ALREADY_STAGED' using errcode='55000'; end if;
+  v_original_clients:=private.weekly_source_bulk_original_client_ids_v1((p_stage->>'source_cycle_id')::uuid,
+    (p_stage->>'actor_user_id')::uuid,v_request->>'bulk_request_key');
+  v_selection:=private.weekly_source_protect_all_signed_selection_v1((p_stage->>'source_cycle_id')::uuid,(p_stage->>'actor_user_id')::uuid,v_context,v_original_clients);
+  if v_selection->>'selection_sha256' is distinct from v_request->>'expected_selection_sha256'
+    or v_selection#>>'{source_cas,source_cas_sha256}' is distinct from v_request->>'expected_source_cas_sha256' then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_CHANGED' using errcode='40001'; end if;
+  select count(*),jsonb_agg(value)->0 into v_count,v_item from jsonb_array_elements(v_selection->'eligible') value
+    where value->>'incident_id'=v_request->>'incident_id';
+  if v_count<>1 or v_item->>'work_event_id' is distinct from p_stage->>'work_event_id'
+    or v_item->>'client_id' is distinct from p_stage->>'client_id'
+    or v_item#>>'{claim,evidence_timesheet_id}' is distinct from p_stage->>'evidence_timesheet_id'
+    or v_item->>'comparison_revision_id' is distinct from p_stage->>'current_comparison_revision_id'
+    or (v_item#>>'{claim,work_date}')::date is distinct from (p_stage#>>'{protected_schedule,work_date}')::date
+    or (v_item#>>'{claim,start_at_local}')::timestamp is distinct from (p_stage#>>'{protected_schedule,start_at_local}')::timestamp
+    or (v_item#>>'{claim,end_at_local}')::timestamp is distinct from (p_stage#>>'{protected_schedule,end_at_local}')::timestamp
+    or (v_item#>>'{claim,break_minutes}')::integer is distinct from (p_stage#>>'{protected_schedule,break_minutes}')::integer then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='55000'; end if;
+  v_proof:=jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_STAGED_PROOF_V1','actor_user_id',p_stage->>'actor_user_id',
+    'source_cycle_id',p_stage->>'source_cycle_id','bulk_request_key',v_request->>'bulk_request_key',
+    'selection_sha256',v_selection->>'selection_sha256','source_cas',v_selection->'source_cas',
+    'eligible_claim',v_item,'financial_row_id',p_financial_id,
+    'request_sha256',p_stage#>>'{c1_request,request_sha256}','target_snapshot_sha256',
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_TARGET_SNAPSHOT_V1',p_stage->'target_snapshot'),'hex'));
+  return v_proof||jsonb_build_object('proof_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_STAGED_PROOF_V1',v_proof),'hex'));
+end;
+$function$;

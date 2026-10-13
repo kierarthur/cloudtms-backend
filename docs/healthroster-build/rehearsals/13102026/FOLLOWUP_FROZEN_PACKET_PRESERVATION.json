@@ -1,0 +1,27 @@
+{
+  "status": "FROZEN_SOURCE_PROPOSALS_PRESERVED_NOT_INSTALLED_NOT_EXPOSED",
+  "packages": [
+    {
+      "folder": "protected-source-capability",
+      "manifestSha256": "6c30256b4d12d0c76a95db3b0c013055cc362d5cc11fa21f3b34513afbeb96d3",
+      "artifactCount": 33
+    },
+    {
+      "folder": "cn-a0-native-normalisation",
+      "manifestSha256": "f04bd3656846b5ba1e395095b64689fef839ada1e4dcc0102aa7f030cb16709e",
+      "artifactCount": 38
+    },
+    {
+      "folder": "report-native-pay-fin-delegate",
+      "manifestSha256": "68f37566589858c2b536a3755f74d9fd691a25693d3c50fb0d3ffab021e36af1",
+      "artifactCount": 52
+    },
+    {
+      "folder": "automatic-native-delta-forward-review",
+      "manifestSha256": "00cc030cff3a30c8582a9ab118d482e690010012856157e8dc873a541a7808b2",
+      "artifactCount": 7
+    }
+  ],
+  "files": 134,
+  "remaining": "Root complete owner review/integration, genuine prerequisite bootstrap, semantic SQL/security/financial/concurrency/document/API/NEXT/phone acceptance. Frozen proposals remain historical evidence; adjacent forward successors have distinct identities."
+}

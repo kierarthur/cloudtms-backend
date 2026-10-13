@@ -1,0 +1,55 @@
+-- Root binds actual native Source fixtures via this closed input; no row is
+-- seeded or mutated here. Install ONLY inside root's server-owned rollback.
+create or replace function pg_temp.verify_protected_source_cas_v1(p_input jsonb)
+returns jsonb language plpgsql set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare cycle_id uuid; clients uuid[]; scrambled uuid[]; output jsonb; repeat_output jsonb; facts jsonb;
+  invalid_refused boolean:=false; foreign_refused boolean:=false; foreign_client uuid;
+begin
+  if current_database()<>'cloudtms_test_clone' then raise exception 'NATIVE_SOURCE_VERIFY_TEST_DATABASE_REQUIRED'; end if;
+  if not private.weekly_exceptional_json_keys_exact_v1(p_input,array['source_cycle_id','client_ids','foreign_client_id'])
+    or not(p_input ?& array['source_cycle_id','client_ids','foreign_client_id'])
+    or jsonb_typeof(p_input->'client_ids') is distinct from 'array' then raise exception 'NATIVE_SOURCE_VERIFY_CONTEXT_INVALID'; end if;
+  cycle_id:=(p_input->>'source_cycle_id')::uuid;foreign_client:=(p_input->>'foreign_client_id')::uuid;
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(p_input->'client_ids') value;
+  if cardinality(clients)<2 or cardinality(clients)>100 or foreign_client=any(clients) then
+    raise exception 'NATIVE_SOURCE_VERIFY_TWO_CLIENTS_AND_FOREIGN_REQUIRED'; end if;
+  output:=private.weekly_source_bulk_source_cas_v1(cycle_id,clients);
+  select array_agg(value order by value desc) into scrambled from unnest(clients) value;
+  scrambled:=scrambled||clients[1:1];
+  repeat_output:=private.weekly_source_bulk_source_cas_v1(cycle_id,scrambled);
+  facts:=private.weekly_source_bulk_source_facts_v1(cycle_id,clients);
+  if output is distinct from repeat_output or not private.weekly_exceptional_json_keys_exact_v1(output,
+      array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or output->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or output->>'source_cycle_id' is distinct from cycle_id::text or output->'client_ids' is distinct from to_jsonb(clients)
+    or output->>'source_cas_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1',facts),'hex') then raise exception 'NATIVE_SOURCE_VERIFY_HASH_OR_CLOSED_DTO_FAILED'; end if;
+  begin perform private.weekly_source_bulk_source_cas_v1(cycle_id,clients||array[null::uuid]);
+  exception when sqlstate '22023' then invalid_refused:=sqlerrm='WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID'; end;
+  begin perform private.weekly_source_bulk_source_cas_v1(cycle_id,array[foreign_client]);
+  exception when sqlstate '40001' then foreign_refused:=sqlerrm='WEEKLY_SOURCE_BULK_SOURCE_CAS_CLIENT_SCOPE_CHANGED'; end;
+  if not invalid_refused or not foreign_refused then raise exception 'NATIVE_SOURCE_VERIFY_INVALID_SCOPE_NOT_REFUSED'; end if;
+  return jsonb_build_object('contract','PROTECTED_SOURCE_CAS_NATIVE_C01_V1','source_cycle_id',cycle_id,
+    'client_ids',to_jsonb(clients),'source_cas_sha256',output->>'source_cas_sha256',
+    'duplicate_order_equal',true,'native_domain_hash_equal',true,'closed_dto',true,'null_client_refused',true,'foreign_client_refused',true);
+end;
+$function$;
+
+-- Read-only receipt audit after root performs actual C02/C03 native rounds.
+create or replace function pg_temp.verify_protected_source_original_clients_v1(p_cycle uuid,p_actor uuid,p_key text,p_expected uuid[])
+returns jsonb language plpgsql set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare actual uuid[]; selection jsonb; expected uuid[];
+begin
+  if current_database()<>'cloudtms_test_clone' then raise exception 'NATIVE_SOURCE_VERIFY_TEST_DATABASE_REQUIRED'; end if;
+  select array_agg(distinct value order by value) into expected from unnest(p_expected) value;
+  actual:=private.weekly_source_bulk_original_client_ids_v1(p_cycle,p_actor,p_key);
+  if actual is distinct from expected then raise exception 'NATIVE_SOURCE_VERIFY_ORIGINAL_CLIENTS_CHANGED'; end if;
+  selection:=private.weekly_source_protect_all_signed_selection_v1(p_cycle,p_actor,null,actual);
+  if selection#>'{source_cas,client_ids}' is distinct from to_jsonb(expected) then
+    raise exception 'NATIVE_SOURCE_VERIFY_COMPLETED_CLIENT_DROPPED'; end if;
+  return jsonb_build_object('contract','PROTECTED_SOURCE_ORIGINAL_CLIENTS_NATIVE_V1','client_ids',to_jsonb(actual),
+    'retained_original_census',true,'source_cas_sha256',selection#>>'{source_cas,source_cas_sha256}');
+end;
+$function$;

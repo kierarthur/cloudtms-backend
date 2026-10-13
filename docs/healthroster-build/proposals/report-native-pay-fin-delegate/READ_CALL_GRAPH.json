@@ -1,0 +1,35 @@
+{
+  "schema_version": "REPORT_NATIVE_READ_CALL_GRAPH_V1",
+  "status": "SOURCE_ONLY_ROOT_CATALOGUE_AND_RUNTIME_PROOF_PENDING",
+  "private.weekly_source_report_projection_receipt_assert_v1": [
+    "private.weekly_source_sha256_jsonb_v1"
+  ],
+  "private.weekly_source_self_bill_report_pay_authority_v1": [
+    "private.weekly_source_report_projection_receipt_assert_v1",
+    "private.weekly_source_sha256_jsonb_v1",
+    "private.weekly_source_effective_inventory_v1",
+    "private.weekly_source_publication_request_digest_v1",
+    "private.weekly_source_entitlement_derived_uuid_v1",
+    "private.weekly_source_protected_wait_witness_v1",
+    "private.weekly_source_protected_wait_receipt_v1",
+    "private.bpay_next_source_origin_state_v1",
+    "private.weekly_source_actual_timesheet_submission_v1"
+  ],
+  "private.weekly_source_self_bill_report_pay_witness_v1": [
+    "private.weekly_source_self_bill_report_pay_authority_v1"
+  ],
+  "native_authority": "Complete existing inventory/approval-basis, retained WAIT/LOCAL/C1/DirectNEXT receipt, I3 and submission inputs are byte-pinned in CONTROLLING_INPUTS.json. They retain all native predicates. No new writer, row/advisory lock, queue claim/drain, network/provider/payment/settlement/email call is introduced in these read leaves.",
+  "report_fin_locks": "Unchanged invoice-only leaf uses group UPDATE then cycle UPDATE then exact Report scope UPDATE; read helpers do not acquire family/Timesheet financial locks. Ordinary CYCLE/NHSP full native I-1/NEXT lock ladder is preserved in the complete overload.",
+  "new_signatures": [
+    "private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts)",
+    "private.weekly_source_self_bill_report_pay_authority_v1(uuid)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)"
+  ],
+  "new_service_or_browser_grants": 0,
+  "amount_limits": {
+    "prepared": "NULL; native input receipt is not immutable retained normalized writer output",
+    "active": "Only actual approved inventory ROOT_FAMILY amount, including a proved literal zero",
+    "withheld": "NULL; root controlling Banking caller owns the exact active/withheld evidence join",
+    "paid_or_settled": "No claim or field"
+  }
+}

@@ -1,0 +1,14 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+-- Run after native FIN. These are actual NULL-rule Source and absent-root negatives.
+-- They do not claim an ordinary signed-document or NHSP positive journey.
+do $nfx_negative$ declare s pg_temp.nfx_state%rowtype;root uuid;absent uuid:='db06681a-5c78-87ef-b752-37ff2bad27ab'::uuid;v jsonb;begin
+ select * into strict s from pg_temp.nfx_state;
+ select min(invoice_timesheet_id::text)::uuid into root from public.weekly_source_billing_movements where final_revision_id=s.revision_id having count(distinct invoice_timesheet_id)=1;
+ if root is null then raise exception 'NFX_NATIVE_ONE_ROOT_REQUIRED';end if;
+ if private.weekly_source_signed_check_only_v1(root) is distinct from false or private.weekly_source_agency_invoice_check_only_v1(root) is distinct from false then raise exception 'NFX_NULL_SELF_BILL_SCOPE_BROADENED';end if;
+ if exists(select 1 from public.timesheets where timesheet_id=absent) then raise exception 'NFX_ABSENT_UUID_NOT_VACANT';end if;
+ if private.weekly_source_signed_check_only_v1(absent) is distinct from false or private.weekly_source_agency_invoice_check_only_v1(absent) is distinct from false then raise exception 'NFX_MISSING_SCOPE_DID_NOT_FAIL_CLOSED';end if;
+ v:=private.weekly_source_invoice_issue_validate_v1(absent);
+ if v->>'is_source_invoice' is distinct from 'false' then raise exception 'NFX_MISSING_INVOICE_SCOPE_DID_NOT_FAIL_CLOSED';end if;
+end;$nfx_negative$;

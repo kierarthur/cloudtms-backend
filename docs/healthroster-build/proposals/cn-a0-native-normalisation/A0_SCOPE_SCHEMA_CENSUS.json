@@ -1,0 +1,217 @@
+{
+  "contract": "HEALTHROSTER_A0_CLOCK_SCOPE_COLUMN_CENSUS_V1",
+  "status": "SOURCE_SCHEMA_NOT_RUNTIME",
+  "inputs": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+      "bytes": 6333208
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "bytes": 4481
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "bytes": 14951
+    },
+    {
+      "path": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
+      "sha256": "3d4542bebaa91a3636a61929749168b3cb0840dbbd06529af0c8d5a40a6c3ece",
+      "bytes": 2301
+    }
+  ],
+  "census": [
+    {
+      "alias": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_invoice_id",
+        "replacement_timesheet_id",
+        "return_invoice_id",
+        "reversed_financial_id",
+        "reversed_timesheet_id",
+        "reversed_version",
+        "state",
+        "week_ending_date"
+      ],
+      "missing": [],
+      "columnSource": "DECLARED_MIGRATION_SOURCE"
+    },
+    {
+      "alias": "r",
+      "relation": "private.timesheet_correction_requests",
+      "fields": [
+        "id"
+      ],
+      "missing": [],
+      "columnSource": "DECLARED_MIGRATION_SOURCE"
+    },
+    {
+      "alias": "v_ts",
+      "relation": "public.timesheets",
+      "fields": [
+        "actual_schedule_json",
+        "archived_at_utc",
+        "authorised_at_server",
+        "booking_id",
+        "contract_id",
+        "is_current",
+        "revoked_at",
+        "sheet_scope",
+        "timesheet_id",
+        "version",
+        "week_ending_date"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "t",
+      "relation": "public.timesheets",
+      "fields": [
+        "timesheet_id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "v_contract",
+      "relation": "public.contracts",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "end_date",
+        "id",
+        "start_date"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "c",
+      "relation": "public.contracts",
+      "fields": [
+        "id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "f",
+      "relation": "public.timesheets_financials",
+      "fields": [
+        "timesheet_id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "pf",
+      "relation": "public.timesheets_financials",
+      "fields": [
+        "is_current",
+        "timesheet_id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "s",
+      "relation": "public.nhsp_shifts",
+      "fields": [
+        "cancelled_at_utc",
+        "timesheet_id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "l",
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "fields": [
+        "timesheet_id"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "e",
+      "relation": "public.candidate_expense_components",
+      "fields": [
+        "owning_timesheet_id",
+        "removed_at_utc"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "g",
+      "relation": "public.weekly_source_groups",
+      "fields": [
+        "active",
+        "id",
+        "source_family",
+        "version"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "gc",
+      "relation": "public.weekly_source_group_clients",
+      "fields": [
+        "client_id",
+        "id",
+        "source_group_id",
+        "valid_from",
+        "valid_to"
+      ],
+      "missing": [],
+      "columnSource": "CURRENT_GENERATED_CONTRACT"
+    },
+    {
+      "alias": "a",
+      "relation": "public.weekly_source_group_rule_assignments",
+      "fields": [
+        "effective_from_week_ending",
+        "effective_to_week_ending",
+        "feature_changed_at_utc",
+        "feature_enabled",
+        "feature_purpose",
+        "feature_receipt_json",
+        "feature_release_id",
+        "feature_request_id",
+        "feature_request_sha256",
+        "id",
+        "rule_set_version_id",
+        "source_group_id",
+        "version"
+      ],
+      "missing": [],
+      "columnSource": "DECLARED_MIGRATION_SOURCE"
+    },
+    {
+      "alias": "rel",
+      "relation": "private.cloudtms_database_releases",
+      "fields": [
+        "completed_at_utc",
+        "installed_contract_sha256",
+        "release_id",
+        "repository_contract_sha256",
+        "status"
+      ],
+      "missing": [],
+      "columnSource": "DECLARED_MIGRATION_SOURCE"
+    }
+  ],
+  "limitation": "Includes every explicit native relation/rowtype alias in the new scope owner. Source declared private/F1 relations remain actual catalogue gates; CREATE, source hashes and column census do not prove runtime function/trigger/enum/API behaviour."
+}

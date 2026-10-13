@@ -1,0 +1,264 @@
+{
+  "status": "SOURCE_FORWARD_INTEGRATED_NATIVE_FIRST_USE_UNPROVED",
+  "sourceLaneCommit": "8d879305d9d63a444bceed1df7afdc6884a1ac21",
+  "manifestSha256": "8a4381e977af3ccfd1d6f5236e7b64486c3c47e9d44e8f31aacb4ab1a7a85a4e",
+  "nativeInput": {
+    "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+    "source_file_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+    "complete_definition_sha256": "56e4d474d54ef500c286091bf3a030cf8b8eab44da4a32617dae7558f41981be"
+  },
+  "forwardSha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+  "reverseHunksRestoreEntireNativeDefinition": true,
+  "nativeNextHookExact": true,
+  "guard": "Only genuine native INSERT RETURNING after successful native I-1, matching entry LEGACY census and exact original physical Contract/week may append the new root. External growth, rotation, malformed context and all native G1/immutable guards remain.",
+  "newTables": 0,
+  "newSignatures": 0,
+  "remaining": [
+    "two Source rows one newly created Contract/week LEGACY root",
+    "positive source-expense row sharing own created root",
+    "external root after EMPTY census before creation ->40001",
+    "external rotation/root change ->40001",
+    "changed entry GUC ->40001",
+    "malformed/sentinel parser",
+    "standalone no inherited context unchanged",
+    "published NEXT exact operation member/replay unchanged",
+    "whole native sorted-family concurrency"
+  ],
+  "outputs": [
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/01_current_null_setup.sqlinc",
+      "sha256": "5a3f68638462985ee6252e3dd2c293b670118964f208e9f8f623d5b7a56c82e4",
+      "bytes": 7968
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/02_actual_stage_context.sqlinc",
+      "sha256": "fe012efed7444496432d95843a647b2c892f1ccee06de7492292446a4528924c",
+      "bytes": 914
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/03_actual_projection_context.sqlinc",
+      "sha256": "a27f1247b67d935f2d73cda8f9393a3360c6e72389455c6fe11046408dfe47dc",
+      "bytes": 928
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/04_prepare_and_fin.sqlinc",
+      "sha256": "0fce1cfc89ff5272fb0649f2cc803c0a4e34e363862246c14028e6c9da19249a",
+      "bytes": 3704
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/05_actual_pay_snapshot_context.sqlinc",
+      "sha256": "2ebe41a7338bf08daa71252e5fd5e96956ad02fa8f18cb6b85464000c47b1759",
+      "bytes": 913
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/07_invoice_admit_issue_model.sqlinc",
+      "sha256": "012c36968aa02efd902f3e06f649da28dc55745a48c5cc4fd8a8a1fb242a9d6c",
+      "bytes": 2649
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/08_null_pay_and_invoice_assertions.sqlinc",
+      "sha256": "65507fdc68a9f3d8434345cf4f7124cd4af252c33cb72c4563bfb4aca6cfa1f1",
+      "bytes": 1497
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/09_fresh_namespace_absence.sqlinc",
+      "sha256": "54c4dc62462a33c5ef137ba127aa6478b0c5384a508d30a17f6eaf01b7c1dc8f",
+      "bytes": 2521
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/10_current_rule_save_assign_off.sqlinc",
+      "sha256": "cfc46fde9e2571ea4f9efd5b5c98a31ca18f8b3927a3a0821131060c2815b38b",
+      "bytes": 3855
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/11_current_null_and_missing_negatives.sqlinc",
+      "sha256": "29e63724ef22baaf5d89cb942e6498ffd666c1a8c9eb300fa1ff49a76254f13f",
+      "bytes": 1575
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/build-native-fixtures.mjs",
+      "sha256": "23ca875d74ce68b4cc3a613fdcdc09f471a2714bae0f70846427ca33229918ec",
+      "bytes": 27981
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_BOOTSTRAP_DECISION.md",
+      "sha256": "972a433edbda43bda576cd7cce1c85a35b40da67f63d095c164dcf393b9c229d",
+      "bytes": 7243
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_OWN_STAGE_SOURCE_CENSUS.json",
+      "sha256": "bf557b02794a60dc60e75e86906d7f2c4892233c1ce1b62018c9f14d74b3d82f",
+      "bytes": 14234
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SCHEMA_FORWARD.json",
+      "sha256": "fa811122da1d1a2cf3a7b90d9aaa62d223c033e3c9550793ebc3b18aac8a8ad5",
+      "bytes": 917
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "bytes": 20104
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/capability-lineage-forward.test.mjs",
+      "sha256": "c0d88271f74b33df6df70b2ecf649041ff1f45849c6a25b31f13a34d627b927e",
+      "bytes": 5163
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/capability-own-stage-census.mjs",
+      "sha256": "6e2df790bb5e582ea1dfa889bc2757ef7b72f5ba0f1f437d5d0edb3d60904e9a",
+      "bytes": 6073
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/capability-receipt-vectors.mjs",
+      "sha256": "e374617f4d876cfb1a27017fb7f29398d3c2fbfdd2cc0928e22304bfce230c9d",
+      "bytes": 1650
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/capability-schema-forward.mjs",
+      "sha256": "8943428bc181f6e3b98838d89761efb4daf56d43e4358489861cdb6796857d7f",
+      "bytes": 5678
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/freeze-native-fixtures.mjs",
+      "sha256": "936b9f00bfb3c967538e775a4a28e6a736965bdff82b223dd97dbd3c0816d061",
+      "bytes": 3982
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/LINEAGE_OWN_NEW_ROOT_FORWARD.json",
+      "sha256": "52f58480f77f9a52cd8200d149ecc74de1088709c42fa12f2a0d17cb1f62c15b",
+      "bytes": 1752
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+      "bytes": 48358
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/lineage-own-root-forward.mjs",
+      "sha256": "a585712d7e779c1e8617f7ab6fdb787cd909dbe29587c2f24b815ea481f2f21a",
+      "bytes": 6331
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/merge-pay-context.mjs",
+      "sha256": "53b3650daf9772869e1453815fd03c983496c9195a497498d05c691723825250",
+      "bytes": 685
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/01_current_null_setup.sqlinc",
+      "sha256": "cf9052ecb9129b2704620139647d77a8db017a37c8121b822f6efa038d7aaa0f",
+      "bytes": 8034
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/02_actual_stage_context.sqlinc",
+      "sha256": "d9bfe7cef9a63e2540dff259978f9b05910c4cbbce80bb2bea4a4dc5a4663557",
+      "bytes": 957
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/03_actual_projection_context.sqlinc",
+      "sha256": "992a0f40dafa44ecfb5b38535cb677a2a52fe478f574ea7842f5929644cdc0d0",
+      "bytes": 971
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/04_prepare_and_fin.sqlinc",
+      "sha256": "35c617b05512058ed4d0722b62d32cde2119d054b0e22a0fc08c299bd0767646",
+      "bytes": 3704
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/05_actual_pay_snapshot_context.sqlinc",
+      "sha256": "2ebe41a7338bf08daa71252e5fd5e96956ad02fa8f18cb6b85464000c47b1759",
+      "bytes": 913
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/07_invoice_admit_issue_model.sqlinc",
+      "sha256": "d34cf9a2807d8b03b1efd5181d6f51275ce261eb8d671fb6afa79363e20fb20b",
+      "bytes": 2649
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/08_null_pay_and_invoice_assertions.sqlinc",
+      "sha256": "65507fdc68a9f3d8434345cf4f7124cd4af252c33cb72c4563bfb4aca6cfa1f1",
+      "bytes": 1497
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/09_fresh_namespace_absence.sqlinc",
+      "sha256": "3a2324ce077df9bb8ed64e4eca927f0a6e6a859acecaab93f9d5ba89c80d10a9",
+      "bytes": 2578
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/10_current_rule_save_assign_off.sqlinc",
+      "sha256": "a1a30ab838c533034264a2aeeccbbb72c832e6b76d1201957c79a2ec4715b98e",
+      "bytes": 3867
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/11_current_null_and_missing_negatives.sqlinc",
+      "sha256": "fca31d806831958cbd9f4f7241fde631c7504149a58b936a2acb8e8479816bf9",
+      "bytes": 1575
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/multirow-lineage-fixture/NATIVE_FIXTURE_MANIFEST.json",
+      "sha256": "5735134db20b977ef3c9930a966fd80905c6c141df7d07a4ba717dac8bad50ec",
+      "bytes": 11997
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_FIXTURE_MANIFEST.json",
+      "sha256": "6a2fd50b12593e729673e94067e0db0669f80830e244c47cd9ae6c089565fddb",
+      "bytes": 11995
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_OWNER_SOURCE_CENSUS.json",
+      "sha256": "3ea8ea585991693996d80ca200b8f991188a7ae6f623fc2fd9620fc4f5e319dd",
+      "bytes": 504330
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_PENDING_JOURNEYS.json",
+      "sha256": "3df6d22499c09fac674d9cbe80fd04691c0adfbaf4b49d9fac4a366b7276dc50",
+      "bytes": 8556
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/native-casebook.mjs",
+      "sha256": "afd3ed933f34c59662aaf834880d18b6f2baacb78f59f35ee868e4aa2403b0b0",
+      "bytes": 5270
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/native-money-vectors.test.mjs",
+      "sha256": "4d6fdb02cd87588fb102ce9ea6469412628a633347a33c736e3e6b8eda18d404",
+      "bytes": 9519
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/native-owner-census.mjs",
+      "sha256": "8d3440c59beb79726243c8918ee94eb42a1dd0d2e7163a36dc60362820d5e6af",
+      "bytes": 7457
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/native-pure-bridge.mjs",
+      "sha256": "1328ba612f2a4ef4ef94db16a966eddaca5d9514076fd153c732ee3e325970da",
+      "bytes": 11858
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/README.md",
+      "sha256": "9f18da529decea59de1ffb0c0def9a84cd487049f7f54b3b091272fc099c6122",
+      "bytes": 13073
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/write-native-psql-recipe.ps1",
+      "sha256": "ed8e1ba24f484110978d12be19f23301db23f0631d76379cdc8dc8d7cfc35a07",
+      "bytes": 4298
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_FIXTURE_REVIEW_MANIFEST.json",
+      "sha256": "8a4381e977af3ccfd1d6f5236e7b64486c3c47e9d44e8f31aacb4ab1a7a85a4e",
+      "bytes": 13110
+    },
+    {
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+      "bytes": 48358
+    },
+    {
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+      "sha256": "39ca760351d11168130c71d212958347a5a14a8ab5c91e9f0b41a3f0e89b664f",
+      "bytes": 230
+    }
+  ]
+}

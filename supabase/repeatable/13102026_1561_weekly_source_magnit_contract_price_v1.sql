@@ -977,9 +977,9 @@ begin
       ) then
         raise exception 'WEEKLY_SOURCE_ECONOMIC_HOURS_MISMATCH' using errcode='22023';
       end if;
-      if coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+
+      if coalesce(v_economic->>'total_pay_pence','')!~'^[-]?[0-9]+$'
 
-         or coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+
+         or coalesce(v_economic->>'calculated_charge_pence','')!~'^[-]?[0-9]+$'
  then
         raise exception 'WEEKLY_SOURCE_ECONOMIC_TOTAL_INVALID' using errcode='22023';
       end if;
