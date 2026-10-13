@@ -1,0 +1,183 @@
+{
+  "source": "Sole local PG17 catalogue only; no business rows or routine execution",
+  "registrySha256": "f01b2decad4d006e84e457f1b774c21d2668b61ede72c2e5336cb36f44ba52b9",
+  "rows": [
+    {
+      "signature": "private.bpay_next_accumulate_net_destination_v1(uuid,uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "installed": {
+        "bodyMd5": "8cb17fed1f617217dab764a2705d25e6",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "bfa3d07bdcae5a53d985dde215655fe66bf97f1203fdb4c88813e74d0afac7d5"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_build_destination_group_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "fileSha256": "16e437bb839cc8a91cd499303cd0d6d574797e3fb0da6570ab24858d42b6ce87",
+      "installed": {
+        "bodyMd5": "d793364472a227a012e242959c963115",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "93f494bd031018bba315b6025ebe24cdea16aaba5301ba8a4672802682ec6860"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_capture_instruction_destination_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "fileSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+      "installed": {
+        "bodyMd5": "69eeef2e2f7133bb2abe1c324783b416",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "6c3b6009b81580446310525f00f9852fb63db876a276411c8a18b5ebb959b61f"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_destination_build_binding_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "fileSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+      "installed": {
+        "bodyMd5": "fc84b8f8c652473b66f2ea7214300582",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "f3a75a9abd1b39a374ef1ba710487f606a9a4e4efd18b30f7e9e8b7af704bfdc"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "fileSha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b",
+      "installed": {
+        "bodyMd5": "a3553787e49ad129032a050ec7592fd7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "67754fb617c3f183cde61487535db8ac5abc5ef393fdf9e0ba9431d49433de24"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_record_destination_member_v1(private.bpay_next_transfer_member)",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "fileSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+      "installed": {
+        "bodyMd5": "35f923cea19717348b632b37f7f0de2f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "9443cacd9ac561150bc78b203036035482107f59d8c3686156bd139878737069"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_seal_net_destination_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "fileSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+      "installed": {
+        "bodyMd5": "df5809a067979cfa0722e94e34236365",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "4b522970000cdea5d680f2f1227ecc23306a3cb54918ba6ebbaf40dfbd87b5f6"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+      "fileSha256": "9fa243c98655e950e670bcb65eb73ef554883cf00cb2e1824982a5ed407c8eee",
+      "installed": {
+        "bodyMd5": "a95a96d5d959da41693f628cf1ade766",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "015de672f619792274358bc280a1340ef7fd5ba27efe1e5cd58dd26efb311d20"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf"
+}
