@@ -13528,6 +13528,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_effect_facts_v1(p_revision_id uuid, p_line_id uuid, p_basis jsonb, p_quote jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "6f511c94119f6ee129e966800a5ebf5062513c30362be9bb4137baf2f8ec17f4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -13688,6 +13707,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "1cf024abb66bc1f9b3c40f0cbdd27a11d35a0b2f70287932b0febe67201c0c46"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_component_resolution_review_v1(p_actor_id uuid, p_scope jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f67a6eb0dda2b9fc6cf6b6437926e53376022271f9f09f638ffce8c3388cbc92"
     },
     {
       "acl": [
@@ -16547,7 +16585,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "d7914dceb3f480c464e1fc6b1ef138116c3fbedf34372923c8542769eed6708b"
+      "definition_sha256": "dfa011dfc215602b098795c0d55b94cfa641137153f7256c49d6d15a12febd84"
     },
     {
       "acl": [

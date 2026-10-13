@@ -1,3 +1,38 @@
+function componentInput(s){
+ const q=s.component_review;return exact(q,['candidate_id','work_id','expected_revision_id','approved_line_id','rate_family','rate_code'])&&[q.candidate_id,q.work_id,q.expected_revision_id].every(id)&&identity(q);
+}
+function effectFacts(value,q){
+ if(q===null)return value===null;
+ return exact(value,['pay_ex_vat','charge_ex_vat','margin_ex_vat','charge_state'])&&money(value.pay_ex_vat)&&cents(value.pay_ex_vat)===cents(q.quote.ex)
+  &&nullable(value.charge_ex_vat,money)&&nullable(value.margin_ex_vat,signedMoney)
+  &&(value.charge_ex_vat===null?value.charge_state==='UNAVAILABLE'&&value.margin_ex_vat===null:value.charge_state==='APPROVED'&&value.margin_ex_vat!==null&&cents(value.margin_ex_vat)===cents(value.charge_ex_vat)-cents(value.pay_ex_vat));
+}
+function componentSignature(r,position){const b=r.original_basis;return {rate_family:r.rate_family,rate_code:r.rate_code,component_kind:b.component_kind,tax_treatment:b.tax_treatment,
+ source_kind:b.source_kind,source_pay_channel:b.source_pay_channel,source_umbrella_id:b.source_umbrella_id,valuation_policy_id:b.valuation_policy_id,
+ unit_label:b.unit_label,semantics:b.semantics,source_rate:b.source_rate,source_charge_rate:b.source_charge_rate,available_rates:r.available_rates,
+ valuation_window_id:r.suggestion?.valuation_window_id??null,suggested_rate:r.suggestion?.quote.rate??null,
+ amount_position:b.semantics==='AMOUNT_LED'?position:null,amount_quantity:b.semantics==='AMOUNT_LED'?b.source_units:null,
+ amount_basis:b.semantics==='AMOUNT_LED'?[b.component_source_ex_vat,r.suggestion?.source_component_residual_ex_vat??null,r.suggestion?.included_source_component_ex_vat??null,r.suggestion?.quote.ex??null,r.effect?.suggestion?.charge_ex_vat??null]:null};}
+function componentResponse(payload,args,actorId){
+ const bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');},q=args.resolution.component_review;
+ if(!exact(payload,['ok','kind','context','works','component_review'])||encoder.encode(JSON.stringify(payload)).length>120000)bad();
+ const scope={candidate_id:q.candidate_id,works:payload.works?.map(w=>({work_id:w.work_id,expected_revision_id:w.expected_revision_id,rows:w.rows?.map(r=>({approved_line_id:r.approved_line_id,rate_family:r.rate_family,rate_code:r.rate_code,intent:null}))})),reason:null};
+ validateResolutionResponse({ok:payload.ok,kind:payload.kind,context:payload.context,works:payload.works},{resolution:scope},actorId);
+ const b=payload.component_review,root=payload.works[0],facts=payload.context.works[0];
+ if(!exact(b,['work_id','expected_revision_id','approved_line_id','rate_family','rate_code','linked_count','excluded','complete','header'])||b.complete!==true
+  ||!['work_id','expected_revision_id','approved_line_id','rate_family','rate_code'].every(k=>b[k]===q[k])||root.work_id!==q.work_id||root.expected_revision_id!==q.expected_revision_id
+  ||root.rows.length!==1||identityKey(root.rows[0])!==identityKey(q)||!integer(b.linked_count,false,99n)||b.linked_count!==String(payload.works.length-1)
+  ||!exact(b.header,['candidate_display_name','candidate_reference','client_display_name','timesheet_reference','week_ending_date','job_title','band_label'])||b.header.week_ending_date!==facts.week_ending_date
+  ||!['candidate_display_name','client_display_name'].every(k=>text(b.header[k])&&encoder.encode(b.header[k]).length<=8192)
+  ||!['candidate_reference','timesheet_reference','job_title','band_label'].every(k=>nullable(b.header[k],v=>text(v)&&encoder.encode(v).length<=8192))||!Array.isArray(b.excluded)||b.excluded.length>1000)bad();
+ const signature=componentSignature(root.rows[0],facts.rows[0].position_basis);
+ for(let n=0;n<payload.works.length;n++){const w=payload.works[n],c=payload.context.works[n];if(c.contract_id!==facts.contract_id)bad();for(const r of w.rows){
+  if(!Object.hasOwn(r,'effect')||r.rate_family!==q.rate_family||r.rate_code!==q.rate_code||!same(componentSignature(r,c.rows.find(x=>identityKey(x)===identityKey(r)).position_basis),signature)||n>0&&r.saved_decision!==null)bad();}}
+ const seen=new Set();for(const x of b.excluded){if(!exact(x,['work_id','expected_revision_id','reason','partly_included'])||!id(x.work_id)||!id(x.expected_revision_id)||!['IN_DRAFT','CHANGED','UNAVAILABLE'].includes(x.reason)
+  ||typeof x.partly_included!=='boolean'||x.partly_included!==payload.works.some(w=>w.work_id===x.work_id)||x.work_id===q.work_id||seen.has(x.work_id))bad();seen.add(x.work_id);}
+ return payload;
+}
+
 function bucketInput(s){
   if(exact(s,['bucket_review'])){const q=s.bucket_review;return exact(q,['candidate_id','work_id','expected_revision_id','approved_line_id'])&&[q.candidate_id,q.work_id,q.expected_revision_id].every(id)&&nullable(q.approved_line_id,id);}
   if(!exact(s,['bucket_evidence']))return false;
@@ -98,6 +133,7 @@ const fault=(code,status=503,retryable=false,reload=false)=>Object.assign(new Er
 export function normalizeResolutionInput(input){
   const bad=()=>{throw fault('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);};
   if(!exact(input,['resolution']))bad();const s=input.resolution;
+  if(exact(s,['component_review'])){if(!componentInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(exact(s,['bucket_review'])||exact(s,['bucket_evidence'])){if(!bucketInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(!exact(s,['candidate_id','works','reason'])||!id(s.candidate_id)||!reason(s.reason)||!Array.isArray(s.works)||s.works.length<1||s.works.length>100||encoder.encode(JSON.stringify(input)).length>32768)bad();
   const works=new Set();let count=0;
@@ -228,6 +264,7 @@ function manualEcho(q,choice){
 
 export function validateResolutionResponse(payload,args,actorId){
   normalizeResolutionInput(args);
+  if(exact(args.resolution,['component_review']))return componentResponse(payload,args,actorId);
   if(exact(args.resolution,['bucket_review'])||exact(args.resolution,['bucket_evidence']))return bucketResponse(payload,args,actorId);
  const scope=args.resolution,bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};
   if(!exact(payload,['ok','kind','context','works'])||payload.ok!==true||payload.kind!=='RESOLUTION_CONTEXT'||encoder.encode(JSON.stringify(payload)).length>120000)bad();
@@ -251,9 +288,10 @@ export function validateResolutionResponse(payload,args,actorId){
       const b=r.original_basis,p=r.position_basis;
       if(!['work_id','physical_timesheet_id','physical_timesheet_version','valuation_policy_id','source_pay_channel','source_umbrella_id'].every(k=>b[k]===w[k])||b.rate_family!==req.rate_family||b.rate_code!==req.rate_code
         ||!exact(p,['approved_source_ex_vat','realised_source_ex_vat','held_source_ex_vat','source_basis_channel'])||!money(p.approved_source_ex_vat)||!signedMoney(p.realised_source_ex_vat)||!money(p.held_source_ex_vat)||!nullable(p.source_basis_channel,x=>channels.includes(x))||cents(p.approved_source_ex_vat)!==cents(b.component_source_ex_vat))bad();
-      if(!exact(out,['approved_line_id','rate_family','rate_code','original_basis','available_rates','suggestion','suggestion_unavailable_code','expected_decision','saved_decision','saved_quote','saved_unavailable_code','incompatible_decisions','preview','preview_unavailable_code','requires_zero_confirmation'])
+      if(!exact(out,['approved_line_id','rate_family','rate_code','original_basis','available_rates','suggestion','suggestion_unavailable_code','expected_decision','saved_decision','saved_quote','saved_unavailable_code','incompatible_decisions','preview','preview_unavailable_code','requires_zero_confirmation',...(Object.hasOwn(out,'effect')?['effect']:[])])
         ||identityKey(out)!==identityKey(req)||!same(out.original_basis,b)||!same(out.available_rates,r.available_rates)||!Array.isArray(out.incompatible_decisions)||typeof out.requires_zero_confirmation!=='boolean'
         ||!quoteOrCode(out.suggestion,out.suggestion_unavailable_code)||!nullable(out.suggestion,q=>quote(q,w.valuation_policy_id,p)))bad();
+      if(Object.hasOwn(out,'effect')&&(!exact(out.effect,['suggestion','saved','preview'])||!effectFacts(out.effect.suggestion,out.suggestion)||!effectFacts(out.effect.saved,out.saved_quote)||!effectFacts(out.effect.preview,out.preview)))bad();
       let prior=null;
       for(const d of r.decisions){if(!decision(d)||prior!==null&&d.decision_id<=prior||owners.has(d.decision_id)||++ownerCount>100)bad();owners.add(d.decision_id);prior=d.decision_id;}
       const saved=out.saved_decision;

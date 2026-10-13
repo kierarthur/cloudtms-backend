@@ -17510,22 +17510,50 @@
       "owner": "WB-30 finite native grouped rates/evidence read support"
     },
     {
-      "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
-      "finalPhysical": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+      "signature": "private.bpay_next_component_resolution_review_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+      ],
+      "owner": "WB31 mandatory native single-component review/effect facts"
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_effect_facts_v1(uuid,uuid,jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+      ],
+      "owner": "WB31 mandatory native single-component review/effect facts"
+    },
+    {
+      "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
+        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
         "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
         "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
-        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql"
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
       ],
-      "owner": "WB-30 grouped native read support; original explicit context and atomic save owner unchanged"
+      "owner": "WB31 single-component/effect support; complete WB30/explicit reader retained, original atomic writer unchanged"
     },
     {
       "signature": "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)",
