@@ -2425,8 +2425,12 @@ export function verifyBpayNextSourceGates(){
   // committed row reads are retained only after their final successor passes.
   const projectionFile='supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql';
   const correctionSignatures=new Set(["private.bpay_next_bind_simple_csv_destination_v1(uuid)","private.bpay_next_issue_simple_csv_v1(uuid,uuid,uuid)","private.bpay_next_receive_simple_reissue_v1(uuid,uuid,uuid)","private.bpay_next_apply_work_collection_recovery_v1(uuid,uuid)"]);
-  git(['merge-base','--is-ancestor',FOUNDATION_RECONCILED,'HEAD']);
+  // Retained authority is the exact immutable checkpoint source. A linear
+  // release package may preserve its bytes without that build-branch ancestry.
+  // FROZEN_BASE ancestry above and every current successor check still apply.
+  git(['cat-file','-e',FOUNDATION_RECONCILED+'^{commit}']);
   const retainedProjection=git(['show',FOUNDATION_RECONCILED+':'+projectionFile]);
+  if(createHash('sha256').update(retainedProjection.replaceAll('\r\n','\n')).digest('hex')!=='7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b')throw Error('BPAY_NEXT_RETAINED_PROJECTION_IDENTITY_CHANGED');
   if(read(projectionFile).replaceAll('\r\n','\n')!==retainedProjection.replaceAll('\r\n','\n'))throw Error('BPAY_NEXT_RETAINED_PROJECTION_CHANGED');
   const projectionHazards=new Map(baselineHazards);
   for(const signature of correctionSignatures){
