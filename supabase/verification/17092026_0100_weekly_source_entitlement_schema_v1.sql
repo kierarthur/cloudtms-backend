@@ -942,6 +942,7 @@ begin
     array[v_head]::uuid[],'PROPOSED'
   );
 
+  SET CONSTRAINTS public.weekly_source_entitlement_head_inventory_assert, public.weekly_source_entitlement_head_component_inventory_assert DEFERRED;
   v_phase:='HEAD_INSERT';
   -- Step 2: the head, staged.
   insert into public.weekly_source_entitlement_heads(
