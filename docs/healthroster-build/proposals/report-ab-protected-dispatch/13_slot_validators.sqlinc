@@ -1,0 +1,109 @@
+-- Literal Report slots delegated by the actual Money post-VERIFIED recorder.
+-- Partial measured cases may be retained; they never qualify a strategy.
+create or replace function private.weekly_source_report_fin_native_comparisons_assert_v1(
+ p_artifacts jsonb,p_execution jsonb,p_receipt_input_commit text
+) returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare row_value jsonb; paired jsonb; scope_value jsonb; required_assertions text[]; key_value text;
+ cases constant text[]:=array['BOUND_NEGATIVE','D_NEGATIVE','D_POSITIVE','D_ZERO','NEXT_ACTIVE','ORDINARY_NHSP_REGRESSION','STANDALONE_NEGATIVE'];
+ base_assertions constant text[]:=array['actual_report_and_export_binding','bound_export_pay_finalised','native_fin_atomic',
+  'native_invoice_admission','native_invoice_validation','native_frozen_render','invoice_target_matches_original',
+  'rounding_identity_and_last_line_checked','zero_invoice_only_pay_vectors','no_report_pay_orchestrator',
+  'no_row_resolution_pay_entitlement','native_candidate_i1_hooks_retained','no_provider_settlement_email_network','rollback_fresh_restored'];
+begin
+ if p_execution is distinct from private.weekly_source_protected_qualification_release_v1()
+  or coalesce(p_receipt_input_commit,'') !~ '^[0-9a-f]{40}$' or jsonb_typeof(p_artifacts) is distinct from 'array'
+  or jsonb_array_length(p_artifacts) not between 1 and 14
+  or (select count(distinct (value->>'case_id')||':'||(value->>'variant')) from jsonb_array_elements(p_artifacts))<>jsonb_array_length(p_artifacts) then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+ scope_value:=p_artifacts->0->'scope';
+ if not private.weekly_source_qualification_closed_object_v1(scope_value,array['agency_id','source_group_id','rule_set_version_id',
+  'rule_set_values_sha256','effective_from_week_ending','effective_to_week_ending']) then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+ for row_value in select value from jsonb_array_elements(p_artifacts) loop
+  required_assertions:=base_assertions;
+  if row_value->>'case_id'='NEXT_ACTIVE' then required_assertions:=required_assertions||array['next_active_no_expense_observation']; end if;
+  if row_value->>'case_id'='ORDINARY_NHSP_REGRESSION' then required_assertions:=required_assertions||array['ordinary_nhsp_unchanged']; end if;
+  if not private.weekly_source_qualification_closed_object_v1(row_value,array['schema_version','execution','scope','case_id','variant',
+    'source_fixture_sha256','original_report_sha256','report_row_manifest_sha256','binding_authority_sha256','native_tool_receipt',
+    'native_result','comparison','assertions','receipt_id','receipt_sha256','comparison_sha256'])
+   or row_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_VARIANT_V1'
+   or row_value->'execution' is distinct from p_execution or row_value->'scope' is distinct from scope_value
+   or coalesce(row_value->>'case_id','')<>all(cases) or coalesce(row_value->>'variant','') not in ('A','B')
+   or row_value->>'comparison_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+     'WEEKLY_SOURCE_REPORT_FIN_NATIVE_VARIANT_RECORD_V1',row_value-'comparison_sha256'),'hex')
+   or not private.weekly_source_qualification_closed_object_v1(row_value->'assertions',required_assertions)
+   or exists(select 1 from unnest(required_assertions) required_key where row_value->'assertions'->required_key is distinct from 'true'::jsonb)
+   or not private.weekly_source_qualification_closed_object_v1(row_value->'native_tool_receipt',
+     array['accepted','database','rolledBack','connectedFresh','tool_receipt_sha256','journey_id'])
+   or row_value#>'{native_tool_receipt,accepted}' is distinct from 'true'::jsonb
+   or row_value#>'{native_tool_receipt,rolledBack}' is distinct from 'true'::jsonb
+   or row_value#>'{native_tool_receipt,connectedFresh}' is distinct from 'true'::jsonb
+   or row_value#>>'{native_tool_receipt,database}' is distinct from current_database()
+   or row_value#>>'{native_tool_receipt,journey_id}' is distinct from ('REPORT_FIN_'||(row_value->>'case_id')||'_'||(row_value->>'variant'))
+   or coalesce(row_value#>>'{native_tool_receipt,tool_receipt_sha256}','') !~ '^[0-9a-f]{64}$'
+   or coalesce(row_value->>'receipt_id','') !~ '^[A-Za-z0-9_./:@-]{1,256}$'
+   or not private.weekly_source_qualification_closed_object_v1(row_value->'native_result',array['source_cycle_id','report_scope_id',
+     'final_revision_id','client_manifest_id','invoice_id','fin_result_sha256','admission_receipt_sha256','validation_receipt_sha256',
+     'rendered_document_sha256','pay_isolation_receipt_sha256'])
+   or not private.weekly_source_qualification_closed_object_v1(row_value->'comparison',array['schema_version','net_pence','vat_pence','gross_pence',
+     'rounding_pence','report_lines_sha256','invoice_target_sha256','pay_isolation_sha256','render_semantics_sha256'])
+   or row_value#>>'{comparison,schema_version}' is distinct from 'WEEKLY_SOURCE_REPORT_FIN_COMPARISON_V1' then
+   raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  for key_value in select unnest(array['source_fixture_sha256','original_report_sha256','report_row_manifest_sha256','binding_authority_sha256',
+    'receipt_sha256','comparison_sha256']) loop
+   if coalesce(row_value->>key_value,'') !~ '^[0-9a-f]{64}$' then raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  end loop;
+  for key_value in select unnest(array['source_cycle_id','report_scope_id','final_revision_id','client_manifest_id','invoice_id']) loop
+   if coalesce(row_value->'native_result'->>key_value,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  end loop;
+  for key_value in select unnest(array['fin_result_sha256','admission_receipt_sha256','validation_receipt_sha256','rendered_document_sha256','pay_isolation_receipt_sha256']) loop
+   if coalesce(row_value->'native_result'->>key_value,'') !~ '^[0-9a-f]{64}$' then raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  end loop;
+  for key_value in select unnest(array['net_pence','vat_pence','gross_pence','rounding_pence']) loop
+   if jsonb_typeof(row_value->'comparison'->key_value) is distinct from 'string' or coalesce(row_value->'comparison'->>key_value,'') !~ '^(0|-?[1-9][0-9]{0,14})$' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  end loop;
+  for key_value in select unnest(array['report_lines_sha256','invoice_target_sha256','pay_isolation_sha256','render_semantics_sha256']) loop
+   if coalesce(row_value->'comparison'->>key_value,'') !~ '^[0-9a-f]{64}$' then raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  end loop;
+  if (row_value#>>'{comparison,net_pence}')::bigint+(row_value#>>'{comparison,vat_pence}')::bigint is distinct from (row_value#>>'{comparison,gross_pence}')::bigint
+   or (row_value->>'case_id'='D_POSITIVE' and (row_value#>>'{comparison,rounding_pence}')::bigint<=0)
+   or (row_value->>'case_id'='D_NEGATIVE' and (row_value#>>'{comparison,rounding_pence}')::bigint>=0)
+   or (row_value->>'case_id'='D_ZERO' and (row_value#>>'{comparison,rounding_pence}')::bigint<>0) then
+   raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000'; end if;
+  select value into paired from jsonb_array_elements(p_artifacts) where value->>'case_id'=row_value->>'case_id' and value->>'variant'<>row_value->>'variant';
+  if found and (row_value->'comparison' is distinct from paired->'comparison'
+    or row_value#>>'{native_result,source_cycle_id}' is distinct from paired#>>'{native_result,source_cycle_id}'
+    or row_value#>>'{native_result,report_scope_id}' is distinct from paired#>>'{native_result,report_scope_id}'
+    or exists(select 1 from unnest(array['source_fixture_sha256','original_report_sha256','report_row_manifest_sha256','binding_authority_sha256']) required_key
+      where row_value->>required_key is distinct from paired->>required_key)) then
+   raise exception 'WEEKLY_SOURCE_REPORT_FIN_VARIANTS_DIFFERENT_NATIVE_BASIS' using errcode='55000'; end if;
+ end loop;
+exception when undefined_function or undefined_table or no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_ARTIFACT_INVALID' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_source_report_fin_qualifications_assert_v1(p_artifacts jsonb,p_execution jsonb,p_receipt_input_commit text)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare artifact jsonb;
+begin
+ if p_execution is distinct from private.weekly_source_protected_qualification_release_v1()
+  or coalesce(p_receipt_input_commit,'') !~ '^[0-9a-f]{40}$' or jsonb_typeof(p_artifacts) is distinct from 'array'
+  or jsonb_array_length(p_artifacts) not between 1 and 100
+  or (select count(distinct value->'scope') from jsonb_array_elements(p_artifacts))<>jsonb_array_length(p_artifacts) then
+  raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+ for artifact in select value from jsonb_array_elements(p_artifacts) loop
+  if artifact->'installation' is distinct from p_execution or artifact->>'receipt_input_commit' is distinct from p_receipt_input_commit then
+   raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  perform private.weekly_source_report_fin_certificate_assert_v1(artifact,(artifact#>>'{scope,source_group_id}')::uuid,
+    (artifact#>>'{scope,rule_set_version_id}')::uuid,(artifact#>>'{scope,effective_from_week_ending}')::date,
+    (artifact#>>'{scope,effective_to_week_ending}')::date);
+ end loop;
+exception when undefined_function or undefined_table or no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow then
+ raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;

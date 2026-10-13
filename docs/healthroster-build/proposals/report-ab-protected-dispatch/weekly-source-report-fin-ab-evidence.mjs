@@ -11,8 +11,10 @@ export const caseIds=Object.freeze(['BOUND_NEGATIVE','D_NEGATIVE','D_POSITIVE','
 export const assertions=Object.freeze(['actual_report_and_export_binding','bound_export_pay_finalised','native_fin_atomic',
  'native_invoice_admission','native_invoice_validation','native_frozen_render','invoice_target_matches_original',
  'rounding_identity_and_last_line_checked','zero_invoice_only_pay_vectors','no_report_pay_orchestrator',
- 'no_row_resolution_pay_entitlement','next_active_no_expense_observation','ordinary_nhsp_unchanged',
+ 'no_row_resolution_pay_entitlement',
  'native_candidate_i1_hooks_retained','no_provider_settlement_email_network','rollback_fresh_restored']);
+export const assertionsForCase=id=>[...assertions,...(id==='NEXT_ACTIVE'?['next_active_no_expense_observation']:[]),
+ ...(id==='ORDINARY_NHSP_REGRESSION'?['ordinary_nhsp_unchanged']:[])];
 export const executionKeys=Object.freeze(['release_id','source_commit','contract_sha256','installation_id','environment','database',
  'managed_manifest_sha256','installed_catalogue_jsonb_sha256']);
 const scopeKeys=['agency_id','source_group_id','rule_set_version_id','rule_set_values_sha256','effective_from_week_ending',
@@ -34,9 +36,9 @@ function execution(value){
 // These validators do not establish that a native journey happened. Only the
 // root's real rollback collector may supply these byte-preserved envelopes.
 // Unit-test envelopes MUST NEVER be retained as release evidence.
-export function buildNativeComparisons(actualExecution,inputs){
+export function buildNativeComparisons(actualExecution,inputs,{complete=false}={}){
  execution(actualExecution);
- if(!Array.isArray(inputs)||inputs.length!==caseIds.length*2)fail('REPORT_AB_NATIVE_CASE_CENSUS_INVALID');
+ if(!Array.isArray(inputs)||!inputs.length||inputs.length>caseIds.length*2||(complete&&inputs.length!==caseIds.length*2))fail('REPORT_AB_NATIVE_CASE_CENSUS_INVALID');
  const rows=inputs.map(input=>{
   exact(input,['receipt_id','receipt_bytes','receipt_sha256'],'REPORT_AB_NATIVE_INPUT_INVALID');
   if(typeof input.receipt_id!=='string'||!/^[A-Za-z0-9_./:@-]{1,256}$/.test(input.receipt_id)
@@ -71,14 +73,16 @@ export function buildNativeComparisons(actualExecution,inputs){
    ||(row.case_id==='D_POSITIVE'&&BigInt(row.comparison.rounding_pence)<=0n)
    ||(row.case_id==='D_NEGATIVE'&&BigInt(row.comparison.rounding_pence)>=0n)
    ||(row.case_id==='D_ZERO'&&BigInt(row.comparison.rounding_pence)!==0n))fail('REPORT_AB_NATIVE_COMPARISON_CASE_INVALID');
-  exact(row.assertions,assertions,'REPORT_AB_ASSERTION_CENSUS_INVALID');
+  exact(row.assertions,assertionsForCase(row.case_id),'REPORT_AB_ASSERTION_CENSUS_INVALID');
   if(Object.values(row.assertions).some(v=>v!==true))fail('REPORT_AB_NATIVE_ASSERTION_FAILED');
-  return {...row,receipt_id:input.receipt_id,receipt_sha256:input.receipt_sha256};
+  const body={...row,receipt_id:input.receipt_id,receipt_sha256:input.receipt_sha256};
+  return {...body,comparison_sha256:domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_VARIANT_RECORD_V1',body)};
  }).sort((a,b)=>a.case_id.localeCompare(b.case_id)||a.variant.localeCompare(b.variant));
  if(new Set(rows.map(r=>r.case_id+':'+r.variant)).size!==inputs.length)fail('REPORT_AB_NATIVE_CASE_CENSUS_INVALID');
  for(const id of caseIds){
   const a=rows.find(r=>r.case_id===id&&r.variant==='A'),b=rows.find(r=>r.case_id===id&&r.variant==='B');
-  if(!a||!b||['scope','comparison'].some(k=>domainHash('REPORT_AB_'+k,a[k])!==domainHash('REPORT_AB_'+k,b[k]))
+  if(!a||!b){if(complete)fail('REPORT_AB_NATIVE_CASE_CENSUS_INVALID');continue;}
+  if(['scope','comparison'].some(k=>domainHash('REPORT_AB_'+k,a[k])!==domainHash('REPORT_AB_'+k,b[k]))
    ||['source_fixture_sha256','original_report_sha256','report_row_manifest_sha256','binding_authority_sha256'].some(k=>a[k]!==b[k])
    ||a.native_result.source_cycle_id!==b.native_result.source_cycle_id||a.native_result.report_scope_id!==b.native_result.report_scope_id)
    fail('REPORT_AB_VARIANTS_NOT_SAME_NATIVE_BASIS');
@@ -86,14 +90,17 @@ export function buildNativeComparisons(actualExecution,inputs){
  if(new Set(rows.map(r=>domainHash('REPORT_AB_SCOPE',r.scope))).size!==1)fail('REPORT_AB_NATIVE_SCOPE_MIXED');
  return rows;
 }
-export function assertNativeComparisons(actualExecution,rows){
- const inputs=rows.map(row=>{const {receipt_id,receipt_sha256,...body}=row;
+export function assertNativeComparisons(actualExecution,rows,{complete=false}={}){
+ const inputs=rows.map(row=>{const {receipt_id,receipt_sha256,comparison_sha256,...body}=row;
   // The original raw receipt hash is retained separately; its exact bytes are
   // checked at capture. Reconstructing JSON would not reproduce its bytes.
-  if(!hex.test(receipt_sha256))fail('REPORT_AB_NATIVE_ARTIFACT_INVALID');
+  if(!hex.test(receipt_sha256)||domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_VARIANT_RECORD_V1',{...body,receipt_id,receipt_sha256})!==comparison_sha256)
+   fail('REPORT_AB_NATIVE_ARTIFACT_INVALID');
   return {receipt_id,receipt_bytes:JSON.stringify(body),receipt_sha256:sha256(JSON.stringify(body))};});
- const rebuilt=buildNativeComparisons(actualExecution,inputs);
- if(rebuilt.some((row,i)=>domainHash('REPORT_AB_RETAINED_BODY',{...row,receipt_sha256:rows[i].receipt_sha256})!==domainHash('REPORT_AB_RETAINED_BODY',rows[i])))
+ const rebuilt=buildNativeComparisons(actualExecution,inputs,{complete});
+ if(rebuilt.some((row,i)=>{const {comparison_sha256,...body}=row;
+  const retainedBody={...body,receipt_sha256:rows[i].receipt_sha256};
+  return domainHash('REPORT_AB_RETAINED_BODY',{...retainedBody,comparison_sha256:domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_VARIANT_RECORD_V1',retainedBody)})!==domainHash('REPORT_AB_RETAINED_BODY',rows[i]);}))
   fail('REPORT_AB_RETAINED_BODY_CHANGED');
  return rows;
 }
@@ -103,20 +110,19 @@ function decision(value,rows){
   ||value.native_comparison_sha256!==domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISONS_V1',rows)
   ||typeof value.reason!=='string'||value.reason.trim()!==value.reason||value.reason.length<1||value.reason.length>1000)fail('REPORT_AB_DECISION_INVALID');
 }
-export function buildQualification(installation,recordedExecution,rows,reviewedDecision,decisionBinding,sourceProof){
- execution(installation);execution(recordedExecution);assertNativeComparisons(recordedExecution,rows);decision(reviewedDecision,rows);
- if(installation.release_id===recordedExecution.release_id||installation.contract_sha256!==recordedExecution.contract_sha256
-  ||installation.installation_id!==recordedExecution.installation_id
-  ||installation.installed_catalogue_jsonb_sha256!==recordedExecution.installed_catalogue_jsonb_sha256)fail('REPORT_AB_R1_R2_IDENTITY_CHANGED');
+export function buildQualification(installation,recordedExecution,rows,reviewedDecision,decisionBinding,sourceProof,receiptInputCommit){
+ execution(installation);execution(recordedExecution);assertNativeComparisons(recordedExecution,rows,{complete:true});decision(reviewedDecision,rows);
+ if(domainHash('REPORT_AB_INSTALLED_EXECUTION',installation)!==domainHash('REPORT_AB_INSTALLED_EXECUTION',recordedExecution)
+  ||!commit.test(receiptInputCommit))fail('REPORT_AB_INSTALLED_EXECUTION_CHANGED');
  exact(decisionBinding,['path','blob_oid','sha256','json_pointer'],'REPORT_AB_DECISION_BINDING_INVALID');
  if(decisionBinding.path!=='supabase/release/weekly-source-protected-operational.json'
   ||!/^\/report_fin_qualifications\/(0|[1-9][0-9]?)\/decision$/.test(decisionBinding.json_pointer)
   ||!commit.test(decisionBinding.blob_oid)||!hex.test(decisionBinding.sha256))fail('REPORT_AB_DECISION_BINDING_INVALID');
- assertExecutionTreeProof(sourceProof,recordedExecution.source_commit,installation.source_commit);
+ assertExecutionTreeProof(sourceProof,recordedExecution.source_commit,receiptInputCommit);
  if(!sourceProof.receipt_bindings.some(row=>row.role==='INSTALLATION'&&row.key==='weeklySourceProtectedOperational'
   &&row.path===decisionBinding.path&&row.blob_oid===decisionBinding.blob_oid&&row.sha256===decisionBinding.sha256))
   fail('REPORT_AB_DECISION_NOT_IN_EXECUTION_PROOF');
- const body={schema_version:schema,phase:'BOTH_NATIVE_VARIANTS_QUALIFIED',installation,scope:rows[0].scope,
+ const body={schema_version:schema,phase:'BOTH_NATIVE_VARIANTS_QUALIFIED',installation,receipt_input_commit:receiptInputCommit,scope:rows[0].scope,
   execution:recordedExecution,native_comparisons:rows,decision:reviewedDecision,decision_binding:decisionBinding,source_equivalence:sourceProof};
  return {...body,qualification_sha256:domainHash(schema,body)};
 }
@@ -152,60 +158,67 @@ export async function prepareReportFinQualifications({root,context,verified,inpu
  if(context.environment!=='TEST'||context.expectedDatabase!=='cloudtms_test_clone')fail('REPORT_AB_MANAGED_SCOPE_INVALID');
  const catalogue=verified.evidence?.weekly_source_protected_qualification_catalogue;
  if(catalogue?.contract_sha256!==context.expectedHash||!hex.test(catalogue?.jsonb_sha256))fail('REPORT_AB_CATALOGUE_REQUIRED');
- const installation={release_id:context.releaseId,source_commit:context.gitCommit,contract_sha256:context.expectedHash,
-  installation_id:null,environment:context.environment,database:context.expectedDatabase,managed_manifest_sha256:context.manifestHash,
-  installed_catalogue_jsonb_sha256:catalogue.jsonb_sha256};
  const rows=[];
  for(const input of inputs){
   exact(input,['execution_release_id','decision','decision_binding'],'REPORT_AB_MANAGED_INPUT_INVALID');
   const recorded=JSON.parse(await execute(recordedReleaseSql(input.execution_release_id,literal)));
   if(!recorded||!Array.isArray(recorded.native_comparisons))fail('REPORT_AB_RECORDED_NATIVE_COMPARISON_REQUIRED');
   exact(recorded,['execution','native_comparisons'],'REPORT_AB_RECORDED_NATIVE_COMPARISON_REQUIRED');
+  if(input.execution_release_id!==context.releaseId||recorded.execution.source_commit!==context.gitCommit
+   ||recorded.execution.contract_sha256!==context.expectedHash||recorded.execution.managed_manifest_sha256!==context.manifestHash
+   ||recorded.execution.installed_catalogue_jsonb_sha256!==catalogue.jsonb_sha256||!commit.test(context.receiptInputCommit))
+   fail('REPORT_AB_INSTALLED_EXECUTION_CHANGED');
   const file=input.decision_binding.path;
   if(file!=='supabase/release/weekly-source-protected-operational.json'
    ||!/^\/report_fin_qualifications\/(0|[1-9][0-9]?)\/decision$/.test(input.decision_binding.json_pointer))fail('REPORT_AB_DECISION_BINDING_INVALID');
   const git=args=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false',...args],{cwd:root,encoding:null,maxBuffer:256*1024*1024});
-  const bytes=git(['show',context.gitCommit+':'+file]),disk=fs.readFileSync(path.join(root,file));
+  const bytes=git(['show',context.receiptInputCommit+':'+file]),disk=fs.readFileSync(path.join(root,file));
   if(bytes.length>2*1024*1024||!bytes.equals(disk)||sha256(bytes)!==input.decision_binding.sha256)fail('REPORT_AB_REVIEWED_DECISION_CHANGED');
-  const blob=git(['rev-parse',context.gitCommit+':'+file]).toString().trim();
+  const blob=git(['rev-parse',context.receiptInputCommit+':'+file]).toString().trim();
   const index=Number(input.decision_binding.json_pointer.split('/')[2]),bundle=JSON.parse(bytes.toString('utf8'));
   if(blob!==input.decision_binding.blob_oid||domainHash('REPORT_AB_COMMITTED_INPUT',bundle.report_fin_qualifications?.[index])
    !==domainHash('REPORT_AB_COMMITTED_INPUT',{execution_release_id:input.execution_release_id,decision:input.decision}))fail('REPORT_AB_REVIEWED_DECISION_CHANGED');
-  const source=proveCommittedSources(root,recorded.execution.source_commit,context.gitCommit);
-  rows.push(buildQualification({...installation,installation_id:recorded.execution.installation_id},recorded.execution,recorded.native_comparisons,
-   input.decision,input.decision_binding,source));
+  const source=proveCommittedSources(root,recorded.execution.source_commit,context.receiptInputCommit);
+  // Other scopes/history remain append-only. The actual committed decision
+  // binds one complete exact scope batch; no body is silently selected/dropped.
+  const requested=input.decision.native_comparison_sha256;
+  const groups=new Map();for(const row of recorded.native_comparisons){const key=domainHash('REPORT_AB_SCOPE',row.scope);
+   const group=groups.get(key)??[];group.push(row);groups.set(key,group);}
+  const matches=[...groups.values()].map(group=>[...group].sort((a,b)=>a.case_id.localeCompare(b.case_id)||a.variant.localeCompare(b.variant)))
+   .filter(group=>domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISONS_V1',group)===requested);
+  if(matches.length!==1)fail('REPORT_AB_RECORDED_NATIVE_COMPARISON_REQUIRED');
+  rows.push(buildQualification(recorded.execution,recorded.execution,matches[0],input.decision,input.decision_binding,source,context.receiptInputCommit));
  }
  if(new Set(rows.map(q=>domainHash('REPORT_AB_SCOPE',q.scope))).size!==rows.length)fail('REPORT_AB_MANAGED_SCOPE_DUPLICATE');
  const old=JSON.parse(await execute("select coalesce(evidence_json->'weekly_source_report_fin_qualifications','null'::jsonb)::text "+
   'from private.cloudtms_database_releases where release_id='+literal(context.releaseId)));
- if(old!==null&&domainHash('REPORT_AB_RELEASE_REPLAY',old)!==domainHash('REPORT_AB_RELEASE_REPLAY',rows))fail('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');
+ if(old!==null&&(!Array.isArray(old)||rows.some(q=>old.some(prior=>domainHash('REPORT_AB_SCOPE',prior.scope)===domainHash('REPORT_AB_SCOPE',q.scope)
+  &&domainHash('REPORT_AB_QUALIFICATION_REPLAY',prior)!==domainHash('REPORT_AB_QUALIFICATION_REPLAY',q)))))fail('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');
  return rows;
 }
-// Called only after the existing writer's VERIFIED commit, while its exact
-// session mutex remains held. Root captures real native envelopes separately;
-// this source interface performs no journey/provider/network call itself.
-export async function retainNativeReportFinComparisons({context,inputs,execute,literal,assertWriterSql,identitySql}){
- if(!Array.isArray(inputs))fail('REPORT_AB_MANAGED_INPUT_INVALID');
- if(!inputs.length)return;
- const current=JSON.parse(await execute(recordedReleaseSql(context.releaseId,literal)));
- if(!current||current.execution?.source_commit!==context.gitCommit||current.execution?.contract_sha256!==context.expectedHash
-  ||current.execution?.managed_manifest_sha256!==context.manifestHash||context.environment!=='TEST'
-  ||context.expectedDatabase!=='cloudtms_test_clone')fail('REPORT_AB_CAPTURE_RELEASE_CHANGED');
- const rows=buildNativeComparisons(current.execution,inputs);
- const encoded=sqlJson(rows,literal);
- await execute(`begin;${assertWriterSql}${identitySql(context)}
- do $report_native_capture$ declare r private.cloudtms_database_releases%rowtype; old jsonb; begin
- select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1 for update;
- if r.release_id<>${literal(context.releaseId)} or r.status<>'VERIFIED' or r.completed_at_utc is null
-  or r.git_commit<>${literal(context.gitCommit)} or r.installed_contract_sha256<>${literal(context.expectedHash)}
-  or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
-  or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from ${literal(current.execution.installed_catalogue_jsonb_sha256)}
-  or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
-   'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_CATALOGUE_V1',private.weekly_source_protected_qualification_current_catalogue_v1()),'hex')
- then raise exception 'WEEKLY_SOURCE_REPORT_FIN_CAPTURE_RELEASE_CHANGED' using errcode='55000'; end if;
- old:=r.evidence_json->'weekly_source_report_fin_native_comparisons';
- if old is not null and old is distinct from ${encoded} then raise exception 'WEEKLY_SOURCE_REPORT_FIN_EVIDENCE_REPLACEMENT_REFUSED' using errcode='55000'; end if;
- update private.cloudtms_database_releases set evidence_json=evidence_json||jsonb_build_object('weekly_source_report_fin_native_comparisons',${encoded})
- where release_id=r.release_id and status='VERIFIED';
- end $report_native_capture$;${assertWriterSql}commit;`);
+// Root-only source interface to Money's actual owner-session recorder. It
+// neither installs/resumes a release nor writes the release ledger directly.
+// Exact recorder/receipt ABI remains provisional until Money's full freeze.
+export async function recordPostVerifiedReportArtifacts({actorUserId,expectedExecution,expectedEvidenceSha256,receiptInputCommit,
+ receiptTreeProof,artifactSlot,artifacts,reason,turnBackendPid,execute,literal}){
+ execution(expectedExecution);
+ if(!uuid.test(actorUserId)||!hex.test(expectedEvidenceSha256)||!commit.test(receiptInputCommit)
+  ||!['weekly_source_report_fin_native_comparisons','weekly_source_report_fin_qualifications'].includes(artifactSlot)
+  ||!Array.isArray(artifacts)||!artifacts.length||typeof reason!=='string'||reason.trim()!==reason||reason.length<1||reason.length>1000
+  ||!Number.isSafeInteger(turnBackendPid)||turnBackendPid<1)fail('REPORT_AB_POST_VERIFIED_INPUT_INVALID');
+ assertExecutionTreeProof(receiptTreeProof,expectedExecution.source_commit,receiptInputCommit);
+ if(artifactSlot==='weekly_source_report_fin_native_comparisons')assertNativeComparisons(expectedExecution,artifacts);
+ else for(const q of artifacts){
+  if(q.installation?.release_id!==expectedExecution.release_id||q.receipt_input_commit!==receiptInputCommit
+   ||domainHash(schema,(({qualification_sha256,...body})=>body)(q))!==q.qualification_sha256)fail('REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
+  assertNativeComparisons(expectedExecution,q.native_comparisons,{complete:true});
+ }
+ const request={schema_version:'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORD_V1',expected_execution:expectedExecution,
+  expected_evidence_sha256:expectedEvidenceSha256,receipt_input_commit:receiptInputCommit,receipt_tree_proof:receiptTreeProof,
+  artifact_slot:artifactSlot,artifacts,reason,turn_backend_pid:turnBackendPid};
+ const result=JSON.parse(await execute('select private.weekly_source_post_verified_evidence_record_v1('+literal(actorUserId)+'::uuid,'+
+  sqlJson(request,literal)+')::text;'));
+ if(!result||typeof result!=='object'||Array.isArray(result)
+  ||result.schema_version!=='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1')fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');
+ return result;
 }

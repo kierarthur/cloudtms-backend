@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import {loadReportFinInputs} from './weekly-source-report-fin-ab-evidence.mjs';
 import {loadCommittedPrerequisiteJourneys} from './weekly-source-protected-prerequisite-evidence.mjs';
 import {loadOperationalJourneys} from './weekly-source-protected-operational-evidence.mjs';
 import {loadTestSetupInputs} from './weekly-source-protected-test-setup-evidence.mjs';
@@ -356,7 +355,6 @@ async function applyRelease() {
       protectedCapabilityJourneys:[...loadCommittedPrerequisiteJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),
         ...loadOperationalJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash})],
       protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),
-      reportFinQualifications:loadReportFinInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),
       verify: () => {
         runVerifiers(mode,releaseVerifierContext);
         const verified=compareExpected(release.contractPath);

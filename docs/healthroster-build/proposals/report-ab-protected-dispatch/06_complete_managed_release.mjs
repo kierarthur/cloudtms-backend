@@ -1,4 +1,3 @@
-import {prepareReportFinQualifications,retainNativeReportFinComparisons} from './weekly-source-report-fin-ab-evidence.mjs';
 import { buildQualification, domainHash } from './weekly-source-protected-release-qualification.mjs';
 import { buildPrerequisiteQualification, assertManagedPrerequisiteEvidence, proveCommittedSources, installedQualificationCatalogueEvidence } from './weekly-source-protected-prerequisite-evidence.mjs';
 import { assertManagedOperationalEvidence } from './weekly-source-protected-operational-evidence.mjs';
@@ -335,7 +334,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
 // pre-apply security rehearsal and fresh-connection verifiers remain separate.
 export async function applyManagedRelease({ root, current, release, context: input,
   mapSource = value=>value, executableFile, openSession, deadlockRetries = ()=>0,
-  preapply, verify, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], reportFinQualifications = [], reportFinNativeInputs = [], log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  preapply, verify, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
   baselinePrefix=BASELINE_MIGRATION_PREFIX }) {
   // Dependency injection is only for the finite control-flow unit model. The
   // CLI never takes a baseline-prefix override from arguments/environment.
@@ -506,11 +505,6 @@ export async function applyManagedRelease({ root, current, release, context: inp
       if (old!==null && domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',old)!==domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',
         verified.evidence.weekly_source_protected_test_setup_authorizations)) throw Error('TEST_SETUP_EVIDENCE_REPLACEMENT_REFUSED');
     }
-    const reportQualifications=await prepareReportFinQualifications({root,context,verified,inputs:reportFinQualifications,execute,literal});
-    if(reportQualifications.length){
-      if(verified.evidence?.weekly_source_report_fin_qualifications!==undefined)throw Error('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');
-      verified.evidence={...(verified.evidence??{}),weekly_source_report_fin_qualifications:reportQualifications};
-    }
     await execute(`begin;${assertWriterSql}${identitySql(context)}
       update private.cloudtms_database_releases r set status='VERIFIED',installed_contract_sha256=${literal(verified.sha256)},
         completed_at_utc=pg_catalog.clock_timestamp(),evidence_json=evidence_json||${json(verified.evidence??{})}
@@ -518,7 +512,6 @@ export async function applyManagedRelease({ root, current, release, context: inp
       do $verified$ begin if not exists(select 1 from private.cloudtms_database_releases r
         where r.release_id=${literal(context.releaseId)} and ${releaseMatch(context)} and r.status='VERIFIED')
         then raise exception 'MANAGED_RELEASE_VERIFIED_RECEIPT_MISSING'; end if; end $verified$; commit;`);
-    await retainNativeReportFinComparisons({context,inputs:reportFinNativeInputs,execute,literal,assertWriterSql,identitySql});
     return {releaseId:context.releaseId,manifestHash:context.manifestHash};
   } catch(error) {
     failure=error;

@@ -1,12 +1,12 @@
 import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 const dir=path.dirname(fileURLToPath(import.meta.url)),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const signatures=JSON.parse(fs.readFileSync(path.join(dir,'PRIVATE_SIGNATURES.json'),'utf8')).signatures;
-const owners=['01_certificate.sqlinc','02_release_feature_strategy.sqlinc','03_operational_dispatch.sqlinc'];
+const owners=['01_certificate.sqlinc','02_release_feature_strategy.sqlinc','03_operational_dispatch.sqlinc','13_slot_validators.sqlinc'];
 const definitions=owners.map(f=>fs.readFileSync(path.join(dir,f),'utf8').replaceAll('\r\n','\n')).join('\n');
 const rows=signatures.map(signature=>{const name=signature.slice(0,signature.indexOf('('));
  const rx=new RegExp('create or replace function '+name.replaceAll('.','\\.')+'\\([\\s\\S]*?as \\$function\\$([\\s\\S]*?)\\$function\\$;');
  const match=definitions.match(rx);if(!match)throw Error('DEFINITION_NOT_FOUND '+signature);
- return {signature,body_sha256:sha(match[1]),returns:name.endsWith('certificate_assert_v1')?'void':'jsonb',volatility:name.endsWith('dispatch_v1')?'v':'s'};});
+ return {signature,body_sha256:sha(match[1]),returns:name.endsWith('_assert_v1')?'void':'jsonb',volatility:name.endsWith('dispatch_v1')?'v':'s'};});
 const verifier=`-- Data-free declaration/body/registration/ACL and early null refusal only.
 -- No financial, A/B, release, activation, feature, business or network call.
 \\set ON_ERROR_STOP on
@@ -61,7 +61,7 @@ const package_sha256=sha(JSON.stringify(artifacts));
 fs.writeFileSync(path.join(dir,'SOURCE_MANIFEST.json'),JSON.stringify({schema_version:'REPORT_AB_PROTECTED_DISPATCH_SOURCE_PACKAGE_V1',
  root_commit:inputs.root_commit,status:'REVIEWED_WIP_SAME_INSTALL_RECORDER_CONTRACT_PENDING_NO_SELECTED_VARIANT',new_private_signatures:signatures,
  private_union:'Five new owner-only signatures; complete future Q/A0/Prepared/later union is root-owned, not current-only 237.',
- tests:{offline_cases:25,passed:25,node_syntax:'PASS',database_compile:'NOT_RUN',financial_ab:'NOT_RUN',exposure:'HELD',
+ tests:{offline_cases:28,passed:28,node_syntax:'PASS',database_compile:'NOT_RUN',financial_ab:'NOT_RUN',exposure:'HELD',
  release_design:'Distinct-release draft held; authoritative same-Install2 recorder/reader/F1 contract pending; no third release.'},
  package_sha256,artifacts},null,2)+'\n');
 console.log(JSON.stringify({artifacts:artifacts.length,package_sha256,manifest_sha256:sha(fs.readFileSync(path.join(dir,'SOURCE_MANIFEST.json')))}));

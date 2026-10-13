@@ -14,7 +14,9 @@ const signatures=[
  'private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)',
  'private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)',
  'private.weekly_source_report_fin_strategy_v1(uuid)',
- 'private.weekly_source_report_fin_dispatch_v1(jsonb)'];
+ 'private.weekly_source_report_fin_dispatch_v1(jsonb)',
+ 'private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)',
+ 'private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'];
 const pinsFile=path.join(out,'CONTROLLING_INPUTS.json');
 const pins=JSON.parse(fs.readFileSync(pinsFile,'utf8'));
 for(const row of pins.inputs)if(sha(fs.readFileSync(path.join(root,row.path)))!==row.sha256)throw Error('INPUT_CHANGED: '+row.path);
@@ -70,25 +72,16 @@ compose(q+'07_complete_existing_feature_setup.sqlinc','05_complete_feature_setup
  {id:'REPORT_INITIAL_RECEIPT',old:"      jsonb_build_object('protected_capability_qualification',v_qualification) end;",
   new:"      jsonb_build_object('protected_capability_qualification',v_qualification) end\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"}]);
 const writer=q+'14_complete_managed_release.mjs';
-const writerPrefix="import {prepareReportFinQualifications,retainNativeReportFinComparisons} from './weekly-source-report-fin-ab-evidence.mjs';\n";
-const writerInput=read(writer);
-const sig=writerInput.match(/protectedTestSetupAuthorizations[^\n]*/g);if(!sig)throw Error('WRITER_SIGNATURE_MISSING');
-compose(writer,'06_complete_managed_release.mjs',[
- {id:'ADJACENT_EVIDENCE_IMPORT',old:writerInput.split('\n')[0]+'\n',new:writerPrefix+writerInput.split('\n')[0]+'\n'},
- {id:'ROOT_ONLY_INPUTS',old:'protectedTestSetupAuthorizations = []',new:'protectedTestSetupAuthorizations = [], reportFinQualifications = [], reportFinNativeInputs = []'},
- {id:'QUALIFIED_REPORT_BEFORE_VERIFIED_COMMIT',old:"    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'",
-  new:"    const reportQualifications=await prepareReportFinQualifications({root,context,verified,inputs:reportFinQualifications,execute,literal});\n    if(reportQualifications.length){\n      if(verified.evidence?.weekly_source_report_fin_qualifications!==undefined)throw Error('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');\n      verified.evidence={...(verified.evidence??{}),weekly_source_report_fin_qualifications:reportQualifications};\n    }\n    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'"},
- {id:'NATIVE_R1_APPEND_ONLY_CAPTURE_INTERFACE',old:'    return {releaseId:context.releaseId,manifestHash:context.manifestHash};',
-  new:'    await retainNativeReportFinComparisons({context,inputs:reportFinNativeInputs,execute,literal,assertWriterSql,identitySql});\n    return {releaseId:context.releaseId,manifestHash:context.manifestHash};'}]);
+// Post-install evidence is recorded through Money's dedicated existing-owner
+// action. Never apply/resume or change the installation writer for certificate
+// retention. Full owners are retained for independent byte/reverse proof.
+compose(writer,'06_complete_managed_release.mjs',[]);
 compose(q+'weekly-source-protected-operational-evidence.mjs','09_complete_operational_evidence.mjs',[
  {id:'CLOSED_OPTIONAL_REPORT_BUNDLE_SECTION',old:" exact(bundle,['schema_version','qualifications'],'OPERATIONAL_BUNDLE_INVALID');",
   new:" exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications'])],'OPERATIONAL_BUNDLE_INVALID');"},
  {id:'REPORT_ONLY_BUNDLE_WITHOUT_CAPABILITY_FABRICATION',old:"  ||!bundle.qualifications.length||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');",
   new:"  ||(!bundle.qualifications.length&&(bundle.report_fin_qualifications===undefined||!Array.isArray(bundle.report_fin_qualifications)||!bundle.report_fin_qualifications.length))\n  ||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');"}]);
-compose(q+'15_complete_current_release_caller.mjs','10_complete_current_release_caller.mjs',[
- {id:'REPORT_LOADER_IMPORT',old:'#!/usr/bin/env node\n',new:"#!/usr/bin/env node\nimport {loadReportFinInputs} from './weekly-source-report-fin-ab-evidence.mjs';\n"},
- {id:'COMMITTED_REPORT_INPUTS',old:'      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),',
-  new:'      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),\n      reportFinQualifications:loadReportFinInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),'}]);
+compose(q+'15_complete_current_release_caller.mjs','10_complete_current_release_caller.mjs',[]);
 write('weekly-source-protected-release-qualification.mjs',read(q+'weekly-source-protected-release-qualification.mjs'));
 write('weekly-source-protected-execution-tree.mjs',read('docs/healthroster-build/proposals/strict-qualification-git-path-parser-forward/weekly-source-protected-execution-tree.mjs'));
 const prefix="create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n";
@@ -97,7 +90,7 @@ for(const [input,output] of [
  ['supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc','12_complete_acl_current_union.sqlinc']])
  compose(input,output,[{id:'ONLY_FIVE_REPORT_PRIVATE_HELPERS',old:prefix,new:prefix+signatures.map(sig=>"    ('"+sig+"'),\n").join('')}]);
 write('PRIVATE_SIGNATURES.json',JSON.stringify({schema_version:'REPORT_AB_OWNER_ONLY_SIGNATURE_DELTA_V1',signatures,
- root_base_private:232,current_only_proposal_private:237,table_count:105,service_count:142,
+ root_base_private:232,current_only_proposal_private:239,table_count:105,service_count:142,
  warning:'These complete current-root unions are reverse-proof inputs, not the future Q/A0/Prepared union. Root must merge literal sets with every later retained owner before installation.'},null,2)+'\n');
 write('07_owner_acl.sqlinc',signatures.map(sig=>'alter function '+sig+' owner to postgres;\nrevoke all on function '+sig+' from public,anon,authenticated,service_role;\n').join('')+
  'alter function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean) owner to postgres;\nrevoke all on function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;\n');

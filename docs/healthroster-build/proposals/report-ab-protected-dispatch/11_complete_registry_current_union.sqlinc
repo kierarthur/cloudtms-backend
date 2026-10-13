@@ -129,6 +129,8 @@ as $function$
     ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),
     ('private.weekly_source_report_fin_strategy_v1(uuid)'),
     ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),
+    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),
+    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),
     ('private.weekly_source_staged_source_documents_v1(uuid)'),
     ('private.weekly_source_staged_publication_context_v1(uuid,uuid)'),
     ('private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)'),

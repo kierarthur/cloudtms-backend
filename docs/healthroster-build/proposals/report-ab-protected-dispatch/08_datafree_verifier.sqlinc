@@ -6,11 +6,13 @@ do $report_ab_declarations$
 declare expected record; actual pg_catalog.pg_proc%rowtype;
 begin
  for expected in select * from (values
-  ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)','e502e1fed7417b31db1b834d281d161a7d2bedd34e11ba27af7dce7137523980','void','s'),
+  ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)','78df6aaa4529387ab595845ed20c6ba47ef1ceee3529e9762f9bcb57527fd149','void','s'),
   ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)','0bc696e9af0bd54fe79c9c702420bd112e01be495152152359b02abe6c59ee83','jsonb','s'),
   ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)','e8dc6749561598168e025d616a97fb2564264c73708a9adc802acf7efcb97080','jsonb','s'),
   ('private.weekly_source_report_fin_strategy_v1(uuid)','6fca6dc250fb8a283272e5bb332151a33bb7aa280b4a830008d0a2e1f0903e50','jsonb','s'),
-  ('private.weekly_source_report_fin_dispatch_v1(jsonb)','624a5c55dbc6134f0a0d9c1c3035439d11e4f16362d1cbee41e93d0570a3b4f7','jsonb','v')
+  ('private.weekly_source_report_fin_dispatch_v1(jsonb)','624a5c55dbc6134f0a0d9c1c3035439d11e4f16362d1cbee41e93d0570a3b4f7','jsonb','v'),
+  ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)','bfc13212f3327f68fdb9aecc5483a0e605e239b063202851442cbcb93b965b28','void','s'),
+  ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)','1c99e244bea0a3c51c7d40bd0c66e0db615daac8f8b22a954fbfb2708baf8794','void','s')
  ) items(signature,body_sha256,return_type,volatility) loop
   select * into actual from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure(expected.signature);
   if not found or actual.proowner<>current_user::regrole::oid or not actual.prosecdef or actual.prokind<>'f'

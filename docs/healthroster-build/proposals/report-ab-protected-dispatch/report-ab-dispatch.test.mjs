@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';
-import {caseIds,assertions,buildNativeComparisons,assertNativeComparisons,buildQualification,schema} from './weekly-source-report-fin-ab-evidence.mjs';
+import {caseIds,assertionsForCase,buildNativeComparisons,assertNativeComparisons,buildQualification,schema,recordPostVerifiedReportArtifacts} from './weekly-source-report-fin-ab-evidence.mjs';
 import {domainHash} from './weekly-source-protected-release-qualification.mjs';
 const dir=path.dirname(fileURLToPath(import.meta.url)),read=f=>fs.readFileSync(path.join(dir,f),'utf8'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const hash='a'.repeat(64),id='10000000-0000-4000-8000-000000000001';
@@ -15,7 +15,7 @@ const fixture=()=>caseIds.flatMap(case_id=>['A','B'].map(variant=>{
    fin_result_sha256:hash,admission_receipt_sha256:hash,validation_receipt_sha256:hash,rendered_document_sha256:hash,pay_isolation_receipt_sha256:hash},
   comparison:{schema_version:'WEEKLY_SOURCE_REPORT_FIN_COMPARISON_V1',net_pence:'100',vat_pence:'20',gross_pence:'120',
    rounding_pence:case_id==='D_POSITIVE'?'19':case_id==='D_NEGATIVE'?'-15':'0',report_lines_sha256:hash,
-   invoice_target_sha256:hash,pay_isolation_sha256:hash,render_semantics_sha256:hash},assertions:Object.fromEntries(assertions.map(k=>[k,true]))};
+   invoice_target_sha256:hash,pay_isolation_sha256:hash,render_semantics_sha256:hash},assertions:Object.fromEntries(assertionsForCase(case_id).map(k=>[k,true]))};
  const receipt_bytes=JSON.stringify(row);return {receipt_id:'UNIT_ONLY/'+case_id+'/'+variant,receipt_bytes,receipt_sha256:sha(receipt_bytes)};
 }));
 const mutate=(inputs,index,fn)=>{const copy=structuredClone(inputs),row=JSON.parse(copy[index].receipt_bytes);fn(row);
@@ -23,7 +23,9 @@ const mutate=(inputs,index,fn)=>{const copy=structuredClone(inputs),row=JSON.par
 // These fabricated strings exercise only the codec. They are not native
 // receipts, qualification, money/render proof, or inputs to a managed release.
 test('metadata codec accepts exactly fourteen closed UNIT_ONLY envelopes',()=>assert.equal(buildNativeComparisons(execution,fixture()).length,14));
-test('one variant alone cannot select a strategy',()=>assert.throws(()=>buildNativeComparisons(execution,fixture().filter((_,i)=>i%2===0)),/CASE_CENSUS/));
+test('one variant alone is only partial measured evidence, never strategy qualification',()=>{
+ const partial=buildNativeComparisons(execution,fixture().filter((_,i)=>i%2===0));assert.equal(partial.length,7);
+ assert.throws(()=>assertNativeComparisons(execution,partial,{complete:true}),/CASE_CENSUS/);});
 test('repeated case cannot replace a missing native journey',()=>{const f=fixture();f[2]=f[0];assert.throws(()=>buildNativeComparisons(execution,f),/CASE_CENSUS/);});
 test('raw receipt bytes are bound before parsing',()=>{const f=fixture();f[0].receipt_bytes+=' ';assert.throws(()=>buildNativeComparisons(execution,f),/ARTIFACT/);});
 test('compile-only or false gate is refused',()=>assert.throws(()=>buildNativeComparisons(execution,mutate(fixture(),0,r=>r.assertions.native_fin_atomic=false)),/ASSERTION_FAILED/));
@@ -39,9 +41,9 @@ test('retained comparison ordering and bodies cannot drift',()=>{const rows=buil
  const bad=structuredClone(rows);bad.reverse();assert.throws(()=>assertNativeComparisons(execution,bad),/BODY_CHANGED/);});
 test('missing or default decision refuses before a certificate exists',()=>{const rows=buildNativeComparisons(execution,fixture());
  assert.throws(()=>buildQualification({...execution,release_id:'UNIT_ONLY_R2'},execution,rows,null,null,null),/DECISION_INVALID/);});
-test('R1 cannot masquerade as R2',()=>{const rows=buildNativeComparisons(execution,fixture()),decision={schema_version:'WEEKLY_SOURCE_REPORT_FIN_REVIEWED_DECISION_V1',selected_variant:'B',
+test('different installed execution cannot masquerade as the same installed qualification',()=>{const rows=buildNativeComparisons(execution,fixture()),decision={schema_version:'WEEKLY_SOURCE_REPORT_FIN_REVIEWED_DECISION_V1',selected_variant:'B',
  native_comparison_sha256:domainHash('WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISONS_V1',rows),reason:'UNIT_ONLY metadata vector; not qualification'};
- assert.throws(()=>buildQualification(execution,execution,rows,decision,null,null),/R1_R2_IDENTITY_CHANGED/);});
+ assert.throws(()=>buildQualification({...execution,release_id:'UNIT_DIFFERENT_RELEASE'},execution,rows,decision,null,null,'b'.repeat(40)),/INSTALLED_EXECUTION_CHANGED/);});
 test('every complete successor reverses to its pinned original',()=>{const receipt=JSON.parse(read('FULL_REVERSE_RECEIPT.json'));
  for(const owner of receipt.owners){let source=read(owner.output);assert.equal(sha(source),owner.output_sha256);
   for(const hunk of [...owner.hunks].reverse()){assert.equal(source.split(hunk.new).length,2);source=source.replace(hunk.new,()=>hunk.old);}
@@ -61,15 +63,15 @@ test('F1 receives no browser selector and preserves native admin/CAS/date guards
  const closed=s.slice(s.indexOf('assert_request_v1'),s.indexOf('WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID'));assert.doesNotMatch(closed,/variant|report_fin/);
  assert.match(s,/_weekly_source_settings_require_admin_v1\(v_actor\)/);assert.match(s,/WEEKLY_SOURCE_RULE_ASSIGNMENT_STALE/);
  assert.match(s,/WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED/);assert.match(s,/report_fin_qualification/);});
-test('private ACL addition is exactly five, with no service/browser grant',()=>{const sig=JSON.parse(read('PRIVATE_SIGNATURES.json'));assert.equal(sig.signatures.length,5);
- assert.equal(new Set(sig.signatures).size,5);const acl=read('07_owner_acl.sqlinc');assert.doesNotMatch(acl,/grant\s+execute/i);
+test('private ACL addition is exactly seven, with no service/browser grant',()=>{const sig=JSON.parse(read('PRIVATE_SIGNATURES.json'));assert.equal(sig.signatures.length,7);
+ assert.equal(new Set(sig.signatures).size,7);const acl=read('07_owner_acl.sqlinc');assert.doesNotMatch(acl,/grant\s+execute/i);
  for(const s of sig.signatures)assert.ok(acl.includes('revoke all on function '+s+' from public,anon,authenticated,service_role;'));});
 test('later strict complete Git parser retains every raw path and only existing bundle exceptions',()=>{const s=read('weekly-source-protected-execution-tree.mjs');
  assert.doesNotMatch(s,/\.filter\(row=>selected\(row\.path\)\)/);assert.match(s,/fatal/);assert.match(s,/weekly-source-protected-operational\.json/);
  assert.doesNotMatch(s,/report-fin-ab\.json|qualification-decisions/);});
-test('native capture is append-only under the actual writer, not a journey runner',()=>{const s=read('weekly-source-report-fin-ab-evidence.mjs');
- assert.match(s,/old is not null and old is distinct from/);assert.match(s,/assertWriterSql/);assert.match(s,/r\.status<>'VERIFIED'/);
- assert.doesNotMatch(s,/fetch\(|provider\.request|smtp|sendEmail|set_config\(/);});
+test('native capture delegates only to the actual post-VERIFIED owner, never a direct ledger writer',()=>{const s=read('weekly-source-report-fin-ab-evidence.mjs');
+ assert.match(s,/weekly_source_post_verified_evidence_record_v1/);assert.match(s,/expected_evidence_sha256/);assert.match(s,/receipt_input_commit/);
+ assert.doesNotMatch(s,/update private\.cloudtms_database_releases|fetch\(|provider\.request|smtp|sendEmail|set_config\(/);});
 test('Report-only receipt bundle never fabricates BULK/AUTO qualification',()=>{const s=read('09_complete_operational_evidence.mjs');
  assert.match(s,/bundle\.report_fin_qualifications/);assert.match(s,/return bundle\.qualifications\.map/);assert.doesNotMatch(s,/capabilities:.*REPORT/);});
 test('absent Report binding supplies no bootstrap authority and cannot dispatch operationally',()=>{const binding=read('02_release_feature_strategy.sqlinc');
@@ -78,8 +80,20 @@ test('absent Report binding supplies no bootstrap authority and cannot dispatch 
  assert.match(read('README.md'),/ordinary unqualified feature enablement is not an executable R1 path/);
  const strategy=binding.slice(binding.indexOf('create or replace function private.weekly_source_report_fin_strategy_v1'));
  assert.doesNotMatch(strategy,/return null|coalesce.*selected_variant/);});
-test('writer and CLI use only closed committed Report input, no selector/default',()=>{const writer=read('06_complete_managed_release.mjs'),cli=read('10_complete_current_release_caller.mjs');
- assert.match(writer,/prepareReportFinQualifications/);assert.match(cli,/reportFinQualifications:loadReportFinInputs/);
- assert.ok(writer.indexOf('prepareReportFinQualifications({')<writer.indexOf("set status='VERIFIED'"));
- assert.ok(writer.indexOf('retainNativeReportFinComparisons({context')>writer.indexOf("set status='VERIFIED'"));
- assert.doesNotMatch(writer,/p_report_vat_rounding_variant.*['"]A['"]|selected_variant.*\?\?.*['"]A['"]/);});
+test('normal install writer/CLI remain exact; post-evidence never runs another install',()=>{
+ for(const output of ['06_complete_managed_release.mjs','10_complete_current_release_caller.mjs']){
+ const owner=JSON.parse(read('FULL_REVERSE_RECEIPT.json')).owners.find(r=>r.output===output);
+ assert.equal(owner.hunks.length,0);assert.equal(owner.input_sha256,owner.output_sha256);}
+ assert.doesNotMatch(read('weekly-source-report-fin-ab-evidence.mjs'),/applyManagedRelease\(/);});
+test('non-NEXT measured evidence is truthful while NEXT qualification remains held',()=>{
+ const rows=buildNativeComparisons(execution,fixture().filter(input=>JSON.parse(input.receipt_bytes).case_id!=='NEXT_ACTIVE'));
+ assert.equal(rows.length,12);assert.ok(rows.every(row=>!Object.hasOwn(row.assertions,'next_active_no_expense_observation')));
+ assert.throws(()=>assertNativeComparisons(execution,rows,{complete:true}),/CASE_CENSUS/);});
+test('whole retained comparison body hash includes raw source, tool, and native outputs',()=>{
+ const rows=buildNativeComparisons(execution,fixture());const corrupt=structuredClone(rows);corrupt[0].native_result.invoice_id='20000000-0000-4000-8000-000000000001';
+ assert.throws(()=>assertNativeComparisons(execution,corrupt),/ARTIFACT_INVALID/);});
+test('slot validators distinguish partial measurement from complete strategy and exact retained subset',()=>{
+ const slots=read('13_slot_validators.sqlinc'),certificate=read('01_certificate.sqlinc');
+ assert.match(slots,/jsonb_array_length\(p_artifacts\) not between 1 and 14/);assert.match(slots,/case_id'='NEXT_ACTIVE'/);
+ assert.match(certificate,/cardinality\(required_cases\)\*2/);assert.match(certificate,/where retained_case=certificate_case/);
+ assert.match(certificate,/execution is distinct from installation/);assert.match(certificate,/receipt_input_commit/);});

@@ -3,13 +3,14 @@
 -- This source template is not installed, exposed, or operationally qualified.
 \set ON_ERROR_STOP on
 begin;
+\ir 13_slot_validators.sqlinc
 \ir 01_certificate.sqlinc
 \ir 02_release_feature_strategy.sqlinc
 \ir 03_operational_dispatch.sqlinc
 \ir 04_complete_fin.sqlinc
 \ir 05_complete_feature_setup.sqlinc
 \ir 07_owner_acl.sqlinc
--- Do not blindly include current-only 237 registry/ACL if Q/A0/Prepared or
+-- Do not blindly include current-only 239 registry/ACL if Q/A0/Prepared or
 -- other later helpers exist. Root substitutes the complete literal final union.
 -- Final union and its native independent ACL verifier are mandatory.
 notify pgrst,'reload schema';

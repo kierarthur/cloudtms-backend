@@ -65,30 +65,9 @@
       "input": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/14_complete_managed_release.mjs",
       "output": "06_complete_managed_release.mjs",
       "input_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
-      "output_sha256": "2e02dd38dea88db67d35c367986e03b97e91fa8f634b6e365d671a993fd86ce5",
+      "output_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
       "full_reverse": true,
-      "hunks": [
-        {
-          "id": "ADJACENT_EVIDENCE_IMPORT",
-          "old": "import { buildQualification, domainHash } from './weekly-source-protected-release-qualification.mjs';\n",
-          "new": "import {prepareReportFinQualifications,retainNativeReportFinComparisons} from './weekly-source-report-fin-ab-evidence.mjs';\nimport { buildQualification, domainHash } from './weekly-source-protected-release-qualification.mjs';\n"
-        },
-        {
-          "id": "ROOT_ONLY_INPUTS",
-          "old": "protectedTestSetupAuthorizations = []",
-          "new": "protectedTestSetupAuthorizations = [], reportFinQualifications = [], reportFinNativeInputs = []"
-        },
-        {
-          "id": "QUALIFIED_REPORT_BEFORE_VERIFIED_COMMIT",
-          "old": "    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'",
-          "new": "    const reportQualifications=await prepareReportFinQualifications({root,context,verified,inputs:reportFinQualifications,execute,literal});\n    if(reportQualifications.length){\n      if(verified.evidence?.weekly_source_report_fin_qualifications!==undefined)throw Error('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');\n      verified.evidence={...(verified.evidence??{}),weekly_source_report_fin_qualifications:reportQualifications};\n    }\n    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'"
-        },
-        {
-          "id": "NATIVE_R1_APPEND_ONLY_CAPTURE_INTERFACE",
-          "old": "    return {releaseId:context.releaseId,manifestHash:context.manifestHash};",
-          "new": "    await retainNativeReportFinComparisons({context,inputs:reportFinNativeInputs,execute,literal,assertWriterSql,identitySql});\n    return {releaseId:context.releaseId,manifestHash:context.manifestHash};"
-        }
-      ]
+      "hunks": []
     },
     {
       "input": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
@@ -113,32 +92,21 @@
       "input": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/15_complete_current_release_caller.mjs",
       "output": "10_complete_current_release_caller.mjs",
       "input_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
-      "output_sha256": "6ea217ba99632cb4e3f8dac1e02c152a9c6e980547a2ea6068355d7fd498dac2",
+      "output_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
       "full_reverse": true,
-      "hunks": [
-        {
-          "id": "REPORT_LOADER_IMPORT",
-          "old": "#!/usr/bin/env node\n",
-          "new": "#!/usr/bin/env node\nimport {loadReportFinInputs} from './weekly-source-report-fin-ab-evidence.mjs';\n"
-        },
-        {
-          "id": "COMMITTED_REPORT_INPUTS",
-          "old": "      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),",
-          "new": "      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),\n      reportFinQualifications:loadReportFinInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),"
-        }
-      ]
+      "hunks": []
     },
     {
       "input": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
       "output": "11_complete_registry_current_union.sqlinc",
       "input_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
-      "output_sha256": "0f183e01e8089f81f75d4fb4be4c16f42b919cd84df1e8a2a0453bc911b6cb90",
+      "output_sha256": "5512aca2fb2997f3a389693f12843c3c04d77ae708706c0dd3e34d66214ae060",
       "full_reverse": true,
       "hunks": [
         {
           "id": "ONLY_FIVE_REPORT_PRIVATE_HELPERS",
           "old": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n",
-          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n"
+          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
         }
       ]
     },
@@ -146,13 +114,13 @@
       "input": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
       "output": "12_complete_acl_current_union.sqlinc",
       "input_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
-      "output_sha256": "1f81063c6ad9fc386cbbaffba28f02671b4946620e95ae8ddeaf2ed3429b4d8d",
+      "output_sha256": "2d71f59c118334e85331aa72d6c5c658f51e1949d0a4fcaa75b2ae18d0d4399f",
       "full_reverse": true,
       "hunks": [
         {
           "id": "ONLY_FIVE_REPORT_PRIVATE_HELPERS",
           "old": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n",
-          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n"
+          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
         }
       ]
     }

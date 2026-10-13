@@ -265,7 +265,7 @@
     },
     {
       "file": "07_owner_acl.sqlinc",
-      "statements": 12,
+      "statements": 16,
       "meta": 0,
       "status": "LEXICAL_ONLY_NO_PG_COMPILE"
     },
@@ -288,9 +288,15 @@
       "status": "LEXICAL_ONLY_NO_PG_COMPILE"
     },
     {
+      "file": "13_slot_validators.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
       "file": "ROOT_CLOSURE_TEMPLATE.sqlinc",
       "statements": 3,
-      "meta": 7,
+      "meta": 8,
       "status": "LEXICAL_ONLY_NO_PG_COMPILE"
     }
   ],

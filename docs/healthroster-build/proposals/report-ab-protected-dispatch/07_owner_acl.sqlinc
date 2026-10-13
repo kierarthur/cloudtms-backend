@@ -8,5 +8,9 @@ alter function private.weekly_source_report_fin_strategy_v1(uuid) owner to postg
 revoke all on function private.weekly_source_report_fin_strategy_v1(uuid) from public,anon,authenticated,service_role;
 alter function private.weekly_source_report_fin_dispatch_v1(jsonb) owner to postgres;
 revoke all on function private.weekly_source_report_fin_dispatch_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text) owner to postgres;
+revoke all on function private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text) owner to postgres;
+revoke all on function private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text) from public,anon,authenticated,service_role;
 alter function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean) owner to postgres;
 revoke all on function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;
