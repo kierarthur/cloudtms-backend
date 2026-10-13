@@ -1683,6 +1683,22 @@ begin
     pg_catalog.sha256(pg_catalog.convert_to('before','UTF8')),
     array['b7000000-0000-4000-8000-000000000fc1']::uuid[],'COMMITTED',
     pg_catalog.transaction_timestamp());
+  -- Named minimum schema receipt for this synthetic certified-zero head.
+  -- It proves the existing FK/digest/token/head-membership prerequisite only;
+  -- it is not manager, transport, applied financial or native publisher proof.
+  insert into private.weekly_source_entitlement_publication_receipts(
+    decision_bundle_id,bundle_revision,request_digest,publication_mode,candidate_id,
+    member_root_ids,member_family_booking_ids,member_root_versions,head_ids,
+    scope_change_tx_token,decision_id,decided_by_user_id,census_json,proof_json
+  ) values (
+    'b7000000-0000-4000-8000-000000000fb1',1,
+    pg_catalog.sha256(pg_catalog.convert_to('receipt','UTF8')),'IMMEDIATE',
+    'b7000000-0000-4000-8000-000000000106',
+    array['b7000000-0000-4000-8000-000000000306']::uuid[],array['WP07-BK-06']::text[],
+    array[2]::integer[],array['b7000000-0000-4000-8000-000000000fc1']::uuid[],
+    'b7000000-0000-4000-8000-000000000fe1','b7000000-0000-4000-8000-000000000fd1',
+    'b7000000-0000-4000-8000-000000000001','{}'::jsonb,'{}'::jsonb
+  );
   insert into public.weekly_source_entitlement_heads(
     id,authority_kind,agency_id,candidate_id,contract_id,week_ending_date,
     root_timesheet_id,root_family_booking_id,root_timesheet_version,head_revision,
@@ -1701,6 +1717,15 @@ begin
     'b7000000-0000-4000-8000-000000000001',pg_catalog.transaction_timestamp(),
     pg_catalog.sha256(pg_catalog.convert_to('receipt','UTF8')),
     'b7000000-0000-4000-8000-000000000fe1');
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert immediate;
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert deferred;
+
 
   -- A withdrawn generation can never be un-withdrawn and can never be given an
   -- entitlement head (proof/36 section 6's permanence rule; decision D8).
@@ -2406,6 +2431,8 @@ $verify_workbench_result_no_draft$;
 --     transaction's own id.  (i) is deliberately STATIC — the absence of an
 --     exception handler is not an executable property — and is labelled so.
 -- ---------------------------------------------------------------------------
+create temporary table wp07_ordering_owner_frame_probe(probe_id uuid primary key) on commit drop;
+
 do $verify_ordering_rule$
 declare
   v_definition text;
@@ -2426,6 +2453,8 @@ declare
   v_broad_triggers text;
   v_xid_before bigint;
   v_xid_after bigint;
+  v_owner_frame_xid text;
+  v_probe_id uuid:=pg_catalog.gen_random_uuid();
 begin
   v_definition:=pg_catalog.pg_get_functiondef(
     'public.weekly_source_first_authorisation_withdraw_v1(uuid,uuid,text,uuid)'::regprocedure);
@@ -2471,6 +2500,10 @@ begin
     'ordering rule: the fixture root must authorise, got '||v_result::text);
   perform pg_temp.drain_workbench_jobs();
   v_signature:=pg_temp.current_signature(v_root);
+  -- Observe this caller's actual SQL frame, which can be the harness's
+  -- enclosing SAVEPOINT. Top-level pg_current_xact_id alone cannot name it.
+  insert into pg_temp.wp07_ordering_owner_frame_probe(probe_id) values(v_probe_id)
+    returning xmin::text into v_owner_frame_xid;
   v_xid_before:=pg_catalog.pg_current_xact_id()::text::bigint;
   v_result:=public.weekly_source_first_authorisation_withdraw_v1(
     v_root,v_root,v_signature,'b7000000-0000-4000-8000-000000000001');
@@ -2503,7 +2536,7 @@ begin
   -- carry a later xid; that sub-transaction still rolls back with this one,
   -- which section 13 proves by forcing a failure after it.  This owner's own two
   -- writes — the withdrawal marks and the audit entry — must share one xid, and
-  -- that xid must be the top-level one.
+  -- that xid must be the caller frame observed below, including an enclosing savepoint.
   perform pg_temp.assert_true(
     v_xmin_timesheet is not null
     and v_xmin_timesheet::bigint>=v_xid_before
@@ -2520,11 +2553,11 @@ begin
     ||' audit='||coalesce(v_xmin_audit,'<null>'));
   perform pg_temp.assert_true(
     v_xmin_authorisation=v_xmin_audit
-    and v_xmin_authorisation::bigint=v_xid_before,
+    and v_xmin_authorisation=v_owner_frame_xid,
     'ordering rule: the withdrawal marks and the audit entry must be written by '
     ||'the withdrawal owner''s OWN frame, not a sub-transaction — authorisation='
     ||coalesce(v_xmin_authorisation,'<null>')||' audit='
-    ||coalesce(v_xmin_audit,'<null>')||' top-level xid='||v_xid_before::text);
+    ||coalesce(v_xmin_audit,'<null>')||' own frame xid='||v_owner_frame_xid||' top-level xid='||v_xid_before::text);
 
   -- (iii) the window test, EXECUTED (WP-25).  A concurrent session can never see
   -- the order, because PostgreSQL has no dirty read at any isolation level.  The

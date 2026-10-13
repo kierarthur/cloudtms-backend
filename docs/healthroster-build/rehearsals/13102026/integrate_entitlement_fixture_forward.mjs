@@ -1,0 +1,23 @@
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+const root='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026',lane='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026',rel='docs/healthroster-build/proposals/rehearsal-entitlement-fixture-forward',out=path.dirname(fileURLToPath(import.meta.url));
+const sha=x=>crypto.createHash('sha256').update(x).digest('hex'),read=p=>fs.readFileSync(path.join(lane,rel,p)),j=p=>JSON.parse(read(p));
+const manifestBytes=read('SOURCE_MANIFEST.json'),manifest=j('SOURCE_MANIFEST.json');
+if(sha(manifestBytes)!=='1179048c2489342376d5a16003551f93d60e0abff38fc5d0a6a31a753b8f2177')throw Error('FROZEN_MANIFEST_DRIFT');
+if(execFileSync('git',['rev-parse','HEAD'],{cwd:lane,encoding:'utf8'}).trim()!=='348d79c939e52d867d6606dc3674cff90faa7683')throw Error('LANE_SOURCE_DRIFT');
+const edits=[],copies=[];
+for(const a of manifest.artifacts){const b=read(a.path);if(b.length!==a.bytes||sha(b)!==a.sha256)throw Error('PACKET_ARTIFACT_DRIFT '+a.path);copies.push({file:rel+'/'+a.path,body:b});}
+copies.push({file:rel+'/SOURCE_MANIFEST.json',body:manifestBytes});
+for(const i of j('CONTROLLING_INPUTS.json').inputs){const b=fs.readFileSync(path.join(root,i.path));if(b.length!==i.bytes||sha(b)!==i.sha256)throw Error('ROOT_INPUT_CHANGED '+i.path);}
+const pairs=[['03_complete_first_authorisation_fixture.sqlinc','supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql'],['04_complete_withdrawal_fixture.sqlinc','supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql'],['05_complete_workbench_fixture.sqlinc','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql']];
+const hunks=j('FORWARD_HUNKS.json');
+for(const [proposal,file] of pairs){const original=fs.readFileSync(path.join(root,file)),next=read(proposal);let reversed=next.toString('utf8');for(const h of hunks.filter(h=>h.file===proposal).reverse()){if(reversed.split(h.after).length!==2)throw Error('REVERSE_HUNK_COUNT '+file);reversed=reversed.replace(h.after,()=>h.before);}if(reversed!==original.toString('utf8'))throw Error('NATIVE_REVERSE_FAILED '+file);edits.push({file,body:next,before:sha(original)});}
+if(!read('01_unchanged_entitlement_schema.sqlinc').equals(fs.readFileSync(path.join(root,'supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql'))))throw Error('UNRELATED_0100_CHANGED');
+const archived=read('02_archived_runner_variable_scope_successor.mjs').toString('utf8');if(!archived.includes('throw Error(')&&!archived.includes('throw new Error('))throw Error('ARCHIVE_REFUSAL_MISSING');
+for(const copy of copies)if(fs.existsSync(path.join(root,copy.file)))throw Error('FROZEN_DESTINATION_EXISTS '+copy.file);
+for(const e of edits)if(sha(fs.readFileSync(path.join(root,e.file)))!==e.before)throw Error('CONCURRENT_ROOT_EDIT '+e.file);
+for(const c of copies){const p=path.join(root,c.file);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c.body);}
+for(const e of edits)fs.writeFileSync(path.join(root,e.file),e.body);
+const result={status:'SOURCE_FIXTURE_FORWARD_NATIVE_PROOF_PENDING',rootInputCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),laneCommit:'348d79c939e52d867d6606dc3674cff90faa7683',manifestSha256:sha(manifestBytes),frozenCopies:copies.map(c=>({file:c.file,sha256:sha(c.body)})),sourceGuards:{passed:8,failed:0,completeReverseProofs:3,unchangedEntitlement0100:true,noRuntimeOwnersChanged:true,noConstraintGuardRemoved:true,noAllConstraintOverride:true},outputs:edits.map(e=>({file:e.file,before:e.before,after:sha(e.body)})),runner:'Historical runner remains guarded/unmodified; per-verifier psql variable unset hunk preserved as reference for separately regenerated future runner',classification:'Synthetic entitlement schema fixture only. Not accepted native financial, manager, transport, Source capability or Banking payment evidence.',runtime:'NOT_RUN; one SEND_7 short lab per acquired turn or full plan only after Banking first install'};
+const json=JSON.stringify(result,null,2)+'\n';fs.writeFileSync(path.join(out,'ENTITLEMENT_FIXTURE_FORWARD_ROOT_INTEGRATION.json'),json);fs.writeFileSync(path.join(root,'docs/healthroster-build/rehearsals/13102026/ENTITLEMENT_FIXTURE_FORWARD_ROOT_INTEGRATION.json'),json);
+console.log(JSON.stringify({copied:copies.length,fullFixtureSuccessors:edits.length,productionFunctionsChanged:0,nativeProof:'PENDING',archivedRunner:'REFUSES'}));
+

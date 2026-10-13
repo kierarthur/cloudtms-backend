@@ -422,6 +422,10 @@ begin
       and head_row.head_revision=v_revision-1;
   end if;
 
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert deferred;
   -- 1. the decision bundle revision
   insert into public.weekly_source_entitlement_decision_bundles(
     decision_bundle_id,bundle_revision,agency_id,candidate_id,week_ending_date,
@@ -489,6 +493,14 @@ begin
     array[v_booking],array[1],array[p_head_id],v_token,gen_random_uuid(),v_actor,
     '{}'::jsonb,'{}'::jsonb);
 
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert immediate;
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert deferred;
   return p_head_id;
 end;
 $seed$;

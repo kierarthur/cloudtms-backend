@@ -218,6 +218,10 @@ create function pg_temp.publish_head(
   p_token uuid,p_candidate_id uuid,p_contract_id uuid,p_root uuid,p_family text,
   p_version integer,p_certified_zero boolean,p_component_count integer
 ) returns void language sql as $function$
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert deferred;
   insert into public.weekly_source_entitlement_decision_bundles(
     decision_bundle_id,bundle_revision,agency_id,candidate_id,week_ending_date,
     bundle_kind,source_root_family_booking_id,source_root_timesheet_id,
@@ -283,6 +287,15 @@ create function pg_temp.publish_head(
   update public.weekly_source_root_authorisations
      set current_entitlement_head_id=p_head_id
    where root_timesheet_id=p_root and withdrawn_at_utc is null;
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert immediate;
+  set constraints
+    public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert,
+    public.weekly_source_entitlement_head_receipt_assert deferred;
+
 $function$;
 
 -- ---------------------------------------------------------------------------

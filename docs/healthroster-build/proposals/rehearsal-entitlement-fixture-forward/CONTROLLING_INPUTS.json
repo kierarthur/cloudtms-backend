@@ -1,0 +1,80 @@
+{
+  "schema_version": "ENTITLEMENT_FIXTURE_INPUTS_V1",
+  "inputs": [
+    {
+      "path": "supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql",
+      "bytes": 141049,
+      "sha256": "c1899930198365bead48d77136b8b5ea1e22ca64905fbd9f498ba6f01a1896b3"
+    },
+    {
+      "path": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "bytes": 157393,
+      "sha256": "516083e17ea8652a4a15e7ffb078f521201baba7e92587484ab8baaeaa116b46"
+    },
+    {
+      "path": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "bytes": 66247,
+      "sha256": "3c18be69ccb345cf969352db42e050c2d540998a503e6ce640b4285fcfccaef4"
+    },
+    {
+      "path": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "bytes": 91216,
+      "sha256": "f627f8acdd169847ff13edf9289f1c940b370cccbee6def6cf190bc33d08d762"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/FULL_REHEARSAL_1_RECEIPT.json",
+      "bytes": 45655,
+      "sha256": "e9172e2afc606b07dd707109e040517e69c83aab8fe3b9e036690f3360576c55"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/FULL_REHEARSAL_EXACT_SOURCE_PLAN.json",
+      "bytes": 12188292,
+      "sha256": "e8b75f5ac3f25e9b881e2b11182948bbae5972c2738d91e8887730ae38bf0691"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/FULL_REHEARSAL_EXECUTION_MANIFEST.json",
+      "bytes": 1213683,
+      "sha256": "b0fd269f27da2aa2440a17ee2bf0832c7f0a17a66f27cf0437dde178ea617a52"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/run_full_upgrade_rehearsal.mjs",
+      "bytes": 22537,
+      "sha256": "471fb4f6df983ff592e2ce3e19618c8051cd46607821fdb80b7a7eb8b1c4c76a"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "bytes": 155269,
+      "sha256": "64ef7e6d04e1b652af722cb9dd050310fcd8e1cd249f59b9359428a310b70933"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "bytes": 179414,
+      "sha256": "09fbe853b875393170ea2f538eddd41a0e4be41ab65cf5cb54cb663eae2ada71"
+    },
+    {
+      "path": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "bytes": 23350,
+      "sha256": "2fee6c5413c1378610790e909642f5d6ea4966274f0d1436af96ec9f1d5f63bc"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "bytes": 44246,
+      "sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447"
+    },
+    {
+      "path": "supabase/verification/support/22092026_1850_source_fixture_capture.sql",
+      "bytes": 4053,
+      "sha256": "fcadfe617ce40a2eb29476df1cc9ba31af6ca1796697be54dbdaa08ccc6f34f8"
+    },
+    {
+      "path": "scripts/cloudtms-db-component-release.mjs",
+      "bytes": 15167,
+      "sha256": "1d27d70edcb5ab0bc9f70e25bfb97be27bb7fb9b53f25e95b84e8e704a068859"
+    }
+  ]
+}
