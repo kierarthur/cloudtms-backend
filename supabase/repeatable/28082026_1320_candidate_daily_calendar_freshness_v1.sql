@@ -19,7 +19,6 @@ declare
   v_today date:=(p_now_utc at time zone 'Europe/London')::date;
   v_deadline timestamptz; v_max_age integer:=1; v_days integer;
   v_first date; v_last date;
-  v_background_copy_only boolean:=false;
 begin
   select * into v_scope from private.candidate_daily_authority_scopes
     where environment=p_environment and candidate_id=p_candidate_id;
@@ -60,39 +59,7 @@ begin
     end if;
   end if;
   if coalesce(v_sync.effective_visible_cursor,0)<coalesce(v_sync.required_visible_cursor,0) then
-    -- MyTMS is the availability authority. A completed Candidate command's
-    -- queued Sheet copy is not a stale Rota and must not block the next edit.
-    -- Retain the strict barrier for transitions, unknown/missing work, failed
-    -- overlays, source reconciliation and every non-Candidate command.
-    v_background_copy_only:=v_scope.authority_mode='SUPABASE_PRIMARY'
-      and not v_scope.transition_in_progress
-      and v_sync.accepted_canonical_cursor=v_scope.canonical_version
-      and v_sync.required_visible_cursor=v_scope.canonical_version
-      and coalesce(v_sync.terminal_count,0)=0
-      and (select count(distinct o.availability_version)
-        from public.candidate_daily_sheet_projection_outbox o
-        where o.environment=p_environment and o.candidate_id=p_candidate_id
-          and o.target='MASTER_AVAILABILITY_SHEET'
-          and o.availability_version>v_sync.effective_visible_cursor
-          and o.availability_version<=v_sync.required_visible_cursor)
-        =v_sync.required_visible_cursor-v_sync.effective_visible_cursor
-      and not exists(
-        select 1 from public.candidate_daily_sheet_projection_outbox o
-        left join public.candidate_daily_command_receipts c on c.command_id=o.command_id
-          and c.environment=o.environment and c.candidate_id=o.candidate_id
-        where o.environment=p_environment and o.candidate_id=p_candidate_id
-          and o.target='MASTER_AVAILABILITY_SHEET'
-          and o.availability_version>v_sync.effective_visible_cursor
-          and (o.availability_version>v_sync.required_visible_cursor
-            or o.state not in ('PENDING','CLAIMED','RETRY','DELIVERED')
-            or c.actor_class is distinct from 'CANDIDATE'
-            or c.command_class is distinct from 'AVAILABILITY_APPLY'
-            or c.state is distinct from 'COMPLETED'
-            or c.terminal_http_status is distinct from 200
-            or c.canonical_version_after is distinct from o.availability_version));
-    if v_background_copy_only is distinct from true then
-      v_reasons:=v_reasons||'"PROJECTION_LAG"'::jsonb;
-    end if;
+    v_reasons:=v_reasons||'"PROJECTION_LAG"'::jsonb;
   end if;
   if coalesce(v_sync.terminal_count,0)>0 then v_reasons:=v_reasons||'"TERMINAL_OUTBOX"'::jsonb; end if;
   if not exists(select 1 from private.candidate_daily_source_links l where l.environment=p_environment

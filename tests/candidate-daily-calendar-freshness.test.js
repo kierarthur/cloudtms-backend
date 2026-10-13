@@ -44,3 +44,24 @@ test('Controlled authority transition retains its separate strict freshness proo
   assert.match(transition,/FEDERATED_MEMBERSHIP_ACTIVE/);
   assert.doesNotMatch(sql,/create or replace function public\.candidate_daily_(system_policy_activate_ready|authority_transition)/);
 });
+
+test('Queued Candidate availability copies are a narrow canonical-ready exception in the late owner',()=>{
+  const late=read('supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql');
+  assert.match(late,/v_scope.authority_mode='SUPABASE_PRIMARY'/);
+  assert.match(late,/not v_scope.transition_in_progress/);
+  assert.match(late,/c.actor_class is distinct from 'CANDIDATE'/);
+  assert.match(late,/c.command_class is distinct from 'AVAILABILITY_APPLY'/);
+  assert.match(late,/c.state is distinct from 'COMPLETED'/);
+  assert.match(late,/count\(distinct o.availability_version\)/);
+  assert.match(late,/o.state not in \('PENDING','CLAIMED','RETRY','DELIVERED'\)/);
+  assert.match(late,/c.canonical_version_after is distinct from o.availability_version/);
+  assert.equal((late.match(/CREATE OR REPLACE FUNCTION|create or replace function/g)||[]).length,2);
+  assert.match(late,/BOOKED_DAILY_SHIFT/); assert.match(late,/candidate_entry.eligible/);
+  assert.match(late,/d.booked then 'BOOKED'/);
+  assert.doesNotMatch(late,/update public.candidate_daily_rota_days|delete from public.candidate_daily_rota_days/);
+  const proof=read(verifier);
+  for(const marker of ['second save lost either exact projection','older Sheet acknowledgement replaced the newer choice',
+    'availability overwrote a new booking','unknown copy gap bypassed','background copy bypassed transition barrier']) {
+    assert.ok(proof.includes(marker),marker);
+  }
+});
