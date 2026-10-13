@@ -18,7 +18,7 @@
   "generalPublicDefinerSeal": "839/76service omissions/0browser executable/338226c4e9b878c5aa92fc8e319dd7bf; constants rederived unchanged",
   "browserCatalogueVerifiers": "PASS:general1302/Candidate-MyTMS0952/Candidate-named1947v3",
   "sourceWriterCatalogueCensus": "PASS:31 classified inventory owners,2636 scanned routines,93 observed write sites,29 writer routines,5 removal sites,0unclassified writers/deleters; original lexical limits retained",
-  "backendSourceAndFinalDefinerChecks": "PASS:32/32 before final catalogue-verifier comment/classification-only edit; committed exact LF archive verification follows",
+  "backendSourceAndFinalDefinerChecks": "PASS:32/32 against exact committed LF archive including final catalogue-verifier edits",
   "releaseSourceChecks": "PASS:67/67 integration checks;26/26 managed-source checks repeated after native reload policy",
   "officeSourceChecks": "PASS:changed JS syntax;31/31 native combined-review source checks; independent integration review",
   "candidateBindingRegistry": "PASS:2 entries",
@@ -26,5 +26,9 @@
   "independentReview": "SOURCE PASS receipts for gate fixes, immutable helper prerequisite, incoming owner/finalizer preservation, canonical final selection, exact native source classifications, native runtime reload and Office contact-policy/exact busy retry; final census-verifier implementation receipt follows",
   "acceptanceAndProtectedVerification": "AUTHORED_NOT_RUN; no fixture/rehearsal/business/caller/timing programme",
   "hostedActions": "NOT_RUN; only owner-authorized build-branch publication follows committed LF proof. Promotion/TEST install remains pending explicit owner recheck PASS",
-  "next": "Record both exact published candidate SHAs in FIRST_INSTALL_CANDIDATE.md and BUILD_LOG, then continue XD01-XD03. HealthRoster sole-producer blocker remains explicit; do not hold firstinstall. After ownerPASS protected disabled-first installation then F17/narrowF21 service-owned transition"
+  "next": "Record both exact published candidate SHAs in FIRST_INSTALL_CANDIDATE.md and BUILD_LOG, then continue XD01-XD03. HealthRoster sole-producer blocker remains explicit; do not hold firstinstall. After ownerPASS protected disabled-first installation then F17/narrowF21 service-owned transition",
+  "backendCandidateCodeCommit": "a4e87c601bd567b14240af483283d602d21cc715",
+  "finalCensusVerifierReview": "SOURCE PASS:9b52f629bc03bf13a705572540e4d257cb5b2d47932140191caf9702c99eb885",
+  "publication": "Fresh GitHub ls-remote confirms exact backend/Office code SHAs on own codex/bpay-next-build-20261009 branches; not promoted/installed",
+  "localArchiveCleanup": "Automatic approval review blocked deletion; ignored own archive/tar retained, no removal ran"
 }
