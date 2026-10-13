@@ -1,0 +1,9 @@
+# Fatal Git path parser forward
+
+This new adjacent packet accepts the remaining P2 in `STRICT_QUALIFICATION_FORWARD_SOURCE_CRITIC.md`, SHA-256 `49682eab129c98fb8f91679b8d8d68602ef287a65fc1b1b118f7c632a6a7fb80`. Frozen12, frozen45, both pin6 packets and all previous source evidence remain unchanged. The independent source critic supplied counterexamples; these were not native/database failures.
+
+The complete proposal/native parser successors consume every raw NUL record. They require fatal, round-trippable UTF-8 and reject unsupported paths before mode/type/inventory checks. No row is filtered. Empty internal records and a missing NUL terminator refuse. Supported non-ASCII paths preserve exact bytes through UTF-8 roundtrip; differing valid Unicode names do not compare equal. Git modes, types, blob IDs, bytes, all tracked inventory and the same three closed receipt-bundle exceptions remain unchanged. No normalization, renaming or extra exclusion is introduced.
+
+Source regressions use actual committed root `cea15289e0283e3383e71f0acb8b18ce184647c2`, its actual complete 3694-file tree and real blobs. The before/after whole-vector proof and both proposal/native mapper outputs must be identical on the lawful corpus. They reject the exact backslash and FF/FE counterexamples, an unsupported object under that path, valid Unicode path drift and malformed record boundaries.
+
+The actual whole proof exceeds Arthur's two-million-byte rollback envelope once converted to a SQL fixture and fences. Do not trim it, fabricate an empty inventory, borrow another account or claim a whole-vector native pass. Root's owner-approved complete fallback/release procedure may handle it after the Banking first-install record. Current source proof, syntax checks and negative vectors are not SQL, financial, app or activation acceptance. The separate SECURITY/OFF engineering folder is unfinished and not covered by this correction.

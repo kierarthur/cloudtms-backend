@@ -1,0 +1,12 @@
+-- Review-only proposed new controlling closure; root installs only after
+-- generated-contract review and SEND_7 native rollback compilation.
+\ir 13102026_2301_report_prepared_output/02_codec.sqlinc
+\ir 13102026_2301_report_prepared_output/03_capture_context.sqlinc
+\ir 13102026_2301_report_prepared_output/04_receipt_insert_guard.sqlinc
+\ir 13102026_2301_report_prepared_output/05_retained_amount.sqlinc
+\ir 13102026_2301_report_prepared_output/06_complete_ordinary_apply.sqlinc
+\ir 13102026_2301_report_prepared_output/07_complete_report_pay_authority.sqlinc
+\ir 13102026_2301_report_prepared_output/08_complete_registry_union.sqlinc
+\ir 13102026_2301_report_prepared_output/09_complete_final_acl_union.sqlinc
+\ir 13102026_2301_report_prepared_output/11_final_private_acl.sqlinc
+notify pgrst, 'reload schema';

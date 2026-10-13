@@ -1,0 +1,14 @@
+alter function private.weekly_source_report_prepared_context_assert_v1() owner to postgres;
+revoke all on function private.weekly_source_report_prepared_context_assert_v1() from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_financial_codec_v1(public.timesheets_financials) owner to postgres;
+revoke all on function private.weekly_source_report_prepared_financial_codec_v1(public.timesheets_financials) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_output_capture_v1(uuid,uuid,uuid,bytea,bytea,bytea,jsonb) owner to postgres;
+revoke all on function private.weekly_source_report_prepared_output_capture_v1(uuid,uuid,uuid,bytea,bytea,bytea,jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_output_hash_v1(bytea,jsonb) owner to postgres;
+revoke all on function private.weekly_source_report_prepared_output_hash_v1(bytea,jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_output_insert_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_report_prepared_output_insert_guard_v1() from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_output_supported_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_report_prepared_output_supported_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_prepared_pay_amount_v1(public.weekly_source_ordinary_pay_projection_receipts) owner to postgres;
+revoke all on function private.weekly_source_report_prepared_pay_amount_v1(public.weekly_source_ordinary_pay_projection_receipts) from public,anon,authenticated,service_role;

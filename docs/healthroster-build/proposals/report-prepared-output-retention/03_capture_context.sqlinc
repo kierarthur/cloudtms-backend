@@ -1,0 +1,87 @@
+create or replace function private.weekly_source_report_prepared_context_assert_v1()
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_rel oid; v_owner oid; v_columns text[];
+begin
+  v_rel:=pg_catalog.to_regclass('pg_temp.weekly_source_report_prepared_output_context_v1');
+  select oid into strict v_owner from pg_catalog.pg_roles where rolname=current_user;
+  if v_rel is null or not exists(select 1 from pg_catalog.pg_class c
+    where c.oid=v_rel and c.relnamespace=pg_catalog.pg_my_temp_schema() and c.relowner=v_owner
+      and c.relpersistence='t' and c.relkind='r' and not c.relrowsecurity and not c.relforcerowsecurity) then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CONTEXT_UNAVAILABLE' using errcode='55000'; end if;
+  select pg_catalog.array_agg(a.attname||':'||pg_catalog.format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text order by a.attnum)
+    into v_columns from pg_catalog.pg_attribute a where a.attrelid=v_rel and a.attnum>0 and not a.attisdropped;
+  if v_columns is distinct from array[
+    'request_hash:bytea:true','backend_pid:integer:true','transaction_id:bigint:true','owner_oid:oid:true',
+    'scope_json:jsonb:true','writer_result_json:jsonb:true','financial_output_json:jsonb:true','financial_row_hash:bytea:true'
+  ]::text[] or exists(select 1 from pg_catalog.pg_attribute a where a.attrelid=v_rel and a.attnum>0
+    and (a.atthasdef or a.attacl is not null))
+    or exists(select 1 from pg_catalog.pg_class c, lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) acl
+      where c.oid=v_rel and acl.grantee<>v_owner)
+    or exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid=v_rel and not t.tgisinternal)
+    or not exists(select 1 from pg_catalog.pg_constraint c where c.conrelid=v_rel and c.contype='p' and c.conkey=array[1]::smallint[]) then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CONTEXT_UNAVAILABLE' using errcode='55000'; end if;
+end;
+$function$;
+create or replace function private.weekly_source_report_prepared_output_capture_v1(p_final_revision_id uuid,p_root_timesheet_id uuid,p_actor_user_id uuid,p_request_hash bytea,p_service_snapshot_hash bytea,p_server_calculation_fingerprint bytea,p_write_result jsonb)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_revision public.weekly_source_final_revisions%rowtype; v_root public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype; v_expected_result jsonb; v_output jsonb; v_scope jsonb; v_owner oid;
+begin
+  if p_request_hash is null or pg_catalog.octet_length(p_request_hash)<>32
+    or p_service_snapshot_hash is null or pg_catalog.octet_length(p_service_snapshot_hash)<>32
+    or p_server_calculation_fingerprint is null or pg_catalog.octet_length(p_server_calculation_fingerprint)<>32
+    or p_actor_user_id is null or p_write_result is null or pg_catalog.jsonb_typeof(p_write_result) is distinct from 'object'
+    or private.weekly_source_report_prepared_output_supported_v1(p_final_revision_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CAPTURE_INVALID' using errcode='55000'; end if;
+  select * into strict v_revision from public.weekly_source_final_revisions where id=p_final_revision_id;
+  select * into strict v_root from public.timesheets where timesheet_id=p_root_timesheet_id;
+  select * into strict v_fin from public.timesheets_financials where id=(p_write_result->>'timesheet_financials_id')::uuid;
+  if v_root.is_current is distinct from true or v_fin.timesheet_id is distinct from v_root.timesheet_id
+    or v_fin.timesheet_version is distinct from v_root.version or v_fin.is_current is distinct from true
+    or v_fin.candidate_id is null or v_fin.client_id is null or v_revision.state is distinct from 'CURRENT'
+    or not exists(select 1 from public.contracts c where c.id=v_root.contract_id
+      and c.client_id=v_fin.client_id and c.candidate_id=v_fin.candidate_id)
+    or not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_WRITER_IDENTITY_UNPROVED' using errcode='55000'; end if;
+  -- Exact returned eight-key native codec and its original ten-field marker.
+  -- This is not the caller's canonical INPUT or a recalculation.
+  v_expected_result:=pg_catalog.jsonb_build_object('ok',true,'timesheet_id',v_fin.timesheet_id,
+    'timesheet_financials_id',v_fin.id,'processing_status',v_fin.processing_status::text,
+    'timesheet_version',v_fin.timesheet_version,'updated_at',v_fin.updated_at,'computed_at_utc',v_fin.computed_at_utc,
+    'version_marker',pg_catalog.md5(pg_catalog.jsonb_build_object(
+      'id',v_fin.id,'timesheet_id',v_fin.timesheet_id,'timesheet_version',v_fin.timesheet_version,
+      'processing_status',v_fin.processing_status::text,'updated_at',v_fin.updated_at,'computed_at_utc',v_fin.computed_at_utc,
+      'total_hours',v_fin.total_hours,'total_pay_ex_vat',v_fin.total_pay_ex_vat,
+      'total_charge_ex_vat',v_fin.total_charge_ex_vat,'margin_ex_vat',v_fin.margin_ex_vat)::text));
+  if p_write_result is distinct from v_expected_result then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_WRITER_RESULT_CHANGED' using errcode='55000'; end if;
+  v_output:=private.weekly_source_report_prepared_financial_codec_v1(v_fin);
+  v_scope:=pg_catalog.jsonb_build_object('final_revision_id',v_revision.id,'source_cycle_id',v_revision.source_cycle_id,
+    'rule_set_version_id',v_revision.rule_set_version_id,
+    'client_id',v_fin.client_id,'candidate_id',v_fin.candidate_id,'root_timesheet_id',v_root.timesheet_id,
+    'published_timesheet_financial_id',v_fin.id,'root_timesheet_version',v_fin.timesheet_version,
+    'actor_user_id',p_actor_user_id,'request_hash',pg_catalog.encode(p_request_hash,'hex'),
+    'service_snapshot_hash',pg_catalog.encode(p_service_snapshot_hash,'hex'),
+    'server_calculation_fingerprint',pg_catalog.encode(p_server_calculation_fingerprint,'hex'));
+  select oid into strict v_owner from pg_catalog.pg_roles where rolname=current_user;
+  if pg_catalog.to_regclass('pg_temp.weekly_source_report_prepared_output_context_v1') is not null then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CAPTURE_REUSED' using errcode='55000'; end if;
+    create temporary table pg_temp.weekly_source_report_prepared_output_context_v1(
+      request_hash bytea primary key,backend_pid integer not null,transaction_id bigint not null,owner_oid oid not null,
+      scope_json jsonb not null,writer_result_json jsonb not null,financial_output_json jsonb not null,financial_row_hash bytea not null
+    ) on commit drop;
+    revoke all on table pg_temp.weekly_source_report_prepared_output_context_v1 from public,anon,authenticated,service_role;
+  perform private.weekly_source_report_prepared_context_assert_v1();
+  if exists(select 1 from pg_temp.weekly_source_report_prepared_output_context_v1 where request_hash=p_request_hash) then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CAPTURE_REUSED' using errcode='55000'; end if;
+  insert into pg_temp.weekly_source_report_prepared_output_context_v1 values(p_request_hash,pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),
+    v_owner,v_scope,p_write_result,v_output,private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_REPORT_PREPARED_NATIVE_ROW_V1',pg_catalog.to_jsonb(v_fin)));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_WRITER_IDENTITY_UNPROVED' using errcode='55000';
+end;
+$function$;

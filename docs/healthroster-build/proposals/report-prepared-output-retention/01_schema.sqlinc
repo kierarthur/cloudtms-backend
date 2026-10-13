@@ -1,0 +1,16 @@
+alter table public.weekly_source_ordinary_pay_projection_receipts
+  add column prepared_writer_output_json jsonb,
+  add column prepared_writer_output_hash bytea;
+alter table public.weekly_source_ordinary_pay_projection_receipts
+  add constraint weekly_source_ordinary_prepared_output_pair_ck check (
+    (prepared_writer_output_json is null and prepared_writer_output_hash is null) or
+    (prepared_writer_output_json is not null and prepared_writer_output_hash is not null
+      and pg_catalog.jsonb_typeof(prepared_writer_output_json)='object'
+      and prepared_writer_output_json->>'schema_version' is not distinct from 'WEEKLY_SOURCE_REPORT_PREPARED_WRITER_OUTPUT_V1'
+      and pg_catalog.octet_length(prepared_writer_output_hash)=32
+      and outcome='PREPARED_FOR_AUTHORISATION' and published_timesheet_financial_id is not null)
+  );
+comment on column public.weekly_source_ordinary_pay_projection_receipts.prepared_writer_output_json is
+  'Owner-captured actual native normalized output for report-supported export initial preparation; historical NULL means unknown. Not active pay or settlement.';
+comment on column public.weekly_source_ordinary_pay_projection_receipts.prepared_writer_output_hash is
+  'WEEKLY_SOURCE_REPORT_PREPARED_WRITER_OUTPUT_V1 domain bound to the unchanged V1 receipt hash. No caller supplied money.';
