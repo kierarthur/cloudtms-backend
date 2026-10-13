@@ -930,13 +930,13 @@ begin
         case when coalesce(v_source_row.source_shift_charge_pence,0)<0 then -1 else 1 end
         else 1 end;
       if v_row_sign not in (-1,1)
-         or coalesce(v_economic->>'sign','')!~'^[-]?[0-9]+
+         or coalesce(v_economic->>'sign','')!~'^[-]?[0-9]+$'
 
          or (v_economic->>'sign')::smallint is distinct from v_row_sign
-         or coalesce(v_economic->>'paid_minutes','')!~'^[0-9]+
+         or coalesce(v_economic->>'paid_minutes','')!~'^[0-9]+$'
 
          or (v_economic->>'paid_minutes')::integer is distinct from v_source_row.actual_net_minutes
-         or coalesce(v_economic->>'break_minutes','')!~'^[0-9]+
+         or coalesce(v_economic->>'break_minutes','')!~'^[0-9]+$'
 
          or (v_economic->>'break_minutes')::integer is distinct from v_source_row.break_minutes then
         raise exception 'WEEKLY_SOURCE_ECONOMIC_SOURCE_TUPLE_MISMATCH' using errcode='22023';
@@ -945,13 +945,13 @@ begin
       if exists(
         select 1
         from (values ('day'),('night'),('sat'),('sun'),('bh')) bucket(name)
-        where coalesce(v_economic#>>array['bucket_minutes',bucket.name],'')!~'^[0-9]+
+        where coalesce(v_economic#>>array['bucket_minutes',bucket.name],'')!~'^[0-9]+$'
 
-           or coalesce(v_economic#>>array['hours',bucket.name],'')!~'^[+-]?[0-9]+([.][0-9]+)?
+           or coalesce(v_economic#>>array['hours',bucket.name],'')!~'^[+-]?[0-9]+([.][0-9]+)?$'
 
-           or coalesce(v_economic#>>array['pay_rates',bucket.name],'')!~'^[+]?[0-9]+([.][0-9]+)?
+           or coalesce(v_economic#>>array['pay_rates',bucket.name],'')!~'^[+]?[0-9]+([.][0-9]+)?$'
 
-           or coalesce(v_economic#>>array['charge_rates',bucket.name],'')!~'^[+]?[0-9]+([.][0-9]+)?
+           or coalesce(v_economic#>>array['charge_rates',bucket.name],'')!~'^[+]?[0-9]+([.][0-9]+)?$'
 
            or (v_economic#>>array['pay_rates',bucket.name])::numeric<=0
            or (v_economic#>>array['charge_rates',bucket.name])::numeric<=0
