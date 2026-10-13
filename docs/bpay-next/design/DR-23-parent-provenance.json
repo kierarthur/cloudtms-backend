@@ -1,0 +1,91 @@
+{
+  "card": "DR-23 seq150",
+  "output": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+  "parents": [
+    {
+      "signature": "private.bpay_next_accept_simple_paye_net_v1(uuid,uuid,numeric)",
+      "finalPhysical": "supabase/repeatable/04102026_0100_banking_pay_next_paye_net_intake_v1.sql",
+      "fileSha256": "74a1a562af0463910724c28375aa7c6ce7054405607dd975e3490bdfe63caec9",
+      "statementSha256": "cb74779d068d6a69e9985364a27f457dc20d35dddd42a71c3f10fac94fd3888f"
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "fileSha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456",
+      "statementSha256": "027d83f48c22382b5ce89dc02aaed5c73d13624f2c3281392022d8dc3be31f81"
+    },
+    {
+      "signature": "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "b0ac27b4629b4a5387924e3feb9085215c162f8733dbb8cca2e8a535ba3a0c8f"
+    },
+    {
+      "signature": "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "eb3cd095d292aff7293097b6b4bd2fdadbee6af02d14e3b9d7352397ec0dc4ac"
+    },
+    {
+      "signature": "private.bpay_next_begin_case_transfer_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "3414ac894eecdfc3c302b3b8a5986a520da71536d4894d6c7402d6c373687eb0"
+    },
+    {
+      "signature": "private.bpay_next_stage_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "095cb06ebe677f4d87ab9af08392117056a35df926cf74ce54f3688480eae389"
+    },
+    {
+      "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "38e2e2706b413f7941b6c6768b14cb5f7c9598a14d3911853123d230fb71db79"
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/13102026_1455_banking_pay_next_stored_credit_page_dispatch_v1.sql",
+      "fileSha256": "b92bfe45d52de9a6b1dcb6fd960db1d1c1864b186ed05dce6b48b7cda07a2618",
+      "statementSha256": "cf8ce062beda5f667b96d6f5933c8adeaf98540c0c1f78b06099b7e31182253d"
+    },
+    {
+      "signature": "private.bpay_next_validate_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "fileSha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb",
+      "statementSha256": "f7f940eaef78199f0d17a6cf5881f8037466b501f54910de6687ec7a1b0441ea"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_paye_net_entry_in_progress_v1(uuid)",
+    "private.bpay_next_accept_simple_paye_net_v1(uuid,uuid,numeric,uuid)",
+    "private.bpay_next_accept_simple_paye_net_v1(uuid,uuid,numeric)",
+    "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)",
+    "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)",
+    "private.bpay_next_begin_case_transfer_v1(uuid,uuid)",
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_paye_net_capacity_v1(numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric)",
+    "private.bpay_next_paye_net_cash_v1(numeric,numeric,numeric)",
+    "private.bpay_next_paye_net_preview_v1(uuid,uuid,numeric,jsonb,integer)",
+    "private.bpay_next_stage_case_net_page_v1(uuid,integer)",
+    "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint,bigint)",
+    "private.bpay_next_validate_case_net_page_v1(uuid,integer)",
+    "private.bpay_next_net_capacity_revision_v1()"
+  ],
+  "note": "Actual latest parents retained; pure capacity/cash extraction only in staged/apply owners, private write-free bounded preview, original public read branch and audit/admission hunks.",
+  "versionSupport": {
+    "migration": "supabase/migrations/13102026_1706_banking_pay_next_paye_net_preview_version.sql",
+    "tables": [
+      "finance_case",
+      "case_component",
+      "case_period",
+      "case_hold",
+      "case_capacity_use",
+      "worker_week_contribution"
+    ],
+    "decision": "BD182 constant optimistic economic-input generation only; native precommit refusal, not a new fence/protocol or allocator"
+  }
+}
