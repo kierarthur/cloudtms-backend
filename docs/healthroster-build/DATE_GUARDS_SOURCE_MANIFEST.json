@@ -1,0 +1,248 @@
+{
+  "formatVersion": 1,
+  "status": "SOURCE_READY_FOR_ROOT_REVIEW_NOT_INSTALLED",
+  "scope": [
+    "WP-F9",
+    "WP-F8"
+  ],
+  "worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-date-guards-build-13102026",
+  "branch": "codex/healthroster-v2-date-guards-build-13102026",
+  "baseCommit": "83547d19a4e8407d5a330849f0e82736c33e48de",
+  "sourceTests": {
+    "ordinary": {
+      "command": "npm test",
+      "passed": 1523,
+      "failed": 0,
+      "stdoutSha256": "f57a7d66be29f09d92fe01147911905da9e6ac678f33dad60e91275d41a9c137"
+    },
+    "coverageUpload": {
+      "command": "node --test tests/weekly-source/coverage-warnings.test.mjs tests/weekly-source/weekly-source-upload-publication-owner.test.mjs tests/weekly-source/weekly-source-upload-publication-contract.test.mjs",
+      "passed": 35,
+      "failed": 0,
+      "qualification": "Earlier coverage count 7 before two route cases; latest all 15 new F8 cases included ordinary 1523 suite."
+    },
+    "focusedContractCoverage": {
+      "passed": 33,
+      "failed": 0
+    },
+    "focusedRouteContractCoverage": {
+      "passed": 51,
+      "failed": 0
+    }
+  },
+  "sourceChecks": {
+    "workerSourceBundle": "PASS (esbuild only, no Wrangler/deployment)",
+    "syntax": "PASS",
+    "diffWhitespace": "PASS",
+    "databaseSourceIntegrity": {
+      "passed": true,
+      "migrations": 295,
+      "repeatables": 807
+    }
+  },
+  "qualifiedInputs": [
+    {
+      "path": "root/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "mode": "READ_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/30092026_2052_weekly_source_import_preparation_v1.sql",
+      "sha256": "c028807b7b9544b2a19caf29657c5546320fed6840ed28e898d38396d03d2103",
+      "mode": "READ_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2",
+      "mode": "READ_ONLY"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b",
+      "mode": "READ_ONLY"
+    }
+  ],
+  "privateOwnerOnlySignatures": [
+    "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)",
+    "private.weekly_source_final_upload_gate_v1(uuid)",
+    "private.weekly_source_final_upload_assert_v1(uuid)",
+    "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_context_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_floor_assert_v1(uuid,uuid,text,date)"
+  ],
+  "verificationFilesToAdd": [
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql"
+  ],
+  "newVerificationFilesToAdd": [
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql"
+  ],
+  "pending": [
+    "Root review and source integration preserving current PP/Credit/Bank/F1/report/money owners",
+    "G1 unconditional group-before-cycle shared engine and report union",
+    "FIN assertion and ordinary/combined producer grey-line hunks",
+    "New report exact timing arm (weekly report coverage exempt)",
+    "Final ACL/private-helper and release JSON union",
+    "Actual installed SQL/helper/runtime/security/NEW/UPGRADE proof",
+    "Exact-client floor through disable and dated membership proof",
+    "Concurrent CURRENT-revision group-move proof",
+    "Real Contract service count/pages and UI date refusal proof",
+    "Actual Office warnings and grey-line proof",
+    "Off-PC complete source backup before protected TEST publication"
+  ],
+  "boundaries": {
+    "committed": false,
+    "pushed": false,
+    "deployed": false,
+    "dbCalls": false,
+    "docker": false,
+    "hostedMutation": false,
+    "secretOrAuthReads": false,
+    "realEmail": false
+  },
+  "files": [
+    {
+      "path": "broker/src/contract-worked-date-guard.js",
+      "sha256": "e4906fdec7fdc1753df177ff1f33772bed3006cd28d286a06557f72f1911eee3",
+      "lfSha256": "e4906fdec7fdc1753df177ff1f33772bed3006cd28d286a06557f72f1911eee3",
+      "bytes": 12022
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "1b82d393794ac1d73dad5c9f99ba52eb87b810948ca3d15e3acf9226736150e4",
+      "lfSha256": "1b82d393794ac1d73dad5c9f99ba52eb87b810948ca3d15e3acf9226736150e4",
+      "bytes": 8943915
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "lfSha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "bytes": 3588
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "sha256": "59f97acb2aae4181fbf244b8cd3f44b4c499cae288d2917293f5baceb3f96a2a",
+      "lfSha256": "59f97acb2aae4181fbf244b8cd3f44b4c499cae288d2917293f5baceb3f96a2a",
+      "bytes": 49687
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "sha256": "19f97e2782afd7bdf1782310672968e32b3fb57fd9ba336f06502cca387c6918",
+      "lfSha256": "19f97e2782afd7bdf1782310672968e32b3fb57fd9ba336f06502cca387c6918",
+      "bytes": 47372
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "b698e931be3202797b2f2c865c9e70216ff0b0c0b200c299139e4d30eabfdba3",
+      "lfSha256": "b698e931be3202797b2f2c865c9e70216ff0b0c0b200c299139e4d30eabfdba3",
+      "bytes": 17463
+    },
+    {
+      "path": "docs/healthroster-build/F8_INTEGRATION_HUNKS.md",
+      "sha256": "3ed3eba6e5ee0c9e719a65813144d0014d6e0892430cd58175b0c33119cdffdd",
+      "lfSha256": "3ed3eba6e5ee0c9e719a65813144d0014d6e0892430cd58175b0c33119cdffdd",
+      "bytes": 7568
+    },
+    {
+      "path": "docs/healthroster-build/F8_WORKER_INTEGRATION.diff",
+      "sha256": "4ac90bd542640dcb2c8b1f718cd4fcb5acf01ab183510e85ef6a74916506de01",
+      "lfSha256": "4ac90bd542640dcb2c8b1f718cd4fcb5acf01ab183510e85ef6a74916506de01",
+      "bytes": 5900
+    },
+    {
+      "path": "docs/healthroster-build/F9_INDEX_INTEGRATION.diff",
+      "sha256": "8e407f863d2a321350c144804c36909a768074b29451269df4171f369dce33c6",
+      "lfSha256": "8e407f863d2a321350c144804c36909a768074b29451269df4171f369dce33c6",
+      "bytes": 7724
+    },
+    {
+      "path": "docs/healthroster-build/WP_DATE_GUARDS_IMPLEMENTATION.md",
+      "sha256": "d73e14ebfce35cb310dc1fa08cc21e44076e860c4f79a70f6e0e4be0aca7080f",
+      "lfSha256": "d73e14ebfce35cb310dc1fa08cc21e44076e860c4f79a70f6e0e4be0aca7080f",
+      "bytes": 4796
+    },
+    {
+      "path": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3",
+      "lfSha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3",
+      "bytes": 16849
+    },
+    {
+      "path": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b",
+      "lfSha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b",
+      "bytes": 19824
+    },
+    {
+      "path": "supabase/repeatable/13102026_1404_weekly_source_import_preparation_timing_guard_v1.sql",
+      "sha256": "39ca3506b77ed6f70ac7ec5c7d57f66ce314b5977ce2baa6aa2ee96d88dd0b66",
+      "lfSha256": "39ca3506b77ed6f70ac7ec5c7d57f66ce314b5977ce2baa6aa2ee96d88dd0b66",
+      "bytes": 3760
+    },
+    {
+      "path": "supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+      "sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e",
+      "lfSha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e",
+      "bytes": 25356
+    },
+    {
+      "path": "supabase/repeatable/13102026_1412_weekly_source_upload_stage_coverage_floor_v1.sql",
+      "sha256": "ee33fbe66c4f9beb9cd136c3207d5a7eebc7986e718b2e0a25972b61cdb27c96",
+      "lfSha256": "ee33fbe66c4f9beb9cd136c3207d5a7eebc7986e718b2e0a25972b61cdb27c96",
+      "bytes": 32766
+    },
+    {
+      "path": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "sha256": "e9f6b32d9db46f5bc6278cd35a5b06e6602a8bc97ab8e546f184c8d73fe123c8",
+      "lfSha256": "e9f6b32d9db46f5bc6278cd35a5b06e6602a8bc97ab8e546f184c8d73fe123c8",
+      "bytes": 3405
+    },
+    {
+      "path": "tests/contract-worked-date-guard.test.js",
+      "sha256": "fdbb1658d9cdeb4367f9d45fedf80db065397343c44bab70fa09c12c17316017",
+      "lfSha256": "fdbb1658d9cdeb4367f9d45fedf80db065397343c44bab70fa09c12c17316017",
+      "bytes": 143
+    },
+    {
+      "path": "tests/contract-workflow-safety.test.js",
+      "sha256": "8bbc7550e0acbdeecf53d186c56b9b9f49c68cf112c3d243abd17fb9f67e8017",
+      "lfSha256": "8bbc7550e0acbdeecf53d186c56b9b9f49c68cf112c3d243abd17fb9f67e8017",
+      "bytes": 9328
+    },
+    {
+      "path": "tests/contracts/contract-edit-worked-date-guard.test.mjs",
+      "sha256": "383906f3bda0365176c4d5508c5eacc5c77f8a325e2eedbd50780dabe767437c",
+      "lfSha256": "383906f3bda0365176c4d5508c5eacc5c77f8a325e2eedbd50780dabe767437c",
+      "bytes": 18814
+    },
+    {
+      "path": "tests/weekly-source-timing-coverage.test.js",
+      "sha256": "424da2ac0985a3d98b691de7809e6081b2a1abea1cc0d24c440c265df480b337",
+      "lfSha256": "424da2ac0985a3d98b691de7809e6081b2a1abea1cc0d24c440c265df480b337",
+      "bytes": 184
+    },
+    {
+      "path": "tests/weekly-source/coverage-warnings.test.mjs",
+      "sha256": "3837159077109e0b9b9667fe44d2689ca368da4337cb43b2e797b66476408260",
+      "lfSha256": "3837159077109e0b9b9667fe44d2689ca368da4337cb43b2e797b66476408260",
+      "bytes": 8165
+    },
+    {
+      "path": "tests/weekly-source/f8-admission-vectors.sql",
+      "sha256": "904c178e542156a364825fe35b8f075573d65ad1fd0c6812e58b1a6619df9562",
+      "lfSha256": "904c178e542156a364825fe35b8f075573d65ad1fd0c6812e58b1a6619df9562",
+      "bytes": 3898
+    },
+    {
+      "path": "tests/weekly-source/fixtures/f8-client-save-f1-input.txt",
+      "sha256": "5ab29f4e14afcfe462c8a2811b3d384eb855a925e1dbb2e86b99010023f35827",
+      "lfSha256": "5ab29f4e14afcfe462c8a2811b3d384eb855a925e1dbb2e86b99010023f35827",
+      "bytes": 17187
+    },
+    {
+      "path": "tests/weekly-source/timing-coverage-source-contract.test.mjs",
+      "sha256": "a676479e7e59a280988e4460ae9fe2165161ec5340505302e846fc24fde1c3ea",
+      "lfSha256": "a676479e7e59a280988e4460ae9fe2165161ec5340505302e846fc24fde1c3ea",
+      "bytes": 5848
+    }
+  ]
+}

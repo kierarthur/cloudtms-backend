@@ -1,4 +1,5 @@
 import { XLSX_BINARY64_SAME_VALUE_PENCE_V1 } from './money.js';
+import { assertWeeklySourceCoverageFloor } from './coverage-warnings.mjs';
 
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
 const HEALTHROSTER = new Set([
@@ -319,6 +320,7 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       fatalErrors: parsed?.fatalErrors ?? [],
     });
   }
+  assertWeeklySourceCoverageFloor(parsed, body, context);
   const physicalRows = classifications(parsed);
   if (physicalRows.length !== Number(parsed.selectedWorksheet?.physicalOrdinalSpan ?? 0)) {
     fail('WEEKLY_SOURCE_PHYSICAL_CENSUS_INCOMPLETE', 'The source row census is incomplete.');

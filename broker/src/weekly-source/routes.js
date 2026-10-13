@@ -746,12 +746,14 @@ async function handleUploadPreview(req, env, dependencies, user) {
   const { fileKey, bytes } = await loadUploadBytes(body, env, dependencies);
   let parsed;
   let acceptContext = {};
+  let coverageWarnings;
   if (typeof dependencies.previewUpload === 'function') {
     const result = await dependencies.previewUpload({
       body, bytes, actor: user, env, fileKey, parseWeeklySourceFile,
     });
     parsed = result?.parsed;
     acceptContext = result?.accept_context ?? {};
+    coverageWarnings = result?.coverage_warnings;
   } else {
     const parserOptions = plainObject(body.parser_options ?? {}, 'WEEKLY_SOURCE_PARSER_OPTIONS_INVALID', 'Source options');
     parsed = await parseWeeklySourceFile(bytes, parserOptions);
@@ -765,6 +767,7 @@ async function handleUploadPreview(req, env, dependencies, user) {
     file_key: fileKey,
     preview: parsed,
     accept_context: acceptContext,
+    ...(coverageWarnings === undefined ? {} : { coverage_warnings: coverageWarnings }),
   });
 }
 
@@ -953,6 +956,25 @@ async function runModeAAuthorisationFollowUp(dependencies, env, actorUserId, app
 function routeErrorResponse(error) {
   const busy = bpayBusyEnvelope(error);
   if (busy) return jsonResponse(busy.status, busy.body);
+  // Only the declared F8 refusals use their purpose-bound SQL detail as product
+  // wording. Unrelated RPC errors retain the established transport verbatim.
+  const f8Code = String(error?.json?.message || error?.code || '');
+  const f8Messages = {
+    WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID: 'The final file could not be checked. Refresh the import before trying again.',
+    WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE: 'The import period could not be checked. Refresh the upload before trying again.',
+    WEEKLY_SOURCE_CLIENT_GROUP_HAS_CURRENT_FINAL_REVISION: 'This client has a finalised report in its current group and cannot be moved.',
+  };
+  const f8Patterns = {
+    WEEKLY_SOURCE_FINAL_FILE_UPLOADED_TOO_EARLY: /^The final file can be uploaded from (?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday) [0-2]\d:[0-5]\d \(\d{2}\/\d{2}\/\d{4}\)\.$/,
+    WEEKLY_SOURCE_FINAL_FILE_COVERAGE_INCOMPLETE: /^(?:Upload an export covering the whole week\.|The current file covers \d{2}\/\d{2}\/\d{4}–\d{2}\/\d{2}\/\d{4} only\. Upload an export covering the whole week\.)$/,
+    WEEKLY_SOURCE_COVERAGE_BEFORE_RULE_SET: /^Import coverage starts from \d{2}\/\d{2}\/\d{4}, the first week using these settings\.$/,
+  };
+  if (Object.hasOwn(f8Messages, f8Code) || Object.hasOwn(f8Patterns, f8Code)) {
+    const detail = String(error?.json?.details || error?.message || '');
+    return jsonResponse(409, { ok: false, error_code: f8Code,
+      message: f8Messages[f8Code] || (f8Patterns[f8Code].test(detail) ? detail
+        : 'The final file could not be checked. Refresh the import before trying again.') });
+  }
   if (error instanceof WeeklySourceRouteError) {
     return jsonResponse(error.status, {
       ok: false,

@@ -4,6 +4,7 @@ import { qualifyWeeklySourceContract } from './contract-qualification.js';
 import { canonicalWeeklyShiftFinancialSegment } from './weekly-rate-owner.js';
 import { compareWeeklySourceShiftPrice } from './source-price-comparator.js';
 import { buildWeeklySourceCanonicalEconomicSnapshot } from './economic-snapshot.js';
+import { weeklySourceCoverageWarnings } from './coverage-warnings.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
@@ -751,6 +752,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
       return {
         parsed,
         context,
+        ...(context.coverage_context == null ? {} : { coverage_warnings: weeklySourceCoverageWarnings(parsed, body, context) }),
         accept_context: {
           source_group_id: context.source_group_id,
           source_cycle_id: context.source_cycle_id,
@@ -758,6 +760,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           client_id: context.client_id ?? null,
           authority_scope_version: context.authority_scope_version,
           previous_coverage: context.previous_coverage ?? null,
+          ...(context.coverage_context == null ? {} : { coverage_context: context.coverage_context }),
         },
       };
     },
