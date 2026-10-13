@@ -12,4 +12,3 @@ No fixtures, business rows, real caller/queue/payments, producer/legacy mutation
 - Existing acceptance receipt remains pending until the exact Case/Candidate point and affected Cases refresh succeed. Empty current stored list, hidden reply, failed parent read or failed Case point cannot prove completion. Confirmed Case/result remains honest after return to the window.
 
 Reuse one owner-authorised joined receipt for overlapping exact clauses at rolling TEST acceptance; never build a separate fixture/proof programme. Later own/external allocation, floor, frozen Draft, execution, receipt and advice clauses belong XD03–06/EX cards. Timing remains the owner-approved TEST-after-install Create Draft check only; no local300Timesheet dataset.
-
