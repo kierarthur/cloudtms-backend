@@ -13,7 +13,7 @@
   "reviews": [
     {
       "path": "docs/bpay-next/reviews/WB-29-ready-screen-policy-review.md",
-      "sha256": "47b1d1e48c0797bcac29b86946358cdd98ecc0d1821ff37bea94c49385e59487"
+      "sha256": "f4ebb9414af3cf2c3ac5d39dbf5f88bfc72e4fd08a4627b00f439a8a9d8efd3d"
     },
     {
       "path": "docs/bpay-next/reviews/WB-29-ready-final-Office-source-review.md",
@@ -35,5 +35,6 @@
     "sequence": 141,
     "item": "WB-30"
   },
-  "scope": "Complete WB29 card and assigned WB45 consumer joins; later WB30–34/CM owners untouched; F25 parked files untouched"
+  "scope": "Complete WB29 card and assigned WB45 consumer joins; later WB30–34/CM owners untouched; F25 parked files untouched",
+  "documentationCompletionCommit": "6196b66b42c9be115b797a168923fb58a6894a34"
 }

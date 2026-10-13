@@ -160,7 +160,7 @@ Source review of the final nonwork Status repair confirms it calls the existing 
 
 ### Provenance and evidence limits
 
-Backend source checkpoint: `d23544f600187821ca24195a09a78648bdcc9c4e`. Frontend HEAD at hash capture: `f0d71fa73b038a95f81086ba84a3e55fb98c6f4e`; the final scoped Workbench/CSS/index changes are saved working bytes, identified below. The original Office and modal modernisation hashes are dependencies, not a claim to re-review all their unrelated code. All images are root-produced actual native Office renders with bounded local fixed read responses; no database rows, hosted reads or financial actions are acceptance evidence. Business dispatch, joined original Timesheet/Draft/CSV/Snooze journeys, hundreds-row performance and whole WB29 completion remain NOT_RUN/open.
+Backend source checkpoint: `d23544f600187821ca24195a09a78648bdcc9c4e`. Final frontend product commit: `f0d71fa73b038a95f81086ba84a3e55fb98c6f4e`; root confirms the committed bytes are the exact reviewed Workbench/CSS/index bytes below. The original Office and modal modernisation hashes are dependencies, not a claim to re-review all their unrelated code. All images are root-produced actual native Office renders with bounded local fixed read responses; no database rows, hosted reads or financial actions are acceptance evidence. Business dispatch, joined original Timesheet/Draft/CSV/Snooze journeys, hundreds-row performance and whole WB29 completion remain NOT_RUN/open.
 
 | Saved frontend source | SHA-256 |
 |---|---|
@@ -191,3 +191,17 @@ All 15 current PNGs below were individually viewed; actual/design pairs were ope
 | WB29-main-dark.png | D73F1BF57ECAEE650B20375BE019BADACA0797F8D1943A317A1172FBEF6723AF |
 | WB29-main-device-light.png | AF1FA86241908F2D76EA5284633554F4C33536CC00A5CD4BEC515E44F018EE3C |
 | WB29-main-phone-dark.png | E8D55B245984D93F3A9A259CB9EBB9261C019F5B4902288F0B73C64530AD68F5 |
+
+Root subsequently packaged byte-identical copies into the appropriate `SCR-02/WB29`, `SCR-04/WB29`, `SCR-09/WB29` and `SCR-10/WB29` folders, preserving prior review history. Their mapping is `SCR-09/WB29/capture-manifest.json`, SHA-256 `6C95ADE586EC7BBF7702ED83B37B6278C986EE4A304C8AF8E4AA3B3670433BF3`; the image hashes above are the approval identity, independent of the packaging path.
+
+Read-only design/policy identities:
+
+| Pack source | SHA-256 |
+|---|---|
+| SCREEN_DESIGN_POLICY.md | 8BC212B174469236F2B46DBF70EADC3664A946636458321CD3C77B7146323DE5 |
+| tools/policy.json | 45036D841D4568AA2D4D7ADF4F063D6D17B70288E289EE0B285068797A87369D |
+| png/T01_ready_list_dark.png | BA3D7A1D0BECD5B0C7209AC75E538958D87807A68B7CAC33482DF11B629D7B96 |
+| png/T06_phone_ready_phone_dark.png | B8E264DE363D85C194051BB143748AF13643E7A799AEF34A304F10850FD6BCA8 |
+| png/SCR-09c_candidate_rate_set_ready_dark.png | 0737858F1C3344261A539590F522ABB4E257088E06F5A82323D16660A6E82591 |
+| png/T02_candidate_window_dark.png | 3A3AEB0CA222430471684957C5525DB611353AEC5AF27578642D508B5345ADE8 |
+| png/SCR-02_filters_dark.png | BF940AAFEFC8DDBBB8EFC875D988EF35DBE82B2AFC2C42599789EAF34F07148E |
