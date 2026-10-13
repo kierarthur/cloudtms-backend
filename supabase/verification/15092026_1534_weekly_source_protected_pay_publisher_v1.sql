@@ -24,13 +24,13 @@ insert into public.tms_users(
   id,email,role,is_active,password_hash,payment_authoriser
 ) values (
   'e1000000-0000-4000-8000-000000000001','protected-owner@example.test',
-  'admin',true,'not-a-login',true
+  'admin',true,'not-a-login',false
 );
 insert into public.tms_users(
   id,email,role,is_active,password_hash,payment_authoriser
 ) values (
-  'e1000000-0000-4000-8000-000000000002','ordinary-admin@example.test',
-  'admin',true,'not-a-login',false
+  'e1000000-0000-4000-8000-000000000002','unflagged-user@example.test',
+  'user',true,'not-a-login',false
 );
 insert into public.clients(id,name)
 values ('e1000000-0000-4000-8000-000000000003','Protected Roster Client');

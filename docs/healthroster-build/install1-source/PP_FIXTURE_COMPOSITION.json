@@ -1,0 +1,39 @@
+{
+  "status": "SOURCE_FIXTURES_ONLY",
+  "old": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92",
+  "pp": "547c74da5f0a05b09297c042bc7f3cc0c0105b85",
+  "patchSha256": "9146a23b884bef5413192e512c07e15ec6312a44c6d4b606eabe307fa07ac855",
+  "records": [
+    {
+      "file": "tests/weekly-source/weekly-source-routes.test.mjs",
+      "beforeSha256": "87ce7542cda9743705815d1bcfeac9972a6ee5e72d8ae6db0199d194603d445e",
+      "afterSha256": "8a3641afd6820d2d5f2783eddc98cc50a1d92d25779bc634660387918c0ce048"
+    },
+    {
+      "file": "tests/weekly-source/weekly-source-settings-routes.test.mjs",
+      "beforeSha256": "4754336179b5e30de1f960d583dc7b87326e1005d6c2b13d6a5b977ac9241764",
+      "afterSha256": "03365d16538afc7604b7d2d75b54f85485c277df7a779b854f3e30eb4e000c26"
+    },
+    {
+      "file": "tests/weekly-source/weekly-source-report-real-owner.test.mjs",
+      "beforeSha256": "d1775e4514ad11b17e7e11fb468e153cb458ce7ac42bc27829d5d3f8a774213c",
+      "afterSha256": "d7ff3c459f6111534f84fbad6c8eb8718ab21031cda85b0e04193527bd6d7f19"
+    },
+    {
+      "file": "tests/weekly-source/weekly-source-office-presentation-integration.test.mjs",
+      "beforeSha256": "9a914945c68a2b10f7d42aee58a53cb335fc539c3118ebe04abf2fbb4e89881a",
+      "afterSha256": "8572a4cdcafba175c723ee7ed1cdf2d3c19ab5b9a53da15ab9ab488c1ff26762"
+    },
+    {
+      "file": "tests/weekly-source/protected-action-orchestrator.test.mjs",
+      "beforeSha256": "456286d6bf0b6fb04b990696ab591341d48e5463e54e6f2bb61302adb8decc8b",
+      "afterSha256": "456286d6bf0b6fb04b990696ab591341d48e5463e54e6f2bb61302adb8decc8b"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "beforeSha256": "f84a4d6e56572e2ecd3e6a687a110f387a3be59a43440194cffb2061a4363420",
+      "afterSha256": "1cb06489bfd0871f9f82e0bba62c782265d5f97aa07a5754a91cf4a587af64c0"
+    }
+  ],
+  "purpose": "Current-row active fixtures; unflagged admin positive and unflagged non-admin refusal. Native publisher assertions and Banking successor tests retained."
+}

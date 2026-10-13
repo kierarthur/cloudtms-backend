@@ -1,0 +1,304 @@
+{
+  "status": "SOURCE_INPUTS_ONLY_NOT_COMPOSED_OR_INSTALLABLE",
+  "predecessor": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "original": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92",
+  "proposed": "547c74da5f0a05b09297c042bc7f3cc0c0105b85",
+  "inventory": {
+    "migrations": 389,
+    "repeatables": 1018
+  },
+  "originalPpRootSha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae",
+  "rows": [
+    {
+      "signature": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "new": true,
+      "proposedDefinitionSha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "currentFinal": {
+        "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+        "physical": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+        "closureSha256": "d58b576d1b1d5b8f10b6cd9c5b5694b9ab585ef00cee9cbd206f7ba6a89aa35a"
+      },
+      "originalDefinitionSha256": "8d86bbfe8226f2eb567b4aa5cbaa0088d0cbf9ed15e7f40c2e88bc69ce774793",
+      "proposedDefinitionSha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "currentDefinitionSha256": "8d86bbfe8226f2eb567b4aa5cbaa0088d0cbf9ed15e7f40c2e88bc69ce774793",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/private_weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/private_weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/private_weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_unknown_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_record_c1_unknown_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "closureSha256": "b05ece1e284c24c683c440af77eb6969aed074a8f0b327fd9eeaebb7966e1728"
+      },
+      "originalDefinitionSha256": "68ed57e630441e551c2415e51a8b28e840b939d9240ac51b352b81211db75d80",
+      "proposedDefinitionSha256": "f2daf22b79ef047ca7e96ac2da0973b7f1640dcd097d5dfb404a66fccacd4c38",
+      "currentDefinitionSha256": "68ed57e630441e551c2415e51a8b28e840b939d9240ac51b352b81211db75d80",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_unknown_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_unknown_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_unknown_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_checkpoint_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_record_c1_checkpoint_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "closureSha256": "b05ece1e284c24c683c440af77eb6969aed074a8f0b327fd9eeaebb7966e1728"
+      },
+      "originalDefinitionSha256": "c6a82ebec8a57cb7d05e81c86bb911bb309d1b0a91105b4122c486e15ee10450",
+      "proposedDefinitionSha256": "aeecedadd9e1403e45daa084bf2ec987c399af698d968ac8cb0179380aad3d6b",
+      "currentDefinitionSha256": "c6a82ebec8a57cb7d05e81c86bb911bb309d1b0a91105b4122c486e15ee10450",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_checkpoint_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_checkpoint_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_checkpoint_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_recovery_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_record_c1_recovery_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "closureSha256": "b05ece1e284c24c683c440af77eb6969aed074a8f0b327fd9eeaebb7966e1728"
+      },
+      "originalDefinitionSha256": "ca650640ab1c01d690d05039fff483b9a0df71e3335cdda15336630d76bd3ae0",
+      "proposedDefinitionSha256": "0625bb172792e82aac4a80031a48803749970e0445416b4fa985587006fd0cf1",
+      "currentDefinitionSha256": "ca650640ab1c01d690d05039fff483b9a0df71e3335cdda15336630d76bd3ae0",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_recovery_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_recovery_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_record_c1_recovery_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_read_c1_request_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_read_c1_request_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "closureSha256": "b05ece1e284c24c683c440af77eb6969aed074a8f0b327fd9eeaebb7966e1728"
+      },
+      "originalDefinitionSha256": "450abdc5fe2894811694d3b3a01dc765b07e7a6cd349c2ecce884156450cf4ef",
+      "proposedDefinitionSha256": "5206010402046122790837675b5c212f7f073d67e5b4a4c3dfcd288352406e80",
+      "currentDefinitionSha256": "450abdc5fe2894811694d3b3a01dc765b07e7a6cd349c2ecce884156450cf4ef",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_read_c1_request_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_read_c1_request_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_read_c1_request_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_c1_publication_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_complete_c1_publication_v1(jsonb)",
+        "physical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "root": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "closureSha256": "c6654540464369fc0d3be1f2eb87900f95571919a5a3e795c1de0b39ab7b8049"
+      },
+      "originalDefinitionSha256": "7571a944a79d86bc98474eebda6b0b19415e0c7d20f9f964af904913032ac908",
+      "proposedDefinitionSha256": "ff364714f04710665c59196537dad7466f9989ecb44d5eefd4d6620d69218b5e",
+      "currentDefinitionSha256": "1ea853b18f55875eeeb9aaded7fc76b6afa0e563ea77cd01fbc6a7680c6d1ff7",
+      "currentEqualsOriginal": false,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_c1_publication_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_c1_publication_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_c1_publication_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "closureSha256": "46a1e75159da47f4c8d511d9c87b5ba8d9c20a6e7f63c0c5983c2f683b4180cc"
+      },
+      "originalDefinitionSha256": "502a5a6ce518c01f06050d26e751fe8a7f55e3cc7be3a441141e18ae79105f65",
+      "proposedDefinitionSha256": "6bdfb7ff5493272374a4584e9df4e20bb7707e8ee0e151da0ab8a683b544cdd9",
+      "currentDefinitionSha256": "502a5a6ce518c01f06050d26e751fe8a7f55e3cc7be3a441141e18ae79105f65",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_action_publication_status_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_action_publication_status_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_action_publication_status_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+        "physical": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "root": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "closureSha256": "4321fa0ef3428e36e30a5c47f72887b2bd2aec09ed686c47ecf67ec6b49b246c"
+      },
+      "originalDefinitionSha256": "f0ab0f97134b034f016d6d29ef92da4799f8992ea21400311249fa595755cfef",
+      "proposedDefinitionSha256": "0023259b8cc936d0324965499ce0a6ba85c363655b091a757b00f471e749b995",
+      "currentDefinitionSha256": "1186a3d5447152e55be5cb1e7dfce6641d86fee7a158404d3c720c2b879d910a",
+      "currentEqualsOriginal": false,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_local_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_local_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_exceptional_pay_complete_local_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "closureSha256": "7633e0905557de734af6ebd76944c9fa6259705c7e62d0eccb1d6e3f1e5ff444"
+      },
+      "originalDefinitionSha256": "bcc16d8455a7c3f55268f84f609040bbd0627e0f26a91bc5e43f8e5f15bfd699",
+      "proposedDefinitionSha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44",
+      "currentDefinitionSha256": "bcc16d8455a7c3f55268f84f609040bbd0627e0f26a91bc5e43f8e5f15bfd699",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_workspace_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_workspace_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_workspace_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_manual_review_open_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_manual_review_open_v1(jsonb)",
+        "physical": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "root": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "closureSha256": "4321fa0ef3428e36e30a5c47f72887b2bd2aec09ed686c47ecf67ec6b49b246c"
+      },
+      "originalDefinitionSha256": "830422e3766a343637c84ea108091ec73047d6d2dea547dfd9419ff041d90b82",
+      "proposedDefinitionSha256": "6d1de3eb487502c877c425bec5e66d86ededd8fddd22da43c9c1022e0c1fa63b",
+      "currentDefinitionSha256": "4eb5e114afdab960eb00e6132ad9fa2ab32b381f327e8fe35d5b81db5650443d",
+      "currentEqualsOriginal": false,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_manual_review_open_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_manual_review_open_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_manual_review_open_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+        "physical": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+        "root": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+        "closureSha256": "1ea079ea417c3750f214f30de0360af3a756f58c486751d5c146e588ded7c064"
+      },
+      "originalDefinitionSha256": "6f9122ef1ce8d854b48ac88696d06022561b8e03d23b26de52d628a710bb7899",
+      "proposedDefinitionSha256": "6af026b832ad16d2474a9dca510d12e95109ff88f7e8ef93122fb2f9a2844fa3",
+      "currentDefinitionSha256": "6f9122ef1ce8d854b48ac88696d06022561b8e03d23b26de52d628a710bb7899",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_authorise_scope_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_authorise_scope_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_authorise_scope_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+        "physical": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+        "root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+        "closureSha256": "f09814bf8b1f2386584bfef479fa2daccd1fa3e2b10f7f3903f998fa335fac42"
+      },
+      "originalDefinitionSha256": "cd24542b51718cd6fccc2a0c1577b100a864223188c6a61bdce63be561a76ed4",
+      "proposedDefinitionSha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121",
+      "currentDefinitionSha256": "cd24542b51718cd6fccc2a0c1577b100a864223188c6a61bdce63be561a76ed4",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_workspace_scopes_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_workspace_scopes_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_workspace_scopes_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_combined_review_workspace_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_combined_review_workspace_v1(jsonb)",
+        "physical": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+        "root": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+        "closureSha256": "f48f0cc364dda5af7cf15eaba64cec2ad5f6a6ce129e4cf297dd9b91caed34e4"
+      },
+      "originalDefinitionSha256": "ac877db6c95d2d91b0eb60342352cae03d36f11fde662be1925451d4f746cf52",
+      "proposedDefinitionSha256": "5d8b766785991b508a582b7ca80f82ac41a959f2866341e1ffcebd0891474b85",
+      "currentDefinitionSha256": "ac877db6c95d2d91b0eb60342352cae03d36f11fde662be1925451d4f746cf52",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_combined_review_workspace_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_combined_review_workspace_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_combined_review_workspace_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "closureSha256": "7633e0905557de734af6ebd76944c9fa6259705c7e62d0eccb1d6e3f1e5ff444"
+      },
+      "originalDefinitionSha256": "957f466a412bdace1169078e21016fda1173e98f795c7b84395141f90c1576b6",
+      "proposedDefinitionSha256": "a5fee7a92456ed515788d95782ff9de5678c49999b4595a4b757fe0faf24518c",
+      "currentDefinitionSha256": "957f466a412bdace1169078e21016fda1173e98f795c7b84395141f90c1576b6",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_timesheet_presentation_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_timesheet_presentation_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_timesheet_presentation_v1_jsonb_.sql.current"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_office_notifications_list_v1(jsonb)",
+      "originalPhysical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "currentFinal": {
+        "signature": "public.weekly_source_office_notifications_list_v1(jsonb)",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "closureSha256": "a528fd8eafc204b6d4779c374032900c2297a70bf7c53271d69ea2a5859f6eb9"
+      },
+      "originalDefinitionSha256": "c46e80c470fdb444970bc41969264076e193909d2fca379430576b1ef01d0f4d",
+      "proposedDefinitionSha256": "830aae6368dc1a20025b42dcdbd3bb5de95424efc48d1206a6945906b8e23b93",
+      "currentDefinitionSha256": "c46e80c470fdb444970bc41969264076e193909d2fca379430576b1ef01d0f4d",
+      "currentEqualsOriginal": true,
+      "completeDefinitionFiles": [
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_notifications_list_v1_jsonb_.sql.original",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_notifications_list_v1_jsonb_.sql.pp",
+        "docs/healthroster-build/install1-source/definitions/public_weekly_source_office_notifications_list_v1_jsonb_.sql.current"
+      ]
+    }
+  ],
+  "dynamicPatchReview": "Source final-definer scan does not replace canonical pg_get_functiondef and dynamic-patch verification. Read every controlling root and exact staged PG17 seal before installation."
+}

@@ -193,7 +193,8 @@
     "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
     "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
     "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
-    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql"
+    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
@@ -353,6 +354,7 @@
     "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
     "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
     "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
-    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql"
+    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql"
   ]
 }

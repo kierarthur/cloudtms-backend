@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { weeklySourceReportInternals } from '../../broker/src/index.js';
 
-const admin = async () => ({ id: '00000000-0000-4000-8000-000000000001', role: 'admin' });
+const admin = async () => ({ id: '00000000-0000-4000-8000-000000000001', role: 'admin', is_active: true });
 const env = { SUPABASE_URL: 'https://test.invalid' };
 
 function request(path) {

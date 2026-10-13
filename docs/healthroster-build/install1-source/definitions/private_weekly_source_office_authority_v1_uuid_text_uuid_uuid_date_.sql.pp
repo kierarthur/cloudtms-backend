@@ -1,0 +1,89 @@
+create or replace function private.weekly_source_office_authority_v1(
+  p_actor_user_id uuid,
+  p_operation text,
+  p_source_group_id uuid default null,
+  p_client_id uuid default null,
+  p_scope_date date default null
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_actor public.tms_users%rowtype;
+  v_operation text:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_operation,'')));
+  v_payment_operation boolean;
+  v_scope_date date:=coalesce(p_scope_date,current_date);
+  v_payload jsonb;
+begin
+  if p_actor_user_id is null or v_operation not in (
+    'OPEN_QUERY_NOTICE','VIEW_SOURCE_PROGRESS','VIEW_PAY_WORK','OPEN_PAY_QUERY','UPLOAD_SOURCE','SEAL_SOURCE',
+    'SUPERSEDE_SOURCE','RECHECK_SOURCE','ASK_CANDIDATES','SEND_MANAGER',
+    'RESEND_MANAGER','ACCEPT_SYSTEM_HOURS','FINALISE_WEEK',
+    'ADMIT_SOURCE_INVOICE','MOVE_SOURCE_INVOICE',
+    'APPROVE_PROTECTED_PAY','AMEND_PROTECTED_PAY','WITHDRAW_PROTECTED_PAY',
+    'RECORD_NOT_WORKED','RECONCILE_PROTECTED_PAY','CORRECT_FINAL_SOURCE'
+  ) then
+    raise exception 'WEEKLY_SOURCE_OFFICE_OPERATION_INVALID' using errcode='22023';
+  end if;
+
+  select * into v_actor
+  from public.tms_users
+  where id=p_actor_user_id;
+  if not found or not v_actor.is_active then
+    raise exception 'WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE' using errcode='42501';
+  end if;
+
+  v_payment_operation:=v_operation in (
+    'APPROVE_PROTECTED_PAY','AMEND_PROTECTED_PAY','WITHDRAW_PROTECTED_PAY',
+    'RECORD_NOT_WORKED','RECONCILE_PROTECTED_PAY','ACCEPT_SYSTEM_HOURS',
+    'OPEN_PAY_QUERY','VIEW_PAY_WORK'
+  );
+  if v_payment_operation then
+    if not private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) then
+      raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';
+    end if;
+  elsif v_operation<>'OPEN_QUERY_NOTICE'
+     and pg_catalog.lower(pg_catalog.btrim(coalesce(v_actor.role,'')))<>'admin' then
+    raise exception 'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED' using errcode='42501';
+  end if;
+
+  if p_source_group_id is not null and not exists(
+    select 1 from public.weekly_source_groups source_group
+    where source_group.id=p_source_group_id and source_group.active
+  ) then
+    raise exception 'WEEKLY_SOURCE_GROUP_NOT_ACTIVE' using errcode='22023';
+  end if;
+
+  if p_client_id is not null and (
+    p_source_group_id is null or not exists(
+      select 1
+      from public.weekly_source_group_clients membership
+      where membership.source_group_id=p_source_group_id
+        and membership.client_id=p_client_id
+        and v_scope_date between membership.valid_from
+          and coalesce(membership.valid_to,'infinity'::date)
+    )
+  ) then
+    raise exception 'WEEKLY_SOURCE_CLIENT_NOT_IN_GROUP' using errcode='22023';
+  end if;
+
+  v_payload:=pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor.id,
+    'actor_active',v_actor.is_active,
+    'actor_role',pg_catalog.lower(pg_catalog.btrim(coalesce(v_actor.role,''))),
+    'payment_authoriser',coalesce(v_actor.payment_authoriser,false),
+    'payment_golden_key',coalesce(v_actor.payment_golden_key,false),
+    'operation',v_operation,
+    'source_group_id',p_source_group_id,
+    'client_id',p_client_id,
+    'scope_date',v_scope_date
+  );
+  return v_payload || pg_catalog.jsonb_build_object(
+    'allowed',true,
+    'decision_fingerprint',pg_catalog.encode(
+      private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFFICE_AUTHORITY_V1',v_payload),
+      'hex'
+    )
+  );
+end;
+$function$;

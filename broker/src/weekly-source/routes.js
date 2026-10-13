@@ -4,6 +4,7 @@ import {
   recordGuardRefusalAfterRollback,
 } from './guard-refusal-record.mjs';
 import { bpayBusyEnvelope } from '../bpay-busy.js';
+import { isActivePaymentActor } from '../payment-actor-permission.js';
 import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs';
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 
@@ -142,6 +143,15 @@ const PROTECTED_ACTIONS = new Set([
   'RECORD_NOT_WORKED',
 ]);
 
+// R-234: Checklist readers join this view only when WP-U3 installs them. They
+// are deliberately absent from the RPC catalogue until that producer exists.
+const PAY_VIEW_COMMANDS = new Set([
+  'WORKSPACE_SCOPES', 'COMBINED_REVIEW_WORKSPACE', 'PROTECTED_EDITOR_CONTEXT',
+  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',
+  'ACCEPT_SYSTEM_HOURS', 'FIRST_AUTHORISE', 'WITHDRAW_FIRST_AUTHORISATION',
+  ...PROTECTED_ACTIONS,
+]);
+
 const FORBIDDEN_BROWSER_FINANCIAL_KEYS = new Set([
   'pay_ex_vat',
   'charge_ex_vat',
@@ -262,9 +272,16 @@ async function requireOfficeUser(req, env, dependencies) {
   if (typeof dependencies.requireUser !== 'function') {
     fail('WEEKLY_SOURCE_AUTHORITY_UNAVAILABLE', 'Weekly source access is unavailable.', 503);
   }
-  const user = await dependencies.requireUser(env, req, ['admin']);
+  const user = await dependencies.requireUser(env, req, []);
   if (!user?.id) fail('WEEKLY_SOURCE_AUTHENTICATION_REQUIRED', 'Sign in is required.', 401);
-  return { ...user, id: canonicalUuid(user.id, 'WEEKLY_SOURCE_ACTOR_INVALID', 'Office user') };
+  // These fields come from requireUser's current database row, never the body.
+  const actor = user;
+  if (actor.is_active !== true) fail('WEEKLY_SOURCE_AUTHENTICATION_REQUIRED', 'Sign in is required.', 401);
+  if (!isActivePaymentActor(actor)) {
+    fail('PAYMENT_PERMISSION_REQUIRED', 'Payment permission is required.', 403);
+  }
+  return { ...actor, id: canonicalUuid(user.id, 'WEEKLY_SOURCE_ACTOR_INVALID', 'Office user'),
+    payView: String(actor.role ?? '').trim().toLowerCase() !== 'admin' };
 }
 
 async function callRpc(dependencies, name, pRequest, timeoutMs = 45_000) {
@@ -473,6 +490,12 @@ async function handleSettingsPut(req, env, dependencies, user, kind, id = null) 
 
 async function handleWorkspace(req, env, dependencies, user) {
   const url = new URL(req.url);
+  if (user.payView) {
+    if (url.searchParams.has('tab') && url.searchParams.get('tab') !== 'queries') {
+      fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
+    }
+    url.searchParams.set('tab', 'queries');
+  }
   const result = await callRpc(
     dependencies,
     'weekly_source_office_workspace_v1',
@@ -574,6 +597,16 @@ async function handleCommand(req, env, ctx, dependencies, user) {
   const payload = plainObject(body.payload ?? {}, 'WEEKLY_SOURCE_COMMAND_INVALID', 'Command');
   assertNoBrowserFinancialFacts(payload);
   const request = { ...payload, actor_user_id: user.id };
+  if (user.payView) {
+    if (!PAY_VIEW_COMMANDS.has(action)
+        || (action === 'COMBINED_REVIEW_WORKSPACE' && (
+          (payload.tab != null && payload.tab !== 'queries')
+          || (payload.section != null && !['questions', 'checks', 'protected'].includes(payload.section))
+        ))) {
+      fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
+    }
+    if (action === 'COMBINED_REVIEW_WORKSPACE') request.tab = 'queries';
+  }
 
   if (action === 'LATER_CHANGE_DECISION') {
     const keys = ['schema_version', 'decision_bundle_id', 'bundle_revision',
@@ -1086,6 +1119,12 @@ export async function dispatchWeeklySourceRequest(req, env, ctx, dependencies = 
 
   try {
     const user = await requireOfficeUser(req, env, dependencies);
+    if (user.payView && !(
+      (req.method === 'GET' && [ `${officePrefix}/workspace`, `${officePrefix}/notifications` ].includes(path))
+      || (req.method === 'POST' && path === `${officePrefix}/commands`)
+    )) {
+      fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
+    }
     if (req.method === 'GET' && path === `${officePrefix}/workspace`) {
       return await handleWorkspace(req, env, dependencies, user);
     }

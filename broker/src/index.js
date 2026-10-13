@@ -117,6 +117,7 @@ import {
   displayedTimesheetRouteLabel
 } from './timesheet-route-sort.js';
 import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
+import { isActivePaymentActor } from './payment-actor-permission.js';
 import { createCandidateDailySpecialist, createCandidateDailyProjectionWake } from './candidate-daily-specialist.js';
 import {
   CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
@@ -74968,7 +74969,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const presentedDetailsPayload = await attachWeeklySourceOfficeTimesheetPresentation(
       env,
       candidatePresentedDetailsPayload,
-      user.id
+      user.id,
+      sbRpc,
+      user
     );
     const expenseWorkflowRoute = await resolveExpenseWorkflowRouteForPresentation(
       env,
@@ -75993,9 +75996,25 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
 
 
 
+async function weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user) {
+  if (user?.is_active !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  if (user.role === 'admin') return { ok: true, routing: null };
+  if (!isActivePaymentActor(user)) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  const routing = await weeklySourceAuthoriseRouting(
+    (functionName, args, options) => sbRpc(env, functionName, args, options),
+    currentTimesheetId, user.id
+  );
+  if (routing.refusal) return { ok: false, response: withCORS(env, req,
+    new Response(JSON.stringify({ error: routing.refusal.error_code,
+      error_code: routing.refusal.error_code, message: routing.refusal.message,
+      refresh_required: true }), { status: routing.refusal.status, headers: JSON_HEADERS })) };
+  if (routing.bound !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  return { ok: true, routing };
+}
+
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, internalOptions = null) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  const user = await requireUser(env, req, []);
+  if (!user || (user.role !== 'admin' && !isActivePaymentActor(user))) return withCORS(env, req, unauthorized());
 
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -76464,6 +76483,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  const sourcePayPermission = await weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user);
+  if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
       env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
@@ -76736,6 +76757,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
 
   const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
     action: 'UNAUTHORISE',
+    weeklySourcePaymentScope: sourcePayPermission.routing?.bound === true,
+    weeklySourcePaymentActor: user,
     requestedTimesheetId,
     currentTimesheetId: finalTimesheetId,
     currentVersion: rpcPayload.current_version ?? guard.resolved?.current_version ?? null,
@@ -85563,7 +85586,8 @@ async function attachWeeklySourceOfficeTimesheetPresentation(
   env,
   payloadInput,
   actorUserId,
-  rpc = sbRpc
+  rpc = sbRpc,
+  authenticatedActor = null
 ) {
   const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)
     ? { ...payloadInput }
@@ -85633,10 +85657,27 @@ async function attachWeeklySourceOfficeTimesheetPresentation(
         : {};
     // Pass through the exact server-owned category to existing detail/patch
     // shapes. Never infer physical archive state or action permission here.
-    const result = { ...payload, ...categoryFields, weekly_source_presentation: presentation };
+    // W16: scope comes from the exact service reader, actor from the current
+    // authenticated session. No supplied row/action/role can acquire permission.
+    const paymentAllowed = authenticatedActor?.id === actorId && isActivePaymentActor(authenticatedActor);
+    const actionState = presentation.action_state || {};
+    const hintsFor = (row) => {
+      const flags = row?.actions || {};
+      const retains = (name) => row?.[name] !== false && flags[name] !== false;
+      return {
+        can_authorise: paymentAllowed && actionState.authorise_allowed === true && retains('can_authorise'),
+        can_bulk_authorise: paymentAllowed && actionState.authorise_allowed === true && retains('can_bulk_authorise'),
+        can_unauthorise: paymentAllowed && actionState.unauthorise_allowed === true && retains('can_unauthorise'),
+      };
+    };
+    const actorHints = hintsFor(payload);
+    const result = { ...payload, ...categoryFields, ...actorHints, weekly_source_presentation: presentation,
+      actions: { ...(payload.actions || {}), ...actorHints } };
     for (const key of ['timesheet', 'data_row', 'row', 'effective']) {
       if (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key])) {
-        result[key] = { ...payload[key], ...categoryFields };
+        const rowHints = hintsFor(payload[key]);
+        result[key] = { ...payload[key], ...categoryFields, ...rowHints,
+          actions: { ...(payload[key].actions || {}), ...rowHints } };
       }
     }
     return result;
@@ -91887,7 +91928,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
         && payload.ok !== false
         && payload.soft_failure !== true
         && payload.context_degraded !== true) {
-      payload = await attachWeeklySourceOfficeTimesheetPresentation(env, payload, user.id);
+      payload = await attachWeeklySourceOfficeTimesheetPresentation(env, payload, user.id, sbRpc, user);
     }
     if (profile === 'full' && payload.ok !== false && payload.soft_failure !== true && payload.context_degraded !== true) {
       try {
@@ -93566,9 +93607,16 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
     (!processingStatusUpper || ['PENDING_AUTH', 'READY_FOR_HR'].includes(processingStatusUpper))
   );
   const canUnauthorise = !!(authorised === true && !locked && currentTimesheetId);
+  // Only the authenticated route can supply these two top-level fields. Atomic
+  // RPC payloads, source rows and browser bodies cannot grant actor authority.
+  const scopedPaymentAllowed = src.weeklySourcePaymentScope === true
+    ? isActivePaymentActor(src.weeklySourcePaymentActor) : true;
   const footerActionHints = {
-    can_authorise: hasOwn(sourceActions, 'can_authorise') ? boolWithDefault(sourceActions.can_authorise, canAuthorise) : canAuthorise,
-    can_unauthorise: hasOwn(sourceActions, 'can_unauthorise') ? boolWithDefault(sourceActions.can_unauthorise, canUnauthorise) : canUnauthorise,
+    can_authorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_authorise') ? boolWithDefault(sourceActions.can_authorise, canAuthorise) : canAuthorise),
+    ...(src.weeklySourcePaymentScope === true ? {
+      can_bulk_authorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_bulk_authorise') ? boolWithDefault(sourceActions.can_bulk_authorise, canAuthorise) : canAuthorise)
+    } : {}),
+    can_unauthorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_unauthorise') ? boolWithDefault(sourceActions.can_unauthorise, canUnauthorise) : canUnauthorise),
     can_save: canEdit,
     can_edit: canEdit,
     read_only: !canEdit,
@@ -136968,7 +137016,7 @@ async function sbGetUserByEmail(env, email) {
   return Array.isArray(json) && json[0] ? json[0] : null;
 }
 async function sbGetUserById(env, id) {
-  const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(id)}&select=id,email,role,is_active,password_hash,session_version`;
+  const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(id)}&select=id,email,role,is_active,password_hash,session_version,payment_authoriser,payment_golden_key`;
   const res = await fetch(url, { headers: sbAuthHeaders(env) });
   const json = await res.json().catch(()=>[]);
   return Array.isArray(json) && json[0] ? json[0] : null;
@@ -139739,6 +139787,9 @@ async function requireUser(env, req, allowedRoles = []) {
     id: user.id,
     email: user.email,
     role: user.role,
+    is_active: user.is_active === true,
+    payment_authoriser: user.payment_authoriser === true,
+    payment_golden_key: user.payment_golden_key === true,
     sv: user.session_version|0,
     sid: p.sid,
     session_id: p.sid,
@@ -168053,8 +168104,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
 
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null, internalOptions = null) {
   const enc = encodeURIComponent;
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  const user = await requireUser(env, req, []);
+  if (!user || (user.role !== 'admin' && !isActivePaymentActor(user))) return withCORS(env, req, unauthorized());
 
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -168566,6 +168617,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  const sourcePayPermission = await weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user);
+  if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
       env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
@@ -168728,7 +168781,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   // the ordinary owner writes no root-authorisation generation, so the week
   // silently stays unmanaged and every later entitlement publication then raises
   // at the pointer update.  See `weeklySourceAuthoriseRouting` above.
-  const weeklySourceRouting = await weeklySourceAuthoriseRouting(
+  const weeklySourceRouting = sourcePayPermission.routing ?? await weeklySourceAuthoriseRouting(
     (functionName, args, options) => sbRpc(env, functionName, args, options),
     currentTimesheetId, user?.id || null
   );
@@ -169065,6 +169118,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
 
   const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
     action: 'AUTHORISE',
+    weeklySourcePaymentScope: weeklySourceRouting.bound === true,
+    weeklySourcePaymentActor: user,
     requestedTimesheetId,
     currentTimesheetId: finalTimesheetId,
     currentVersion: decision.current_version,

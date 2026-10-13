@@ -1,0 +1,270 @@
+create or replace function public.weekly_exceptional_pay_complete_c1_publication_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_keys constant text[]:=array[
+    'schema_version','actor_user_id','publication_request_id',
+    'expected_request_sha256','idempotency_key'
+  ];
+  v_actor_user_id uuid;
+  v_request_id uuid;
+  v_expected_request_hash bytea;
+  v_idempotency_key text;
+  v_publication public.weekly_exceptional_c1_publication_requests%rowtype;
+  v_generation public.weekly_exceptional_pay_generations%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_checkpoint public.weekly_exceptional_c1_publication_checkpoints%rowtype;
+  v_result jsonb;
+  v_publication_id uuid;
+  v_head_revision bigint;
+  v_receipt_hash bytea;
+  v_request_hash bytea;
+  v_target_state text;
+  v_source_hash bytea;
+  v_step_sequence integer;
+  v_before_hash bytea;
+  v_after_hash bytea;
+begin
+  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
+     or not (p_request ?& v_keys)
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_C1_COMPLETE_V1' then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor_user_id:=(p_request->>'actor_user_id')::uuid;
+    v_request_id:=(p_request->>'publication_request_id')::uuid;
+    v_expected_request_hash:=private.weekly_exceptional_hex_sha256_v1(
+      p_request->>'expected_request_sha256'
+    );
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  if pg_catalog.char_length(v_idempotency_key) not between 16 and 240 then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_INVALID' using errcode='22023';
+  end if;
+
+  -- SP-12: existing admission only; no producer/version evidence.
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
+
+  select request.* into strict v_publication
+  from public.weekly_exceptional_c1_publication_requests request
+  where request.id=v_request_id
+  for update;
+  select generation.* into strict v_generation
+  from public.weekly_exceptional_pay_generations generation
+  where generation.id=v_publication.generation_id
+    and generation.family_id=v_publication.family_id
+  for update;
+  select family.* into strict v_family
+  from public.weekly_exceptional_pay_target_families family
+  where family.id=v_publication.family_id
+  for update;
+  select run.* into strict v_run
+  from public.weekly_exceptional_orchestration_runs run
+  where run.id=v_publication.orchestration_run_id
+  for update;
+
+  if v_publication.request_sha256 is distinct from v_expected_request_hash
+     or v_run.requested_by_user_id is distinct from v_actor_user_id
+     or not exists(
+       select 1 from public.tms_users office_user
+       where office_user.id=v_actor_user_id and office_user.is_active
+         and (office_user.payment_authoriser or office_user.payment_golden_key)
+     ) then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_SCOPE_INVALID' using errcode='55000';
+  end if;
+  if v_publication.state='PUBLISHED' then
+    if v_generation.lifecycle_state<>'PUBLISHED'
+       or v_family.current_generation_id is distinct from v_generation.id
+       or v_publication.c1_publication_id is null
+       or v_publication.c1_head_revision is null
+       or v_publication.c1_receipt_sha256 is null then
+      raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_STATE_INVALID' using errcode='55000';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'outcome','PUBLISHED','idempotent_replay',true,
+      'publication_request_id',v_publication.id,
+      'family_id',v_family.id,'generation_id',v_generation.id,
+      'c1_publication_id',v_publication.c1_publication_id,
+      'c1_head_revision',v_publication.c1_head_revision::text,
+      'state','LIVE'
+    );
+  end if;
+  if v_publication.state<>'SUBMITTED'
+     or v_generation.lifecycle_state<>'PENDING_C1'
+     or v_family.c1_publication_state<>'PUBLISHING'
+     or exists(
+       select 1 from public.weekly_exceptional_c1_unknown_outcomes unknown_outcome
+       where unknown_outcome.publication_request_id=v_publication.id
+         and unknown_outcome.state='RECOVERY_REQUIRED'
+     ) then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_STATE_INVALID' using errcode='55000';
+  end if;
+
+  select checkpoint.* into strict v_checkpoint
+  from public.weekly_exceptional_c1_publication_checkpoints checkpoint
+  where checkpoint.publication_request_id=v_publication.id
+  order by checkpoint.checkpoint_sequence desc
+  limit 1
+  for share;
+  v_result:=v_checkpoint.result_json;
+  if v_checkpoint.phase<>'PUBLISH'
+     or pg_catalog.upper(coalesce(v_result->>'status',''))<>'PUBLISHED'
+     or pg_catalog.jsonb_typeof(v_result->'has_more')<>'boolean'
+     or (v_result->>'has_more')::boolean
+     or nullif(v_result->>'publication_id','') is null
+     or nullif(v_result->>'head_revision','') is null
+     or nullif(v_result->>'receipt_sha256','') is null
+     or nullif(v_result->>'request_sha256','') is null then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_RESULT_INVALID' using errcode='55000';
+  end if;
+  begin
+    v_publication_id:=(v_result->>'publication_id')::uuid;
+    v_head_revision:=(v_result->>'head_revision')::bigint;
+    v_receipt_hash:=private.weekly_exceptional_hex_sha256_v1(v_result->>'receipt_sha256');
+    v_request_hash:=private.weekly_exceptional_hex_sha256_v1(v_result->>'request_sha256');
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_RESULT_INVALID' using errcode='55000';
+  end;
+  if v_head_revision<1
+     or v_request_hash is distinct from v_publication.request_sha256
+     or (v_publication.c1_operation_id is not null
+         and (v_result->>'operation_id')::uuid is distinct from v_publication.c1_operation_id) then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_RESULT_INVALID' using errcode='55000';
+  end if;
+
+  select target_event.resulting_lifecycle_state into strict v_target_state
+  from public.weekly_exceptional_pay_target_events target_event
+  where target_event.family_id=v_family.id
+    and target_event.financial_generation_id=v_generation.id
+  order by target_event.event_sequence desc limit 1;
+  if v_target_state not in (
+    'PENDING_APPROVAL','PROTECTED','WAITING_SOURCE','READY_TO_RECONCILE',
+    'RECONCILED','NOT_WORKED','ACTION_REQUIRED'
+  ) then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_TARGET_INVALID' using errcode='55000';
+  end if;
+  select family_event.source_proposal_hash into strict v_source_hash
+  from public.weekly_exceptional_pay_family_events family_event
+  where family_event.family_id=v_family.id
+    and family_event.evidence_approval_id in (
+      select approval.id from public.weekly_exceptional_payment_approvals approval
+      where approval.pay_target_family_id=v_family.id
+    )
+  order by family_event.event_sequence desc limit 1;
+
+  v_before_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_C1_COMPLETE_BEFORE_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'family_bound_version',v_family.bound_version,
+      'prior_generation_id',v_family.current_generation_id,
+      'new_generation_id',v_generation.id,
+      'publication_request_id',v_publication.id
+    )
+  );
+  if v_family.current_generation_id is not null
+     and v_family.current_generation_id is distinct from v_generation.id then
+    update public.weekly_exceptional_pay_generations
+    set lifecycle_state='SUPERSEDED',superseded_by_generation_id=v_generation.id,
+        superseded_at_utc=pg_catalog.statement_timestamp()
+    where id=v_family.current_generation_id
+      and family_id=v_family.id
+      and lifecycle_state='PUBLISHED';
+    if not found then
+      raise exception 'WEEKLY_PROTECTED_C1_PRIOR_GENERATION_INVALID' using errcode='55000';
+    end if;
+  end if;
+
+  update public.weekly_exceptional_pay_generations
+  set lifecycle_state='PUBLISHED',published_at_utc=pg_catalog.statement_timestamp(),
+      result_hash=v_receipt_hash
+  where id=v_generation.id and lifecycle_state='PENDING_C1';
+  if not found then
+    raise exception 'WEEKLY_PROTECTED_C1_GENERATION_INVALID' using errcode='55000';
+  end if;
+  update public.weekly_exceptional_c1_publication_requests
+  set state='PUBLISHED',c1_publication_id=v_publication_id,
+      c1_head_revision=v_head_revision,c1_receipt_sha256=v_receipt_hash,
+      typed_result_json=v_result,completed_at_utc=pg_catalog.statement_timestamp()
+  where id=v_publication.id;
+  update public.weekly_exceptional_pay_target_families
+  set ownership_state='TARGET_MANAGED',current_generation_id=v_generation.id,
+      current_generation_number=v_generation.generation_number,
+      current_complete_target_vector_hash=v_generation.complete_next_vector_hash,
+      current_source_proposal_hash=v_source_hash,
+      current_lifecycle_state=v_target_state,
+      c1_publication_state='LIVE',
+      current_component_count=v_publication.expected_component_count,
+      bound_version=bound_version+1
+  where id=v_family.id;
+  update public.weekly_exceptional_orchestration_runs
+  set state='COMPLETE',after_state_fingerprint=v_receipt_hash,
+      completed_at_utc=pg_catalog.statement_timestamp()
+  where id=v_run.id;
+  insert into public.weekly_exceptional_payment_events(
+    family_id,event_kind,lifecycle_view,bounded_payload_json,idempotency_key
+  ) values (
+    v_family.id,'PROTECTED_STATE_OBSERVED','LIVE',
+    pg_catalog.jsonb_build_object(
+      'generation_id',v_generation.id,
+      'publication_request_id',v_publication.id,
+      'c1_head_revision',v_head_revision::text
+    ),v_idempotency_key||':payment-event'
+  );
+  v_after_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_C1_COMPLETE_AFTER_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'generation_id',v_generation.id,
+      'target_vector_hash',pg_catalog.encode(v_generation.complete_next_vector_hash,'hex'),
+      'c1_publication_id',v_publication_id,'c1_head_revision',v_head_revision::text,
+      'c1_receipt_sha256',pg_catalog.encode(v_receipt_hash,'hex')
+    )
+  );
+  select coalesce(max(step.sequence),0)+1 into v_step_sequence
+  from public.weekly_exceptional_orchestration_steps step
+  where step.orchestration_run_id=v_run.id;
+  insert into public.weekly_exceptional_orchestration_steps(
+    orchestration_run_id,sequence,step_kind,idempotency_key,
+    allowlisted_owner_name,allowlisted_owner_signature,bounded_request_hash,
+    before_state_fingerprint,bounded_owner_response_json,owner_response_hash,
+    after_state_fingerprint,outcome,completed_at_utc
+  ) values (
+    v_run.id,v_step_sequence,'COMPLETE_C1_PUBLICATION',v_idempotency_key,
+    'C1.weekly_source_publish_c1','sealed C1 V1',v_expected_request_hash,
+    v_before_hash,v_result,v_receipt_hash,v_after_hash,'COMPLETE',
+    pg_catalog.statement_timestamp()
+  );
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,
+    object_type,object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor_user_id,actor.display_name,actor.role,
+    'weekly_exceptional_pay_target_families',v_family.id::text,
+    'WEEKLY_PROTECTED_C1_PUBLISHED',
+    pg_catalog.jsonb_build_object('prior_generation_id',v_family.current_generation_id),
+    pg_catalog.jsonb_build_object(
+      'generation_id',v_generation.id,'publication_request_id',v_publication.id,
+      'c1_publication_id',v_publication_id,'c1_head_revision',v_head_revision::text,
+      'component_count',v_publication.expected_component_count
+    ),'Approved hours published through the existing pay route.'
+  from public.tms_users actor where actor.id=v_actor_user_id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'outcome','PUBLISHED','idempotent_replay',false,
+    'publication_request_id',v_publication.id,
+    'family_id',v_family.id,'generation_id',v_generation.id,
+    'c1_publication_id',v_publication_id,
+    'c1_head_revision',v_head_revision::text,
+    'state','LIVE','family_bound_version',v_family.bound_version+1
+  );
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPLETE_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;

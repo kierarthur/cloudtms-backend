@@ -1,0 +1,208 @@
+create or replace function public.weekly_exceptional_pay_record_c1_unknown_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_keys constant text[]:=array[
+    'schema_version','actor_user_id','publication_request_id','phase',
+    'record_offset','next_record_offset','records_submitted','error_code',
+    'recovery_call','idempotency_key'
+  ];
+  v_recovery_keys constant text[]:=array[
+    'contract','method','rpc_name','parameters_json','parameters_sha256',
+    'result_kind','stream_kind','stream_id','recovery_attempted'
+  ];
+  v_actor_user_id uuid;
+  v_request_id uuid;
+  v_phase text;
+  v_record_offset integer;
+  v_next_record_offset integer;
+  v_records_submitted integer;
+  v_error_code text;
+  v_recovery jsonb;
+  v_method text;
+  v_rpc_name text;
+  v_expected_rpc text;
+  v_stream_kind text;
+  v_stream_id uuid;
+  v_idempotency_key text;
+  v_recovery_hash bytea;
+  v_parameters_hash bytea;
+  v_publication public.weekly_exceptional_c1_publication_requests%rowtype;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_existing public.weekly_exceptional_c1_unknown_outcomes%rowtype;
+  v_unknown_sequence bigint;
+  v_total_records integer;
+begin
+  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
+     or not (p_request ?& v_keys)
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_C1_UNKNOWN_V1'
+     or pg_catalog.jsonb_typeof(p_request->'recovery_call')<>'object' then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_INVALID' using errcode='22023';
+  end if;
+  if pg_catalog.octet_length(pg_catalog.convert_to(p_request::text,'UTF8'))>524288 then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_TOO_LARGE' using errcode='54000';
+  end if;
+  begin
+    v_actor_user_id:=(p_request->>'actor_user_id')::uuid;
+    v_request_id:=(p_request->>'publication_request_id')::uuid;
+    v_record_offset:=(p_request->>'record_offset')::integer;
+    v_next_record_offset:=(p_request->>'next_record_offset')::integer;
+    v_records_submitted:=(p_request->>'records_submitted')::integer;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_INVALID' using errcode='22023';
+  end;
+  v_phase:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'phase','')));
+  v_error_code:=pg_catalog.btrim(coalesce(p_request->>'error_code',''));
+  v_recovery:=p_request->'recovery_call';
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  if v_phase not in ('START','STAGE','VALIDATE','CERTIFY','PUBLISH')
+     or v_record_offset<0 or v_next_record_offset<v_record_offset
+     or (v_phase='STAGE' and v_records_submitted<1)
+     or (v_phase<>'STAGE' and v_records_submitted<>0)
+     or pg_catalog.char_length(v_error_code) not between 1 and 120
+     or pg_catalog.char_length(v_idempotency_key) not between 16 and 240
+     or not private.weekly_exceptional_json_keys_exact_v1(v_recovery,v_recovery_keys)
+     or not (v_recovery ?& v_recovery_keys)
+     or v_recovery->>'contract'<>'WEEKLY_SOURCE_C1_UNKNOWN_CALL_V1'
+     or pg_catalog.jsonb_typeof(v_recovery->'recovery_attempted')<>'boolean'
+     or (v_recovery->>'recovery_attempted')::boolean then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_INVALID' using errcode='22023';
+  end if;
+  v_method:=v_recovery->>'method';
+  v_rpc_name:=v_recovery->>'rpc_name';
+  v_stream_kind:=v_recovery->>'stream_kind';
+  v_expected_rpc:=case v_method
+    when 'start' then 'weekly_source_start_c1'
+    when 'stage' then 'weekly_source_stage_c1'
+    when 'continueValidation' then 'weekly_source_continue_c1'
+    when 'certify' then 'weekly_source_certify_c1'
+    when 'publish' then 'weekly_source_publish_c1'
+    else null end;
+  if v_expected_rpc is null or v_rpc_name<>v_expected_rpc
+     or v_recovery->>'result_kind'<>'CONTROL'
+     or (v_method='start') is distinct from (v_stream_kind='START')
+     or (v_method<>'start' and v_stream_kind<>'OPERATION') then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_ROUTE_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_parameters_hash:=private.weekly_exceptional_hex_sha256_v1(
+      v_recovery->>'parameters_sha256'
+    );
+    if v_stream_kind='START' then
+      v_stream_id:=(v_recovery->>'stream_id')::uuid;
+      if v_stream_id is distinct from v_request_id then
+        raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_STREAM_INVALID';
+      end if;
+      -- START is keyed by the immutable request id until C1 returns the real
+      -- operation id.  Never persist that request id as an operation id.
+      v_stream_id:=null;
+    else
+      v_stream_id:=(v_recovery->>'stream_id')::uuid;
+    end if;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_STREAM_INVALID' using errcode='22023';
+  end;
+  if extensions.digest(
+       pg_catalog.convert_to(v_recovery->>'parameters_json','UTF8'),'sha256'
+     ) is distinct from v_parameters_hash then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_PARAMETERS_INVALID' using errcode='22023';
+  end if;
+  v_recovery_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_C1_UNKNOWN_CALL_V1',v_recovery
+  );
+
+  select unknown_outcome.* into v_existing
+  from public.weekly_exceptional_c1_unknown_outcomes unknown_outcome
+  where unknown_outcome.idempotency_key=v_idempotency_key
+  for share;
+  if found then
+    if v_existing.publication_request_id is distinct from v_request_id
+       or v_existing.phase is distinct from v_phase
+       or v_existing.record_offset is distinct from v_record_offset
+       or v_existing.next_record_offset is distinct from v_next_record_offset
+       or v_existing.records_submitted is distinct from v_records_submitted
+       or v_existing.recovery_call_sha256 is distinct from v_recovery_hash then
+      raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_KEY_COLLISION' using errcode='23505';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'outcome','RECOVERY_REQUIRED','idempotent_replay',true,
+      'publication_request_id',v_request_id,'unknown_outcome_id',v_existing.id,
+      'state',v_existing.state
+    );
+  end if;
+
+  select request.* into strict v_publication
+  from public.weekly_exceptional_c1_publication_requests request
+  where request.id=v_request_id
+  for update;
+  select run.* into strict v_run
+  from public.weekly_exceptional_orchestration_runs run
+  where run.id=v_publication.orchestration_run_id
+  for update;
+  select family.* into strict v_family
+  from public.weekly_exceptional_pay_target_families family
+  where family.id=v_publication.family_id
+  for update;
+  if v_run.requested_by_user_id is distinct from v_actor_user_id
+     or not private.weekly_source_pay_actor_allowed_v1(v_actor_user_id)
+     or v_publication.state in ('PUBLISHED','REFUSED','FAILED','RETIRED')
+     or exists(
+       select 1 from public.weekly_exceptional_c1_unknown_outcomes pending
+       where pending.publication_request_id=v_request_id
+         and pending.state='RECOVERY_REQUIRED'
+     )
+     or (v_stream_id is not null
+         and v_publication.c1_operation_id is not null
+         and v_stream_id is distinct from v_publication.c1_operation_id) then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_SCOPE_INVALID' using errcode='55000';
+  end if;
+  select count(*)::integer into v_total_records
+  from (
+    select id from public.weekly_exceptional_c1_source_records
+      where publication_request_id=v_request_id
+    union all
+    select source_record_id from public.weekly_exceptional_c1_source_parts
+      where publication_request_id=v_request_id
+    union all
+    select id from public.weekly_exceptional_c1_component_records
+      where publication_request_id=v_request_id
+  ) records;
+  if v_total_records<1 or v_next_record_offset>v_total_records
+     or v_next_record_offset<>v_record_offset
+     or v_records_submitted>v_total_records-v_record_offset then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_OFFSET_INVALID' using errcode='55000';
+  end if;
+  select coalesce(max(unknown_sequence),0)+1 into v_unknown_sequence
+  from public.weekly_exceptional_c1_unknown_outcomes
+  where publication_request_id=v_request_id;
+  insert into public.weekly_exceptional_c1_unknown_outcomes(
+    publication_request_id,unknown_sequence,phase,record_offset,
+    next_record_offset,records_submitted,error_code,recovery_call_json,
+    recovery_call_sha256,state,idempotency_key
+  ) values (
+    v_request_id,v_unknown_sequence,v_phase,v_record_offset,
+    v_next_record_offset,v_records_submitted,v_error_code,v_recovery,
+    v_recovery_hash,'RECOVERY_REQUIRED',v_idempotency_key
+  ) returning * into v_existing;
+  update public.weekly_exceptional_c1_publication_requests
+  set state='RECOVERY_REQUIRED',c1_operation_id=coalesce(c1_operation_id,v_stream_id)
+  where id=v_request_id;
+  update public.weekly_exceptional_pay_target_families
+  set c1_publication_state='PENDING' where id=v_family.id;
+  update public.weekly_exceptional_orchestration_runs
+  set state='PENDING' where id=v_run.id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'outcome','RECOVERY_REQUIRED','idempotent_replay',false,
+    'publication_request_id',v_request_id,'unknown_outcome_id',v_existing.id,
+    'unknown_sequence',v_unknown_sequence,'state','RECOVERY_REQUIRED',
+    'recovery_call_sha256',pg_catalog.encode(v_recovery_hash,'hex')
+  );
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_C1_UNKNOWN_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;

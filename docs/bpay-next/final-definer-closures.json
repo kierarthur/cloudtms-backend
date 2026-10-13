@@ -12131,21 +12131,23 @@
     },
     {
       "signature": "public.weekly_source_combined_review_workspace_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
       "allowedPhysical": [
+        "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+        "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+        "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
         "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
         "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
-        "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql"
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; WP-PP bounded actor/view successor preserving current native body",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12193,22 +12195,23 @@
     },
     {
       "signature": "public.weekly_source_manual_review_open_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
       "allowedPhysical": [
         "supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
         "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
-        "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql"
+        "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
       ],
       "predecessors": [
         "supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
-        "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
         "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql"
       ],
-      "owner": "F-25 BD019 parked protocol; latest surviving original authority; SP15 BD125 post-write refresh",
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "F-25 BD019 parked protocol; latest surviving original authority; SP15 BD125 post-write refresh; WP-PP bounded actor/view successor preserving current native body",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13335,19 +13338,21 @@
     },
     {
       "signature": "public.weekly_exceptional_pay_complete_c1_publication_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
       "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
         "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql"
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
       ],
-      "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest",
+      "owner": "SP-12 existing admission before original outer business locks; SP-07/WB-02/WB-05/SP-15/SP-09/SP-28 merge latest; WP-PP bounded actor/view successor preserving current native body",
       "baselineSource": "3241f945773bccf64f13f6258ad126c52f17c8ab"
     },
     {
@@ -16523,19 +16528,21 @@
     },
     {
       "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+        "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
         "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql"
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
       ],
-      "owner": "SP15 / BD125 affected-Work post-write refresh only"
+      "owner": "SP15 / BD125 affected-Work post-write refresh only; WP-PP bounded actor/view successor preserving current native body"
     },
     {
       "signature": "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)",
@@ -18061,6 +18068,207 @@
         "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql"
       ],
       "owner": "DR-23 seq150 current-parent audit, typed readiness, pure native capacity/cash reuse and versioned write-free PAYE_NET_PREVIEW; DR22/EX02/EX13 retain later joins. No Source/producer changed."
+    },
+    {
+      "signature": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "new"
+    },
+    {
+      "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_unknown_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_checkpoint_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_record_c1_recovery_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_read_c1_request_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_publication_status_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_source_office_authorise_scope_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
+    },
+    {
+      "signature": "public.weekly_source_office_notifications_list_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      ],
+      "owner": "WP-PP bounded actor/view successor; no change to native financial/refusal/lock authority",
+      "baselineSource": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9"
     }
   ],
   "editorChains": [

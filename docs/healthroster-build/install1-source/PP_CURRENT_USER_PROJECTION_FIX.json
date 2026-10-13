@@ -1,0 +1,9 @@
+{
+  "status": "FORWARD_SOURCE_FIX_NATIVE_HTTP_PENDING",
+  "file": "broker/src/index.js",
+  "beforeSha256": "3f82affc5f70989150d172e53e999ecd68f2d4ef857648fc6e3685f0a7ebd164",
+  "afterSha256": "5d6912b6e502af72b586d6205dd6f99fdc1347c73e4bdeae98dc36b6c73ba5d8",
+  "beforeOwnerSha256": "5e469491c4c28d876bd23e4f5c59b5b5f926fe78186f46e04aa5d2d463e87b7a",
+  "afterOwnerSha256": "26ee14fcf93557a495aaf8b14841703c34c2bf7381d4c5a716155d35e4a5af20",
+  "fix": "Read both existing payment flags on the actual requireUser current-row transport. Preserve all original fields, session/tenant/token and password-update behavior; no permission inferred from token/body."
+}

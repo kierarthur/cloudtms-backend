@@ -1,0 +1,56 @@
+{
+  "status": "SOURCE_INTEGRATED_FORWARD_KEY_TAG_FIX_REQUIRED",
+  "base": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "lane": "c18c4ee7703fac27422f38e92cbd1ca391ebdfe7",
+  "laneBase": "171778d7214c2dad98ce392981fecd2f47db20b6",
+  "manifestSha256": "f98a9625f3bb8c2186f2052a6835a3ca1fd83023f62c017a12a20ede6073b0c0",
+  "files": [
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "2b0d7819f0d01246114cd3cb2ba909d2d1beef92d9dd19ab330b91e67549a622"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn-cli.mjs",
+      "sha256": "94acc0bdb2971124431dc3d61c46edad05896fc14aaedd1db67bc84ad8de5baa"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "9ba376bcc396c6183a3d836f21096d6ef4ce2bf305dcf3c8e0225aca453717da"
+    },
+    {
+      "file": "scripts/request-test-release.mjs",
+      "sha256": "c03a773078fd01c73de733658599cc2cd78ca0d0742fe2806657eebfc88d6b75"
+    },
+    {
+      "file": "tests/healthroster-rehearsal-turn.test.mjs",
+      "sha256": "668199c42a3428d4a0b3f86eca7e791b9d3bd45e156b898ed0558ec9fd72f6fc"
+    },
+    {
+      "file": "tests/healthroster-turn-control.test.mjs",
+      "sha256": "04dd02526bf26fb0c4190f81beee1d67cc99181b1f0ba0187a4df7880a4e26d5"
+    },
+    {
+      "file": "tests/request-test-release-turn.test.mjs",
+      "sha256": "e886531252f7a23d3cf79ad11ce683000d56b2b3545b47127f31e46ad5531a60"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "69a7365e1eec0339d9066a3c86194b7462f1f3a076b23b40c53c3be52fc5a192"
+    },
+    {
+      "file": "tests/healthroster-full-rehearsal-protocol.test.mjs",
+      "sha256": "4bfe273f1fe3ae8f7773e4b4600ee2cefb8756c81d9e2e63677369efd89728fe"
+    },
+    {
+      "file": "codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_RELEASE_TURN_FROZEN_MANIFEST_20261014.json",
+      "sha256": "f98a9625f3bb8c2186f2052a6835a3ca1fd83023f62c017a12a20ede6073b0c0"
+    },
+    {
+      "file": "codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_RELEASE_TURN_SOURCE_REVIEW_20261014.md",
+      "sha256": "865b6f38cd1be4dd4f367b50e8f676444e9c87cf322aefe7a843596f3e4eefde"
+    }
+  ],
+  "retainedBankingCallerBase": true,
+  "noNativeClaim": true,
+  "requiredCorrection": "SEND7 takes a two-int32 advisory key: its pg_locks objsubid is 2. The frozen lane used 1; root will correct it forward before native use, preserving frozen original."
+}

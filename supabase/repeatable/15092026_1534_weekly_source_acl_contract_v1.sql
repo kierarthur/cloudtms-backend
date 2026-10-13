@@ -429,6 +429,7 @@ as $function$
     ('public.weekly_source_manual_review_open_v1(jsonb)'),
     ('public.weekly_source_manual_review_resolve_v1(jsonb)'),
     ('public.weekly_exceptional_pay_complete_local_v1(jsonb)'),
+    ('private.weekly_source_pay_actor_allowed_v1(uuid)'),
     ('private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)'),
     ('private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)'),
     ('private.weekly_source_invoice_batch_snapshot_v1()'),

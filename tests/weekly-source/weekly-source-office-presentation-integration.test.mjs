@@ -95,7 +95,7 @@ test('canonical invoice-delay category reaches all existing detail shapes withou
   assert.equal(payload.timesheet.tools_stage, undefined, 'input is not mutated');
 });
 
-test('no category override preserves the existing Stage and actions', async () => {
+test('no category override preserves Stage and fails Source action hints closed without actor evidence', async () => {
   const payload = { current_timesheet_id: TIMESHEET_ID, sheet_scope: 'WEEKLY',
     tools_stage: 'INVOICED', timesheet: { timesheet_id: TIMESHEET_ID, is_archived: false } };
   const result = await weeklySourceOfficePresentationInternals.attachWeeklySourceOfficeTimesheetPresentation(
@@ -104,7 +104,9 @@ test('no category override preserves the existing Stage and actions', async () =
   );
   assert.equal(result.tools_stage, 'INVOICED');
   assert.deepEqual(result.timesheet, { ...payload.timesheet,
-    weekly_source_operational_category: null, weekly_source_processing_reason: null });
+    weekly_source_operational_category: null, weekly_source_processing_reason: null,
+    can_authorise: false, can_bulk_authorise: false, can_unauthorise: false,
+    actions: { can_authorise: false, can_bulk_authorise: false, can_unauthorise: false } });
 });
 
 test('explicit no override clears stale category hints in every detail shape, not financial facts', async () => {
@@ -150,7 +152,7 @@ test('Simple and Bulk Authorise both attach the same server-owned projection', (
   const bulkStart = worker.indexOf('async function handleTimesheetBulkAuthoriseContext');
   const bulkEnd = worker.indexOf('\nasync function ', bulkStart + 50);
   const bulkSource = worker.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : undefined);
-  assert.match(bulkSource, /attachWeeklySourceOfficeTimesheetPresentation\(env, payload, user\.id\)/);
+  assert.match(bulkSource, /attachWeeklySourceOfficeTimesheetPresentation\(env, payload, user\.id, sbRpc, user\)/);
   assert.doesNotMatch(bulkSource, /pay_workbench|pay_batch_create|banking\/pay/);
 });
 
@@ -169,7 +171,24 @@ test('normal summary gets one exact server snapshot with filters and row order u
   assert.equal(calls.length,1,'not one RPC per Timesheet');
   assert.equal(calls[0][1],'weekly_source_office_summary_rows_v1');
   assert.deepEqual(calls[0][2],{p_request:{actor_user_id:ACTOR_ID,p_filters:filters}});
-  assert.equal(result,rows,'no JavaScript repaging/category/action/financial rewrite');
+  assert.deepEqual(result,rows,'no category/action/financial/value/order rewrite');
+  for(let index=0;index<rows.length;index++)assert.equal(result[index],rows[index],'native row objects remain exact');
+});
+
+test('normal summary retains Banking native bounded page offsets and every row without mutation',async()=>{
+  const rows=Array.from({length:150},(_,index)=>({timesheet_id:'paging-root-'+index,total_hours:index,
+    weekly_source_operational_category:{category_basis:{facts:{root_version:index+1}}}}));
+  const frozen=JSON.stringify(rows),calls=[];
+  const result=await weeklySourceOfficePresentationInternals.readWeeklySourceOfficeSummaryRows(
+    {},ACTOR_ID,{limit:150,offset:17,order_dir:'desc'},async(_env,name,args)=>{
+      calls.push({name,args});const start=args.p_request.p_filters.offset-17;
+      return {contract:'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1',rows:rows.slice(start,start+args.p_request.p_filters.limit)};
+    });
+  assert.deepEqual(calls.map(call=>call.args.p_request.p_filters),[
+    {limit:100,offset:17,order_dir:'desc'},{limit:50,offset:117,order_dir:'desc'}]);
+  assert.ok(calls.every(call=>call.name==='weekly_source_office_summary_rows_v1'&&call.args.p_request.actor_user_id===ACTOR_ID));
+  assert.deepEqual(result,rows);for(let index=0;index<150;index++)assert.equal(result[index],rows[index]);
+  assert.equal(JSON.stringify(rows),frozen,'source rows and category/financial facts remain immutable');
 });
 
 test('summary contract failure cannot silently fall back to old display evidence', async () => {

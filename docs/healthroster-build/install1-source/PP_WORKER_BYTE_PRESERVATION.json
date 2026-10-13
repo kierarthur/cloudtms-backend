@@ -1,0 +1,22 @@
+{
+  "base": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "status": "SOURCE_ONLY_CANONICAL_COMPOSITION_UNCHANGED",
+  "records": [
+    {
+      "file": "broker/src/index.js",
+      "baseRawSha256": "0517b6b8cde43b5f4803c725230d290af68bb9c68ee03ae277935883724c5373",
+      "canonicalCompositionSha256": "e3bdbbfedff305c3dcbe997dd665966f804f2b530b388cd69e6f70dc48cc64bf",
+      "rawComposedSha256": "3f82affc5f70989150d172e53e999ecd68f2d4ef857648fc6e3685f0a7ebd164",
+      "hunks": 14,
+      "proof": "Every unchanged context and untouched line retains exact predecessor bytes; canonical composition is identical."
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "baseRawSha256": "ec1a819336daeb552791af5170433d3925c9ff48e7d8c422dd3b0d92d14e6805",
+      "canonicalCompositionSha256": "034b96260f679a4c320648ec29a9ff1d19f982d800c50c6aceccfb69ea99fc67",
+      "rawComposedSha256": "034b96260f679a4c320648ec29a9ff1d19f982d800c50c6aceccfb69ea99fc67",
+      "hunks": 6,
+      "proof": "Every unchanged context and untouched line retains exact predecessor bytes; canonical composition is identical."
+    }
+  ]
+}
