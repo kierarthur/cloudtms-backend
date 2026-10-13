@@ -1,0 +1,39 @@
+{
+  "status": "READ_ONLY_NATIVE_EXTRACTION_NOT_MOUNTED",
+  "input": {
+    "file": "broker/src/index.js",
+    "sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86"
+  },
+  "extractions": [
+    {
+      "output": "native-daily-role-helpers.mjs",
+      "sourceBlockSha256": "ebfaa19acebb1a52d2d22ba9c675c5efcda2b3ad5ef9de579e78f5df24a4e1a6",
+      "outputSha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06"
+    },
+    {
+      "output": "native-weekly-correction-dispatch.mjs",
+      "sourceRouteSha256": "0bc652d477532f5bdaf4a0b1bab27431165243fd6687c6c3a8174d6e00b84749",
+      "sourceDispatchSha256": "d59eecdbfbbd109969bc6feae8137f21e0ce49e736ce5b124e45fbc540a5460a",
+      "outputSha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c"
+    }
+  ],
+  "dailyNativeInput": {
+    "file": "broker/src/daily-canonical-authority.js",
+    "sha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+    "copy": "daily-canonical-authority.native-input.js"
+  },
+  "retainedOwners": [
+    "buildWeeklyScheduleSegmentsSnapshot",
+    "buildNhspWeeklySnapshotCached",
+    "rebuildFromExistingSegmentsEvidence",
+    "enrichTsfinWithHrCrosscheck"
+  ],
+  "excludedWorkerArms": [
+    "dequeue",
+    "write",
+    "repair/self-heal",
+    "outbox success/fail",
+    "debug audit",
+    "no-op queue completion"
+  ]
+}

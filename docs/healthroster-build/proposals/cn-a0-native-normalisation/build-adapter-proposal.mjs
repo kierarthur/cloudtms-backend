@@ -27,9 +27,9 @@ change(`        !sameUuid(r.original_financial_id, a.original_financial_id) || r
         (prepare.original_materialisation_required && r.original_authorisation_required !== true)) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');`);
 change(`  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||
              value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');`,
-`  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||
-             a.original_financial_authority_hash != null || frozen.financial_authority_hash != null ||
-             frozen.financial_snapshot != null || t0.authorised_at_server != null ||
+`  } else if (value.original_current_snapshot !== null || a.original_financial_id !== null ||
+             a.original_financial_authority_hash !== null || frozen.financial_authority_hash !== null ||
+             frozen.financial_snapshot !== null || t0.authorised_at_server !== null ||
              value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');`);
 change(`    if (prepare.original_materialisation_required) {
       // No claim that preview/calculator JSON equals the bounded writer's stored output.

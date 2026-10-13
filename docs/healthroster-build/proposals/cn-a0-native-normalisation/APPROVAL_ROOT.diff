@@ -1,0 +1,47 @@
+--- a/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc
++++ b/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc
+@@ -282,6 +282,12 @@ begin
+     'planned_reversal_timesheet_id',v_request.frozen_original_json->>'planned_reversal_timesheet_id',
+     'planned_reversal_week_id',v_request.frozen_original_json->>'planned_reversal_week_id',
+     'original_invoice_id',v_request.original_invoice_id,'return_invoice_id',v_request.return_invoice_id);
++  if v_fin.id is null and v_original.sheet_scope::text='WEEKLY' then
++    -- Exact server-owned scope participates in the native PREPARE/CAS hash.
++    -- Missing A0 never silently changes Source/Rule/ordinary pricing origin.
++    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',
++      private.timesheet_correction_a0_clock_scope_v1(v_request.id));
++  end if;
+   v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');
+   -- Internal service DTO only. Original frozen snapshot and exact P0 context
+   -- go to existing producer/preloader; Candidate detail never exposes these.
+@@ -336,7 +342,7 @@ begin
+   end if;
+   if (v_prepare->>'original_materialisation_required')::boolean then
+     if not v_t0_authorise then raise exception 'CORRECTION_AUTHORISED_ORIGINAL_FINANCE_MISSING' using errcode='55000'; end if;
+-    perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,
++    perform private.timesheet_correction_canonical_input_assert_v1(v_original,v_request.reversed_timesheet_id,
+       v_request.reversed_version,v_request.candidate_id,v_request.client_id);
+     v_write:=public.tsfin_write_current_snapshot_single_bounded(v_request.reversed_timesheet_id,v_request.reversed_version,
+       v_original,p_actor_user_id,v_now);
+@@ -348,16 +354,21 @@ begin
+     -- no separate materialisation transaction or guessed normalisation exists.
+     select to_jsonb(tf) into strict v_original from public.timesheets_financials tf
+       where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;
++    perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,
++      v_request.reversed_version,v_request.candidate_id,v_request.client_id);
+   end if;
+   v_p:=v_request.replacement_timesheet_id;
+   select t.version into v_version from public.timesheets t where t.timesheet_id=v_p;
+-  perform private.timesheet_correction_snapshot_identity_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,
++  perform private.timesheet_correction_canonical_input_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,
+     v_request.candidate_id,v_request.client_id);
+   v_write:=public.tsfin_write_current_snapshot_single_bounded(v_p,v_version,
+     (p_prepared->'replacement_snapshot')||jsonb_build_object('processing_status','PENDING_AUTH'),p_actor_user_id,v_now);
+   if coalesce((v_write->>'ok')::boolean,false) is not true then
+     raise exception 'CORRECTION_REPLACEMENT_WRITE_FAILED' using errcode='55000',detail=v_write::text;
+   end if;
++  select to_jsonb(tf) into strict v_after_fin from public.timesheets_financials tf where tf.timesheet_id=v_p and tf.is_current;
++  perform private.timesheet_correction_snapshot_identity_assert_v1(v_after_fin,v_p,v_version,
++    v_request.candidate_id,v_request.client_id);
+   v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);
+   v_r:=(v_leg->>'timesheet_id')::uuid;
+   v_reversal_snapshot:=case when (v_prepare->>'original_materialisation_required')::boolean

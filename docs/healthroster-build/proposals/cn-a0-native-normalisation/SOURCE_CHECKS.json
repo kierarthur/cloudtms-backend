@@ -1,0 +1,60 @@
+{
+  "contract": "HEALTHROSTER_CN_A0_SOURCE_CHECKS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "tests": {
+    "total": 66,
+    "passed": 66,
+    "failed": 0,
+    "files": [
+      "tests/healthroster-cn-a0-callbacks.test.mjs",
+      "tests/healthroster-cn-a0-producers.test.mjs",
+      "tests/healthroster-cn-a0-clock-scope.test.mjs"
+    ]
+  },
+  "javascriptSyntaxFiles": 19,
+  "rootPatchApplyChecks": 3,
+  "sqlStaticGuards": "Illegal schema-qualified syntax constructs and delimiter pairing only; no PostgreSQL compilation/runtime claim.",
+  "currentRowtypeCensus": {
+    "generatedContractScopes": 47,
+    "declaredRequestScopes": 20,
+    "missing": 0,
+    "unmapped": 0
+  },
+  "newScopeColumnCensus": {
+    "aliases": 15,
+    "missing": 0
+  },
+  "frozenHandoffs": [
+    {
+      "path": "docs/healthroster-build/PROTECTION_SOURCE_MANIFEST.json",
+      "sha256": "2d0947db59f875da1fd4aeed4b49c6566174b19cc244c41785670248c3fd1070",
+      "bytes": 27267,
+      "pinnedFiles": 52,
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/F4_AI_SOURCE_MANIFEST.json",
+      "sha256": "6de00fa2d72625b8b3d39b38b14dd4765ab76989ae297abfcf2c97b7ae5010a8",
+      "bytes": 40263,
+      "pinnedFiles": 45,
+      "status": "UNCHANGED"
+    }
+  ],
+  "database": false,
+  "docker": false,
+  "hosted": false,
+  "appBuild": false,
+  "externalEmail": false,
+  "withheld": [
+    "Actual signed NULL-rule activation/settings/Contract scope owner first use and private owner/schema checks",
+    "Root complete source integration and generated contract/private-owner registry/browser isolation",
+    "PostgreSQL17 compilation of exact1127 complete successor and private input assertion",
+    "Actual native same-unit Original/P0 writes, stored reread, R0 sign-copy/batch writer and full-component money/VAT/rate/expense oracle",
+    "Locked original/source/policy/rate/validation/physical CW and request CAS concurrency/rollback proof",
+    "Joined native I-1/Candidate gates and published NEXT compatibility",
+    "Actual SIGNED workflow/approval/manifest document page proof; agency permission/ordinary negatives",
+    "Protected commit-bound release and installed actual RPC/runtime body proof with feature flags OFF until qualified",
+    "Actual MyTMS TEST build/TestFlight and phone journey",
+    "SEND7 root-held shared turn; Banking first install before full rehearsal; no lane database calls"
+  ]
+}

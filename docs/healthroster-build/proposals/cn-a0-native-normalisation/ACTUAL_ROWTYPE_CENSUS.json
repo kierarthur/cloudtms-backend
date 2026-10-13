@@ -1,0 +1,1304 @@
+{
+  "contract": "HEALTHROSTER_CN_ACTUAL_ROWTYPE_SOURCE_CENSUS_V1",
+  "status": "SOURCE_COLUMN_CENSUS_NOT_SQL_COMPILE_OR_RUNTIME",
+  "schemaInput": {
+    "file": "supabase/release/current-contract.json",
+    "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334"
+  },
+  "declaredNewRelation": {
+    "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+    "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+    "relation": "private.timesheet_correction_requests",
+    "columns": [
+      "id",
+      "correction_id",
+      "origin",
+      "state",
+      "state_revision",
+      "proposal_revision",
+      "root_timesheet_id",
+      "original_booking_id",
+      "reversed_timesheet_id",
+      "reversed_version",
+      "reversed_financial_id",
+      "candidate_id",
+      "client_id",
+      "contract_id",
+      "work_date",
+      "week_ending_date",
+      "replacement_timesheet_id",
+      "replacement_booking_id",
+      "replacement_week_id",
+      "reversal_timesheet_id",
+      "reversal_booking_id",
+      "reversal_week_id",
+      "request_key",
+      "request_fingerprint",
+      "target_revision",
+      "reason",
+      "frozen_original_json",
+      "proposal_json",
+      "original_invoice_id",
+      "return_invoice_id",
+      "workflow_id",
+      "workflow_generation",
+      "terminal_receipt_json",
+      "created_by_user_id",
+      "created_at_utc",
+      "updated_at_utc",
+      "applied_at_utc",
+      "cancelled_at_utc"
+    ],
+    "status": "SOURCE_DECLARATION_ACTUAL_CATALOGUE_PENDING"
+  },
+  "physicalTimesheetFacts": {
+    "candidate_id": false,
+    "family_booking_id": false,
+    "booking_id": true,
+    "contract_id": true
+  },
+  "inputs": [
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_acl.sqlinc",
+      "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+      "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_delete_guard.sqlinc",
+      "sha256": "004b05626594e9c0d078020453cbe7a66ce69903f7d3e1183a959d3d43d5a744"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_expand.sqlinc",
+      "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc",
+      "sha256": "397a996c943d906105a35d6f1324c2e25f9f742d871fdde641a2235bdca445e1"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+      "sha256": "120ccfd2b77e85d2af9ee135e9fb40322c36c2d10b2dec0e2b31901c70db8a1e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "sha256": "b866dec3ce248f2bfe0c34c07645c3765b7e583622b49710e0b011621990461f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_overlap.sqlinc",
+      "sha256": "0485a8cc5fc63da8587194b313793b46214682a2aeaefbb57572ca335812d0af"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_pending_delete.sqlinc",
+      "sha256": "fe2af727bfcbed953c8087a62b30d113944cb24ff0fae08f440d67b586db2ac0"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_preview.sqlinc",
+      "sha256": "bdc5fa7d1f82582d3252f5e8d275b5cf7374102916a19124f44f1cf32c0b5b9c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+      "sha256": "536095f99b49901c1e8a4be4aeaa2945145435cda07ec405ed025573ad954423"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+      "sha256": "4334172f7cadf479e99816c34c162f96e6ecb6a719e13143ec80cb5531276043"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+      "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+      "sha256": "4df7467f617bb5c610b9612c19ff1ffa16a0d01eb05b9a9bc5c0446df081b50d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+      "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_acl.sqlinc",
+      "sha256": "5e0155cb0a6c1bc2411b838f62d332a33241b11241131bc1a1fcd71039d5ee98"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "sha256": "e573b48cc58db6a107848e0548b201f28584308577c2f5ff8629cdc9a269bdf3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+      "sha256": "1dae7e323edf51bc3e36eb811d3c6316f3cb297588b9bc719d8ab02ce8d2fc37"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sqlinc",
+      "sha256": "3ca710f6cf84d67f66fc2c7894ee2c35fd533e73c7d5bb97afe3922cdc714669"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_original_input.sqlinc",
+      "sha256": "524624e073b09621f5b6cb94574032feaa4584e46fbeb5dcea197ca6964f5733"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+      "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sqlinc",
+      "sha256": "71a3f9e6caa47248894478bdf33fb4f07d172449de39554c80890a3e5b351cd8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+      "sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "sha256": "23f71a8b14940a9b94b10e99488e2857bf502ea162c0526235bc517d26c9d1e2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sqlinc",
+      "sha256": "c11a3c72f09e862cb970798e4da8ceb29c4bf42a96a37cee4f7f51b3fc59ae78"
+    }
+  ],
+  "routines": [
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_prepare_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "correction_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_invoice_id",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "return_invoice_id",
+        "reversed_financial_id",
+        "reversed_timesheet_id",
+        "reversed_version",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "target_revision",
+        "terminal_receipt_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_prepare_v1",
+      "variable": "v_original",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "archived_at_utc",
+        "authorised_at_server",
+        "booking_id",
+        "is_current",
+        "timesheet_id",
+        "version"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_prepare_v1",
+      "variable": "v_p0",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "actual_schedule_json",
+        "archived_at_utc",
+        "authorised_at_server",
+        "booking_id",
+        "correction_id",
+        "correction_kind",
+        "is_current",
+        "parent_timesheet_id",
+        "timesheet_id",
+        "version"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_prepare_v1",
+      "variable": "v_fin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_prepare_v1",
+      "variable": "v_pfin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_utc",
+        "id",
+        "locked_by_invoice_id",
+        "paid_at_utc"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "routine": "public.timesheet_correction_authorise_atomic_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "correction_id",
+        "frozen_original_json",
+        "id",
+        "original_invoice_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "return_invoice_id",
+        "reversed_timesheet_id",
+        "reversed_version",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "terminal_receipt_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "routine": "private.timesheet_correction_cancel_capability_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "contract_id",
+        "correction_id",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "week_ending_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "routine": "private.timesheet_correction_cancel_capability_v1",
+      "variable": "v_p",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_server",
+        "booking_id",
+        "candidate_workflow_generation",
+        "candidate_workflow_id",
+        "contract_id",
+        "correction_id",
+        "correction_kind",
+        "is_current",
+        "parent_timesheet_id",
+        "timesheet_id",
+        "week_ending_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "routine": "public.timesheet_correction_cancel_atomic_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "id",
+        "original_invoice_id",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "return_invoice_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "terminal_receipt_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "routine": "public.timesheet_correction_cancel_atomic_v1",
+      "variable": "v_p",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "candidate_workflow_generation",
+        "candidate_workflow_id",
+        "sheet_scope",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_ts",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "candidate_workflow_generation",
+        "candidate_workflow_id",
+        "current_document_version_id",
+        "img_sha256_auth",
+        "img_sha256_nurse",
+        "r2_auth_key",
+        "r2_nurse_key",
+        "submission_mode",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "candidate_signature_component_id",
+        "candidate_signature_sha256",
+        "generation",
+        "id",
+        "manager_approved_at_utc",
+        "manager_signature_component_id",
+        "manager_signature_sha256"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_approval",
+      "relation": "public.candidate_approval_requests",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_hours",
+      "relation": "public.candidate_submission_components",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "final_signed_byte_size",
+        "final_signed_content_sha256",
+        "final_signed_page_count",
+        "final_signed_render_input_sha256",
+        "final_signed_render_state",
+        "final_signed_storage_key",
+        "id",
+        "review_render_input_sha256",
+        "review_render_state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_candidate",
+      "relation": "public.candidate_submission_components",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "source_content_sha256",
+        "storage_key"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "routine": "private.timesheet_correction_signed_witness_v1",
+      "variable": "v_manager",
+      "relation": "public.candidate_submission_components",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "source_content_sha256",
+        "storage_key"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "routine": "private.timesheet_correction_draft_round_trip_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "client_id",
+        "id",
+        "replacement_timesheet_id",
+        "return_invoice_id",
+        "reversal_timesheet_id",
+        "reversed_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "routine": "private.timesheet_correction_draft_round_trip_v1",
+      "variable": "v_invoice",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "client_id",
+        "id",
+        "invoice_no",
+        "paid_at_utc",
+        "status",
+        "type"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "routine": "private.timesheet_correction_draft_round_trip_v1",
+      "variable": "v_fin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_utc",
+        "is_stale",
+        "locked_by_invoice_id",
+        "processing_status"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc",
+      "routine": "private.timesheet_correction_applied_assert_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "correction_id",
+        "origin",
+        "replacement_timesheet_id",
+        "reversal_timesheet_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state",
+        "terminal_receipt_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "routine": "private.timesheet_correction_whole_state_guard_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "id",
+        "origin",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "reversal_booking_id",
+        "reversal_timesheet_id",
+        "root_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "routine": "private.timesheet_correction_whole_state_guard_v1",
+      "variable": "v_r",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_server",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "routine": "private.timesheet_correction_whole_state_guard_v1",
+      "variable": "v_p",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_server",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+      "routine": "public.invoice_correction_pair_scope_v1",
+      "variable": "v_target",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "client_id",
+        "header_snapshot_json",
+        "issued_at_utc",
+        "status"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+      "routine": "public.invoice_correction_pair_scope_v1",
+      "variable": "v_operation",
+      "relation": "public.import_apply_operations",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "import_id",
+        "response_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+      "routine": "public.invoice_correction_pair_scope_v1",
+      "variable": "v_timesheet",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "adjustment_origin",
+        "candidate_hint_text",
+        "correction_id",
+        "correction_kind",
+        "is_adjustment",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_route_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "id",
+        "original_invoice_id",
+        "return_invoice_id",
+        "reversal_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_scope_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "client_id",
+        "correction_id",
+        "id",
+        "original_invoice_id",
+        "replacement_timesheet_id",
+        "return_invoice_id",
+        "reversal_timesheet_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_scope_v1",
+      "variable": "v_rfin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_utc",
+        "client_id",
+        "id",
+        "invoice_breakdown_json",
+        "locked_by_invoice_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_scope_v1",
+      "variable": "v_pfin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "authorised_at_utc",
+        "client_id",
+        "hours_bh",
+        "hours_day",
+        "hours_night",
+        "hours_sat",
+        "hours_sun",
+        "id",
+        "total_charge_ex_vat",
+        "total_pay_ex_vat"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_scope_v1",
+      "variable": "v_target",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "client_id",
+        "issued_at_utc",
+        "paid_at_utc",
+        "status",
+        "type"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "routine": "private.timesheet_correction_invoice_scope_v1",
+      "variable": "v_cn",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "issued_document_version_id",
+        "status"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "routine": "public.timesheet_correction_manager_summary_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "correction_id",
+        "frozen_original_json",
+        "id",
+        "reason"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "routine": "public.timesheet_correction_manager_summary_v1",
+      "variable": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "candidate_id",
+        "immutable_submission_json",
+        "immutable_submission_sha256",
+        "review_manifest_sha256",
+        "target_timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "routine": "public.timesheet_correction_manager_summary_v1",
+      "variable": "v_approval",
+      "relation": "public.candidate_approval_requests",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "manager_review_timesheet_component_id",
+        "manager_review_timesheet_sha256"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "routine": "public.timesheet_correction_manager_summary_v1",
+      "variable": "v_hours",
+      "relation": "public.candidate_submission_components",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "review_content_sha256",
+        "review_render_input_sha256"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_pending_delete.sqlinc",
+      "routine": "public.timesheet_delete_with_pending_expense_apply_v1",
+      "variable": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "account_id",
+        "anchor_timesheet_id",
+        "candidate_id",
+        "contract_week_id",
+        "generation",
+        "id",
+        "target_timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_workflow_projection_v1",
+      "variable": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "anchor_timesheet_id",
+        "target_timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_workflow_projection_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "private.timesheet_correction_leg_create_v1",
+      "variable": "v_original",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "sheet_scope",
+        "submission_mode"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "private.timesheet_correction_leg_create_v1",
+      "variable": "p_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "correction_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_booking_id",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "target_revision",
+        "week_ending_date",
+        "work_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_send_v1",
+      "variable": "v_ts",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "actual_schedule_json",
+        "archived_at_utc",
+        "candidate_hint_text",
+        "candidate_workflow_id",
+        "contract_id",
+        "is_current",
+        "sheet_scope",
+        "submission_mode",
+        "version",
+        "week_ending_date",
+        "worked_start_iso"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_send_v1",
+      "variable": "v_fin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_send_v1",
+      "variable": "v_req",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "correction_id",
+        "created_at_utc",
+        "created_by_user_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_booking_id",
+        "original_invoice_id",
+        "proposal_json",
+        "proposal_revision",
+        "reason",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "request_fingerprint",
+        "request_key",
+        "return_invoice_id",
+        "reversed_financial_id",
+        "reversed_timesheet_id",
+        "reversed_version",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "target_revision",
+        "updated_at_utc",
+        "week_ending_date",
+        "work_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_send_v1",
+      "variable": "v_existing",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "created_by_user_id",
+        "id",
+        "replacement_timesheet_id",
+        "request_fingerprint",
+        "state",
+        "state_revision"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "private.timesheet_correction_projection_by_request_v1",
+      "variable": "v_req",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "correction_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_booking_id",
+        "proposal_json",
+        "reason",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state",
+        "state_revision",
+        "target_revision",
+        "week_ending_date",
+        "work_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_create_projection_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "contract_id",
+        "correction_id",
+        "id",
+        "replacement_booking_id",
+        "replacement_timesheet_id",
+        "replacement_week_id",
+        "root_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "routine": "public.timesheet_correction_create_projection_v1",
+      "variable": "v_p",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "archived_at_utc",
+        "booking_id",
+        "contract_id",
+        "correction_id",
+        "correction_kind",
+        "is_current",
+        "parent_timesheet_id",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+      "routine": "private._candidate_timesheet_delete_retire_workflows_v1",
+      "variable": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "anchor_timesheet_id",
+        "contract_week_id",
+        "generation",
+        "id",
+        "state",
+        "target_timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+      "routine": "private._candidate_timesheet_delete_retire_workflows_v1",
+      "variable": "v_expense_component",
+      "relation": "public.candidate_expense_components",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "component_generation",
+        "expense_component_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+      "routine": "public.timesheet_standard_delete_preview_v1",
+      "variable": "v_requested",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "booking_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+      "routine": "public.timesheet_standard_delete_preview_v1",
+      "variable": "v_current",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "adjustment_origin",
+        "booking_id",
+        "candidate_hint_text",
+        "correction_id",
+        "correction_kind",
+        "is_adjustment",
+        "sheet_scope",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+      "routine": "public.timesheet_weekly_manual_adjustment_delete_preview",
+      "variable": "v_in_ts",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "booking_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+      "routine": "public.timesheet_weekly_manual_adjustment_delete_preview",
+      "variable": "v_current_ts",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "adjustment_origin",
+        "booking_id",
+        "correction_id",
+        "correction_kind",
+        "is_adjustment",
+        "parent_timesheet_id",
+        "sheet_scope",
+        "status",
+        "timesheet_id",
+        "week_ending_date"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+      "routine": "private.timesheet_correction_whole_transition_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "correction_id",
+        "id",
+        "original_invoice_id",
+        "replacement_timesheet_id",
+        "return_invoice_id",
+        "reversal_timesheet_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state",
+        "terminal_receipt_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "routine": "private.invoice_credit_scoped_advance_v1",
+      "variable": "v_chunk",
+      "relation": "public.invoice_operation_chunks",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "entity_id",
+        "error_json",
+        "id",
+        "operation_id",
+        "payload_json",
+        "phase",
+        "result_json",
+        "status"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "routine": "private.invoice_credit_scoped_advance_v1",
+      "variable": "v_operation",
+      "relation": "public.invoice_operations",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "actor_user_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "routine": "private.invoice_credit_scoped_advance_v1",
+      "variable": "v_original",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "client_id",
+        "header_snapshot_json",
+        "id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_invoice",
+      "relation": "public.invoices",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "header_snapshot_json",
+        "id",
+        "issued_document_version_id",
+        "status",
+        "type"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "correction_id",
+        "id",
+        "origin",
+        "replacement_timesheet_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id",
+        "state"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_r",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "adjustment_origin",
+        "authorised_at_server",
+        "correction_kind",
+        "is_current",
+        "parent_timesheet_id",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_p",
+      "relation": "public.timesheets",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "adjustment_origin",
+        "authorised_at_server",
+        "correction_id",
+        "correction_kind",
+        "is_current",
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_fin",
+      "relation": "public.timesheets_financials",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "invoice_breakdown_json",
+        "locked_by_invoice_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_document",
+      "relation": "public.invoice_document_versions",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "id",
+        "snapshot_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "routine": "private.invoice_credit_scope_context_v1",
+      "variable": "v_input",
+      "relation": "public.invoice_operation_chunks",
+      "columnSource": "GENERATED_CONTRACT",
+      "fields": [
+        "actual_byte_count",
+        "actual_page_count",
+        "id",
+        "payload_json",
+        "result_json"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sqlinc",
+      "routine": "private.timesheet_correction_scoped_source_identity_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "contract_id",
+        "frozen_original_json",
+        "id",
+        "origin",
+        "original_invoice_id",
+        "reversal_timesheet_id",
+        "reversed_timesheet_id",
+        "root_timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sqlinc",
+      "routine": "private.timesheet_correction_nullable_daily_contract_v1",
+      "variable": "v_request",
+      "relation": "private.timesheet_correction_requests",
+      "columnSource": "DECLARED_NEW_MIGRATION",
+      "fields": [
+        "correction_id",
+        "id",
+        "root_timesheet_id",
+        "workflow_generation",
+        "workflow_id"
+      ],
+      "missing": []
+    }
+  ],
+  "missing": [],
+  "unmapped": [],
+  "limitation": "Checks explicit %rowtype variable dereferences per function against the current generated contract. It does not replace real relation-alias, view/record/trigger/enum/function/API or actual runtime qualification. New private request rowtypes are documented separately from source and remain root catalogue gates."
+}

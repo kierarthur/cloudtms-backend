@@ -6,7 +6,7 @@
   },
   "output": {
     "path": "timesheet-correction-orchestrator.mjs",
-    "sha256": "e599576f55b7e8b498551667a052ee998214043b357ac6f2a44f53064220224c"
+    "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced"
   },
   "hunks": [
     {
@@ -31,7 +31,7 @@
     },
     {
       "anchor": "  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');",
-      "replacement": "  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||\n             a.original_financial_authority_hash != null || frozen.financial_authority_hash != null ||\n             frozen.financial_snapshot != null || t0.authorised_at_server != null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');"
+      "replacement": "  } else if (value.original_current_snapshot !== null || a.original_financial_id !== null ||\n             a.original_financial_authority_hash !== null || frozen.financial_authority_hash !== null ||\n             frozen.financial_snapshot !== null || t0.authorised_at_server !== null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');"
     },
     {
       "anchor": "    if (prepare.original_materialisation_required) {\n      // No claim that preview/calculator JSON equals the bounded writer's stored output.\n      // Root must prove and add an exact native normalization contract before enabling A0 missing-finance.\n      fail('CORRECTION_ORIGINAL_NORMALISATION_UNPROVED', 503);\n    }",
