@@ -1175,6 +1175,18 @@
       "sha256": "609cc16166e72d5e73977f7debeaeb11d67c88a2fd5427f4d0451087deeab991"
     },
     {
+      "path": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "path": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

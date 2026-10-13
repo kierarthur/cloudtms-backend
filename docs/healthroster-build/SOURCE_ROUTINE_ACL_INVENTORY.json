@@ -1,0 +1,356 @@
+{
+  "status": "SOURCE_EXPECTATION_NOT_INSTALLED_CATALOGUE_PROOF",
+  "contract_baseline": "b8dcdcd1 current-contract.json, read-only",
+  "closures": [
+    {
+      "closure": "13102026_1111",
+      "functions": 8,
+      "changed_existing": 6,
+      "new_functions": 2,
+      "service_executable": 5,
+      "owner_only": 3,
+      "routines": [
+        {
+          "signature": "private._invoice_credit_resume_v1(uuid,uuid,uuid,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private._invoice_dispatch_advance_batch(jsonb,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_support_member_guard_v1()",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "public._ctms_assert_invoice_can_unissue_v1(uuid,boolean,text)",
+          "service": false,
+          "native": true
+        },
+        {
+          "signature": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+          "service": true,
+          "native": true
+        }
+      ]
+    },
+    {
+      "closure": "13102026_1127",
+      "functions": 44,
+      "changed_existing": 11,
+      "new_functions": 33,
+      "service_executable": 16,
+      "owner_only": 28,
+      "routines": [
+        {
+          "signature": "private._candidate_timesheet_delete_retire_workflows_v1(text,uuid[],uuid[],uuid[],uuid,uuid,timestamptz)",
+          "service": false,
+          "native": true
+        },
+        {
+          "signature": "private._timesheet_candidate_submission_delete_guard_v1(text,uuid[],boolean)",
+          "service": false,
+          "native": true
+        },
+        {
+          "signature": "private._timesheet_cross_record_overlap_assert_v1(uuid,jsonb,jsonb,timestamptz,timestamptz,uuid,uuid,text)",
+          "service": false,
+          "native": true
+        },
+        {
+          "signature": "private.timesheet_correction_actor_allowed_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_actor_assert_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_applied_assert_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_cancel_capability_v1(uuid,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_draft_holds_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_draft_round_trip_v1(uuid,text,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_financial_authority_hash_v1(jsonb)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_financial_guard_v1()",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_invoice_route_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_invoice_scope_v1(uuid,uuid,uuid,boolean,integer)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamptz)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_origin_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_projection_by_request_v1(uuid,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_replacement_empty_v1(uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_request_guard_v1()",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_signed_witness_v1(uuid,boolean)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_snapshot_identity_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_terminal_guard_v1()",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_timesheet_authority_hash_v1(jsonb)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_week_allocate_v1(uuid,date,public.submission_mode_enum,uuid,timestamptz)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_whole_state_guard_v1()",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_whole_transition_v1(uuid,text,uuid,text,boolean,integer)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "public._ctms_expand_lifecycle_items_v1(jsonb,text,uuid,integer)",
+          "service": false,
+          "native": true
+        },
+        {
+          "signature": "public.invoice_correction_pair_scope_v1(uuid,uuid,uuid,boolean,integer)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_correction_authorise_atomic_v1(uuid,bigint,jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_cancel_atomic_v1(text,uuid,bigint,uuid,timestamptz)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_manager_summary_v1(uuid,integer,uuid,text)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_correction_pair_transition_v1(uuid,text,uuid,uuid,text,boolean,integer)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_correction_prepare_v1(uuid,uuid)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_return_to_draft_v1(uuid,uuid)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_send_v1(jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_correction_workflow_projection_v1(uuid,uuid)",
+          "service": true,
+          "native": false
+        },
+        {
+          "signature": "public.timesheet_delete_with_pending_expense_apply_v1(text,text,uuid,uuid,uuid,text,uuid[],uuid[],uuid[],uuid[],uuid[],text,uuid,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_standard_delete_preview_v1(uuid,uuid,uuid,text)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "public.timesheet_weekly_manual_adjustment_delete_preview(uuid,uuid)",
+          "service": true,
+          "native": true
+        }
+      ]
+    },
+    {
+      "closure": "13102026_1143",
+      "functions": 12,
+      "changed_existing": 7,
+      "new_functions": 5,
+      "service_executable": 7,
+      "owner_only": 5,
+      "routines": [
+        {
+          "signature": "private._invoice_correction_validate_batch(jsonb,date)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_document_advance_batch(jsonb,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamptz)",
+          "service": true,
+          "native": true
+        },
+        {
+          "signature": "private.invoice_credit_original_input_receipt_v1(jsonb)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.invoice_credit_scope_context_v1(uuid,uuid,uuid,uuid,boolean)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.invoice_credit_scoped_advance_v1(jsonb,timestamptz)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_nullable_daily_contract_v1(jsonb,uuid)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "private.timesheet_correction_scoped_source_identity_v1(jsonb)",
+          "service": false,
+          "native": false
+        },
+        {
+          "signature": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+          "service": true,
+          "native": true
+        }
+      ]
+    }
+  ]
+}

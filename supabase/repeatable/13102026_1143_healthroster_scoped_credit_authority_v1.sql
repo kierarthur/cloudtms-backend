@@ -1,0 +1,22 @@
+-- Repeatable CloudTMS function/view authority: healthroster_scoped_credit_authority_v1
+-- Use CREATE OR REPLACE and preserve owner, security, search_path, and ACL contracts.
+
+\set ON_ERROR_STOP on
+
+begin;
+
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_context.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_original_input.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_start.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sql
+\ir 13102026_1143_healthroster_scoped_credit/13102026_1143_acl.sql
+notify pgrst, 'reload schema';
+
+commit;

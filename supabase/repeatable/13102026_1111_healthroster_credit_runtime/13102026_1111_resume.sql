@@ -1,0 +1,69 @@
+-- Only the creating operation may resume an unchanged committed credit.
+create or replace function private._invoice_credit_resume_v1(
+  p_source_invoice_id uuid,
+  p_operation_id uuid,
+  p_planned_credit_id uuid,
+  p_reversal_timesheet_id uuid default null
+) returns table(credit_note_id uuid)
+language plpgsql stable security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_credit public.invoices%rowtype;
+  v_reversed_id uuid;
+  v_source_count integer;
+  v_credit_count integer;
+begin
+  if p_source_invoice_id is null or p_operation_id is null or p_planned_credit_id is null then return; end if;
+  select cn.* into v_credit from public.invoices cn
+  where cn.id=p_planned_credit_id and cn.original_invoice_id=p_source_invoice_id
+    and cn.type='CREDIT_NOTE' and cn.status in('DRAFT','ISSUED','PAID')
+    and coalesce(cn.header_snapshot_json#>>'{credit_scope,creating_operation_id}',
+      cn.header_snapshot_json->>'credit_operation_id')=p_operation_id::text
+    and (case when p_reversal_timesheet_id is null then not(cn.header_snapshot_json?'credit_scope')
+      else cn.header_snapshot_json#>>'{credit_scope,reversal_timesheet_id}'=p_reversal_timesheet_id::text end);
+  if not found then return; end if;
+  if p_reversal_timesheet_id is not null then
+    if not pg_input_is_valid(v_credit.header_snapshot_json#>>'{credit_scope,reversed_timesheet_id}','uuid') then
+      raise exception 'CREDIT_RESUME_PROVENANCE_INVALID' using errcode='P0001';
+    end if;
+    v_reversed_id:=(v_credit.header_snapshot_json#>>'{credit_scope,reversed_timesheet_id}')::uuid;
+  end if;
+  select count(*)::integer into v_source_count from public.invoice_lines original
+  where original.invoice_id=p_source_invoice_id
+    and (p_reversal_timesheet_id is null or original.timesheet_id=v_reversed_id);
+  select count(*)::integer into v_credit_count from public.invoice_lines cloned where cloned.invoice_id=v_credit.id;
+  if v_source_count=0 or v_source_count<>v_credit_count or exists(
+    select 1 from public.invoice_lines original
+    left join public.invoice_lines cloned on cloned.invoice_id=v_credit.id
+      and cloned.meta_json->>'original_invoice_line_id'=original.id::text
+      and cloned.source_key='CN:'||v_credit.id||':LINE:'||original.id
+    where original.invoice_id=p_source_invoice_id
+      and (p_reversal_timesheet_id is null or original.timesheet_id=v_reversed_id)
+      and (cloned.id is null
+        or cloned.timesheet_id is distinct from original.timesheet_id
+        or cloned.booking_id is distinct from original.booking_id
+        or cloned.total_charge_ex_vat is distinct from -original.total_charge_ex_vat
+        or cloned.total_pay_ex_vat is distinct from -original.total_pay_ex_vat
+        or cloned.vat_rate_pct is distinct from original.vat_rate_pct
+        or cloned.vat_amount is distinct from -original.vat_amount
+        or cloned.total_inc_vat is distinct from -original.total_inc_vat
+        or cloned.paper_ts_r2_key is distinct from original.paper_ts_r2_key
+        or (p_reversal_timesheet_id is not null
+          and cloned.meta_json->>'reversal_timesheet_id' is distinct from p_reversal_timesheet_id::text))
+  ) or exists(
+    select 1 from public.invoice_lines cloned where cloned.invoice_id=v_credit.id
+      and not exists(select 1 from public.invoice_lines original
+        where original.invoice_id=p_source_invoice_id
+          and (p_reversal_timesheet_id is null or original.timesheet_id=v_reversed_id)
+          and cloned.meta_json->>'original_invoice_line_id'=original.id::text)
+  ) or (select row(v_credit.subtotal_ex_vat,v_credit.vat_amount,v_credit.total_inc_vat)
+    is distinct from row(-sum(original.total_charge_ex_vat),-sum(original.vat_amount),-sum(original.total_inc_vat))
+    from public.invoice_lines original where original.invoice_id=p_source_invoice_id
+      and (p_reversal_timesheet_id is null or original.timesheet_id=v_reversed_id)) then
+    raise exception 'CREDIT_RESUME_LINES_OR_MONEY_CHANGED' using errcode='P0001';
+  end if;
+  credit_note_id:=v_credit.id;
+  return next;
+end;
+$function$;
