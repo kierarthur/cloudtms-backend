@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withSharedRehearsalTurn,TURN_KEY} from '../scripts/healthroster-rehearsal-turn.mjs';
-function fixture(answers){const events=[];return {events,deps:{checkProtectedRelease(){events.push('releaseCheck');},openTurn(){events.push('open');return {async query(sql){events.push(sql);return answers.shift();},async close(){events.push('close');}};},log(row){events.push(row.status);}}};}
+import {withSharedRehearsalTurn,TURN_KEY,TURN_OWNERSHIP_SQL} from '../scripts/healthroster-rehearsal-turn.mjs';
+const ownership={physicalDatabase:'cloudtms_test_clone',databaseOid:42,backendPid:71,testIdentity:true,legacyControl:true,held:true};
+function fixture(answers){const events=[],loss=new AbortController();return {events,loss,deps:{checkProtectedRelease(){events.push('releaseCheck');},openTurn(){events.push('open');return {signal:loss.signal,async query(sql){events.push(sql);return sql===TURN_OWNERSHIP_SQL?[JSON.stringify(ownership)]:answers.shift();},async close(){events.push('close');}};},log(row){events.push(row.status);}}};}
 test('busy turn runs no identity, fingerprint or trial and closes only its own connection',async()=>{const {events,deps}=fixture([['f']]);const result=await withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps);assert.equal(result.status,'BUSY_NO_TRIAL');assert.deepEqual(events,['releaseCheck','open','select pg_try_advisory_lock(20261013, 1);','BUSY_NO_TRIAL','close']);});
 test('separate turn survives before, trial, rollback and fresh after, then unlocks and closes',async()=>{const {events,deps}=fixture([['t'],['t'],['t']]);const result=await withSharedRehearsalTurn({task:'test',async work(){events.push('before','trial','rollback','freshAfter');return {status:'proved'};}},deps);assert.equal(result.status,'proved');const before=events.indexOf('before'),after=events.indexOf('freshAfter'),unlock=events.indexOf('select pg_advisory_unlock(20261013, 1);');assert.ok(events.indexOf('TAKEN')<before&&after<unlock&&unlock<events.indexOf('close'));assert.equal(events.at(-1),'RELEASED');assert.deepEqual(TURN_KEY,[20261013,1]);});
 test('trial failure still unlocks and closes before propagating its error',async()=>{const {events,deps}=fixture([['t'],['t'],['t']]);await assert.rejects(withSharedRehearsalTurn({task:'test',work(){throw Error('source failure');}},deps),/source failure/);assert.ok(events.includes('select pg_advisory_unlock(20261013, 1);'));assert.equal(events.at(-2),'close');assert.equal(events.at(-1),'RELEASED');});
@@ -23,4 +24,44 @@ test('exact five-minute boundary permits a fresh protected check and non-waiting
  const {events,deps}=fixture([['f']]);deps.now=()=>1200000;deps.readLastBusy=()=>900000;
  const result=await withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps);
  assert.equal(result.status,'BUSY_NO_TRIAL');assert.equal(events[0],'releaseCheck');assert.equal(events.at(-1),'close');
+});
+test('actual PID and database OID are exposed as the only activity exemption',async()=>{
+ const {deps}=fixture([['t'],['t'],['t']]);
+ await withSharedRehearsalTurn({task:'test',async work(turn){assert.equal(turn.identity.backendPid,71);assert.equal(turn.identity.databaseOid,42);
+  assert.equal(turn.activityExclusionSql,'pid <> pg_backend_pid() and not (pid = 71 and datid = 42)');await turn.assertHeld('before');}},deps);
+});
+test('loss while callback is active signals work immediately and cannot produce clean receipt',async()=>{
+ const {deps,loss}=fixture([['t'],['t'],['t']]);const records=[];deps.log=record=>records.push(record);
+ await assert.rejects(withSharedRehearsalTurn({task:'test',async work(turn){loss.abort(Error('own connection closed'));
+  assert.equal(turn.signal.aborted,true);await assert.rejects(turn.assertHeld('publication'),/own connection closed/);return {status:'proved'};}},deps),/own connection closed/);
+ assert.equal(records.some(row=>row.status==='LOST_INCOMPLETE'),true);assert.equal(records.at(-1).proved,false);
+});
+test('ownership drift in exact pg_locks probe refuses all later work',async()=>{
+ const {deps}=fixture([['t'],['t'],['t']]);const open=deps.openTurn;let probes=0;
+ deps.openTurn=()=>{const connection=open(),query=connection.query;connection.query=sql=>sql===TURN_OWNERSHIP_SQL
+  ?Promise.resolve([JSON.stringify({...ownership,backendPid:++probes===1?71:72})]):query(sql);return connection;};
+ await assert.rejects(withSharedRehearsalTurn({task:'test',work:turn=>turn.assertHeld('before-full-sql')},deps),/TURN_OWNERSHIP_LOST/);
+});
+test('source failure remains primary when explicit unlock also fails',async()=>{
+ const {deps}=fixture([['t'],['t'],['f']]);
+ await assert.rejects(withSharedRehearsalTurn({task:'test',work(){throw Error('original source failure');}},deps),error=>error.message==='original source failure'&&error.turnUnlockConfirmed===false);
+});
+for(const phase of ['before-fingerprint','full-rehearsal','rollback','fresh-proof','protected-wait','runtime','office']){
+ test('connection loss at '+phase+' stops later phases and cannot return proved',async()=>{
+  const {deps,loss}=fixture([['t'],['t'],['t']]),seen=[];
+  await assert.rejects(withSharedRehearsalTurn({task:'test',async work(turn){
+   for(const current of ['before-fingerprint','full-rehearsal','rollback','fresh-proof','protected-wait','runtime','office']){
+    if(current===phase)loss.abort(Error('lost at '+phase));await turn.assertHeld(current);seen.push(current);
+   }
+   return {status:'proved'};
+  }},deps),new RegExp('lost at '+phase));assert.equal(seen.includes(phase),false);
+ });
+}
+test('periodic monitor signals an active callback when actual lock ownership disappears',async()=>{
+ const {deps}=fixture([['t'],['t'],['t']]),open=deps.openTurn;let probes=0;
+ deps.openTurn=()=>{const connection=open(),query=connection.query;connection.query=sql=>sql===TURN_OWNERSHIP_SQL
+  ?Promise.resolve([JSON.stringify({...ownership,held:++probes<3})]):query(sql);return connection;};
+ await assert.rejects(withSharedRehearsalTurn({task:'test',monitorMs:1,async work(turn){
+  await new Promise(resolve=>turn.signal.addEventListener('abort',resolve,{once:true}));return {status:'proved'};
+ }},deps),/TURN_OWNERSHIP_LOST/);assert.ok(probes>=3);
 });
