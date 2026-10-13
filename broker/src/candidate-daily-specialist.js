@@ -325,6 +325,31 @@ export function createCandidateDailySpecialist(env, rpc, executionContext = null
   };
 }
 
+// Internal, post-commit hint only. The signed Google receiver claims work from
+// the existing durable outbox; this does not carry write scope or availability.
+export function createCandidateDailyProjectionWake(env, executionContext = null) {
+  return function wake(correlationId) {
+    if (String(env?.CANDIDATE_APP_ENVIRONMENT || '').toUpperCase() !== 'TEST'
+        || typeof executionContext?.waitUntil !== 'function') return;
+    const started = Date.now();
+    const work = Promise.resolve().then(async () => {
+      let status = 'FALLBACK_SCHEDULED';
+      try {
+        const response = await callGoogleSpecialist(env, 'AVAILABILITY_PROJECTION_WAKE', {}, correlationId);
+        const value = response.result;
+        if (Number.isInteger(value.claimed) && Number.isInteger(value.completed)
+            && typeof value.busy === 'boolean' && typeof value.uncertain === 'boolean') {
+          status = value.busy ? 'BUSY_FALLBACK_SCHEDULED'
+            : value.uncertain ? 'UNCONFIRMED_FALLBACK_SCHEDULED' : 'WAKE_COMPLETED';
+        }
+      } catch { /* Durable outbox and minute fallback remain authoritative. */ }
+      console.log(JSON.stringify({ event: 'CANDIDATE_AVAILABILITY_PROJECTION_WAKE',
+        correlation_id: correlationId, status, duration_ms: Date.now() - started }));
+    });
+    executionContext.waitUntil(work);
+  };
+}
+
 export const candidateDailySpecialistInternals = Object.freeze({
   stableJson,
   safeEffectMessage
