@@ -1,0 +1,15 @@
+# XD-01 / XD-02 future joined TEST checklist — AUTHORED / NOT_RUN
+
+No fixtures, business rows, real caller/queue/payments, producer/legacy mutations or rehearsal were created or run locally. Actual local A4 fixed-response screenshots are presentation evidence only. Existing receipt/installed-unit provenance and schema compilation do not prove these business journeys.
+
+- XD01: one genuine current active-PAYE Candidate's stored original-Umbrella/non-taxable/one-off credit shows only the eleven masked fields; ****last4 and full unchanged beneficiary, no full account/sort code.
+- After the native binding admission its raw identity is excluded from current stored credits. Many excluded/bound/invalid raw identities, including empty nonterminal windows, continue from scan_cursor; limits1/17/100 produce the same eligible union without rescanning consumed IDs. Each displayed data header sorts the entire reader scope both directions with its exact native UUID tie.
+- XD07 owns the still-unbuilt typed non-adoptable oversized row and pre-JSON bounds. When XD07 supplies it, the row displays its plain unavailable state and scrolling reaches the next valid credit without truncating the name. This is an explicit unfinished product clause, not a passed check.
+- XD02: adopt the genuine40.00 original-Umbrella NON_TAXABLE ONE_OFF_SPECIFIED_BANK_ACCOUNT credit into NEXT for its current-PAYE Candidate once. Original creator/consent/bank/version/hash and no legacy payout/reservation must be verified by native authority; pending CASE_CREATE receipt is distinct from materialised Case.
+- Only command_id and legacy_case_id are posted. Actual admitted Case becomes visible through the existing Candidate Cases reader and the stored row disappears. Native origin retains its original bank privately; the new Case's captured current-PAYE channel is not confused with that original Umbrella origin.
+- Same request bytes/UUID return the same receipt after timeout/lost response and reopening. No automatic financial retry or new UUID is allowed until the original result is settled. Actor/agency/Candidate/owner boundary changes must not recover another subject's request or erase unknown evidence.
+- Already-used legacy credit, alteredcommand/actor/bank/origin conflict, foreign Candidate, no genuine consent, taxable or unsupported switching refuse without duplicate obligation; existing Case resolution blocker remains where applicable.
+- Existing acceptance receipt remains pending until the exact Case/Candidate point and affected Cases refresh succeed. Empty current stored list, hidden reply, failed parent read or failed Case point cannot prove completion. Confirmed Case/result remains honest after return to the window.
+
+Reuse one owner-authorised joined receipt for overlapping exact clauses at rolling TEST acceptance; never build a separate fixture/proof programme. Later own/external allocation, floor, frozen Draft, execution, receipt and advice clauses belong XD03–06/EX cards. Timing remains the owner-approved TEST-after-install Create Draft check only; no local300Timesheet dataset.
+

@@ -1,0 +1,65 @@
+{
+  "source": "Sole localPG17 catalogue; no business rows or routine execution",
+  "file": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+  "fileSha256": "33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c",
+  "rows": [
+    {
+      "signature": "private.bpay_next_bind_stored_credit_v1(uuid,uuid,uuid)",
+      "installed": {
+        "bodyMd5": "4f254481132cf3769091faa2b2fca660",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "04198cf56a11a3c0ecf61b12df3337d5ef92be588f6d652251c349a318a3d8c4"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_bind_stored_credit_v1(uuid,uuid,uuid)",
+      "installed": {
+        "bodyMd5": "08a9edba7db9c5d98c17b90acd0669fb",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "4dc72788bb2f41384e0ff1055642fc695742b8657f265c5d57725147d49e581b"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_stored_credit_legacy_guard_v1()",
+      "installed": {
+        "bodyMd5": "51a8a4c66c0a6a9e39bc6877487a5167",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "54ed6be1a6d91d559eec3b65d2ffe65d8f41e5779ff6851d9d6ebcc5c557b37a"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf"
+}

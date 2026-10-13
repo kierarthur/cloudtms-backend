@@ -1,0 +1,1392 @@
+[
+  {
+    "file": "XD01-02-list-dark.png",
+    "scenario": "list",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-pending-dark.png",
+    "scenario": "pending",
+    "mode": "dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-dark.png",
+    "scenario": "pending",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-reopened-dark.png",
+    "scenario": "pending",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-shown-dark.png",
+    "scenario": "shown",
+    "mode": "dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-shown-dark.png",
+    "scenario": "shown",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It now shows in Bethany Clarke's cases.\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-unknown-dark.png",
+    "scenario": "unknown",
+    "mode": "dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-dark.png",
+    "scenario": "unknown",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-reopened-dark.png",
+    "scenario": "unknown",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-refused-dark.png",
+    "scenario": "refused",
+    "mode": "dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-refused-dark.png",
+    "scenario": "refused",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThis credit cannot be adopted; refresh and try again.\nRefresh\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-empty-dark.png",
+    "scenario": "empty",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\nNo stored one-off credits are available.\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-read-error-dark.png",
+    "scenario": "read-error",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe list has changed. Refresh and try again.\nRefresh\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-loading-dark.png",
+    "scenario": "loading",
+    "mode": "dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\nLoading…\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-list-device-light.png",
+    "scenario": "list",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-pending-device-light.png",
+    "scenario": "pending",
+    "mode": "device-light",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-device-light.png",
+    "scenario": "pending",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-reopened-device-light.png",
+    "scenario": "pending",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-shown-device-light.png",
+    "scenario": "shown",
+    "mode": "device-light",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-shown-device-light.png",
+    "scenario": "shown",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It now shows in Bethany Clarke's cases.\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-unknown-device-light.png",
+    "scenario": "unknown",
+    "mode": "device-light",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-device-light.png",
+    "scenario": "unknown",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-reopened-device-light.png",
+    "scenario": "unknown",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-refused-device-light.png",
+    "scenario": "refused",
+    "mode": "device-light",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-refused-device-light.png",
+    "scenario": "refused",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThis credit cannot be adopted; refresh and try again.\nRefresh\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\nStored credit\nNot taxable\n\t02/09/2026\t\n£40.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nStored credit\nNot taxable\n\t14/08/2026\t\n£25.00\n\t\nB Clarke\nAccount ****4417\n\tAdopt\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-empty-device-light.png",
+    "scenario": "empty",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\nNo stored one-off credits are available.\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-read-error-device-light.png",
+    "scenario": "read-error",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe list has changed. Refresh and try again.\nRefresh\n\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\n\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-loading-device-light.png",
+    "scenario": "loading",
+    "mode": "device-light",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nCREDIT\tCREATED ▼\tAMOUNT\tPAID TO\tACTIONS\nLoading…\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-list-phone-dark.png",
+    "scenario": "list",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-pending-phone-dark.png",
+    "scenario": "pending",
+    "mode": "phone-dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-phone-dark.png",
+    "scenario": "pending",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-bottom-phone-dark.png",
+    "scenario": "pending",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-pending-reopened-phone-dark.png",
+    "scenario": "pending",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It is being added to Bethany Clarke's cases.\nCheck progress\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-shown-phone-dark.png",
+    "scenario": "shown",
+    "mode": "phone-dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-shown-phone-dark.png",
+    "scenario": "shown",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It now shows in Bethany Clarke's cases.\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-shown-bottom-phone-dark.png",
+    "scenario": "shown",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nCredit adopted. It now shows in Bethany Clarke's cases.\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CASE_COMPONENTS",
+        "query": {
+          "kind": "CASE_COMPONENTS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "limit": "1"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-unknown-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-bottom-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-unknown-reopened-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe result has not been confirmed.\nTry again\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-confirm-refused-phone-dark.png",
+    "scenario": "refused",
+    "mode": "phone-dark",
+    "copy": "?\nAdopt this credit into Banking Pay?\n\nIt will use the stored account for B Clarke, account ****4417.\n\nStored credit · £40.00 · Not taxable\n\nCancel\nAdopt credit",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-refused-phone-dark.png",
+    "scenario": "refused",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThis credit cannot be adopted; refresh and try again.\nRefresh\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-refused-bottom-phone-dark.png",
+    "scenario": "refused",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThis credit cannot be adopted; refresh and try again.\nRefresh\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nStored credit\nNot taxable\n02/09/2026\n£40.00\nB Clarke\nAccount ****4417\nOpen\nStored credit\nNot taxable\n14/08/2026\n£25.00\nB Clarke\nAccount ****4417\nOpen\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      },
+      {
+        "method": "LOCAL_FIXED_POST",
+        "body": {
+          "action": "BIND_STORED_CREDIT",
+          "command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "legacy_case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-empty-phone-dark.png",
+    "scenario": "empty",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nNo stored one-off credits are available.\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-read-error-phone-dark.png",
+    "scenario": "read-error",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\n\nThe list has changed. Refresh and try again.\nRefresh\n\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  },
+  {
+    "file": "XD01-02-loading-phone-dark.png",
+    "scenario": "loading",
+    "mode": "phone-dark",
+    "copy": "Stored one-off credits\nBethany Clarke · TMS 10502\nClose\nSort by\nCredit · ascending\nCredit · descending\nCreated · ascending\nCreated · descending\nAmount · ascending\nAmount · descending\nPaid to · ascending\nPaid to · descending\nLoading…\n\nSorted by Created, newest first",
+    "errors": [],
+    "reads": [
+      {
+        "method": "LOCAL_FIXED_GET",
+        "kind": "CURRENT_STORED_CREDITS",
+        "query": {
+          "kind": "CURRENT_STORED_CREDITS",
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "limit": "20",
+          "sort": "CREATED_DESC"
+        }
+      }
+    ]
+  }
+]

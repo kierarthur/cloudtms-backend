@@ -1,0 +1,12 @@
+{
+  "decision": "BD179",
+  "input": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+  "output": "supabase/repeatable/13102026_1455_banking_pay_next_stored_credit_page_dispatch_v1.sql",
+  "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+  "inputSha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456",
+  "originalFunctionSha256": "4b3256b487c8535b00cac2993508695aa809e55275ec99c5fcf48320a3a72072",
+  "sortedBlock": "  -- XD01/A3e: only this existing kind's optional sorted reader. The native\n  -- common args owner remains unchanged and validates the original three keys.\n  if p_kind='CURRENT_STORED_CREDITS' and p_args ? 'sort' then\n    if pg_catalog.jsonb_typeof(p_args->'sort') is distinct from 'string'\n      or p_args->>'sort' not in ('CREDIT_ASC','CREDIT_DESC','CREATED_ASC','CREATED_DESC','AMOUNT_ASC','AMOUNT_DESC','PAID_TO_ASC','PAID_TO_DESC') then\n      raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';end if;\n    perform private.bpay_next_preparation_args_v1(p_args-'sort',array['candidate_id','after_legacy_case_id','limit']);\n    return private.bpay_next_current_stored_credit_page_v1((p_args->>'candidate_id')::uuid,\n      (p_args->>'after_legacy_case_id')::uuid,(p_args->>'limit')::integer,p_args->>'sort');\n  end if;\n",
+  "inverseExact": true,
+  "onlyExistingKindReadChanged": true,
+  "commonArgsAndFinancialOwnersUnchanged": true
+}
