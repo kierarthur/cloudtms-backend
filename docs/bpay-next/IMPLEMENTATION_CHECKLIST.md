@@ -4282,7 +4282,7 @@ After a Candidate's channel changes PAYE→Umbrella through EX-08, their 2 unpai
 
 ## WB-33 — Clear or cancel a resolved rate, pay channel or gross total
 
-Seq 144; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 144; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Persisted versions, independent bucket clear closure, future treatment not old earnings or frozen offers.
 
@@ -4290,7 +4290,7 @@ Dependencies: WB-29, WB-30, F-16, WB-45; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-33-D06 | SCREEN: Independent clear/cancel resolution controls | MISSING | Persisted versions and frozen explicit linked closure, future treatment only; no restoration of old earnings or frozen offers. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-33-D06 | SCREEN: Independent clear/cancel resolution controls | BUILT_REVIEWED | Persisted versions and frozen explicit linked closure, future treatment only; no restoration of old earnings or frozen offers. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4306,6 +4306,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 Clear/cancel exact bucket/amount owner closure, including explicitly opted linked scope, confirms current count/consequences and restores future actionable treatment coherently in the same parent. Other evidence/old SOURCE earnings unchanged; frozen Create offer remains unchanged and stale/ambiguous owner refuses.
+
+13 October final completion: WB33 ITEM+D06 BUILT_REVIEWED. BE ac593202398daea3824f54ca37e79db725ce0a0e; FE 50d47b775afe602e7f5c4e2651ca6bc30c000984. Independent SOURCE and full42 A4 receipts/30 real native dark/device-light-dark/phone PNGs, every visible design difference explained. Joined acceptance AUTHORED_NOT_RUN, no hosted installation. Next WB28seq145.
 
 ## WB-28 — Reset selection and Clear all decisions
 

@@ -1,0 +1,106 @@
+{
+  "item": "WB-33",
+  "sequence": 144,
+  "builderDecisions": [
+    "BD174"
+  ],
+  "stage": "Complete independent DESIGN/SOURCE/A4 review",
+  "implementationCommit": "ac593202398daea3824f54ca37e79db725ce0a0e",
+  "frontendImplementationCommit": "50d47b775afe602e7f5c4e2651ca6bc30c000984",
+  "frontendCoreCommit": "2a65593815bd2543f783d353d5955165f0acc76f",
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+      "sha256": "09aeff09b7e0ca6e1874920e917c987b1f75467cf8e6312d09bf8d8c60d878c8"
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "7db49529a107fa3fe6e96da2c1c287f8bc76c7074ebed7b6505dbed362ef723f"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "cd037341e9d3f35dba31df8d76f74f57bea4e74aa6e0757cbee4a79725e0ce9a"
+    },
+    {
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "109452bc0204c1ff629f874c8c158e176836fffddd1bbe617b27c3b430a2eae9"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "3e794778b03bfa5518af58523ed99e04f589713c2b1c29c7ad6a2ee12390cf0a"
+    },
+    {
+      "path": "docs/bpay-next/LOCAL_SCHEMA_CHECKPOINT.json",
+      "sha256": "d4e3e5c609a7cbb48fbc4a9f326fa489fa7af1199a455f188159746f40ab30a0"
+    }
+  ],
+  "frontendFiles": [
+    {
+      "path": "js/bpay-next-clear-choice.js",
+      "sha256": "337a85fe4e3d044fa14ee054e5004731d67e8515721866054ae748ee2856566b"
+    },
+    {
+      "path": "js/bpay-next-component-choice.js",
+      "sha256": "23b5d5e56b7abf1a84de1bc59a6dbe4307b57ab799565e401c62440af9dc10a2"
+    },
+    {
+      "path": "js/bpay-next-pay-channel.js",
+      "sha256": "38cc12ba6228f0dcd6cc331c8cd04e751adc49975238ac7b4574cd8d61ed6a16"
+    },
+    {
+      "path": "js/bpay-next-rates.js",
+      "sha256": "e2f1bd104e4b4013749e92cb89bc32fa2e3f3b5dc3766cb3b0d800bae6e10132"
+    },
+    {
+      "path": "js/bpay-next-resolution.js",
+      "sha256": "1c01bc2a743d1a6d4489b80802ab499334294f96cd240ff57c40a5f8542e2f98"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "ddef0584e41008509422c2c677539bc41b5e4278e415702b1494a11e52ee402f"
+    },
+    {
+      "path": "index.html",
+      "sha256": "14420390f07df1cbb7b28f183f7176de9b9731fc033ebdfa643327d5259845ec"
+    }
+  ],
+  "checks": {
+    "localPG17": "0 migrations / 3 current private functions installed and catalogue verified; original context/command inverse seam exact except named delegate/CLEAR family guard; public839/service76/browser0; both isolation DO PASS",
+    "dbCheck": "384 migrations / 1002 repeatables PASS",
+    "nodeCheck": "All changed Worker/Office/source-gate JS PASS",
+    "sourceGates": "1562 SQL /31RPC /177 routine /37 typed PASS",
+    "contractHash": "5c98c92936657a822d337039930eb0b1d9e969188643682327bc2ca2ab7c7b4b",
+    "sealLocal": "PASS",
+    "coupling": "PASS",
+    "businessAcceptance": "AUTHORED_NOT_RUN",
+    "hostedInstallation": "NOT_RUN",
+    "timing": "Moved to TEST after installation (owner10/10/2026)"
+  },
+  "next": {
+    "sequence": 145,
+    "item": "WB-28"
+  },
+  "wholeItem": "BUILT_REVIEWED; joined acceptance AUTHORED_NOT_RUN",
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-33-build-boundary-review.md",
+      "sha256": "2a6bb917b7634053a5afcf883e1eabe3f206070be43b8aca533b07f475fa77d3"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-33-reader-source-review.md",
+      "sha256": "da8a20e15b9217119a7bd415ce3d9376f6e39e526201fd408b1992ffb4fa2aac"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-33-office-source-review.md",
+      "sha256": "f2e4f4c71549dbacf36f4b80f951109d1ec8e9a347b13711fb5b10f3268ec239"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-33-recovery-design-review.md",
+      "sha256": "fc022cf455cf1ff4e859828f97745c34610423cc0ea80d275cbab05a24fee205"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-33-screen-policy-review.md",
+      "sha256": "eed638605eded3ed237ed6b1fd30c10fb5c016a707dcfe2b842ceb23270a1a79"
+    }
+  ]
+}

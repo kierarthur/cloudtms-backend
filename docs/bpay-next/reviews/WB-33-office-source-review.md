@@ -89,3 +89,21 @@ ClearChoice48–55 now puts the actual native Candidate subject in its body, sup
 |Unchanged Office CSS|`ddef0584e41008509422c2c677539bc41b5e4278e415702b1494a11e52ee402f`|
 
 **SOURCE PASS retained for these current bytes.** Root reports27 local fixed-response captures without JS errors before its latest visual amendments; this is attributed capture-only evidence, not observed by this reviewer, not joined/hosted/business acceptance and not an A4 verdict. Actual final pixel/policy review remains separate.
+
+## Final A4 wording-only source amendment —13 October2026
+
+Re-read actual current ClearChoice45 after final A4 inspection: the new Clear stale/basis error is now one sentence, “The list has changed; refresh and try again.” Original Create/count-specific owner wording is outside this correction. No new controller action, identity, retry, amount/scope, publication restoration or parent admission is introduced. Prior SOURCE PASS is retained for the exact current bytes below. The separate full A4 review now passes all applicable42policy items after the final30 local captures; actual financial/queue/joined/hosted and keyboard-interaction acceptance remains AUTHORED_NOT_RUN/NOT_RUN.
+
+The earlier hash table is historical; this final table controls the current source receipt.
+
+| Current FE source | SHA-256 |
+| --- | --- |
+| js/bpay-next-clear-choice.js | 337a85fe4e3d044fa14ee054e5004731d67e8515721866054ae748ee2856566b |
+| js/bpay-next-rates.js | e2f1bd104e4b4013749e92cb89bc32fa2e3f3b5dc3766cb3b0d800bae6e10132 |
+| js/bpay-next-component-choice.js | 23b5d5e56b7abf1a84de1bc59a6dbe4307b57ab799565e401c62440af9dc10a2 |
+| js/bpay-next-pay-channel.js | 38cc12ba6228f0dcd6cc331c8cd04e751adc49975238ac7b4574cd8d61ed6a16 |
+| js/bpay-next-resolution.js | 1c01bc2a743d1a6d4489b80802ab499334294f96cd240ff57c40a5f8542e2f98 |
+| js/bpay-next-ui.js | f535e7e75579428ca7b97b57d406ccaeadaebbf0fe15e5935574f435b772248d |
+| css/bpay-next-office.css | ddef0584e41008509422c2c677539bc41b5e4278e415702b1494a11e52ee402f |
+| index.html | 14420390f07df1cbb7b28f183f7176de9b9731fc033ebdfa643327d5259845ec |
+| js/main.js | 9b35f150f430f5aaf9a0fd1741961a86869122fd415f78cdfeeddf42a09e9856 |
