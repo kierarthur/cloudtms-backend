@@ -1,0 +1,64 @@
+{
+  "schema_version": "PROTECTED_SOURCE_STRICT_QUALIFICATION_NATIVE_JOURNEYS_V1",
+  "status": "SOURCE_RECIPES_ONLY_ROOT_EXECUTION_HELD",
+  "no_acceptance_receipts_supplied": true,
+  "route": "Root only, agency TEST, SEND_7 owned separate turn before any SQL trial/fingerprints; actual HTTP/phone acceptance outside rehearsals",
+  "root_source_pin": "b65df0997ac69188eadf4de2a88f70226fa99532",
+  "closure_manifest": "COMPLETE_CLOSURE_CENSUS.json",
+  "new_strict_private_signatures": 8,
+  "all_absent_dependency_private_signatures": 26,
+  "planned_private_union": 258,
+  "statement_and_byte_bounds": {"maximum_parsed_statements_per_rollback_batch": 250, "maximum_sql_bytes": 2000000},
+  "fixture_namespace": {
+    "group_code": "WSQ_TEST_*",
+    "client_refs": "CLI-91301300 through CLI-91301399, exact manifest only",
+    "candidate_refs": "CCR-91301300 through CCR-91301399, exact manifest only",
+    "ids": "Actual native UUID versions 1-5, all fixed in root's before-vacancy manifest; no synthetic UUID-v8 transport",
+    "required_vacancy": ["group ID/code", "Client IDs/cli_ref", "Candidate IDs/tms_ref", "Contract IDs", "original root IDs/booking identities", "work event IDs", "scope/authorization IDs", "every declared fixture descendant and native output namespace"],
+    "rates": "Explicit TEST Contract rates through unchanged native setup; never guess operational values",
+    "email_provider_payment": "No send, submit, settlement, remittance, network side-effect SQL or queue drain; catalogue every native trigger/leaf before execution"
+  },
+  "date_rules": {
+    "actual_clock": "No p_now, fabricated upload timestamp, backdated activation or future clock substitution",
+    "legacy_control": "Sunday 2026-10-11 remains NULL-rule only",
+    "first_rule_week": "Sunday 2026-10-18, coverage floor Monday 2026-10-12",
+    "default_s12_first_upload": "Thursday 2026-10-22 through actual native upload owner",
+    "scope_date": "Use actual ensured cycle and actual work date; never retag an old receipt into a new effective range"
+  },
+  "batches": [
+    {
+      "id": "QF01_COMPLETE_OWNER_AND_ACL",
+      "steps": ["Prove owned turn/physical TEST/actual baseline identity before fingerprints", "Compile entire ordered closure with native schemas already composed", "Reassert literal current private/service/browser closure", "Assert all new private signatures owner/security/path/ACL and original 232 preserved", "Assert ordinary public/service signatures unchanged and all operations/readiness disabled", "ROLLBACK and fresh exact catalogue/ledger/fixture/marker restoration"],
+      "negative_calls": ["NULL helper identities", "pending V2 activation", "old native-only V1 activation", "V2 retained enabled receipt/readiness", "missing private dependency", "malformed normalized remote/closure/deployment DTO"],
+      "acceptance_scope": "Definition/security/type proof only; no native financial or remote proof"
+    },
+    {
+      "id": "QF02_OWNER_XID_TURN_SCOPE",
+      "owners": ["private.weekly_source_protected_qualification_begin_v1(jsonb)", "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)"],
+      "steps": ["Use exact current installed VERIFIED execution/catalogue", "Genuine legal native fixtures and original Source census", "Root's own acquired turn PID/database OID", "Begin/step unchanged native owners", "Compare all 39 Source categories before/after and every original Client/root", "Rollback and fresh scope/fixture absence"],
+      "negatives": ["matching advisory key in another database", "foreign observed turn PID", "lost owned turn", "same PID as trial", "service/browser direct scope", "foreign actor/group/date/event/root", "stale catalogue/release", "changed original Client/root", "source CAS growth", "arbitrary own-stage exclusions"],
+      "acceptance_scope": "Native rollback prerequisite only; same-session handler is not deployed HTTP/phone"
+    },
+    {
+      "id": "QF03_CONTROLLED_CROSS_SESSION_SETUP",
+      "owners": ["public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)", "private.weekly_source_protected_test_setup_atomic_v1(jsonb)"],
+      "steps": ["Actual Banking installation and required compatible NEXT/native gates", "Actual installed strict source off", "Genuine TEST fixture account/signature/source owners; seal census only after signature/comparison", "Nine actual V2 prerequisites through protected committed recording", "Exact committed setup authorization bound to actual current census/release", "OPEN via existing active admin setup owner; relevant assignments and both readiness values false", "Read same committed audit from independent authenticated service sessions", "CLOSE only with original census/CAS unchanged and readiness off; capture actual audit UUID/hash"],
+      "negatives": ["ordinary/foreign Client or Candidate instead of reserved references", "unregistered setup descriptor", "wrong setup actor or journey actor", "wrong current release/contract/catalogue", "expired/day-changed scope", "duplicate open/terminal replay", "assignment enabled", "automatic capability requested", "same Contract/day but foreign work event", "NULL work event for non-self-bill qualification", "source mutation after first completed Client"],
+      "acceptance_scope": "Bounded fixture authority only, never operational readiness; genuine document/account prerequisites can hold it"
+    },
+    {
+      "id": "QF04_REAL_DEPLOYED_HTTP_UI_PHONE",
+      "owners": ["POST /api/weekly-source/v1/commands action PROTECT_ALL_SIGNED", "public.weekly_source_protect_all_signed_atomic_v1(jsonb)", "unchanged native prepare/stage/local completion", "actual MyTMS Candidate/manager signature and document owners"],
+      "steps": ["Exact deployed Worker version/source and Office bundle/source and physical TestFlight build/source/artifact identities", "Real authenticated PREVIEW from original server-owned scope", "Real COMMIT/stage/APPLY and partial/retry/error-order journeys across every original Client", "Actual native LEGACY/NEXT financial/component/signature/lock receipts, no source category changes", "Actual UI deep link/control/partial display", "Actual phone signing before seal and approved-hours/document display after native completion", "Source/actor/payload/foreign/stale/expired negatives", "Capture original server request IDs/native result/capture hashes without secrets", "Readiness remains false throughout; CLOSE/revoke through native setup owner"],
+      "acceptance_scope": "Only actual deployed HTTP/browser/physical-phone captures qualify these three origins; handler mocks/callbacks do not"
+    },
+    {
+      "id": "QF05_RECEIPT_PRESERVING_RECORD_AND_ACTIVATE",
+      "steps": ["All original nine native gates plus three real remote captures and real closed setup audit", "Source-commit equivalence across all literal native/toolchain/release/verifier paths/modes/types", "Actual same installed contract/catalogue and actual VERIFIED execution record", "Protected source-gated R2 writer records full operational evidence while retaining R1 identities", "Negative altered source/mode/type/workflow/verifier/manifest/closure/deployment/receipt ID proofs", "Existing controlled feature owner activates exact future unfinalised assignment with original Client/Contract/settings/CAS guards", "Actual post-activation native/API/UI/phone replay and final operational sign-off"],
+      "held_interfaces": ["Original SECURITY active_admin_activation must be actual intended native owner proof, never renamed lease OPEN", "Automatic positive needs real F1 rule/date authority and its full native/component/caller proof", "Report A/B dispatch uses its own real FIN/admission/render/pay-isolation evidence and remains separate"],
+      "acceptance_scope": "No operational activation is authorised by source completeness or this recipe"
+    }
+  ],
+  "fresh_verification": ["Exact original catalogue/ledger digests restored after every rollback trial", "Original markers/scopes/declared fixture counts absent after rollback", "LEGACY identity retained unless actual separate owner-authorised Bank control activation is evidenced", "No payment/provider/email/drain SQL invoked", "Durable remote fixture scopes terminal and retained genuine audit receipts distinguished from rollback fixtures"],
+  "remaining_root_gates": ["Actual SQL/provider compilation and catalogue union", "Owned turn refusal proofs", "All-39 native own-stage/complete CAS equality", "Native financial/signature/document/source-root provenance", "Actual remote deployment/account/HTTP/UI/TestFlight/phone acceptance", "Lawful activation/security positive", "Automatic date/rule positive", "Final operational replay"]
+}

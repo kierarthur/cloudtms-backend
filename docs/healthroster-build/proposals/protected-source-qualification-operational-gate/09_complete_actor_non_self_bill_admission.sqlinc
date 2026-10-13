@@ -1,0 +1,37 @@
+create or replace function private.weekly_source_protected_non_self_bill_mode_v1(
+  p_client_id uuid,p_contract_id uuid,p_work_date date,p_cycle_id uuid,p_actor_user_id uuid,p_work_event_id uuid
+) returns text language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; policy jsonb; qualification jsonb; declared_client uuid;
+begin
+  if p_client_id is null or p_contract_id is null or p_work_date is null or p_cycle_id is null then return null; end if;
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  policy:=private._weekly_source_effective_policy_v1(p_client_id,p_contract_id,p_work_date);
+  if policy->'self_bill_enabled' is distinct from 'false'::jsonb or policy->>'c1_source_mode' is not null
+    or policy->>'source_group_id' is distinct from c.source_group_id::text
+    or policy->>'source_family' is distinct from 'ROSTER'
+    or private.weekly_source_is_import_authoritative_v1(p_client_id,p_contract_id,p_work_date) is distinct from true
+    or not exists(select 1 from public.weekly_source_group_clients member where member.source_group_id=c.source_group_id
+      and member.client_id=p_client_id and c.finalisation_week_ending between member.valid_from and coalesce(member.valid_to,'infinity'::date)) then return null; end if;
+  declared_client:=private.weekly_source_checking_client_scope_v1(c.current_projection_publication_id);
+  if declared_client is not null and declared_client<>p_client_id then return null; end if;
+  begin
+    qualification:=private.weekly_source_protected_capability_receipt_v1(c.id);
+  exception when sqlstate '55000' or no_data_found or too_many_rows then
+    begin
+      qualification:=private.weekly_source_protected_qualification_assert_v1(null,c.id,null,'BULK_SIGNED');
+    exception when sqlstate '42501' or sqlstate '55000' then
+      if p_work_event_id is null then return null; end if;
+      begin qualification:=private.weekly_source_protected_test_scope_assert_v1(c.id,p_actor_user_id,null,p_work_event_id);
+      exception when sqlstate '42501' or sqlstate '55000' then return null; end;
+      if not exists(select 1 from jsonb_array_elements(qualification#>'{original_census,original_items}') item
+        where item->>'client_id'=p_client_id::text and item->>'contract_id'=p_contract_id::text
+          and item->>'work_date'=p_work_date::text and item->>'work_event_id'=p_work_event_id::text) then return null; end if;
+    end;
+    if not(qualification#>'{original_census,original_client_ids}' @> jsonb_build_array(p_client_id)) then return null; end if;
+  end;
+  if not(qualification->'capabilities' @> '["BULK_SIGNED"]'::jsonb) then return null; end if;
+  return 'HEALTHROSTER_WEEKLY';
+exception when no_data_found or too_many_rows or sqlstate '55000' then return null;
+end;
+$function$;

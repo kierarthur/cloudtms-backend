@@ -1,0 +1,70 @@
+create or replace function private.weekly_source_bulk_own_stage_v1(
+  p_request_id uuid,p_actor_id uuid,p_cycle_id uuid,p_bulk_key text,p_selection_sha256 text,p_source_cas_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_exceptional_c1_publication_requests%rowtype;
+  g public.weekly_exceptional_pay_generations%rowtype; a public.weekly_exceptional_payment_approvals%rowtype;
+  run public.weekly_exceptional_orchestration_runs%rowtype; family public.weekly_exceptional_pay_target_families%rowtype;
+  v_proof jsonb; v_claim jsonb; v_cas jsonb; v_clients uuid[]; v_event uuid; v_count integer;
+begin
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select * into strict g from public.weekly_exceptional_pay_generations where id=r.generation_id and family_id=r.family_id;
+  select * into strict run from public.weekly_exceptional_orchestration_runs where id=r.orchestration_run_id and family_id=r.family_id;
+  select * into strict family from public.weekly_exceptional_pay_target_families where id=r.family_id;
+  select * into strict a from public.weekly_exceptional_payment_approvals
+    where creation_orchestration_run_id=run.id and pay_target_family_id=family.id;
+  v_proof:=g.complete_next_vector_json->'bulk_signed_selection_proof';
+  v_claim:=v_proof->'eligible_claim';
+  if v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_STAGED_PROOF_V1'
+    or v_proof->>'actor_user_id' is distinct from p_actor_id::text
+    or v_proof->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_proof->>'bulk_request_key' is distinct from p_bulk_key
+    or v_proof->>'selection_sha256' is distinct from p_selection_sha256
+    or v_proof#>>'{source_cas,source_cas_sha256}' is distinct from p_source_cas_sha256
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_STAGED_PROOF_V1',v_proof-'proof_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'proof_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',g.complete_next_vector_json)
+      is distinct from g.complete_next_vector_hash
+    or r.state is distinct from 'READY' or g.lifecycle_state is distinct from 'PENDING_C1'
+    or run.state is distinct from 'RUNNING' or run.request_kind not in ('APPROVE','AMEND')
+    or run.requested_by_user_id is distinct from p_actor_id or a.approved_by_user_id is distinct from p_actor_id
+    or a.source_cycle_id is distinct from p_cycle_id or a.withdrawn_at_utc is not null
+    or r.candidate_id is distinct from a.candidate_id or r.contract_id is distinct from a.contract_id
+    or r.root_timesheet_id is distinct from family.root_timesheet_id
+    or r.request_sha256 is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'request_sha256')
+    or r.financial_row_id::text is distinct from v_proof->>'financial_row_id'
+    or a.work_event_id::text is distinct from v_claim->>'work_event_id'
+    or a.comparison_revision_id::text is distinct from v_claim->>'comparison_revision_id'
+    or a.signed_submission_timesheet_id::text is distinct from v_claim#>>'{claim,evidence_timesheet_id}'
+    or a.signed_submission_revision::text is distinct from v_claim#>>'{claim,timesheet_revision}'
+    or encode(a.signed_submission_hash,'hex') is distinct from v_claim#>>'{claim,signature_sha256}'
+    or v_claim#>>'{claim,signature_kind}' is distinct from 'CANDIDATE_WORKFLOW'
+    or a.approved_target_pay_components_json is distinct from g.complete_next_vector_json->'target_snapshot'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_TARGET_SNAPSHOT_V1',a.approved_target_pay_components_json),'hex')
+      is distinct from v_proof->>'target_snapshot_sha256'
+    or family.current_generation_id is distinct from g.prior_generation_id
+    or family.current_generation_number+1 is distinct from g.generation_number
+    or exists(select 1 from private.weekly_source_local_protected_decision_receipts receipt where receipt.publication_request_id=r.id)
+    or exists(select 1 from public.weekly_exceptional_c1_publication_checkpoints checkpoint where checkpoint.publication_request_id=r.id)
+    or exists(select 1 from public.weekly_exceptional_c1_unknown_outcomes outcome where outcome.publication_request_id=r.id and outcome.state='RECOVERY_REQUIRED') then
+    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;
+  select count(*),min(event.id::text)::uuid into v_count,v_event from public.weekly_exceptional_pay_family_events event
+    where event.family_id=family.id and event.evidence_approval_id=a.id and event.durable_work_event_id=a.work_event_id and event.state='WAIT'
+      and not exists(select 1 from public.weekly_exceptional_pay_family_events newer where newer.family_id=family.id
+        and newer.durable_work_event_id=a.work_event_id and newer.event_sequence>event.event_sequence);
+  if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)
+    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,
+      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then
+    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;
+  if private.weekly_source_bulk_signed_claim_v1(a.comparison_revision_id) is distinct from v_claim->'claim' then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_CHANGED' using errcode='40001'; end if;
+  select array_agg(value::uuid order by value::uuid) into v_clients from jsonb_array_elements_text(v_proof#>'{source_cas,client_ids}') value;
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id,v_clients,p_actor_id);
+  if v_cas is distinct from v_proof->'source_cas' then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CHANGED' using errcode='40001'; end if;
+  return jsonb_build_object('work_event_id',a.work_event_id,'publication_request_id',r.id,'generation_id',g.id,
+    'approval_id',a.id,'family_id',family.id,'proof_sha256',v_proof->>'proof_sha256');
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

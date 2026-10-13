@@ -1,0 +1,548 @@
+{
+  "schema_version": "PROTECTED_SOURCE_STRICT_OPERATIONAL_GATE_REVIEW_PACKAGE_V1",
+  "status": "FROZEN_SOURCE_PROPOSAL_NATIVE_REMOTE_ACTIVATION_UNEXECUTED",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "bytes": 20026,
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/02_complete_prerequisite_reader.sqlinc",
+      "bytes": 8874,
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "bytes": 6266,
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "bytes": 2849,
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/05_complete_bulk_readiness.sqlinc",
+      "bytes": 615,
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/06_complete_automatic_readiness.sqlinc",
+      "bytes": 1843,
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
+      "bytes": 20906,
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/08_complete_cas_admission.sqlinc",
+      "bytes": 3409,
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/09_complete_actor_non_self_bill_admission.sqlinc",
+      "bytes": 2861,
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/10_complete_actor_bulk_selection.sqlinc",
+      "bytes": 8394,
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/11_complete_actor_own_stage.sqlinc",
+      "bytes": 6416,
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_17_prepare_family.sqlinc",
+      "bytes": 28838,
+      "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_18_prepare_action.sqlinc",
+      "bytes": 13447,
+      "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_19_action_context.sqlinc",
+      "bytes": 24997,
+      "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_20_stage_request.sqlinc",
+      "bytes": 55162,
+      "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/13_owner_only_acl.sqlinc",
+      "bytes": 1978,
+      "sha256": "402810badd5e27e5586966c4f34f2ca7552ba975e53277e7a874fa9422bce640"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/14_complete_managed_release.mjs",
+      "bytes": 38220,
+      "sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/15_complete_current_release_caller.mjs",
+      "bytes": 26150,
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/16_complete_bulk_command_presentation.sqlinc",
+      "bytes": 15449,
+      "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/17_complete_current_routes.js",
+      "bytes": 57362,
+      "sha256": "4b5a0bbaaa7ed42af5873991ef5d13183a74e3f12a45e482b350b278568f32b8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/18_complete_owner_private_acl.sqlinc",
+      "bytes": 7404,
+      "sha256": "c6e024000673a39287b2943fafa4fba09dd1afea6b4ace0dfb51b56d59923927"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "bytes": 381,
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/COMPLETE_CLOSURE_CENSUS.json",
+      "bytes": 68052,
+      "sha256": "dc6167f29027cb8ff804c0a74c4c22f067dead3ba085db37cc264993f7515769"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/ENGINEERING_BOUNDARIES.md",
+      "bytes": 5403,
+      "sha256": "75881f45730dc4986bc37dd550d2d3e84f3d060b520c4af5aefb03a9ba9ee553"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/INDEX_CALL_SITE_DELTAS.json",
+      "bytes": 1738,
+      "sha256": "5f45a7292b630951f9e26b0ad920a9a221e58210984b40f7d6de50fda507348b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/NATIVE_JOURNEYS.json",
+      "bytes": 8692,
+      "sha256": "32d7aafed3f00593c44e1f4939c6c200fbbc0f4a6b3df660c28a18852caa19a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18341,
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OWNER_DELTAS.json",
+      "bytes": 27521,
+      "sha256": "648337bfa31b735f21e9fc6bb4f4f34e5b56537fc389b3bae855dbe6e874b2ea"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/README.md",
+      "bytes": 13123,
+      "sha256": "fc28c00c4c14ebfc98c4b05fb7153ea1417c3da434f8a66a72d6d91b5fa98514"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/TEST_JOURNEY_SCOPE.sqlinc",
+      "bytes": 18451,
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/freeze-forward.mjs",
+      "bytes": 4044,
+      "sha256": "0bbf03478e9751eea3a2e2e1b325b916a8054af3e425b1934a8b69ea0c31e224"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/generate-owners.mjs",
+      "bytes": 27463,
+      "sha256": "26c239724589caa8c2418478480cef3c20948e3cacbc5e2c1c0f374322412412"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/operational-evidence.mjs",
+      "bytes": 17619,
+      "sha256": "28bd7952f0a6f2866578de4949c2215698a5e9c72b85f2456b01fd7626ec115c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/operational-gate.test.mjs",
+      "bytes": 16313,
+      "sha256": "bda0d3aa98f806bd6a1cc78bbff1ba943d5671889289d585e5ca87cd90a58177"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/prerequisite-evidence.mjs",
+      "bytes": 17250,
+      "sha256": "6ef63b264d2e907dd52a6b7ff4aa2a619c8025948eadae42d944a86c6b6abd29"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/route-bridge.test.mjs",
+      "bytes": 3594,
+      "sha256": "3501d079aa60c69c9622276ce2230a204e38b1200d4899487f54c12bbe8a1ec8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/setup-evidence.mjs",
+      "bytes": 5188,
+      "sha256": "0df0d93c9b54d41e9c8869aae394967afb907fff5c93403ff04f6466a8c32145"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/source-equivalence.mjs",
+      "bytes": 11289,
+      "sha256": "2fcd53a51abaae7bca954caf5425175877d8c196607f30537ac04d88b73d3ae2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-execution-tree.mjs",
+      "bytes": 11284,
+      "sha256": "c3d2f2926c35193747c49d75ec6a921d13a64b538e229cb0b70d94109f54af64"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 17634,
+      "sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17285,
+      "sha256": "69f97daada66a66c7fa703a7ca765f00971ae2e8a93918a6f4ee1dbacc945128"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5203,
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/write-closure-census.mjs",
+      "bytes": 6894,
+      "sha256": "301f2e4249dfff5d490a797c46247923d71a7ada34183b3800bddf78ecfc1146"
+    }
+  ],
+  "frozen_predecessors": [
+    {
+      "path": "docs/healthroster-build/proposals/f5-window-rounding/REVIEW_MANIFEST.json",
+      "sha256": "12a605ad6e2b7d5fb2a46d0d8b898bd66d9784ca5ac91695aabd8608252f875d",
+      "verified_files": 11
+    },
+    {
+      "path": "docs/healthroster-build/proposals/m1-whole-shift/REVIEW_MANIFEST.json",
+      "sha256": "c343deb47ec16d476612d34e16c48815b806cfe4438fdf852299f62cba22e92e",
+      "verified_files": 10
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f5-window-receipt-complete/REVIEW_MANIFEST.json",
+      "sha256": "b57c4601fd792b3489e5fab6178ad325819b829e4fde36d517ed3af9132045c7",
+      "verified_files": 34
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/REVIEW_MANIFEST.json",
+      "sha256": "6c30256b4d12d0c76a95db3b0c013055cc362d5cc11fa21f3b34513afbeb96d3",
+      "verified_files": 33
+    },
+    {
+      "path": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_FIXTURE_REVIEW_MANIFEST.json",
+      "sha256": "8a4381e977af3ccfd1d6f5236e7b64486c3c47e9d44e8f31aacb4ab1a7a85a4e",
+      "verified_files": 44
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/REVIEW_MANIFEST.json",
+      "sha256": "92761006ed24966678f98a28c3988143873c70acf69a9df9d4c720dd64b57aa7",
+      "verified_files": 24
+    }
+  ],
+  "source_checks": {
+    "new_protocol_source_handler_tests_passed": 18,
+    "javascript_syntax_passed": true,
+    "reverse_hunks_complete": true,
+    "actual_git_object_negative_vectors": true,
+    "normalized_constructor_bypass_negatives": true
+  },
+  "literal_private_signature_union": [
+    "private._weekly_source_completed_pack_copy_eligibility_v1(uuid)",
+    "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+    "private._weekly_source_rule_values_v1(jsonb)",
+    "private.weekly_source_accepted_publication_action_immutable_v1()",
+    "private.weekly_source_accepted_publication_action_record_v1(jsonb,jsonb,jsonb)",
+    "private.weekly_source_accepted_publication_action_verify_v1(uuid,uuid,bigint,bytea,uuid)",
+    "private.weekly_source_accepted_publication_context_v1(jsonb)",
+    "private.weekly_source_accepted_removal_query_evidence_v1(uuid,uuid,uuid,uuid,uuid)",
+    "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+    "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+    "private.weekly_source_approval_duty_v1(uuid)",
+    "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_authority_subset_v1(jsonb)",
+    "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+    "private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)",
+    "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)",
+    "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+    "private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid)",
+    "private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb)",
+    "private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb)",
+    "private.weekly_source_billing_movement_hash_v1(jsonb)",
+    "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+    "private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text)",
+    "private.weekly_source_bulk_own_stage_event_excluded_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+    "private.weekly_source_bulk_producer_ready_v1(uuid)",
+    "private.weekly_source_bulk_signed_claim_v1(uuid)",
+    "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+    "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+    "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+    "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+    "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+    "private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb)",
+    "private.weekly_source_candidate_approved_clock_row_v2(jsonb,jsonb,text)",
+    "private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date)",
+    "private.weekly_source_candidate_generation_current_v1(uuid)",
+    "private.weekly_source_candidate_head_hours_v2(uuid)",
+    "private.weekly_source_candidate_initial_approval_v2(uuid)",
+    "private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid)",
+    "private.weekly_source_candidate_saved_local_hours_v2(uuid)",
+    "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)",
+    "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+    "private.weekly_source_canonical_json_text_v1(jsonb)",
+    "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_checking_client_scope_v1(uuid)",
+    "private.weekly_source_completed_rows_v1(uuid,uuid,uuid)",
+    "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+    "private.weekly_source_configured_upload_profile_v1(uuid,uuid,text,text)",
+    "private.weekly_source_correct_final_office_preview_v1(uuid)",
+    "private.weekly_source_correct_final_preconditions_v1(uuid,uuid,uuid,boolean)",
+    "private.weekly_source_covered_hours_incident_v1(uuid)",
+    "private.weekly_source_current_publication_guard_v1(uuid,text,uuid,uuid,uuid,bigint)",
+    "private.weekly_source_cutoff_admission_assert_v1(uuid,text,timestamp with time zone)",
+    "private.weekly_source_effective_inventory_v1(uuid)",
+    "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+    "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+    "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+    "private.weekly_source_entitlement_derived_uuid_v1(text,text)",
+    "private.weekly_source_entitlement_head_inventory_assert_v1()",
+    "private.weekly_source_entitlement_head_receipt_assert_v1()",
+    "private.weekly_source_entitlement_head_root_identity_v1()",
+    "private.weekly_source_entitlement_proposal_record_v1(jsonb,uuid,uuid,date,uuid)",
+    "private.weekly_source_entitlement_proposal_request_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,text)",
+    "private.weekly_source_entitlement_proposal_request_v2(uuid,jsonb,text,uuid,bigint,uuid,uuid,jsonb,text)",
+    "private.weekly_source_entitlement_publication_receipt_immutable_v1()",
+    "private.weekly_source_entitlement_publish_core_v1(jsonb,text,jsonb,uuid,text,uuid,jsonb,jsonb)",
+    "private.weekly_source_entitlement_publish_immediate_v1(jsonb)",
+    "private.weekly_source_expected_week_question_v1(uuid)",
+    "private.weekly_source_expected_week_unsigned_materialise_v1(uuid)",
+    "private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_final_rule_version_guard_v1()",
+    "private.weekly_source_final_upload_assert_v1(uuid)",
+    "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)",
+    "private.weekly_source_final_upload_gate_v1(uuid)",
+    "private.weekly_source_final_value_vector_v1(jsonb)",
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+    "private.weekly_source_frozen_rule_values_v1(uuid)",
+    "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+    "private.weekly_source_head_origin_guard_v2()",
+    "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+    "private.weekly_source_import_is_prepared_v1(uuid)",
+    "private.weekly_source_import_outreach_v1(uuid)",
+    "private.weekly_source_incident_contact_retire_v1(uuid)",
+    "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+    "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+    "private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])",
+    "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+    "private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb)",
+    "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+    "private.weekly_source_invoice_admission_receipt_map_v1(uuid)",
+    "private.weekly_source_invoice_admitted_member_money_v1(uuid,uuid)",
+    "private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_duty_v1(uuid)",
+    "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+    "private.weekly_source_invoice_family_timesheet_ids_v1(uuid)",
+    "private.weekly_source_invoice_issue_blockers_v1(uuid,text[])",
+    "private.weekly_source_invoice_issue_reasons_v1(jsonb,text[])",
+    "private.weekly_source_invoice_issue_skippable_code_v1(text)",
+    "private.weekly_source_invoice_issue_skippable_reason_v1(text)",
+    "private.weekly_source_invoice_issue_validate_v1(uuid)",
+    "private.weekly_source_invoice_legacy_render_support_v1(uuid)",
+    "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+    "private.weekly_source_invoice_manifest_admission_money_v1(uuid)",
+    "private.weekly_source_invoice_movement_money_v1(uuid,uuid)",
+    "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+    "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+    "private.weekly_source_invoice_placement_identity_guard_v1()",
+    "private.weekly_source_invoice_presentation_expected_source_hash_v1(uuid)",
+    "private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)",
+    "private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)",
+    "private.weekly_source_invoice_receipt_projection_assert_v1(uuid)",
+    "private.weekly_source_invoice_receipt_support_v1(uuid)",
+    "private.weekly_source_invoice_rounding_authority_rebuild_v1(uuid)",
+    "private.weekly_source_invoice_rounding_receipt_set_v1(uuid,jsonb)",
+    "private.weekly_source_invoice_rounding_suppression_witness_v1(uuid)",
+    "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+    "private.weekly_source_invoice_vat_target_pence_v1(numeric,numeric,text,numeric)",
+    "private.weekly_source_invoice_window_cycle_v1(uuid,uuid)",
+    "private.weekly_source_invoice_window_lock_inventory_v1(uuid,bigint,uuid,uuid)",
+    "private.weekly_source_invoice_window_scope_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+    "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+    "private.weekly_source_local_origin_canonical_v2(jsonb)",
+    "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+    "private.weekly_source_local_publication_origin_guard_v2()",
+    "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+    "private.weekly_source_lock_and_resolve_families_v1(uuid,uuid[],text,uuid,text)",
+    "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+    "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+    "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+    "private.weekly_source_managed_root_guard_v1(uuid)",
+    "private.weekly_source_manager_due_event_covers_v1(uuid,uuid)",
+    "private.weekly_source_manual_review_command_immutable_v1()",
+    "private.weekly_source_manual_review_final_rows_v2(uuid)",
+    "private.weekly_source_manual_review_source_v2(uuid)",
+    "private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)",
+    "private.weekly_source_mode_a_operation_key_v1(uuid,uuid)",
+    "private.weekly_source_mode_a_refuse_operation_v1(uuid,uuid,uuid,uuid,uuid,text)",
+    "private.weekly_source_mode_a_role_type_v1(text,text)",
+    "private.weekly_source_not_finalised_dispatch_v1(uuid)",
+    "private.weekly_source_not_finalised_due_scope_guard_v1()",
+    "private.weekly_source_office_next_owner_v1()",
+    "private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)",
+    "private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_operational_empty_v1(uuid,uuid)",
+    "private.weekly_source_overlap_admission_assert_v1(uuid)",
+    "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_facts_v1(uuid)",
+    "private.weekly_source_pay_query_gate_v1(uuid)",
+    "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_scope_v1(uuid)",
+    "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+    "private.weekly_source_protected_capability_receipt_v1(uuid)",
+    "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+    "private.weekly_source_protected_contact_retire_v1(uuid,uuid)",
+    "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+    "private.weekly_source_protected_family_lock_v1(uuid)",
+    "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+    "private.weekly_source_protected_group_lock_v1(uuid)",
+    "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+    "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+    "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+    "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+    "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+    "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+    "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+    "private.weekly_source_protected_qualification_census_v1(uuid)",
+    "private.weekly_source_protected_qualification_current_catalogue_v1()",
+    "private.weekly_source_protected_qualification_owner_v1()",
+    "private.weekly_source_protected_qualification_release_v1()",
+    "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+    "private.weekly_source_protected_query_rows_v1(uuid,uuid,boolean)",
+    "private.weekly_source_protected_saved_prepare_route_v1(jsonb,text,text)",
+    "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+    "private.weekly_source_protected_test_authorization_v1(uuid)",
+    "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+    "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+    "private.weekly_source_protected_wait_receipt_v1(uuid,uuid)",
+    "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+    "private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text)",
+    "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+    "private.weekly_source_publication_receipt_json_v1(uuid)",
+    "private.weekly_source_publication_request_canonical_v1(jsonb,text,uuid)",
+    "private.weekly_source_publication_request_digest_v1(jsonb)",
+    "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+    "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)",
+    "private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb)",
+    "private.weekly_source_publication_signed_roots_v1(uuid)",
+    "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+    "private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb)",
+    "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+    "private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer)",
+    "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts)",
+    "private.weekly_source_report_shift_facts_v1(uuid,uuid)",
+    "private.weekly_source_report_shift_facts_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_resolve_root_identity_v1(uuid)",
+    "private.weekly_source_retain_approved_additional_v2(uuid,jsonb)",
+    "private.weekly_source_root_authorisation_identity_v1()",
+    "private.weekly_source_root_authorisation_withdrawal_once_v1()",
+    "private.weekly_source_root_integrity_assert_v1(uuid,text,integer)",
+    "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+    "private.weekly_source_schedule_compatible_v1(jsonb,date)",
+    "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+    "private.weekly_source_self_bill_binding_guard_v1()",
+    "private.weekly_source_self_bill_report_bind_v1(uuid)",
+    "private.weekly_source_self_bill_report_duplicate_hold_v1(uuid)",
+    "private.weekly_source_self_bill_report_duplicate_prior_v1(uuid)",
+    "private.weekly_source_self_bill_report_finalise_v1(jsonb,text)",
+    "private.weekly_source_self_bill_report_manifest_v1(jsonb)",
+    "private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_self_bill_report_pay_authority_v1(uuid)",
+    "private.weekly_source_self_bill_report_pay_witness_v1(uuid)",
+    "private.weekly_source_self_bill_report_prior_binding_v1(uuid)",
+    "private.weekly_source_self_bill_report_projection_rows_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_self_bill_report_row_dto_v1(jsonb)",
+    "private.weekly_source_self_bill_report_row_hash_v1(jsonb)",
+    "private.weekly_source_self_bill_report_rules_assert_v1(uuid,uuid)",
+    "private.weekly_source_self_bill_report_seal_assert_v1(uuid)",
+    "private.weekly_source_self_bill_report_stored_rows_v1(uuid)",
+    "private.weekly_source_self_bill_report_workspace_v1(jsonb)",
+    "private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+    "private.weekly_source_signed_check_only_v1(uuid)",
+    "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+    "private.weekly_source_snapshot_authority_subset_v1(uuid)",
+    "private.weekly_source_snapshot_value_fingerprint_v1(uuid,jsonb)",
+    "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()",
+    "private.weekly_source_source_amount_warnings_v1(uuid,uuid)",
+    "private.weekly_source_staged_entitlement_components_v1(uuid,uuid)",
+    "private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)",
+    "private.weekly_source_staged_publication_context_v1(uuid,uuid)",
+    "private.weekly_source_staged_source_documents_v1(uuid)",
+    "private.weekly_source_target_family_for_root_v1(uuid)",
+    "private.weekly_source_target_family_root_identity_v1()",
+    "private.weekly_source_timesheet_category_v2(uuid)",
+    "private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_context_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_floor_assert_v1(uuid,uuid,text,date)",
+    "private.weekly_source_upload_seal_core_v1(uuid,uuid)",
+    "private.weekly_source_uuid_array_is_distinct_v1(uuid[])",
+    "private.weekly_source_uuid_set_difference_v1(uuid[],uuid[])",
+    "private.weekly_source_uuid_set_equals_v1(uuid[],uuid[])",
+    "private.weekly_source_uuid_set_intersect_v1(uuid[],uuid[])",
+    "private.weekly_source_uuid_set_union_v1(uuid[],uuid[])",
+    "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)",
+    "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_verified_role_band_match_v1(text,text,uuid,uuid,uuid,text,date)",
+    "private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date)",
+    "private.weekly_source_work_event_schedule_compatible_v1(uuid,timestamp without time zone,timestamp without time zone)"
+  ],
+  "root_private_signatures_preserved": 232,
+  "new_distinct_private_signatures": 26,
+  "planned_private_count": 258,
+  "tables_preserved": 105,
+  "service_signatures_preserved": 142,
+  "new_public_rpcs": 0,
+  "new_service_grants": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "operational_prerequisite_v2": false,
+  "actual_sql_compile": false,
+  "actual_native_business_acceptance": false,
+  "actual_deployed_http_ui_phone": false,
+  "actual_activation": false,
+  "holds": [
+    "Real Banking install/current compatible NEXT and actual installed verified strict source",
+    "Root native compile/caller/ACL/provider proof and all-39 original CAS equality",
+    "Actual genuine app account/signatures/documents/native financial/HTTP/UI/phone acceptance",
+    "Original full SECURITY activation assertion through actual intended native owner",
+    "Lawful automatic F1 rule/date and full component/native/caller journey",
+    "Separate Report A/B operational dispatch qualification"
+  ],
+  "root_integration": "Preserve all current 232 private/142 service owners and 2205/2206 registrations; compose literal 258 source union and remeasure actual catalogue. Do not reset current root registry."
+}
