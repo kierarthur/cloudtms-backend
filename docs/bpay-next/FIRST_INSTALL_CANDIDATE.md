@@ -1,6 +1,50 @@
-# First-install candidate — awaiting owner recheck PASS
+# Corrected first-install candidate — awaiting independent full rehearsal
 
-Recorded 13 October 2026 after non-forced publication and fresh GitHub branch verification.
+Recorded 13 October 2026 after publication and fresh GitHub verification. Only the existing build branches were pushed. **Promotion, installation and activation remain held.**
+
+| Repository | Exact candidate code commit | Published branch |
+| --- | --- | --- |
+| Backend | `e67d948f0c93cf15789445e243d3e2202efb316b` | `codex/bpay-next-build-20261009` |
+| Office | `413cea9b35975c6ccac0b084327ef109b05c1c48` | `codex/bpay-next-build-20261009` |
+
+The Office SHA includes every retained change since `980db9d1f0bb8cf119758ca3ef9030b0efbe1d27`, including stored-credit adoption and DR-23's PAYE recovery question. Backend starts from `3abaed3e4f74644bf229c2b58d7e0805ea7284fb`. Remote backend `test` at `e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92` and Office `main` at `887e7af7cd15d9f4034ad73806b44344f3eb0791` were rechecked and already integrated. No work was reset, forced or discarded.
+
+Contract: `1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26`. The fresh, small PostgreSQL 17.11 schema-only NEW seal compiled 207 migrations and 791 closures; complete managed inventory is 389 migrations / 1018 repeatables. Regeneration produced exactly the existing committed contract bytes. The candidate tree contains that checked contract unchanged. See [clean seal](design/SEND6-clean-PG17-seal.json) and [canonical LF pin read-back](design/SEND6-PG17-pin-readback.json). The dedicated clean-seal container and volume were removed immediately; the unfinished build's PG17 infrastructure remains preserved.
+
+| SEND6 item | Status | Evidence |
+| --- | --- | --- |
+| 1: two manual-upsert pins | FIXED — EXECUTED | Canonical committed-LF PG17 function-definition SHA `658e71e3…d0d7`. Both verifier sections pass in round 1, including the original ACL/family/runtime assertions. Every other pin is retained. |
+| 2: Authorise pin | FIXED — EXECUTED | Canonical final 2223 body MD5 `52e97f5b…42e0`, definition SHA `08eacfea…ae6`. Withdrawal route/protection assertions pass in round 2. Unauthorise/invalidate pins remain unchanged. |
+| 3: six legitimate actors | FIXED — EXECUTED | Six main fixture INSERTs explicitly grant payment-authoriser and exclude golden-key authority. Wrong/inactive reviewers remain unprivileged. Absence/audit/ordinary-guard assertions pass in round 1; publication/withdrawal pass in round 2; first-authorisation passes in round 4. No real agency actor was changed. |
+| 4: D10 tamper case | FIXED — EXECUTED | A fresh real-I5 pending decision and successful exact receipt/committed-state/head control are rolled back before corruption. Real integrity refusal, permanent manual review, no-write and committed-revision protections pass in round 2. |
+| 5: F5 singleton negative | FIXED — EXECUTED | Only the named receipt guard is deferred inside the original sentinel block. Both invoice-admission forms pass in rounds 1/3. Both invoice-issue forms pass in round 1, IDs S005574/S005886, statement SHA `b99825c2…6f6a`. Singleton, restored indexes and real receipt guards remain. |
+| 6: original S19 inventory mismatch | **OPEN — instrumented, not repaired** | S19 succeeds in targeted rounds 1/2/4. Its original full-release-context cause remains unknown. On recurrence, instrumentation reports the finite firing phase, head, native declared/actual counts and certified-zero value, preserving SQLSTATE 55000. No zero was fabricated and no FK/guard was relaxed. |
+
+The newly reachable assertions exposed further fixture issues, which were fixed forward and independently reviewed. D8 now has a real matching immutable receipt. The withdrawal fixture completes its actual inventory before flushing its two named native guards. Schema S21 retains the real receipt-table refusal and proves the exact real BEFORE TRUNCATE guard on an empty temporary copy, without CASCADE or removing an FK. Ordering now compares the withdrawal marks and audit to an independent caller-frame probe, correctly handling psql's required statement savepoint while retaining top-level transaction equality, all xmin bounds and managed-root observers. Executable and quoted-SQL checks retain forbidden-token detection and now use correct closing \M boundaries. **No production Source owner was changed.**
+
+These are targeted reruns, **not** a clean full 154-verifier rehearsal or a complete installed-contract comparison. All selected 94 pending migrations / 219 canonical closures replay successfully. Historical failures are preserved: round 1 found 12; round 2 isolated two fixture issues; round 3, invoice-admission alone, passed 4,947/4,947 statements; final round 4 passed 4,455/4,455. Every completed rehearsal explicitly rolled back, matched all 18 fresh before/after fingerprints and left the marker absent. Sequence gaps remain possible. Statement maps and [independent final evidence review](reviews/SEND6-final-evidence-review.md) bind every receipt to its source. Three APPLYING-only verifiers remain for the genuine protected release.
+
+Required db:check, contract coupling, 32 source/legacy-fence/final-definer checks, three existing withdrawal-pin checks and Office node syntax checks pass. An extra pre-existing Office unit-suite attempt remains explicitly **FAILED: 37 passed / 33 failed**. Independent investigation traces those failures to stale rule-B, journal, response, polling, cache and light-theme fixture assumptions already present in the old candidate; see [the investigation](reviews/SEND6-office-gate-investigation.md). No introduced material product defect was identified in those causes. That failed extra run is not presented as a gate pass or financial acceptance proof. Joined business/app/queue/timing acceptance remains **AUTHORED / NOT_RUN**.
+
+| Card | Candidate state | Remaining work and disabled-install safety |
+| --- | --- | --- |
+| XD-01 | PARTIAL — INCLUDED | D02–D04 and the native list/sorting are present. XD-07's oversized typed-refusal row / whole D01 remain unfinished. Oversized responses fail closed, never truncate. NEXT admission is inactive under LEGACY; implemented source/catalogue/A4 gates pass. |
+| XD-02 | COMPLETE | Native bind command, journal and Office Adopt pass their own source/catalogue/46-PNG A4 gates. Future joined in-app checks are authored, not run. |
+| XD-03 | PARTIAL — INCLUDED | Existing native allocation/capture D01 is verified and retained. CM-02 comparison-owner D02 and XD-06 screen D03 remain unfinished. No alternate allocator or early screen was invented. Preparation is inactive under LEGACY; scoped gates pass. |
+| DR-23 | PARTIAL — INCLUDED | Seven versioned-preview/audit/recovery leaves and the Office helper are present. DR-22's full host / D10 / whole ITEM and later EX-02/EX-13 joins remain. Private additive attachments are inert with unused NEXT tables under LEGACY; implemented source/catalogue/A4 gates pass. |
+| DR-22 | EXCLUDED — no committed SQL/product | Three root-owned generated SQL files are preserved outside managed inventory with exact paths/hashes. Draft design notes remain local. Resume the earliest unfinished DR-22 item after this requested stop. |
+
+The early HealthRoster group remains BLOCKED-ON-HEALTHROSTER pending the sole WP-PP25 published SQL/Worker actor-helper handoff. No producer stub was built. That deferral does not hold this disabled candidate. F-25 rule-B objects and parked files remain as directed.
+
+The updated SEND6B future rehearsal/self-fix plan is recorded in BUILD_LOG. Round 1 preceded SEND7; rounds 2–4 held its session-level shared lock (20261013,1), with acquisition/release times logged. The invoice deadlock did not recur when rerun alone under that lock. No invoice production change was made.
+
+**STOPPED after recording, as the user's explicit SEND6 request requires.** The separate review chat must fully re-rehearse these exact code SHAs and compare the complete contract. Owner go is required before promotion or installation. Then: disabled-first protected release:test, database first; normal backend → real private → synthetic private → public broker; Office last; safe smoke checks and TEST_INSTALLS; then F-17 together with F-12. No promotion, deployment-branch push, release, agency switch, LIVE, actual payment/provider/bank/email/drain action was performed. Timing remains moved to TEST after installation; no local 300-Timesheet data was created.
+
+---
+
+# Superseded first-install candidate — NOT INSTALLED
+
+Historical entry: superseded by corrected backend candidate e67d948f0c93cf15789445e243d3e2202efb316b. Not installed. Recorded 13 October 2026 after non-forced publication and fresh GitHub branch verification.
 
 | Repository | Exact candidate code commit | Published branch |
 | --- | --- | --- |
