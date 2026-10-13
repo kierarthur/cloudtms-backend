@@ -1,9 +1,9 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "13 October 2026 availability copy readiness: isolate the approved queued-Candidate-copy exception in a late two-function authority, restoring the unchanged qualified booked-shift tiles reader after an older shared-root upgrade overlap. The exact ordered two-root replay and synthetic consecutive-save/booked-shift verifier passed under the restricted local PostgreSQL 17 owner. The complete qualified contract remains byte-identical; only packaging/order changes from bea90218. No failed hosted release is bypassed and all protected verifiers must rerun.",
-  "canonical_contract_hash": "5137561918a01a406466e74e2a6bde32e7fbae2dc5acc100f901dac0fef42d5f",
-  "contract_sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+  "current_change": "SEND10 first-install CI portability: normalize the one CRLF in historical1306 to the already-audited canonical LF source. Exact whole-file LF bytes, recursive closure, managed expanded executable SQL and the complete389/1018 inventory are unchanged. SEND6 clean local PG17 contract1f5b6396 and repeated SEND9/SEND10 pending94/219 rollback proofs remain the same source authority. No function/DDL/money/rule/ACL/security or contract change; the coupling checker is unchanged.",
+  "canonical_contract_hash": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+  "contract_sha256": "5adfd4b690ad8d21ce148aaff5d50f8de71ec18e9bbb7840cdac661b481354f8",
   "files": [
     {
       "path": "supabase/repeatable/03102026_0400_stage2_canonical_producer_after_h1h2_retry.sql",
@@ -52,6 +52,11 @@
     {
       "path": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
       "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+      "sha256": "2bb81fb1cf5e853c7b6af86632234fe06647a50c899c688b9c2eeb3c465411dd"
     }
-  ]
+  ],
+  "previous_current_change": "13 October 2026 availability copy readiness: isolate the approved queued-Candidate-copy exception in a late two-function authority, restoring the unchanged qualified booked-shift tiles reader after an older shared-root upgrade overlap. The exact ordered two-root replay and synthetic consecutive-save/booked-shift verifier passed under the restricted local PostgreSQL 17 owner. The complete qualified contract remains byte-identical; only packaging/order changes from bea90218. No failed hosted release is bypassed and all protected verifiers must rerun."
 }

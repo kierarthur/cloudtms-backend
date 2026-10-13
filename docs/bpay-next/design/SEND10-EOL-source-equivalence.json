@@ -1,0 +1,31 @@
+{
+  "file": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+  "changedCrLfPairs": 1,
+  "canonicalWholeFileUnchanged": true,
+  "before": {
+    "canonicalHash": "2bb81fb1cf5e853c7b6af86632234fe06647a50c899c688b9c2eeb3c465411dd",
+    "closure": {
+      "paths": [
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
+      ],
+      "sha256": "c9e1b561c285dac3ba6ed806a6b531aa7f75ee94e34cb12b16440ee761cea329"
+    },
+    "managedExpanded": "2bb81fb1cf5e853c7b6af86632234fe06647a50c899c688b9c2eeb3c465411dd",
+    "inventory": "17ecc6a1588b62b172ccf51f38b343f4cc746ddd64060212db15f0e5b0636c4e"
+  },
+  "after": {
+    "canonicalHash": "2bb81fb1cf5e853c7b6af86632234fe06647a50c899c688b9c2eeb3c465411dd",
+    "closure": {
+      "paths": [
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
+      ],
+      "sha256": "c9e1b561c285dac3ba6ed806a6b531aa7f75ee94e34cb12b16440ee761cea329"
+    },
+    "managedExpanded": "2bb81fb1cf5e853c7b6af86632234fe06647a50c899c688b9c2eeb3c465411dd",
+    "inventory": "17ecc6a1588b62b172ccf51f38b343f4cc746ddd64060212db15f0e5b0636c4e"
+  },
+  "contractRawSha256": "5adfd4b690ad8d21ce148aaff5d50f8de71ec18e9bbb7840cdac661b481354f8",
+  "contractLfSha256": "5adfd4b690ad8d21ce148aaff5d50f8de71ec18e9bbb7840cdac661b481354f8",
+  "canonicalContract": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+  "noSqlDefinitionDelta": true
+}
