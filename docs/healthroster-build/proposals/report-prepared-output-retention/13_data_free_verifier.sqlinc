@@ -1,0 +1,30 @@
+\set ON_ERROR_STOP on
+begin;
+do $verify_prepared_output$
+declare v_signature text; v_count integer;
+begin
+  if not exists(select 1 from pg_catalog.pg_attribute where attrelid='public.weekly_source_ordinary_pay_projection_receipts'::regclass
+    and attname='prepared_writer_output_json' and atttypid='jsonb'::regtype and not attnotnull and not atthasdef)
+    or not exists(select 1 from pg_catalog.pg_attribute where attrelid='public.weekly_source_ordinary_pay_projection_receipts'::regclass
+    and attname='prepared_writer_output_hash' and atttypid='bytea'::regtype and not attnotnull and not atthasdef) then
+    raise exception 'REPORT_PREPARED_OUTPUT_SCHEMA_INVALID'; end if;
+  select count(*) into v_count from private._weekly_source_acl_private_helper_contract_v1();
+  if v_count<>239 then raise exception 'REPORT_PREPARED_OUTPUT_PRIVATE_CENSUS_INVALID'; end if;
+  foreach v_signature in array array['private.weekly_source_report_prepared_context_assert_v1()','private.weekly_source_report_prepared_financial_codec_v1(public.timesheets_financials)','private.weekly_source_report_prepared_output_capture_v1(uuid,uuid,uuid,bytea,bytea,bytea,jsonb)','private.weekly_source_report_prepared_output_hash_v1(bytea,jsonb)','private.weekly_source_report_prepared_output_insert_guard_v1()','private.weekly_source_report_prepared_output_supported_v1(uuid)','private.weekly_source_report_prepared_pay_amount_v1(public.weekly_source_ordinary_pay_projection_receipts)']::text[] loop
+    if pg_catalog.to_regprocedure(v_signature) is null
+      or pg_catalog.has_function_privilege('service_role',pg_catalog.to_regprocedure(v_signature),'EXECUTE')
+      or pg_catalog.has_function_privilege('anon',pg_catalog.to_regprocedure(v_signature),'EXECUTE')
+      or pg_catalog.has_function_privilege('authenticated',pg_catalog.to_regprocedure(v_signature),'EXECUTE') then
+      raise exception 'REPORT_PREPARED_OUTPUT_PRIVATE_ACL_INVALID'; end if;
+  end loop;
+  if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='public.weekly_source_ordinary_pay_projection_receipts'::regclass
+    and tgname='weekly_source_report_prepared_output_insert_guard_v1' and tgenabled='O' and tgtype=7
+    and tgfoid='private.weekly_source_report_prepared_output_insert_guard_v1()'::regprocedure) then
+    raise exception 'REPORT_PREPARED_OUTPUT_INSERT_GUARD_INVALID'; end if;
+  -- No native business owner is invoked. NULL is the explicit unrelated arm.
+  if private.weekly_source_report_prepared_output_supported_v1(null) is distinct from false
+    or private.weekly_source_report_prepared_pay_amount_v1(null) is not null then
+    raise exception 'REPORT_PREPARED_OUTPUT_NULL_BEHAVIOUR_INVALID'; end if;
+end;
+$verify_prepared_output$;
+rollback;

@@ -1,0 +1,275 @@
+create or replace function private.weekly_source_report_prepared_pay_amount_v1(p_receipt public.weekly_source_ordinary_pay_projection_receipts)
+returns text language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_output jsonb; v_fin jsonb; v_scope jsonb; v_writer jsonb; v_expected_writer jsonb; v_key text;
+begin
+  -- Historical receipts are intentionally unbackfilled. NULL is unknown.
+  if p_receipt.prepared_writer_output_json is null and p_receipt.prepared_writer_output_hash is null then return null; end if;
+  v_output:=p_receipt.prepared_writer_output_json; v_fin:=v_output->'financial_output';
+  v_scope:=v_output->'scope'; v_writer:=v_output->'writer_result';
+  if p_receipt.prepared_writer_output_hash is null or pg_catalog.jsonb_typeof(v_output) is distinct from 'object'
+    or pg_catalog.jsonb_typeof(v_scope) is distinct from 'object'
+    or pg_catalog.jsonb_typeof(v_fin) is distinct from 'object'
+    or pg_catalog.jsonb_typeof(v_writer) is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_RETENTION_UNPROVED' using errcode='55000'; end if;
+  if p_receipt.outcome is distinct from 'PREPARED_FOR_AUTHORISATION'
+    or private.weekly_source_report_prepared_output_supported_v1(p_receipt.final_revision_id) is distinct from true
+    or private.weekly_source_report_projection_receipt_assert_v1(p_receipt) is distinct from true
+    or p_receipt.prepared_writer_output_hash is null
+    or p_receipt.prepared_writer_output_hash is distinct from private.weekly_source_report_prepared_output_hash_v1(p_receipt.receipt_hash,v_output)
+    or pg_catalog.jsonb_typeof(v_output) is distinct from 'object'
+    or (select pg_catalog.array_agg(k order by k) from pg_catalog.jsonb_object_keys(v_output) k)
+      is distinct from array['financial_output','financial_row_sha256','native_writer_signature','schema_version','scope','writer_result']::text[]
+    or v_output->>'schema_version' is distinct from 'WEEKLY_SOURCE_REPORT_PREPARED_WRITER_OUTPUT_V1'
+    or v_output->>'native_writer_signature' is distinct from
+      'public.tsfin_write_current_snapshot_single_bounded(uuid,integer,jsonb,uuid,timestamp with time zone)'
+    or coalesce(v_output->>'financial_row_sha256','')!~'^[0-9a-f]{64}$'
+    or pg_catalog.jsonb_typeof(v_scope) is distinct from 'object'
+    or (select pg_catalog.array_agg(k order by k) from pg_catalog.jsonb_object_keys(v_scope) k)
+      is distinct from array['actor_user_id','candidate_id','client_id','final_revision_id','published_timesheet_financial_id','request_hash','root_timesheet_id','root_timesheet_version','rule_set_version_id','server_calculation_fingerprint','service_snapshot_hash','source_cycle_id']::text[] then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_RETENTION_UNPROVED' using errcode='55000'; end if;
+  if v_fin is null or pg_catalog.jsonb_typeof(v_fin) is distinct from 'object'
+    or (select pg_catalog.array_agg(k order by k) from pg_catalog.jsonb_object_keys(v_fin) k)
+      is distinct from array['accommodation_charge_ex_vat','accommodation_pay_ex_vat','actual_minutes_by_day_json','actual_schedule_json','additional_charge_ex_vat','additional_margin_ex_vat','additional_pay_ex_vat','additional_units_json','authorised_at_utc','authorised_by_user_id','band','basis','break_end_iso','break_minutes','break_start_iso','candidate_assignment','candidate_id','charge_bh','charge_day','charge_night','charge_sat','charge_sun','client_id','computed_at_utc','created_at','expenses_charge_ex_vat','expenses_description','expenses_evidence_manifest','expenses_evidence_r2_key','expenses_pay_ex_vat','external_source_rows_json','has_pay_channel_issue','has_rate_issue','hours_bh','hours_day','hours_night','hours_sat','hours_sun','hr_crosscheck_issues','hr_crosscheck_status','id','invoice_breakdown_json','is_current','is_stale','margin_ex_vat','mileage_charge_ex_vat','mileage_charge_rate','mileage_evidence_manifest','mileage_evidence_r2_key','mileage_pay_ex_vat','mileage_pay_rate','mileage_units','nhsp_import_id','occupant_key_norm','other_charge_ex_vat','other_pay_ex_vat','pay_bh','pay_day','pay_method','pay_night','pay_on_hold','pay_on_hold_reason','pay_on_hold_since_utc','pay_sat','pay_sun','pay_total_inc_vat_snapshot','pay_vat_amount_snapshot','pay_vat_rate_pct_snapshot','pay_wtr_rate_pct_snapshot','payment_reference','po_number','policy_snapshot_json','processed_at_utc','processed_by_user_id','processing_status','rate_source_refs_json','remittance_last_sent_at_utc','remittance_send_count','role','stale_reason','timesheet_id','timesheet_version','total_charge_ex_vat','total_hours','total_pay_ex_vat','travel_charge_ex_vat','travel_pay_ex_vat','updated_at','worked_end_iso','worked_start_iso']::text[] then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'accommodation_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'accommodation_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'accommodation_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'accommodation_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'actual_minutes_by_day_json') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'actual_schedule_json') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'additional_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'additional_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'additional_margin_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'additional_margin_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'additional_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'additional_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'additional_units_json') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'additional_units_json')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'authorised_at_utc') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'authorised_by_user_id') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'authorised_by_user_id' is not null and v_fin->>'authorised_by_user_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'band') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'basis') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'basis')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'break_end_iso') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'break_minutes') not in ('null','number') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'break_start_iso') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'candidate_assignment') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'candidate_assignment')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'candidate_id') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'candidate_id' is not null and v_fin->>'candidate_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'charge_bh') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'charge_day') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'charge_night') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'charge_sat') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'charge_sun') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'client_id') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'client_id' is not null and v_fin->>'client_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'computed_at_utc') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'computed_at_utc')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'created_at') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'created_at')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'expenses_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'expenses_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'expenses_description') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'expenses_evidence_manifest') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'expenses_evidence_r2_key') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'expenses_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'expenses_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'external_source_rows_json') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'has_pay_channel_issue') not in ('null','boolean') or pg_catalog.jsonb_typeof(v_fin->'has_pay_channel_issue')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'has_rate_issue') not in ('null','boolean') or pg_catalog.jsonb_typeof(v_fin->'has_rate_issue')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hours_bh') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'hours_bh')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hours_day') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'hours_day')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hours_night') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'hours_night')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hours_sat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'hours_sat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hours_sun') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'hours_sun')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hr_crosscheck_issues') not in ('null','array') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hr_crosscheck_issues')='array' and exists(select 1 from pg_catalog.jsonb_array_elements(v_fin->'hr_crosscheck_issues') a where pg_catalog.jsonb_typeof(a) not in ('null','string')) then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'hr_crosscheck_status') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'id') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'id')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'id' is not null and v_fin->>'id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'invoice_breakdown_json') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'invoice_breakdown_json')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'is_current') not in ('null','boolean') or pg_catalog.jsonb_typeof(v_fin->'is_current')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'is_stale') not in ('null','boolean') or pg_catalog.jsonb_typeof(v_fin->'is_stale')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'margin_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'margin_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'mileage_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_charge_rate') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_evidence_manifest') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_evidence_r2_key') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'mileage_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_pay_rate') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'mileage_units') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'mileage_units')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'nhsp_import_id') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'nhsp_import_id' is not null and v_fin->>'nhsp_import_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'occupant_key_norm') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'other_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'other_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'other_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'other_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_bh') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_day') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_method') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_night') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_on_hold') not in ('null','boolean') or pg_catalog.jsonb_typeof(v_fin->'pay_on_hold')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_on_hold_reason') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_on_hold_since_utc') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_sat') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_sun') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_total_inc_vat_snapshot') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'pay_total_inc_vat_snapshot')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_vat_amount_snapshot') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'pay_vat_amount_snapshot')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_vat_rate_pct_snapshot') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'pay_wtr_rate_pct_snapshot') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'payment_reference') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'po_number') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'policy_snapshot_json') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'policy_snapshot_json')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'processed_at_utc') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'processed_by_user_id') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'processed_by_user_id' is not null and v_fin->>'processed_by_user_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'processing_status') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'processing_status')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'rate_source_refs_json') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'rate_source_refs_json')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'remittance_last_sent_at_utc') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'remittance_send_count') not in ('null','number') or pg_catalog.jsonb_typeof(v_fin->'remittance_send_count')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'role') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'stale_reason') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'timesheet_id') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'timesheet_id')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_fin->>'timesheet_id' is not null and v_fin->>'timesheet_id'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'timesheet_version') not in ('null','number') or pg_catalog.jsonb_typeof(v_fin->'timesheet_version')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'total_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'total_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'total_hours') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'total_hours')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'total_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'total_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'travel_charge_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'travel_charge_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'travel_pay_ex_vat') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'travel_pay_ex_vat')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'updated_at') not in ('null','string') or pg_catalog.jsonb_typeof(v_fin->'updated_at')='null' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'worked_end_iso') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if pg_catalog.jsonb_typeof(v_fin->'worked_start_iso') not in ('null','string') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  for v_key in select pg_catalog.unnest(array['accommodation_charge_ex_vat','accommodation_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat','additional_pay_ex_vat','charge_bh','charge_day','charge_night','charge_sat','charge_sun','expenses_charge_ex_vat','expenses_pay_ex_vat','hours_bh','hours_day','hours_night','hours_sat','hours_sun','margin_ex_vat','mileage_charge_ex_vat','mileage_charge_rate','mileage_pay_ex_vat','mileage_pay_rate','mileage_units','other_charge_ex_vat','other_pay_ex_vat','pay_bh','pay_day','pay_night','pay_sat','pay_sun','pay_total_inc_vat_snapshot','pay_vat_amount_snapshot','pay_vat_rate_pct_snapshot','pay_wtr_rate_pct_snapshot','total_charge_ex_vat','total_hours','total_pay_ex_vat','travel_charge_ex_vat','travel_pay_ex_vat']::text[]) loop
+    if pg_catalog.jsonb_typeof(v_fin->v_key) is distinct from 'null' and
+      (pg_catalog.jsonb_typeof(v_fin->v_key) is distinct from 'string'
+       or coalesce(v_fin->>v_key,'')!~'^-?(0|[1-9][0-9]*)([.][0-9]+)?$') then
+      raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  end loop;
+  if coalesce(v_fin->>'total_pay_ex_vat','')!~'^-?(0|[1-9][0-9]*)([.][0-9]+)?$'
+    or coalesce(v_fin->>'timesheet_version','')!~'^[1-9][0-9]*$' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CODEC_INVALID' using errcode='55000'; end if;
+  if v_scope->>'final_revision_id' is distinct from p_receipt.final_revision_id::text
+    or v_scope->>'source_cycle_id' is distinct from p_receipt.source_cycle_id::text
+    or not exists(select 1 from public.weekly_source_final_revisions r where r.id=p_receipt.final_revision_id
+      and r.rule_set_version_id::text=v_scope->>'rule_set_version_id')
+    or v_scope->>'client_id' is distinct from p_receipt.client_id::text
+    or v_scope->>'root_timesheet_id' is distinct from p_receipt.root_timesheet_id::text
+    or v_scope->>'published_timesheet_financial_id' is distinct from p_receipt.published_timesheet_financial_id::text
+    or v_scope->>'actor_user_id' is distinct from p_receipt.actor_user_id::text
+    or v_scope->>'request_hash' is distinct from pg_catalog.encode(p_receipt.request_hash,'hex')
+    or v_scope->>'service_snapshot_hash' is distinct from pg_catalog.encode(p_receipt.service_snapshot_hash,'hex')
+    or v_scope->>'server_calculation_fingerprint' is distinct from pg_catalog.encode(p_receipt.server_calculation_fingerprint,'hex')
+    or v_fin->>'id' is distinct from p_receipt.published_timesheet_financial_id::text
+    or v_fin->>'timesheet_id' is distinct from p_receipt.root_timesheet_id::text
+    or v_fin->>'client_id' is distinct from p_receipt.client_id::text
+    or v_fin->>'candidate_id' is distinct from v_scope->>'candidate_id'
+    or v_fin->>'timesheet_version' is distinct from v_scope->>'root_timesheet_version' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_RETENTION_UNPROVED' using errcode='55000'; end if;
+  -- Reconstruct exactly the retained original writer's ten-field marker.
+  -- No current row/status/clock/amount lookup is made by this historical read.
+  v_expected_writer:=pg_catalog.jsonb_build_object('ok',true,'timesheet_id',v_fin->'timesheet_id',
+    'timesheet_financials_id',v_fin->'id','processing_status',v_fin->'processing_status',
+    'timesheet_version',(v_fin->>'timesheet_version')::integer,
+    'updated_at',v_fin->'updated_at','computed_at_utc',v_fin->'computed_at_utc',
+    'version_marker',pg_catalog.md5(pg_catalog.jsonb_build_object(
+      'id',v_fin->'id','timesheet_id',v_fin->'timesheet_id','timesheet_version',(v_fin->>'timesheet_version')::integer,
+      'processing_status',v_fin->'processing_status','updated_at',v_fin->'updated_at','computed_at_utc',v_fin->'computed_at_utc',
+      'total_hours',(v_fin->>'total_hours')::numeric,'total_pay_ex_vat',(v_fin->>'total_pay_ex_vat')::numeric,
+      'total_charge_ex_vat',(v_fin->>'total_charge_ex_vat')::numeric,'margin_ex_vat',(v_fin->>'margin_ex_vat')::numeric)::text));
+  if v_writer is distinct from v_expected_writer then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_RETENTION_UNPROVED' using errcode='55000'; end if;
+  return v_fin->>'total_pay_ex_vat';
+exception when invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_RETENTION_UNPROVED' using errcode='55000';
+end;
+$function$;

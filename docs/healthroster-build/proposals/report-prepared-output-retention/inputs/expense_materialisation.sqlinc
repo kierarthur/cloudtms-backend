@@ -1,0 +1,103 @@
+create or replace function private.weekly_source_ordinary_projection_expenses_materialise_v1(
+  p_root_timesheet_id uuid,
+  p_timesheet_financial_id uuid,
+  p_expected_source_expenses jsonb
+) returns integer
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expense jsonb;
+  v_authority public.weekly_expense_authority_generations%rowtype;
+  v_movement public.weekly_source_billing_movements%rowtype;
+  v_existing public.weekly_source_expense_pay_materialisations%rowtype;
+  v_lineage_hash bytea;
+  v_changed integer:=0;
+begin
+  if p_root_timesheet_id is null or p_timesheet_financial_id is null
+     or pg_catalog.jsonb_typeof(p_expected_source_expenses)<>'array'
+     or not exists(
+       select 1 from public.timesheets_financials financial
+       where financial.id=p_timesheet_financial_id
+         and financial.timesheet_id=p_root_timesheet_id
+         and financial.is_current
+     ) then
+    raise exception 'WEEKLY_SOURCE_EXPENSE_MATERIALISATION_INPUT_INVALID'
+      using errcode='22023';
+  end if;
+  if pg_catalog.jsonb_array_length(p_expected_source_expenses)=0 then
+    return 0;
+  end if;
+
+  perform pg_catalog.set_config(
+    'cloudtms.weekly_source_projection_owner',
+    'weekly_source_ordinary_projection_expenses_materialise_v1',true
+  );
+  for v_expense in
+    select expense.value
+    from pg_catalog.jsonb_array_elements(p_expected_source_expenses) expense(value)
+    where coalesce(expense.value->>'source_expense_pence','')~'^[1-9][0-9]*$'
+    order by expense.value->>'work_event_id'
+  loop
+    if coalesce(v_expense->>'expense_authority_generation_id','')
+         !~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_expense->>'authority_hash','')!~'^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_AUTHORITY_MANIFEST_INVALID'
+        using errcode='55000';
+    end if;
+    select authority.* into strict v_authority
+    from public.weekly_expense_authority_generations authority
+    where authority.id=(v_expense->>'expense_authority_generation_id')::uuid
+      and authority.work_event_id=(v_expense->>'work_event_id')::uuid
+      and authority.contract_id=(v_expense->>'contract_id')::uuid
+      and authority.source_expense_pence=(v_expense->>'source_expense_pence')::bigint
+      and pg_catalog.encode(authority.authority_hash,'hex')=v_expense->>'authority_hash';
+    select movement.* into strict v_movement
+    from public.weekly_source_billing_movements movement
+    where movement.expense_authority_generation_id=v_authority.id
+      and movement.invoice_timesheet_id=p_root_timesheet_id
+      and movement.source_line_kind='SOURCE_FIXED_EXPENSE'
+      and movement.movement_role in ('EXPENSE_POSITIVE','EXPENSE_REPLACEMENT')
+      and movement.total_pay_ex_vat=v_authority.candidate_reimbursement_ex_vat
+    order by movement.created_at_utc desc,movement.id desc
+    limit 1;
+
+    select materialisation.* into v_existing
+    from public.weekly_source_expense_pay_materialisations materialisation
+    where materialisation.expense_authority_generation_id=v_authority.id
+      and materialisation.candidate_timesheet_financial_id=p_timesheet_financial_id;
+    if found then
+      if v_existing.billing_movement_id is distinct from v_movement.id
+         or v_existing.root_timesheet_id is distinct from p_root_timesheet_id then
+        raise exception 'WEEKLY_SOURCE_EXPENSE_MATERIALISATION_CONFLICT'
+          using errcode='55000';
+      end if;
+      continue;
+    end if;
+    v_lineage_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_EXPENSE_TSFIN_MATERIALISATION_V1',
+      pg_catalog.jsonb_build_object(
+        'expense_authority_generation_id',v_authority.id,
+        'authority_hash',pg_catalog.encode(v_authority.authority_hash,'hex'),
+        'billing_movement_id',v_movement.id,
+        'movement_economic_hash',pg_catalog.encode(v_movement.movement_economic_hash,'hex'),
+        'root_timesheet_id',p_root_timesheet_id,
+        'candidate_timesheet_financial_id',p_timesheet_financial_id
+      )
+    );
+    insert into public.weekly_source_expense_pay_materialisations(
+      expense_authority_generation_id,billing_movement_id,
+      root_timesheet_id,candidate_timesheet_financial_id,pay_lineage_hash
+    ) values (
+      v_authority.id,v_movement.id,p_root_timesheet_id,
+      p_timesheet_financial_id,v_lineage_hash
+    );
+    v_changed:=v_changed+1;
+  end loop;
+  return v_changed;
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_SOURCE_EXPENSE_MATERIALISATION_SCOPE_INVALID'
+      using errcode='55000';
+end;
+$function$;

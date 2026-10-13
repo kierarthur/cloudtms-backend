@@ -1,0 +1,185 @@
+{
+  "schema_version": "REPORT_PREPARED_OUTPUT_SOURCE_MANIFEST_V1",
+  "status": "REVIEWED_SOURCE_PROPOSAL_NATIVE_ACCEPTANCE_HELD",
+  "authoritativeLane": "healthroster-v2-report-build-13102026",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "rootInputCommit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "rootObservedCommit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "census": {
+    "tables": 105,
+    "privateBefore": 232,
+    "newPrivate": 7,
+    "privateAfter": 239,
+    "service": 142
+  },
+  "artifactCount": 29,
+  "artifacts": [
+    {
+      "path": "01_schema.sqlinc",
+      "bytes": 1334,
+      "sha256": "b0fcf6cf1ef5ba366a2c62deb2ddf11bdaf242e40cc88bc7b322bfc4eba15838"
+    },
+    {
+      "path": "02_codec.sqlinc",
+      "bytes": 33957,
+      "sha256": "dd735cdeabd778609eb30a4da2e852f57ba555e2fc029606966b699d14510008"
+    },
+    {
+      "path": "03_capture_context.sqlinc",
+      "bytes": 7645,
+      "sha256": "71443e074b700730db85e6dc20e35e5d8acd38dee0365d39d81e136adf24fb14"
+    },
+    {
+      "path": "04_receipt_insert_guard.sqlinc",
+      "bytes": 5458,
+      "sha256": "fc27a20d6013d4a34574612f53e86588d6b6e3ecd1840fcd05b2ecba9a999c2f"
+    },
+    {
+      "path": "05_retained_amount.sqlinc",
+      "bytes": 30359,
+      "sha256": "7ed19c7ceab15a98d0e9ec75c7fd3f969d2dfa11e2625bbe873913a1889057fb"
+    },
+    {
+      "path": "06_complete_ordinary_apply.sqlinc",
+      "bytes": 38747,
+      "sha256": "d6c408eaa4791ce967fa75c19bbc975c21f54da16801c01719260c4459feb9c0"
+    },
+    {
+      "path": "07_complete_report_pay_authority.sqlinc",
+      "bytes": 23748,
+      "sha256": "e1fdc46f3b8c97273236c6df09f62c4e947d1b252cb986bb4444613e5384e8c8"
+    },
+    {
+      "path": "08_complete_registry_union.sqlinc",
+      "bytes": 36266,
+      "sha256": "72b0a2a14f8bfc9607df6cfd0a074390aaa02b6e0ddd6aec958f4db8a85ba3fb"
+    },
+    {
+      "path": "09_complete_final_acl_union.sqlinc",
+      "bytes": 59435,
+      "sha256": "60768cfcc1f98eda515407c0705f85f37381b55b178688c9ae98c4f5e0f80976"
+    },
+    {
+      "path": "10_complete_independent_acl_verifier.sqlinc",
+      "bytes": 68989,
+      "sha256": "d72a062d74fc6cd1cd53ffa43ba18e03896a8c4ccd72d217f59a8da31a2cb2a8"
+    },
+    {
+      "path": "11_final_private_acl.sqlinc",
+      "bytes": 1796,
+      "sha256": "2be68072c40c0b0520f0a4664172f4f8c230324ac61a789ee0bbfefc0002239c"
+    },
+    {
+      "path": "12_proposed_repeatable_root.sqlinc",
+      "bytes": 813,
+      "sha256": "f42c8e858b02d4cc8a53773187b97319cd699fb717ea14e00d7242a155d530ff"
+    },
+    {
+      "path": "13_data_free_verifier.sqlinc",
+      "bytes": 2721,
+      "sha256": "8002ea36d365056771c6fa340210c38b54a504f46300969e2df32cf3954e0010"
+    },
+    {
+      "path": "CODEC_FIELDS.json",
+      "bytes": 7140,
+      "sha256": "87fae1af68fb75d23d1c625300abedcaadde1922bed02250213de96505b51fe5"
+    },
+    {
+      "path": "NATIVE_PROOF_RECIPE.md",
+      "bytes": 8260,
+      "sha256": "6e010d83bf8a3e20311d36dc0fc1f14ea8e54f86d11e2fcd897f4bf61bd6e8f1"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 10957,
+      "sha256": "d9cd9c2bef616f338e25a2abe49df9fc384517651e27ffd221b150e44ace2379"
+    },
+    {
+      "path": "ROOT_INTEGRATION.md",
+      "bytes": 7155,
+      "sha256": "4a50778fc821f5925854137fd82492b60c69980f63b1e2c50fe8dce81a85ebbe"
+    },
+    {
+      "path": "SOURCE_RECEIPT.json",
+      "bytes": 11536,
+      "sha256": "5ffb55dc568ffe4ccaf790f7b88f4805a0795f4cb6c43ed8b33cb56227cd290e"
+    },
+    {
+      "path": "build-proposal.mjs",
+      "bytes": 49327,
+      "sha256": "4efb27933b4b305d15ca97c2a0b21ce40916d9b217cca1d6a59e5afe72b4012f"
+    },
+    {
+      "path": "freeze-source.mjs",
+      "bytes": 1616,
+      "sha256": "47e74105c6e2a250cce5029a5128ba77436803326b366b1833351d4afb4bbae5"
+    },
+    {
+      "path": "inputs/bounded_writer.sqlinc",
+      "bytes": 36614,
+      "sha256": "3345f5ffd3c4ea69ab95b3d0903b798c6be6989705de075ddbfe6aa587d1fc2f"
+    },
+    {
+      "path": "inputs/compact_report_witness.sqlinc",
+      "bytes": 919,
+      "sha256": "9b7631caedc95d335cdddff4202e095b2b74b02b68c0546074aa1780c33b48f3"
+    },
+    {
+      "path": "inputs/expense_materialisation.sqlinc",
+      "bytes": 4662,
+      "sha256": "59705d5fb026c6245c1b0d9c26ba18ce2e4aa42057d019b6def19c19e0106e12"
+    },
+    {
+      "path": "inputs/ordinary_apply.sqlinc",
+      "bytes": 38263,
+      "sha256": "f9e7809025b4bd47ea1b4d6e1021d47844d238de69e61fe40bb2de6ff6975a5b"
+    },
+    {
+      "path": "inputs/receipt_assert.sqlinc",
+      "bytes": 2193,
+      "sha256": "c2d638524b74808aaac59b13aa43a9801cfce95c6dedcf4bd659cbfb935255de"
+    },
+    {
+      "path": "inputs/receipt_insert.sqlinc",
+      "bytes": 3515,
+      "sha256": "5140fbeb312d03f7d11b2a1f30804d5b4745b56b7ddb3ae1aae5debf18704a92"
+    },
+    {
+      "path": "inputs/report_authority.sqlinc",
+      "bytes": 23010,
+      "sha256": "36f7e5c89bf944b97539334cf4e8e6585244cb33df26a72a4b9e06d65e9fc97d"
+    },
+    {
+      "path": "inputs/root_hash.sqlinc",
+      "bytes": 1655,
+      "sha256": "f1fb653d96d1d0028f1c74df52750c3948c42f79ec32a2fbbf1a1a9ea49a46e7"
+    },
+    {
+      "path": "proposal.test.mjs",
+      "bytes": 16263,
+      "sha256": "58b996858321aa686326dab2ab01926382ec768f93be6a2e525153320881bab0"
+    }
+  ],
+  "packageSha256": "f196d1f0b089307333c17458b7502d28a02023228caab070c384f8827cce10c1",
+  "checks": {
+    "sourceTests": 30,
+    "pass": 30,
+    "fail": 0,
+    "skip": 0,
+    "nodeSyntax": true,
+    "officialSQLStatementPackaging": true,
+    "semanticSQLCompilation": false,
+    "nativeWriterCapture": false,
+    "nativeFinancialAcceptance": false,
+    "rootWrites": false,
+    "databaseCalls": false,
+    "businessNetworkCalls": false,
+    "bankingSourceReads": false
+  },
+  "remainingGates": [
+    "Root review of additive receipt columns/closed codec/ephemeral owner guard and generated contract.",
+    "Root SEND_7 compile and genuine native writer, atomic capture/receipt, replay and intervening rewrite fixtures.",
+    "Actual first-installed Banking active/withheld/headless NEXT evidence join is root/Bank-owned and unavailable here.",
+    "Report A/B admission, native financial, renderer, zero-pay and first-use qualification remain held."
+  ]
+}

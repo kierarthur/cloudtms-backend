@@ -1,0 +1,295 @@
+{
+  "schema_version": "REPORT_PREPARED_OUTPUT_SOURCE_RECEIPT_V1",
+  "status": "SOURCE_PROPOSAL_ONLY_NATIVE_ACCEPTANCE_HELD",
+  "rootInputCommit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "rootObservedCommit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "metadataOnlyChanges": [],
+  "rootPinForward": {
+    "previousCommit": "b65df0997ac69188eadf4de2a88f70226fa99532",
+    "verifierForwardCommit": "d67f94e19000a612ee4f1099c14429d8a8b4bee1",
+    "currentCommit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+    "controllingSourceInputHashesUnchanged": true,
+    "separatelyOwnedChange": "2206 verifier retained_proc alias and exact closed 55000 missing-selector messages; no 2205 helper/ACL/Report/writer change. Native capture proof remains held.",
+    "originalVerifierCanonicalSha256": "0b80cdf4eeb411407fcf4faca6a35462a71575c7497dc3fc0e6b39c676bbe9a1",
+    "currentVerifierCanonicalSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+    "reverseVerifierCanonicalSha256": "0b80cdf4eeb411407fcf4faca6a35462a71575c7497dc3fc0e6b39c676bbe9a1",
+    "unrelatedVerifierBytesRetained": true
+  },
+  "sourceInputs": [
+    {
+      "key": "native",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "bytes": 249666,
+      "rawSha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "canonicalFileSha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "key": "apply",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "rawSha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "canonicalFileSha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "key": "writer",
+      "path": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+      "bytes": 36836,
+      "rawSha256": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa",
+      "canonicalFileSha256": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa"
+    },
+    {
+      "key": "schema",
+      "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "bytes": 154756,
+      "rawSha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+      "canonicalFileSha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "key": "receiptSchema",
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "rawSha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "canonicalFileSha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "key": "receiptAssert",
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+      "bytes": 2340,
+      "rawSha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20",
+      "canonicalFileSha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+    },
+    {
+      "key": "report",
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "bytes": 23242,
+      "rawSha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "canonicalFileSha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+    },
+    {
+      "key": "reportWitness",
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "bytes": 1071,
+      "rawSha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "canonicalFileSha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11"
+    },
+    {
+      "key": "rules",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 83915,
+      "rawSha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "canonicalFileSha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "key": "reportRules",
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "bytes": 9252,
+      "rawSha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+      "canonicalFileSha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7"
+    },
+    {
+      "key": "registry",
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "bytes": 35662,
+      "rawSha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "canonicalFileSha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+    },
+    {
+      "key": "acl",
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "rawSha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "canonicalFileSha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "key": "aclVerifier",
+      "path": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 68399,
+      "rawSha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4",
+      "canonicalFileSha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4"
+    },
+    {
+      "key": "automaticVerifier",
+      "path": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "bytes": 7115,
+      "rawSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "canonicalFileSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+    },
+    {
+      "key": "scanner",
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "rawSha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "canonicalFileSha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    }
+  ],
+  "codec": {
+    "fields": 90,
+    "decimalFields": 39,
+    "jsonTextFields": 9
+  },
+  "aclReverseProofs": [
+    {
+      "path": "08_complete_registry_union.sqlinc",
+      "inputCanonicalFileSha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "reverseCanonicalFileSha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "all232EntriesAndOtherBytesRetained": true
+    },
+    {
+      "path": "09_complete_final_acl_union.sqlinc",
+      "inputCanonicalFileSha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "reverseCanonicalFileSha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "all232EntriesAndOtherBytesRetained": true
+    },
+    {
+      "path": "10_complete_independent_acl_verifier.sqlinc",
+      "inputCanonicalFileSha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4",
+      "reverseCanonicalFileSha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4",
+      "all232EntriesAndOtherBytesRetained": true
+    }
+  ],
+  "completeReverseProofs": [
+    {
+      "owner": "ordinary_projection_apply",
+      "inputSha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+      "reverseSha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+      "nativeBytesRetained": true
+    },
+    {
+      "owner": "report_pay_authority",
+      "inputSha256": "ceaecb6d25cfd64023eea2f5b69a19ed64a545fab6a666942d72380b3f8ebeee",
+      "reverseSha256": "ceaecb6d25cfd64023eea2f5b69a19ed64a545fab6a666942d72380b3f8ebeee",
+      "nativeBytesRetained": true
+    }
+  ],
+  "retainedOwners": {
+    "receiptInsertSha256": "2a7022217def63a069a9c3ca149179e1fa99a43994cb36a31e1c62d11dda43f7",
+    "receiptV1HashAndSignatureUnchanged": true,
+    "boundedWriterSha256": "a2c478f9f90e17a61c8c4fbf039ce422fbf3c84ce94ef5a162b7616c7909354a",
+    "boundedWriterBodyUnchanged": true
+  },
+  "census": {
+    "tables": 105,
+    "privateBefore": 232,
+    "newPrivate": 7,
+    "privateAfter": 239,
+    "service": 142
+  },
+  "packaging": [
+    {
+      "path": "inputs/receipt_insert.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/ordinary_apply.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/report_authority.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/bounded_writer.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/receipt_assert.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/root_hash.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/expense_materialisation.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "inputs/compact_report_witness.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "01_schema.sqlinc",
+      "statements": 4,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "02_codec.sqlinc",
+      "statements": 3,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "03_capture_context.sqlinc",
+      "statements": 2,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "04_receipt_insert_guard.sqlinc",
+      "statements": 3,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "05_retained_amount.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "06_complete_ordinary_apply.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "07_complete_report_pay_authority.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "08_complete_registry_union.sqlinc",
+      "statements": 9,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "09_complete_final_acl_union.sqlinc",
+      "statements": 21,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "10_complete_independent_acl_verifier.sqlinc",
+      "statements": 13,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "11_final_private_acl.sqlinc",
+      "statements": 14,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "12_proposed_repeatable_root.sqlinc",
+      "statements": 1,
+      "sourcePackagingOnly": true
+    },
+    {
+      "path": "13_data_free_verifier.sqlinc",
+      "statements": 3,
+      "sourcePackagingOnly": true
+    }
+  ],
+  "rootWrites": false,
+  "databaseCalls": false,
+  "bankingSourceReads": false,
+  "nativeCompilation": false,
+  "nativeFinancialProof": false,
+  "remainingGates": [
+    "Root review of additive receipt columns/closed codec/ephemeral owner guard and generated contract.",
+    "Root SEND_7 compile and genuine native writer, atomic capture/receipt, replay and intervening rewrite fixtures.",
+    "Actual first-installed Banking active/withheld/headless NEXT evidence join is root/Bank-owned and unavailable here.",
+    "Report A/B admission, native financial, renderer, zero-pay and first-use qualification remain held."
+  ]
+}
