@@ -17536,24 +17536,42 @@
       "owner": "WB31 mandatory native single-component review/effect facts"
     },
     {
-      "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
-      "finalPhysical": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "signature": "private.bpay_next_channel_resolution_review_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql"
+      ],
+      "owner": "WB32 own native resolver Ready fact, including incompatible saved owners"
+    },
+    {
+      "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
+        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
         "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
         "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
         "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
-        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
-        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
       ],
-      "owner": "WB31 single-component/effect support; complete WB30/explicit reader retained, original atomic writer unchanged"
+      "owner": "WB32 exact channel review; complete0314 explicit/context/bucket/component owners retained"
     },
     {
       "signature": "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)",
@@ -17596,16 +17614,19 @@
     },
     {
       "signature": "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
-      "finalRoot": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
       ],
-      "owner": "WB29 native complete resolution transaction"
+      "owner": "WB32 required CLEAR result class only; complete2320 writer/replay/guards/money unchanged"
     },
     {
       "signature": "private.bpay_next_captured_component_resolution_quote_v1(uuid,text)",

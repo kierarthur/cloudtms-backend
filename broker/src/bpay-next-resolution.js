@@ -1,3 +1,34 @@
+function channelInput(s){const q=s.channel_review;return exact(q,['candidate_id','work_id','expected_revision_id'])&&[q.candidate_id,q.work_id,q.expected_revision_id].every(id);}
+function channelResponse(payload,args,actorId){
+ const bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');},q=args.resolution.channel_review;
+ if(!exact(payload,['ok','kind','context','works','channel_review'])||encoder.encode(JSON.stringify(payload)).length>120000)bad();
+ const scope={candidate_id:q.candidate_id,works:payload.works?.map(w=>({work_id:w.work_id,expected_revision_id:w.expected_revision_id,rows:w.rows?.map(r=>({approved_line_id:r.approved_line_id,rate_family:r.rate_family,rate_code:r.rate_code,intent:null}))})),reason:null};
+ validateResolutionResponse({ok:payload.ok,kind:payload.kind,context:payload.context,works:payload.works},{resolution:scope},actorId);
+ const b=payload.channel_review,c=payload.context;
+ if(!exact(b,['candidate_id','work_id','expected_revision_id','complete','header','owners'])||b.complete!==true||!['candidate_id','work_id','expected_revision_id'].every(k=>b[k]===q[k])
+  ||!payload.works.some(w=>w.work_id===q.work_id&&w.expected_revision_id===q.expected_revision_id)||!exact(b.header,['candidate_display_name','candidate_reference'])
+  ||!text(b.header.candidate_display_name)||encoder.encode(b.header.candidate_display_name).length>8192||!nullable(b.header.candidate_reference,v=>text(v)&&encoder.encode(v).length<=8192)
+  ||!Array.isArray(b.owners)||b.owners.length<1||b.owners.length>200)bad();
+ const required=new Map();for(const w of payload.works)for(const r of w.rows){const variants=[...r.incompatible_decisions,...(r.saved_decision?[r.saved_decision]:[])];if(!variants.length)variants.push(null);
+  for(const d of variants)required.set(JSON.stringify([w.work_id,identityKey(r),d?.decision_id??null]),{w,r,d});}
+ if(required.size!==b.owners.length)bad();const seen=new Set();
+ for(const o of b.owners){
+  if(!exact(o,['work_id','expected_revision_id','approved_line_id','rate_family','rate_code','owner_family','owner_id','owner_version','fingerprint','from_channel','from_umbrella_id','to_channel','to_umbrella_id','clear_class','clear_reason','client_display_name','timesheet_reference','resolver_ready'])
+   ||!id(o.work_id)||!id(o.expected_revision_id)||!identity(o)||!nullable(o.owner_id,id)||!nullable(o.owner_version,v=>integer(v,true))||!text(o.client_display_name)||encoder.encode(o.client_display_name).length>8192
+   ||!nullable(o.timesheet_reference,v=>text(v)&&encoder.encode(v).length<=8192)||typeof o.resolver_ready!=='boolean')bad();
+  const k=JSON.stringify([o.work_id,identityKey(o),o.owner_id]),native=required.get(k);if(!native||seen.has(k))bad();seen.add(k);const {w,r,d}=native,source=r.original_basis;
+  if(o.expected_revision_id!==w.expected_revision_id||o.owner_family!==(r.rate_family==='STANDARD'?'WORK_BUCKET':'GROSS')
+   ||o.owner_version!==(d?.decision_version??null)||o.from_channel!==source.source_pay_channel||o.from_umbrella_id!==source.source_umbrella_id
+   ||o.to_channel!==c.target_pay_channel||o.to_umbrella_id!==c.target_umbrella_id||(o.from_channel===o.to_channel&&o.from_umbrella_id===o.to_umbrella_id)
+   ||o.clear_class!==(d?'RESOLVED_AND_CLEARABLE':'NOT_CLEARABLE')||o.clear_reason!==(d?null:'NO_SAVED_DECISION') )bad();
+  const fingerprint={original_basis:source,target_pay_channel:d?.target_pay_channel??c.target_pay_channel,
+   target_umbrella_id:d?d.target_umbrella_id:c.target_umbrella_id,target_umbrella_vat_chargeable:d?d.target_umbrella_vat_chargeable:c.target_umbrella_vat_chargeable,
+   valuation_policy_id:d?.valuation_policy_id??source.valuation_policy_id,valuation_date:d?.valuation_date??c.official_pay_date};
+  if(!same(o.fingerprint,fingerprint))bad();
+ }
+ return payload;
+}
+
 function componentInput(s){
  const q=s.component_review;return exact(q,['candidate_id','work_id','expected_revision_id','approved_line_id','rate_family','rate_code'])&&[q.candidate_id,q.work_id,q.expected_revision_id].every(id)&&identity(q);
 }
@@ -133,6 +164,7 @@ const fault=(code,status=503,retryable=false,reload=false)=>Object.assign(new Er
 export function normalizeResolutionInput(input){
   const bad=()=>{throw fault('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);};
   if(!exact(input,['resolution']))bad();const s=input.resolution;
+  if(exact(s,['channel_review'])){if(!channelInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(exact(s,['component_review'])){if(!componentInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(exact(s,['bucket_review'])||exact(s,['bucket_evidence'])){if(!bucketInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(!exact(s,['candidate_id','works','reason'])||!id(s.candidate_id)||!reason(s.reason)||!Array.isArray(s.works)||s.works.length<1||s.works.length>100||encoder.encode(JSON.stringify(input)).length>32768)bad();
@@ -218,7 +250,7 @@ export function validateResolutionCommandReceipt(receipt,action,args){
     ||typeof receipt.received!=='boolean'||typeof receipt.replay!=='boolean'||encoder.encode(JSON.stringify(receipt)).length>131072)bad();
   if(!receipt.received){if(receipt.replay||receipt.result!==null)bad();return receipt;}
   const result=receipt.result;
-  if(!exact(result,['action','candidate_id','owner_epoch','works','processing','adoption'])||result.action!==action||result.candidate_id!==args.candidate_id
+  if(!exact(result,['action','candidate_id','owner_epoch','works','processing','adoption',...(Object.hasOwn(result,'clear_class')?['clear_class']:[])])||(Object.hasOwn(result,'clear_class')&&(action!=='RESOLUTION_CLEAR'||result.clear_class!=='RESOLVED_AND_CLEARABLE'))||result.action!==action||result.candidate_id!==args.candidate_id
     ||result.owner_epoch!==args.context.owner_epoch||result.processing!==true||!Array.isArray(result.works)||result.works.length!==args.works.length
     ||encoder.encode(JSON.stringify(result)).length>65536||!exact(result.adoption,['workbench_revision','adoption_revision','adoption_state'])
     ||!['workbench_revision','adoption_revision'].every(k=>integer(result.adoption[k]))||!['UNSEEDED','SEEDING','CURRENT','ERROR'].includes(result.adoption.adoption_state))bad();
@@ -264,6 +296,7 @@ function manualEcho(q,choice){
 
 export function validateResolutionResponse(payload,args,actorId){
   normalizeResolutionInput(args);
+  if(exact(args.resolution,['channel_review']))return channelResponse(payload,args,actorId);
   if(exact(args.resolution,['component_review']))return componentResponse(payload,args,actorId);
   if(exact(args.resolution,['bucket_review'])||exact(args.resolution,['bucket_evidence']))return bucketResponse(payload,args,actorId);
  const scope=args.resolution,bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};

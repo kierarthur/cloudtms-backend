@@ -12996,6 +12996,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_channel_resolution_review_v1(p_actor_id uuid, p_scope jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "2ee3283e649fa391118816af452fd00e0bdcac1b62f9bb264f5f3755cff09f6b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -16566,7 +16585,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "949b46075c5dad923c62df018f0d0a6159a6bd9c6b0547ca4aa81ea1942625f6"
+      "definition_sha256": "8c44036b8f6330ce5ad41d842d6b11975c3d198981ae137515fcac7d2d9efc70"
     },
     {
       "acl": [
@@ -16585,7 +16604,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "dfa011dfc215602b098795c0d55b94cfa641137153f7256c49d6d15a12febd84"
+      "definition_sha256": "a5cb17a45f5b8bf0e01cf197a4928a9021f28031e3878e94a3368215b2beb231"
     },
     {
       "acl": [

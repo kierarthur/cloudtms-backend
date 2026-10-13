@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "80a5aca828932b54541ad1512c11136b025f1d12",
-  "compiledAtUtc": "2026-10-13T02:37:53.210Z",
+  "sourceCommit": "e7e3f5316b948cdd58409674f904d7f6bbb0412a",
+  "compiledAtUtc": "2026-10-13T04:09:24.476Z",
   "inventory": {
     "migrations": [
       {
@@ -8952,6 +8952,20 @@
         "sha256": "329bd428f2ed7b7eba08177dbb3442ec7f16e9ac2d8187f3522385a96d178a46"
       },
       {
+        "path": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+        ],
+        "sha256": "108da7af6be9ecb9fda719a581a9ea119b61d05230590eb0df7caa1394e820f1"
+      },
+      {
+        "path": "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql"
+        ],
+        "sha256": "41fcfc8425affcefe95aab1db2c2a9115193ac2c6e6194997d59a7991e749420"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8985,11 +8999,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+        "path": "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql",
         "paths": [
-          "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
+          "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql"
         ],
-        "sha256": "329bd428f2ed7b7eba08177dbb3442ec7f16e9ac2d8187f3522385a96d178a46"
+        "sha256": "41fcfc8425affcefe95aab1db2c2a9115193ac2c6e6194997d59a7991e749420"
       }
     ]
   },
