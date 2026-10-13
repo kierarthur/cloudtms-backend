@@ -1,0 +1,56 @@
+-- Reuse the native append-only authority and retain immutable report history.
+drop trigger if exists weekly_source_immutable_record_guard on public.weekly_source_self_bill_reports;
+create trigger weekly_source_immutable_record_guard before update or delete on public.weekly_source_self_bill_reports
+  for each row execute function private._weekly_source_immutable_record_guard_v1();
+drop trigger if exists weekly_source_immutable_truncate_guard on public.weekly_source_self_bill_reports;
+create trigger weekly_source_immutable_truncate_guard before truncate on public.weekly_source_self_bill_reports
+  for each statement execute function private._weekly_source_immutable_record_guard_v1();
+
+create or replace function private.weekly_source_self_bill_binding_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+begin
+  if tg_op='DELETE' or tg_op='TRUNCATE' then raise exception 'WEEKLY_SOURCE_REPORT_BINDING_AUDIT_RETAINED' using errcode='55000'; end if;
+  if tg_op='UPDATE' and (old.state<>'CURRENT' or new.state<>'SUPERSEDED'
+    or new.superseded_at_utc is null or new.superseded_at_utc<old.bound_at_utc
+    or (to_jsonb(old)-array['state','superseded_at_utc']) is distinct from (to_jsonb(new)-array['state','superseded_at_utc'])) then
+    raise exception 'WEEKLY_SOURCE_REPORT_BINDING_TRANSITION_INVALID' using errcode='55000';
+  end if;
+  if tg_op='INSERT' and (new.state<>'CURRENT' or new.superseded_at_utc is not null
+    or not exists(select 1 from public.weekly_source_upload_rows row_fact join public.weekly_source_uploads upload on upload.id=row_fact.upload_id
+      join public.weekly_source_report_scopes scope on scope.id=upload.report_scope_id
+      join public.weekly_source_projection_publications report_publication on report_publication.id=scope.current_projection_publication_id
+        and report_publication.upload_id=upload.id and report_publication.state='CURRENT' and report_publication.authority_scope_version=scope.version
+      join public.weekly_source_upload_rows export_row on export_row.id=new.export_upload_row_id
+        and export_row.external_source_key=row_fact.external_source_key
+      join public.weekly_source_row_resolutions resolution on resolution.id=new.bound_row_resolution_id
+        and resolution.upload_row_id=export_row.id and resolution.work_event_id=new.work_event_id
+        and resolution.client_id=scope.client_id and resolution.mapping_state='RESOLVED'
+      join public.weekly_source_projection_publications export_publication on export_publication.id=new.export_projection_publication_id
+        and export_publication.upload_id=export_row.upload_id and export_publication.authority_scope_kind='CYCLE'
+        and resolution.generation=coalesce(export_publication.projection_generation,export_publication.authority_scope_version)
+      join public.weekly_source_cycles export_cycle on export_cycle.id=export_publication.source_cycle_id
+        and export_cycle.source_group_id=scope.source_group_id
+      where row_fact.id=new.report_row_id and row_fact.row_finalisation_state='SOURCE_REPORT_LINE'
+        and scope.current_complete_upload_id=upload.id and upload.state='CURRENT'
+        and scope.self_bill_report_id=new.self_bill_report_id
+        and ((export_publication.state='CURRENT' and export_cycle.current_complete_upload_id=export_row.upload_id
+          and export_cycle.current_projection_publication_id=export_publication.id)
+          or (row_fact.source_shift_charge_pence<0 and private.weekly_source_self_bill_report_prior_binding_v1(row_fact.id)=jsonb_build_object(
+            'prior_movement_id',private.weekly_source_self_bill_report_prior_binding_v1(row_fact.id)->'prior_movement_id',
+            'row_id',new.export_upload_row_id,'resolution_id',new.bound_row_resolution_id,
+            'publication_id',new.export_projection_publication_id,'work_event_id',new.work_event_id))))) then
+    raise exception 'WEEKLY_SOURCE_REPORT_BINDING_OWNER_INVALID' using errcode='55000';
+  end if;
+  return new;
+end;
+$function$;
+drop trigger if exists weekly_source_self_bill_binding_guard_v1 on public.weekly_source_self_bill_report_line_bindings;
+create trigger weekly_source_self_bill_binding_guard_v1 before insert or update or delete on public.weekly_source_self_bill_report_line_bindings
+  for each row execute function private.weekly_source_self_bill_binding_guard_v1();
+drop trigger if exists weekly_source_self_bill_binding_truncate_guard_v1 on public.weekly_source_self_bill_report_line_bindings;
+create trigger weekly_source_self_bill_binding_truncate_guard_v1 before truncate on public.weekly_source_self_bill_report_line_bindings
+  for each statement execute function private.weekly_source_self_bill_binding_guard_v1();
+alter function private.weekly_source_self_bill_binding_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_self_bill_binding_guard_v1() from public,anon,authenticated,service_role;

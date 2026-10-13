@@ -1,0 +1,167 @@
+{
+  "formatVersion": 1,
+  "status": "REVIEWED_SOURCE_WIP_NATIVE_ACCEPTANCE_HELD",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "assignedBase": "83547d19",
+  "newPrivateSignatures": [
+    "private.weekly_source_staged_source_documents_v1(uuid)",
+    "private.weekly_source_staged_publication_context_v1(uuid,uuid)",
+    "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)",
+    "private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_staged_entitlement_components_v1(uuid,uuid)",
+    "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)"
+  ],
+  "newPublicOrServiceSignatures": [],
+  "newTableCount": 0,
+  "newIndexCount": 0,
+  "changedExistingOwners": [
+    "private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
+    "public.weekly_exceptional_pay_complete_local_v1(jsonb)"
+  ],
+  "unchangedCompleteCallSiteInputs": [
+    "10_complete_stage_request.sqlinc",
+    "11_complete_automatic_reconcile.sqlinc"
+  ],
+  "sourceTests": {
+    "command": "node --test tests/weekly-source/automatic-native-delta-proposal.test.mjs",
+    "passed": 31,
+    "failed": 0,
+    "qualification": "Independent synthetic full-component comparison + real existing native carrier + hash-bound complete-source/owner/sequence/ACL/parenthesis guards. No PostgreSQL semantic compilation or native financial/business/API/runtime acceptance."
+  },
+  "boundaries": {
+    "sourceOnly": true,
+    "mounted": false,
+    "databaseCalls": false,
+    "docker": false,
+    "rootSharedEdits": false,
+    "frozenReportU3CNInputsEdited": false,
+    "publicProducerExposure": false,
+    "reviewedGitBackupAuthority": "SEND_5B_TO_HEALTHROSTER_FULL_REHEARSAL.md; own feature branch only"
+  },
+  "runtimeGates": "Root complete native I1/detail/expense/vector/receipt/Source-CAS/concurrency/completion/ordinary-regression/ACL and integrated Bank core journeys remain mandatory; see NATIVE_PROOF_RECIPE.md.",
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/01_staged_source_documents.sqlinc",
+      "bytes": 5442,
+      "sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/02_staged_publication_context.sqlinc",
+      "bytes": 19923,
+      "sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/03_approved_detail_evidence.sqlinc",
+      "bytes": 5083,
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/04_native_receipt_successors.sqlinc",
+      "bytes": 51247,
+      "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/05_staged_prior_wait_receipt.sqlinc",
+      "bytes": 8082,
+      "sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/06_expense_evidence.sqlinc",
+      "bytes": 8551,
+      "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/07_staged_entitlement_components.sqlinc",
+      "bytes": 15071,
+      "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/08_automatic_reconcile_delta.sqlinc",
+      "bytes": 18638,
+      "sha256": "a8861b3726843507024ecbbc5fecf01bcf53e6ecdb210282edebc46222d092a0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/09_complete_local_successor.sqlinc",
+      "bytes": 31628,
+      "sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/10_complete_stage_request.sqlinc",
+      "bytes": 55231,
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/11_complete_automatic_reconcile.sqlinc",
+      "bytes": 23651,
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/INTEGRATION_HUNKS.md",
+      "bytes": 3367,
+      "sha256": "01762bbb61b7dc845e5443d6b56706a1d068ffbab64d75af0cbcc47a812771f3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/NATIVE_INPUT_PINS.json",
+      "bytes": 4385,
+      "sha256": "04a9186549a20f39f89c55da356af996b9f703e8bc6f52763f467137fd7ded7f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/NATIVE_PROOF_RECIPE.md",
+      "bytes": 4968,
+      "sha256": "3f4347a81a37cad7b6ead167995be3da71cae2f36f9fe6f0f61afdc5ec67158c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/REVIEW.md",
+      "bytes": 6299,
+      "sha256": "362806cde616363c118fa8c3615ade27ed820deae0c80bf7e19797f1eba8dbfc"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/VERIFIER_EXECUTION_CENSUS_112_167.json",
+      "bytes": 539345,
+      "sha256": "923a48c2535351a07e3e939d2d185997fdcff9219f88ab065b43ed4d63ca26c5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/VERIFIER_SAFETY_112_167.json",
+      "bytes": 115139,
+      "sha256": "bbc58892f6d0aa3435532bcb9d561b480c329cd53de6d06ad44ae1f1f657fb0e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/generate-native-successors.mjs",
+      "bytes": 11529,
+      "sha256": "bfcc990744aa873770c3efeeb5db0649aec58dbbdca6297791bef2e9d74fc6ab"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/reference-comparison.mjs",
+      "bytes": 3900,
+      "sha256": "db6b1d73c15a65fbe250b33b76af1e4bd5f57c3f2b138e8cf3adbcf28e414b24"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/verifier-safety-census.mjs",
+      "bytes": 3917,
+      "sha256": "d78e75188a4ba121cd356813d2b2fdaa3568eb911b9ee0cee3bfd4ecb04184e0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/write-source-manifest.mjs",
+      "bytes": 3356,
+      "sha256": "96b86b98b141236c6b31722ab3b0db181467ff9f9819d9a89a38fc3900a752c2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta/write-verifier-safety.mjs",
+      "bytes": 11909,
+      "sha256": "59d9be8434fa034c0847df5af7f11ef5e4ec3b765f4c335909506d9ddd290232"
+    },
+    {
+      "path": "tests/weekly-source/automatic-native-delta-proposal.test.mjs",
+      "bytes": 20907,
+      "sha256": "1706e50e9e3166e8aa9f71046e947f99bcffee5bd24cbdde6cc9e83f507cba23"
+    }
+  ],
+  "packageSha256": "92b65de84ff4bfc25c8e56e65321225dd9ab638480059bf130f84f281856f94b"
+}

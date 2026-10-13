@@ -1,0 +1,163 @@
+-- Complete native scope census: additive explicit report scope, never cycle fallback.
+create or replace function public.weekly_source_workspace_scopes_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_group uuid;
+  v_client uuid;
+  v_week date;
+  v_limit integer:=100;
+  v_offset integer:=0;
+  v_cursor jsonb;
+  v_rows jsonb;
+  v_version text;
+  v_total integer;
+  v_missing integer;
+  v_pending integer;
+  v_cutoffs jsonb;
+  v_monday date:=(date_trunc('week',statement_timestamp() at time zone 'Europe/London'))::date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','cursor','limit'],
+    'WEEKLY_SOURCE_SCOPE_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  v_group:=nullif(p_request->>'source_group_id','')::uuid;
+  v_client:=nullif(p_request->>'client_id','')::uuid;
+  v_week:=nullif(p_request->>'week_ending','')::date;
+  v_limit:=coalesce((p_request->>'limit')::integer,100);
+  if v_limit not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_SCOPE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS',v_group);
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 then raise exception 'invalid offset'; end if;
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001';
+    end;
+  end if;
+  with candidates as (
+    select distinct on (source_group.id,membership.client_id,cycle.finalisation_week_ending)
+      source_group.id group_id,source_group.display_name source_name,source_group.source_family,
+      membership.client_id,client.name client_name,cycle.id cycle_id,
+      cycle.scope_client_id,
+      cycle.finalisation_week_ending,cycle.cutoff_at_utc,cycle.version cycle_version,
+      cycle.current_complete_upload_id,cycle.current_projection_publication_id
+    from public.weekly_source_groups source_group
+    join public.weekly_source_cycles cycle on cycle.source_group_id=source_group.id
+    join public.weekly_source_group_clients membership on membership.source_group_id=source_group.id
+      and cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+      and (cycle.scope_client_id is null or cycle.scope_client_id=membership.client_id)
+    join public.clients client on client.id=membership.client_id
+    where source_group.active and (v_group is null or source_group.id=v_group)
+      and (v_client is null or membership.client_id=v_client)
+      and (v_week is null or cycle.finalisation_week_ending=v_week)
+      and exists(select 1 from public.weekly_source_client_policies policy
+        where policy.source_group_id=source_group.id and policy.client_id=membership.client_id
+          and policy.authority_mode='SOURCE_AUTHORITY'
+          and cycle.finalisation_week_ending between policy.effective_from and coalesce(policy.effective_to,'infinity'::date))
+    order by source_group.id,membership.client_id,cycle.finalisation_week_ending,
+      (cycle.scope_client_id is not null) desc,cycle.id
+  ), scopes as (
+    select candidate.*,report.id report_scope_id,report.version report_version,
+      case when candidate.source_family='NHSP' then report.current_complete_upload_id
+        when candidate.scope_client_id=candidate.client_id then candidate.current_complete_upload_id end upload_id,
+      case when candidate.source_family='NHSP' then report.current_projection_publication_id
+        when candidate.scope_client_id=candidate.client_id then candidate.current_projection_publication_id end publication_id,
+      coalesce(final_report.id,completion.id) completion_id,
+      case when final_report.id is not null then 'FINAL_SOURCE' else completion.completion_kind end completion_kind,
+      coalesce(final_report.finalised_at_utc,completion.attested_at_utc) completed_at,
+      encode(coalesce(final_report.manifest_hash,completion.completion_hash),'hex') completion_hash,
+      coalesce(report.cutoff_at_utc,candidate.cutoff_at_utc) actual_cutoff
+    from candidates candidate
+    left join public.weekly_source_report_scopes report on report.source_cycle_id=candidate.cycle_id
+      and report.client_id=candidate.client_id and candidate.source_family='NHSP'
+    left join public.weekly_source_client_cycle_completions completion
+      on completion.source_cycle_id=candidate.cycle_id and completion.client_id=candidate.client_id
+      and completion.state='CURRENT' and completion.completion_kind='NO_SHIFTS_TO_IMPORT'
+    -- Completion belongs to this exact client/report. A completed sibling
+    -- report for the same client/week must not hide another pending report.
+    left join lateral (
+      select revision.id,revision.finalised_at_utc,revision.manifest_hash
+      from public.weekly_source_final_revisions revision
+      join public.weekly_source_client_manifests manifest on manifest.final_revision_id=revision.id
+        and manifest.client_id=candidate.client_id
+      where revision.source_cycle_id=candidate.cycle_id and revision.state='CURRENT'
+        and revision.report_scope_id is not distinct from report.id
+      order by revision.revision_number desc,revision.id limit 1
+    ) final_report on true
+    union all
+    select g.id,g.display_name,g.source_family,rs.client_id,cl.name,rc.id,rc.scope_client_id,
+      rc.finalisation_week_ending,rc.cutoff_at_utc,rc.version,rc.current_complete_upload_id,rc.current_projection_publication_id,
+      rs.id,rs.version,rs.current_complete_upload_id,rs.current_projection_publication_id,
+      fr.id,case when fr.id is not null then 'FINAL_SOURCE' end,fr.finalised_at_utc,encode(fr.manifest_hash,'hex'),rs.cutoff_at_utc
+    from public.weekly_source_report_scopes rs join public.weekly_source_self_bill_reports sr on sr.id=rs.self_bill_report_id
+    join public.weekly_source_cycles rc on rc.id=rs.source_cycle_id
+    join public.weekly_source_groups g on g.id=rs.source_group_id and g.active and g.source_family='ROSTER'
+    join public.clients cl on cl.id=rs.client_id
+    left join public.weekly_source_final_revisions fr on fr.id=rs.current_final_revision_id
+      and fr.report_scope_id=rs.id and fr.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and fr.state='CURRENT'
+    where (v_group is null or rs.source_group_id=v_group) and (v_client is null or rs.client_id=v_client)
+      and (v_week is null or rc.finalisation_week_ending=v_week)
+      and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=rs.source_group_id
+        and gc.client_id=rs.client_id and rc.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))
+  ), facts as (
+    select scopes.*,private.weekly_source_import_is_prepared_v1(scopes.upload_id) prepared
+    from scopes
+  ), ordered as (
+    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id,
+      case when exists(select 1 from public.weekly_source_report_scopes rs where rs.id=facts.report_scope_id and rs.self_bill_report_id is not null)
+        then report_scope_id end) client_has_prepared,
+      row_number() over(order by private.weekly_source_query_ascii_fold_v1(client_name) collate "C",
+      client_id,finalisation_week_ending desc,group_id,report_scope_id nulls first) ordinal
+    from facts
+  )
+  select count(*)::integer,
+    count(distinct (cycle_id,client_id)) filter(where completion_id is null and not client_has_prepared
+      and actual_cutoff<(v_monday::timestamp at time zone 'Europe/London'))::integer,
+    count(distinct (cycle_id,client_id)) filter(where completion_id is null and prepared)::integer,
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_WORKSPACE_SCOPES_V1',
+      jsonb_build_object('filter',p_request-'cursor'-'limit','rows',coalesce(jsonb_agg(jsonb_build_array(
+        cycle_id,client_id,cycle_version,report_scope_id,report_version,upload_id,publication_id,completion_hash,prepared)
+        order by ordinal),'[]'::jsonb))),'hex'),
+    coalesce(jsonb_agg(jsonb_build_object(
+      'key',cycle_id::text||':'||client_id::text||':'||coalesce(report_scope_id::text,'CYCLE'),
+      'source_group_id',group_id,'source_cycle_id',cycle_id,'report_scope_id',report_scope_id,
+      'client_id',client_id,'client',client_name,'source',source_name,'source_family',source_family,
+      'week_ending',finalisation_week_ending,'period',to_char(finalisation_week_ending,'FMDD Mon YYYY'),
+      'cutoff',actual_cutoff,'upload_id',upload_id,'projection_publication_id',publication_id,
+      'prepared',prepared,'completed',completion_id is not null,'completion_kind',completion_kind,
+      'completed_at',completed_at,
+      'missing_previous_report',completion_id is null and not client_has_prepared
+        and actual_cutoff<(v_monday::timestamp at time zone 'Europe/London')
+      ) order by ordinal) filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+    into v_total,v_missing,v_pending,v_version,v_rows from ordered;
+  if v_cursor is not null and v_cursor->>'version' is distinct from v_version then
+    raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('source_group_id',source_group.id,
+    'source',source_group.display_name,'cutoff',deadline.value,
+    'passed',statement_timestamp()>=deadline.value) order by source_group.display_name,source_group.id),'[]'::jsonb)
+  into v_cutoffs from public.weekly_source_groups source_group
+  cross join lateral(select ((v_monday+((source_group.cutoff_weekday+6)%7))
+    +source_group.cutoff_local_time) at time zone source_group.timezone value) deadline
+  where source_group.active and (v_group is null or source_group.id=v_group)
+    and exists(select 1 from public.weekly_source_group_clients membership
+      join public.weekly_source_client_policies policy on policy.source_group_id=source_group.id
+        and policy.client_id=membership.client_id and policy.authority_mode='SOURCE_AUTHORITY'
+      where membership.source_group_id=source_group.id and (v_client is null or membership.client_id=v_client)
+        and (statement_timestamp() at time zone source_group.timezone)::date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+        and (statement_timestamp() at time zone source_group.timezone)::date between policy.effective_from and coalesce(policy.effective_to,'infinity'::date));
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_WORKSPACE_SCOPES_V1',
+    'rows',v_rows,'total_count',v_total,'version',v_version,
+    'missing_previous_reports',v_missing,'reports_awaiting_finalisation',v_pending,
+    'this_week_cutoffs',v_cutoffs,'has_more',v_offset+v_limit<v_total,
+    'next_cursor',case when v_offset+v_limit<v_total then
+      encode(convert_to(jsonb_build_object('offset',v_offset+v_limit,'version',v_version)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;

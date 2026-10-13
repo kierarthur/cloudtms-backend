@@ -1,0 +1,38 @@
+-- Native immutable pay-finalisation proof for the exact export binding.
+-- Retired/current flags alone never fabricate proof or erase a retained receipt.
+-- Root adds joined PROPOSED/NEXT/protected effective-position alternatives here.
+create or replace function private.weekly_source_self_bill_report_pay_witness_v1(p_binding_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_count integer; v_witness jsonb;
+begin
+  select count(*),jsonb_agg(jsonb_build_object('bound_pay_snapshot_line_id',fs.id,
+    'bound_pay_final_revision_id',fr.id,'bound_pay_projection_receipt_id',receipt.id,
+    'published_timesheet_financial_id',financial.id,'invoice_timesheet_id',lineage.timesheet_id,
+    'candidate_id',rr.candidate_id,'client_id',rr.client_id,'contract_id',rr.contract_id,'work_event_id',rr.work_event_id))->0
+    into v_count,v_witness
+    from public.weekly_source_self_bill_report_line_bindings b
+    join public.weekly_source_upload_rows er on er.id=b.export_upload_row_id and er.row_finalisation_state='SOURCE_WORKED'
+      and nullif(btrim(er.finalised_by),'') is not null
+    join public.weekly_source_row_resolutions rr on rr.id=b.bound_row_resolution_id and rr.upload_row_id=er.id
+      and rr.work_event_id=b.work_event_id and rr.mapping_state='RESOLVED'
+    join public.weekly_source_projection_publications ep on ep.id=b.export_projection_publication_id and ep.upload_id=er.upload_id
+      and ep.authority_scope_kind='CYCLE' and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+    join public.weekly_source_cycles ec on ec.id=ep.source_cycle_id
+    join public.weekly_source_final_revisions fr on fr.id=ec.current_final_revision_id and fr.source_cycle_id=ec.id
+      and fr.authority_scope_kind='CYCLE' and fr.state='CURRENT'
+    join public.weekly_source_final_snapshot_lines fs on fs.final_revision_id=fr.id and fs.row_resolution_id=rr.id
+      and fs.work_event_id=rr.work_event_id and fs.client_id=rr.client_id and fs.contract_id=rr.contract_id
+    join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=rr.id
+      and lineage.work_event_id=rr.work_event_id and lineage.client_id=rr.client_id and lineage.contract_id=rr.contract_id
+    join public.weekly_source_ordinary_pay_projection_receipts receipt on receipt.final_revision_id=fr.id
+      and receipt.root_timesheet_id=lineage.timesheet_id and receipt.client_id=rr.client_id
+      and receipt.outcome='PREPARED_FOR_AUTHORISATION'
+    join public.timesheets_financials financial on financial.id=receipt.published_timesheet_financial_id
+      and financial.timesheet_id=lineage.timesheet_id and financial.client_id=rr.client_id
+    where b.id=p_binding_id;
+  if v_count=0 then return null; end if;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_REPORT_PAY_WITNESS_AMBIGUOUS' using errcode='55000'; end if;
+  return v_witness;
+end;
+$function$;

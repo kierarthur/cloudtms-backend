@@ -1,0 +1,104 @@
+create or replace function private.weekly_source_self_bill_report_rules_assert_v1(p_client_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_rules jsonb;
+begin
+  -- This helper resolves actual dated membership and enabled immutable F1
+  -- assignment; saved disabled settings can never authorize a report.
+  v_rules:=private.weekly_source_effective_rule_set_v1(p_client_id,p_cycle_id);
+  if v_rules is null or v_rules->>'contract' is distinct from 'WEEKLY_SOURCE_EFFECTIVE_RULE_SET_V1'
+    or v_rules->>'rule_set_version_id' is null
+    or v_rules#>>'{values,self_bill_source}' is distinct from 'SEPARATE_FINAL_REPORT'
+    or v_rules#>>'{values,final_report_profile_kind}' is distinct from 'ACACIUM_SELF_BILL_REPORT_V1'
+    or v_rules#>>'{values,invoice_membership}' is distinct from 'FOLLOW_FINAL_REPORT_LINES'
+    or v_rules#>>'{values,invoice_amount_basis}' is distinct from 'SOURCE_AMOUNT'
+    or v_rules#>>'{values,source_amount_basis}' is distinct from 'REPORT_LINE_NET'
+    or v_rules#>>'{values,line_vat_method}' is distinct from 'LINE_VAT_FROM_REPORT'
+    or v_rules#>>'{values,pay_membership}' is distinct from 'ON_ACCEPTED_REPORT_OR_PROTECTED' then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_RULES_NOT_ENABLED' using errcode='55000';
+  end if;
+  return v_rules;
+end;
+$function$;
+
+create or replace function public.weekly_source_self_bill_report_scope_resolve_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid; v_group_id uuid; v_cycle_id uuid; v_client_id uuid;
+  v_group public.weekly_source_groups%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_report public.weekly_source_self_bill_reports%rowtype; v_scope public.weekly_source_report_scopes%rowtype;
+  v_number text; v_date date; v_content bytea; v_manifest jsonb; v_client_name text;
+  v_net bigint; v_vat bigint; v_gross bigint; v_count integer; v_created boolean:=false;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501'; end if;
+  if p_request is null or jsonb_typeof(p_request)<>'object' or exists(select 1 from jsonb_object_keys(p_request) k
+    where k not in ('actor_user_id','source_group_id','source_cycle_id','client_id','report_number','invoice_date','layout',
+      'content_sha256','line_count','net_pence','vat_pence','gross_pence','rows')) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_SCOPE_REQUEST_INVALID' using errcode='22023'; end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid; v_group_id:=(p_request->>'source_group_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid; v_client_id:=(p_request->>'client_id')::uuid;
+    v_number:=p_request->>'report_number'; v_date:=(p_request->>'invoice_date')::date;
+    v_net:=(p_request->>'net_pence')::bigint; v_vat:=(p_request->>'vat_pence')::bigint;
+    v_gross:=(p_request->>'gross_pence')::bigint; v_count:=(p_request->>'line_count')::integer;
+    v_content:=private.weekly_source_hex32_v1(p_request->>'content_sha256','WEEKLY_SOURCE_CONTENT_HASH_INVALID');
+  exception when others then raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_SCOPE_TYPE_INVALID' using errcode='22023'; end;
+  if v_actor is null or v_group_id is null or v_cycle_id is null or v_client_id is null
+    or coalesce(v_number,'') !~ '^XYOXLR[0-9]{6}$' or v_date is null
+    or substring(v_number from 7)<>to_char(v_date,'DDMMYY') or v_date not between date '2000-01-01' and date '2099-12-31'
+    or coalesce(p_request->>'layout','') not in ('A','B') or v_count is null or v_net is null or v_vat is null or v_gross is null then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_IDENTITY_INVALID' using errcode='22023'; end if;
+  -- G1: always group before cycle, including replay and post-pay report upload.
+  select * into v_group from public.weekly_source_groups where id=v_group_id for update;
+  if not found or not v_group.active or v_group.source_family<>'ROSTER' then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_GROUP_INVALID' using errcode='22023'; end if;
+  select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id and source_group_id=v_group_id for update;
+  if not found or v_cycle.state not in ('OPEN','FINALISABLE','FINALISED')
+    or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id<>v_client_id) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CYCLE_INVALID' using errcode='55000'; end if;
+  select c.name into v_client_name from public.clients c join public.weekly_source_group_clients gc on gc.client_id=c.id
+    where c.id=v_client_id and gc.source_group_id=v_group_id
+      and v_cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);
+  if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CLIENT_INVALID' using errcode='22023'; end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'UPLOAD_SOURCE',v_group_id,v_client_id,v_cycle.finalisation_week_ending);
+  perform private.weekly_source_self_bill_report_rules_assert_v1(v_client_id,v_cycle_id);
+  if (p_request->>'layout'='A' and private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle_id)#>>'{values,invoice_vat_method}'='ONCE_ON_TOTAL_TRUNCATE')
+    or (p_request->>'layout'='B' and private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle_id)#>>'{values,invoice_vat_method}'='ONCE_ON_TOTAL_HALF_UP') then
+    raise exception 'WEEKLY_SOURCE_REPORT_LAYOUT_VAT_METHOD_MISMATCH' using errcode='22023'; end if;
+  v_manifest:=private.weekly_source_self_bill_report_manifest_v1(p_request->'rows');
+  if (v_manifest->>'line_count')::integer is distinct from v_count or (v_manifest->>'net_pence')::bigint is distinct from v_net
+    or (v_manifest->>'vat_pence')::bigint is distinct from v_vat or (v_manifest->>'gross_pence')::bigint is distinct from v_gross
+    or exists(select 1 from jsonb_array_elements(p_request->'rows') r
+      where r->>'source_client_identity' is distinct from v_client_name) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_MANIFEST_MISMATCH' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-self-bill-report-content:'||encode(v_content,'hex'),0));
+  select * into v_report from public.weekly_source_self_bill_reports where content_sha256=v_content;
+  if not found then
+    if exists(select 1 from public.weekly_source_self_bill_reports where source_group_id=v_group_id and client_id=v_client_id and report_number=v_number) then
+      raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_NUMBER_REUSED' using errcode='55000'; end if;
+    insert into public.weekly_source_self_bill_reports(source_group_id,client_id,source_cycle_id,report_number,invoice_date,
+      content_sha256,line_count,net_pence,vat_pence,gross_pence,row_manifest_hash,layout,created_by_user_id)
+    values(v_group_id,v_client_id,v_cycle_id,v_number,v_date,v_content,v_count,v_net,v_vat,v_gross,
+      decode(v_manifest->>'row_manifest_hash','hex'),p_request->>'layout',v_actor) returning * into v_report;
+    v_created:=true;
+  elsif v_report.source_group_id is distinct from v_group_id or v_report.client_id is distinct from v_client_id
+    or v_report.source_cycle_id is distinct from v_cycle_id or v_report.report_number is distinct from v_number
+    or v_report.invoice_date is distinct from v_date or v_report.layout is distinct from p_request->>'layout'
+    or v_report.line_count is distinct from v_count or v_report.net_pence is distinct from v_net
+    or v_report.vat_pence is distinct from v_vat or v_report.gross_pence is distinct from v_gross
+    or v_report.row_manifest_hash is distinct from decode(v_manifest->>'row_manifest_hash','hex') then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CONTENT_SCOPE_CONFLICT' using errcode='55000';
+  end if;
+  insert into public.weekly_source_report_scopes(source_cycle_id,environment,agency_id,source_group_id,client_id,cutoff_at_utc,self_bill_report_id)
+    values(v_cycle_id,v_group.environment,v_group.agency_id,v_group_id,v_client_id,v_cycle.cutoff_at_utc,v_report.id)
+    on conflict(source_group_id,client_id,self_bill_report_id) where self_bill_report_id is not null do nothing;
+  select * into strict v_scope from public.weekly_source_report_scopes where self_bill_report_id=v_report.id;
+  if v_scope.source_cycle_id is distinct from v_cycle_id or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_SCOPE_CHANGED' using errcode='55000'; end if;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_SELF_BILL_REPORT_SCOPE_V1','report_scope_id',v_scope.id,
+    'self_bill_report_id',v_report.id,'source_group_id',v_group_id,'source_cycle_id',v_cycle_id,'client_id',v_client_id,
+    'client_name',v_client_name,'authority_scope_version',v_scope.version,'cutoff_at_utc',v_scope.cutoff_at_utc,
+    'row_manifest_hash',encode(v_report.row_manifest_hash,'hex'),'idempotent',not v_created);
+end;
+$function$;

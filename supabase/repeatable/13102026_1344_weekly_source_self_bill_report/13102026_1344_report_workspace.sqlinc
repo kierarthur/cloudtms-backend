@@ -1,0 +1,76 @@
+-- Same Office workspace shape. The integrator inserts one exact report-scope
+-- delegation into its complete current Office owner after native actor checks.
+create or replace function private.weekly_source_self_bill_report_workspace_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare s public.weekly_source_report_scopes%rowtype; c public.weekly_source_cycles%rowtype;
+  r public.weekly_source_self_bill_reports%rowtype; u public.weekly_source_uploads%rowtype;
+  p public.weekly_source_projection_publications%rowtype; actor uuid; row_fact record; facts jsonb;
+  ready jsonb:='[]'::jsonb; blocked jsonb:='[]'::jsonb; row_json jsonb; v_gate jsonb; v_hash text;
+  v_payload jsonb:='{}'::jsonb; v_prepare jsonb:='{}'::jsonb; v_prepared boolean:=false; v_accepted boolean:=false;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  actor:=(p_request->>'actor_user_id')::uuid;
+  select * into strict s from public.weekly_source_report_scopes where id=(p_request->>'report_scope_id')::uuid and self_bill_report_id is not null;
+  select * into strict c from public.weekly_source_cycles where id=s.source_cycle_id;
+  select * into strict r from public.weekly_source_self_bill_reports where id=s.self_bill_report_id;
+  if (nullif(p_request->>'source_cycle_id','') is not null and p_request->>'source_cycle_id'<>c.id::text)
+    or (nullif(p_request->>'source_group_id','') is not null and p_request->>'source_group_id'<>s.source_group_id::text)
+    or (nullif(p_request->>'client_id','') is not null and p_request->>'client_id'<>s.client_id::text) then
+    raise exception 'WEEKLY_SOURCE_REPORT_WORKSPACE_SCOPE_MISMATCH' using errcode='22023'; end if;
+  perform private.weekly_source_office_authority_v1(actor,'FINALISE_WEEK',s.source_group_id,s.client_id,c.finalisation_week_ending);
+  select * into u from public.weekly_source_uploads where id=s.current_complete_upload_id;
+  select * into p from public.weekly_source_projection_publications where id=s.current_projection_publication_id;
+  v_accepted:=p.id is not null and p.state='CURRENT' and p.authority_scope_kind='SELF_BILL_REPORT_SCOPE'
+    and p.upload_id=u.id and p.authority_scope_version=s.version and u.state='CURRENT' and s.projection_state='CURRENT';
+  if v_accepted and s.current_final_revision_id is null then
+    v_gate:=private.weekly_source_final_upload_gate_v1(u.id);
+    v_prepared:=private.weekly_source_import_is_prepared_v1(u.id);
+    for row_fact in select rr.*,b.work_event_id,b.bound_row_resolution_id from public.weekly_source_upload_rows rr
+      left join public.weekly_source_self_bill_report_line_bindings b on b.report_row_id=rr.id and b.state='CURRENT'
+      where rr.upload_id=u.id and rr.row_finalisation_state='SOURCE_REPORT_LINE' order by rr.source_row_ordinal loop
+      facts:=case when row_fact.work_event_id is null then jsonb_build_object('invoice_ready',false)
+        else private.weekly_source_report_shift_facts_v1(row_fact.work_event_id,s.id) end;
+      row_json:=jsonb_build_object('row_key','report-'||row_fact.id::text,'upload_row_id',row_fact.id,'work_event_id',row_fact.work_event_id,
+        'candidate',row_fact.source_candidate_identity,'candidate_sort',row_fact.source_candidate_identity,'work_date',row_fact.work_date,
+        'day_date',to_char(row_fact.work_date,'Dy FMDD Mon YYYY'),'system_hours',to_char(row_fact.start_at_local,'HH24:MI')||'–'||to_char(row_fact.end_at_local,'HH24:MI'),
+        'invoice_charge',row_fact.source_shift_charge_pence::numeric/100,'movement',case when row_fact.source_shift_charge_pence<0 then 'Trust credit' else 'Report line' end,
+        'status',jsonb_build_object('text',case when row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb
+          then 'Ready to invoice' else 'Holds invoice' end,'tone',case when row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb then 'positive' else 'warning' end),
+        'actions','[]'::jsonb);
+      if row_fact.source_gross_pence::numeric is distinct from row_fact.source_shift_charge_pence::numeric+row_fact.source_vat_pence::numeric then
+        row_json:=row_json||jsonb_build_object('reason','Report net, VAT and total do not reconcile.'); blocked:=blocked||jsonb_build_array(row_json);
+      elsif private.weekly_source_self_bill_report_duplicate_hold_v1(row_fact.id) then
+        blocked:=blocked||jsonb_build_array(row_json||jsonb_build_object('reason','This Request Id was already invoiced on an earlier report.'));
+      elsif row_fact.source_shift_charge_pence<0 or facts->'invoice_ready'='true'::jsonb then ready:=ready||jsonb_build_array(row_json);
+      else blocked:=blocked||jsonb_build_array(row_json||jsonb_build_object('reason','The matching export must be finalised for pay first.')); end if;
+    end loop;
+    v_prepare:=jsonb_build_object('upload_id',u.id,'projection_publication_id',p.id,'expected_authority_scope_version',s.version,
+      'expected_row_manifest_hash',encode(u.row_manifest_hash,'hex'));
+    if v_prepared and jsonb_array_length(blocked)=0 and v_gate->'allowed'='true'::jsonb and s.current_final_revision_id is null then
+      v_payload:=v_prepare||jsonb_build_object('source_cycle_id',c.id,'authority_scope_kind','SELF_BILL_REPORT_SCOPE','report_scope_id',s.id,
+        'expected_comparison_manifest_hash',encode(p.comparison_manifest_hash,'hex'),'expected_issue_set_hash',encode(p.issue_set_hash,'hex'));
+    end if;
+  end if;
+  v_hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_WORKSPACE_V1',jsonb_build_object(
+    'report_scope_id',s.id,'scope_version',s.version,'upload_id',u.id,'publication_id',p.id,'final_revision_id',s.current_final_revision_id,
+    'ready',ready,'blocked',blocked,'file_admission',v_gate)),'hex');
+  return jsonb_build_object('contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_hash,'combined_source_workspace',true,
+    'profile',jsonb_build_object('id','ACACIUM_SELF_BILL_REPORT_V1','label','Acacium self-bill','finalise_label','Finalise invoice for report'),
+    'context',jsonb_build_object('subtitle',r.report_number||' · '||to_char(r.invoice_date,'DD/MM/YYYY'),'cycle_state',s.state,'cycle_tone','warning','controls','{}'::jsonb),
+    'selected',jsonb_build_object('source_group_id',s.source_group_id,'source_cycle_id',c.id,'client_id',s.client_id,'report_scope_id',s.id,'projection_publication_id',p.id),
+    'counts',jsonb_build_object('queries',0,'blockers',jsonb_array_length(blocked),'paid_unresolved',0),
+    'imports','{}'::jsonb,'queries','{}'::jsonb,
+    'finalise',jsonb_build_object('prepared',v_prepared,'prepare_action',case when v_accepted and v_gate->'allowed'='true'::jsonb then v_prepare else '{}'::jsonb end,
+      'unfinalised_count',0,'excluded_rows','[]'::jsonb,'ready',jsonb_build_object('rows',ready,'total_count',jsonb_array_length(ready),'has_more',false,'next_cursor',''),
+      'blocked',jsonb_build_object('rows',blocked,'total_count',jsonb_array_length(blocked),'has_more',false,'next_cursor',''),
+      'complete',private.weekly_source_completed_rows_v1(c.id,s.client_id,s.id),'active_list',case when s.current_final_revision_id is not null then 'complete'
+        when jsonb_array_length(blocked)>0 then 'blocked' else 'ready' end,
+      'confirmation_text','I confirm this is the final self-bill report.','confirmation_required',true,'finalise_enabled',v_payload<>'{}'::jsonb,
+      'finalise_payload',v_payload,'file_admission',v_gate,'source_summary',coalesce(u.original_filename,r.report_number),'rate_warnings','[]'::jsonb,
+      'approved_hours_follow_up','{}'::jsonb,'tracker',jsonb_build_object('rows','[]'::jsonb,'total_count',0)),
+    'history','{}'::jsonb,'notices','[]'::jsonb,'lifecycle_policy',private.weekly_source_office_lifecycle_policy_v1()
+      ||jsonb_build_object('per_timesheet_owner','public.weekly_source_office_timesheet_presentation_v1',
+        'per_timesheet_member','lifecycle','browser_may_infer_phase',false));
+end;
+$function$;

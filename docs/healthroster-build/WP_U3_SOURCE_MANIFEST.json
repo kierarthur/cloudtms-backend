@@ -1,0 +1,130 @@
+{
+  "formatVersion": 1,
+  "status": "SOURCE_FROZEN_HANDOFF_UNMOUNTED_NATIVE_ACCEPTANCE_HELD",
+  "capturedAtUtc": "2026-10-13T16:49:58.8399319Z",
+  "worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "assignedBase": "83547d19",
+  "inputCount": 12,
+  "ownerPrivateReadSignatures": [
+    "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+    "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+    "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)"
+  ],
+  "publicOrServiceSignatureCount": 0,
+  "newTableCount": 0,
+  "newIndexCount": 0,
+  "packagingClassifiedDefinitionStatementCount": 12,
+  "verificationStatementCount": 1,
+  "sourceTests": {
+    "node": "v24.15.0",
+    "syntaxCommand": "node --check broker/src/weekly-source/healthroster-checklist-source.mjs",
+    "syntaxPassed": true,
+    "command": "node --test tests/healthroster-checklist-source.test.mjs tests/healthroster-checklist-sql-source.test.mjs",
+    "passed": 33,
+    "failed": 0,
+    "functionalCallbackTests": 26,
+    "sourceBoundaryTests": 7,
+    "qualification": "Synthetic callback/presentation/session and source packaging/security guard tests only. No actual PostgreSQL semantic compilation, real native workflow/query/financial proof, API or Office acceptance."
+  },
+  "boundaries": {
+    "committed": false,
+    "staged": false,
+    "pushed": false,
+    "gitMutation": false,
+    "databaseTools": false,
+    "docker": false,
+    "hostedEffects": false,
+    "secretsRead": false,
+    "notificationsSent": false,
+    "paymentEffects": false,
+    "sharedSourceEdited": false,
+    "officeWrites": false,
+    "bankingWorktreeRead": false,
+    "runtimeExposure": false,
+    "frozenCreditEdited": false,
+    "frozenReportEdited": false,
+    "frozenCnAdapterEdited": false
+  },
+  "freezePreservation": {
+    "reportManifest": "docs/healthroster-build/REPORT_SOURCE_MANIFEST.json",
+    "reportInputCount": 39,
+    "cnManifest": "docs/healthroster-build/CN_WORKER_ADAPTER_SOURCE_MANIFEST.json",
+    "cnInputCount": 5,
+    "driftCount": 0
+  },
+  "heldGates": [
+    "Root complete native PostgreSQL compile/ACL/caller/generated contract and serial fresh rollback/NEW/UPGRADE verification",
+    "Single Banking-owned native public Checklist union after first install; no competing Source public owner",
+    "Actual signed/Daily own-week discovery and canonical cycle resolution; late submission/current-vs-earlier retention and Sunday/Monday native calendar proof",
+    "Native immutable worker/legacy document/nullable-Contract owner/pending Daily materialisation/order/identity fixtures and no action admission through read arm",
+    "Native normal validation/current issue/D10 issued signature-document-invoice and delivery/outbox provenance; no source-only row admission",
+    "Actual Source/NEXT/ordinary holds/known-zero/unknown withholding and V3 informational paid evidence; no processing-complete or WAIT paid inference",
+    "Native subject/permission selection and native reason rank before every public sort/keyset page; 500+ real rows, independent 230/120 expansions and anchored refresh/closure",
+    "Existing native No one worked/Undo superseding-CAS-audit and exact correction pair/alignment/same-draft-return workspace permissions",
+    "Real installed API/Office bounded desktop/phone scroll/modal return/privacy/readonly/pending actions/NHSP/nonpreset acceptance"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "bytes": 11146,
+      "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 19902,
+      "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "bytes": 15894,
+      "sha256": "ef88892d73f9525e3295fa43459040bacc3c243506ea50827eedc9517863e140"
+    },
+    {
+      "path": "supabase/verification/support/wp_u3_native_read_vectors.sqlinc",
+      "bytes": 7432,
+      "sha256": "27df89a264021f4b50faaae193d9e3bc072b9e5c8cbe9270c7aa7bc7e5fc74c4"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "bytes": 23981,
+      "sha256": "e7859f59b5a763054fb2f41fea606b911ca8cb184441d64d33efe47eeb5333a0"
+    },
+    {
+      "path": "tests/healthroster-checklist-source.test.mjs",
+      "bytes": 19962,
+      "sha256": "0c145ab465dcef3687b676213ae4a34a757757c1c92f0753af4e850652fc81bf"
+    },
+    {
+      "path": "tests/healthroster-checklist-sql-source.test.mjs",
+      "bytes": 5951,
+      "sha256": "055643a149a36ba669dd2f580e8f82fe0cffa88cbde73707463543f14c920bd8"
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_READ_OWNER_INVENTORY.md",
+      "bytes": 6085,
+      "sha256": "b6b5bacba555f339fb60207e273caaa049c790b404040f0808d640a018255b73"
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_CONSUMER_CONTRACT.md",
+      "bytes": 15027,
+      "sha256": "aba55b7e9e1100a14435f58802d23cafdcf451d3a3c3a51512b45815dfa90fa5"
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_INTEGRATION_HUNKS.md",
+      "bytes": 7186,
+      "sha256": "c60bd8da4e81963e27a3451678393a7b39d981ea7d80979760aaa86c489183ac"
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_NATIVE_PROOF_RECIPE.md",
+      "bytes": 8576,
+      "sha256": "3088aa9ecda9ac8e9d003bb22fdaa27071c943a4619aa41004a424c3112e5b3a"
+    }
+  ]
+}

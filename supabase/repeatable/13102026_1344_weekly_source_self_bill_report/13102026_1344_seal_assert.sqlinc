@@ -1,0 +1,50 @@
+create or replace function private.weekly_source_self_bill_report_seal_assert_v1(p_upload_id uuid)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_upload public.weekly_source_uploads%rowtype; v_scope public.weekly_source_report_scopes%rowtype;
+  v_report public.weekly_source_self_bill_reports%rowtype; v_manifest jsonb; v_row record; v_kind text; v_component jsonb;
+begin
+  select * into strict v_upload from public.weekly_source_uploads where id=p_upload_id;
+  select * into strict v_scope from public.weekly_source_report_scopes where id=v_upload.report_scope_id;
+  select * into strict v_report from public.weekly_source_self_bill_reports where id=v_scope.self_bill_report_id;
+  perform private.weekly_source_self_bill_report_rules_assert_v1(v_scope.client_id,v_scope.source_cycle_id);
+  v_manifest:=private.weekly_source_self_bill_report_manifest_v1(private.weekly_source_self_bill_report_stored_rows_v1(p_upload_id));
+  if v_upload.content_sha256 is distinct from v_report.content_sha256 or v_upload.accepted_count<>v_report.line_count
+    or v_report.row_manifest_hash is distinct from decode(v_manifest->>'row_manifest_hash','hex')
+    or v_report.net_pence is distinct from (v_manifest->>'net_pence')::bigint
+    or v_report.vat_pence is distinct from (v_manifest->>'vat_pence')::bigint
+    or v_report.gross_pence is distinct from (v_manifest->>'gross_pence')::bigint
+    or v_upload.coverage_proof_kind<>'SELF_BILL_REPORT_SCOPE' or v_upload.purpose<>'ORDINARY'
+    or v_upload.confirmed_coverage_start_local_date is not null or v_upload.confirmed_coverage_end_local_date is not null
+    or exists(select 1 from public.weekly_source_row_resolutions x join public.weekly_source_upload_rows r on r.id=x.upload_row_id where r.upload_id=p_upload_id)
+    or exists(select 1 from public.weekly_source_expense_cell_evidence where upload_id=p_upload_id)
+    or (select count(*) from public.weekly_source_money_cell_evidence where upload_id=p_upload_id)<>v_report.line_count*3
+    or exists(select 1 from public.weekly_source_upload_rows r where r.upload_id=p_upload_id and (
+      r.row_finalisation_state<>'SOURCE_REPORT_LINE' or r.break_minutes is not null or r.actual_net_minutes is not null
+      or r.finalised_by is not null or r.role_band_source is not null or r.source_expense_pence is not null
+      or r.source_expense_parse_state<>'NOT_APPLICABLE' or r.source_money_parse_state<>'VALID'
+      or r.source_commission_pence is not null or r.source_total_cost_pence is not null
+      or r.source_qualification_profile_version is distinct from 'SOURCE_INVOICE_MONEY_PENCE_V1'
+      or r.normalised_row_hash is distinct from private.weekly_source_self_bill_report_row_hash_v1(
+        jsonb_build_object('source_row_ordinal',r.source_row_ordinal,'external_source_key',r.external_source_key,
+          'source_candidate_identity',r.source_candidate_identity,'source_client_identity',r.source_client_identity,
+          'work_date',r.work_date,'start_at_local',r.start_at_local,'end_at_local',r.end_at_local,
+          'source_shift_charge_pence',r.source_shift_charge_pence,'source_vat_pence',r.source_vat_pence,
+          'source_gross_pence',r.source_gross_pence,'bounded_raw_columns_json',r.bounded_raw_columns_json))
+    )) then raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_SEAL_AUTHORITY_INVALID' using errcode='55000'; end if;
+  for v_row in select * from public.weekly_source_upload_rows where upload_id=p_upload_id loop
+    foreach v_kind in array array['net','vat','gross'] loop
+      v_component:=v_row.bounded_raw_columns_json->'components'->v_kind;
+      if not exists(select 1 from public.weekly_source_money_cell_evidence e where e.upload_id=p_upload_id
+        and e.source_row_ordinal=v_row.source_row_ordinal and e.money_field_kind='SOURCE_'||upper(v_kind)
+        and e.source_file_sha256=v_upload.content_sha256 and e.parse_state='VALID' and not e.formula_present
+        and e.parsed_pence=(v_component->>'parsedPence')::bigint and e.cell_coordinate=v_component->>'coordinate'
+        and e.source_kind=v_component->>'sourceKind' and e.original_token=v_component->>'originalToken'
+        and e.decoded_token=v_component->>'decodedToken' and e.cell_type_marker=v_component->>'cellKind') then
+        raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_MONEY_WITNESS_INVALID' using errcode='55000',detail=v_kind;
+      end if;
+    end loop;
+  end loop;
+  -- net+VAT vs gross differences remain accepted forensic warnings here.
+end;
+$function$;

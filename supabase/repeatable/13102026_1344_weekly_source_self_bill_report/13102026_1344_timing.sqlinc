@@ -1,0 +1,102 @@
+-- Complete F8 facts/gate with purpose-bound report timing and coverage exemption.
+create or replace function private.weekly_source_final_upload_facts_v1(
+  p_profile text,p_week_ending date,p_cutoff_at_utc timestamptz,p_uploaded_at_utc timestamptz,
+  p_coverage_state text,p_coverage_start date,p_coverage_end date,p_rules jsonb,p_coverage_floor date
+) returns jsonb language plpgsql immutable security invoker
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_code text; v_message text; v_earliest timestamptz;
+  v_weekday integer; v_clock time; v_local timestamp; v_required_start date;
+  v_days constant text[]:=array['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+begin
+  -- Legacy/off/unassigned, NHSP and Mode A retain their existing owners.
+  if (p_rules is null and p_profile<>'ACACIUM_SELF_BILL_REPORT_V1') or p_profile in ('NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1') then
+    return jsonb_build_object('contract','WEEKLY_SOURCE_FINAL_UPLOAD_GATE_V1','allowed',true,
+      'code',null,'message',null,'earliest_upload_at_utc',null,'coverage_floor_local_date',null);
+  end if;
+  if p_profile not in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1',
+      'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1','ACACIUM_SELF_BILL_REPORT_V1') or jsonb_typeof(p_rules) is distinct from 'object'
+      or p_week_ending is null or p_cutoff_at_utc is null or p_uploaded_at_utc is null
+      or (p_profile<>'ACACIUM_SELF_BILL_REPORT_V1' and (p_coverage_floor is null or p_rules->>'checking_profile_kind' is distinct from p_profile))
+      or (p_profile='ACACIUM_SELF_BILL_REPORT_V1' and (p_rules->>'self_bill_source' is distinct from 'SEPARATE_FINAL_REPORT'
+        or p_rules->>'final_report_profile_kind' is distinct from 'ACACIUM_SELF_BILL_REPORT_V1')) then
+    v_code:='WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID';
+    v_message:='The final file could not be checked. Refresh the import before trying again.';
+  elsif p_rules->'earliest_final_weekday'='null'::jsonb
+      and p_rules->'earliest_final_local_time'='null'::jsonb then
+    v_earliest:=p_cutoff_at_utc;
+  elsif jsonb_typeof(p_rules->'earliest_final_weekday')='number'
+      and coalesce(p_rules->>'earliest_final_weekday','') ~ '^[0-6]$'
+      and coalesce(p_rules->>'earliest_final_local_time','') ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then
+    v_weekday:=(p_rules->>'earliest_final_weekday')::integer;
+    v_clock:=(p_rules->>'earliest_final_local_time')::time;
+    -- A source cycle's Sunday is the completed work week. Its cutoff/S12
+    -- occurrence is the following configured weekday, as the cycle owner does.
+    v_earliest:=((p_week_ending+v_weekday)+v_clock) at time zone 'Europe/London';
+    if v_earliest<p_cutoff_at_utc then
+      v_code:='WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID';
+      v_message:='The final file could not be checked. Refresh the import before trying again.';
+    end if;
+  else
+    v_code:='WEEKLY_SOURCE_FINAL_UPLOAD_CONTEXT_INVALID';
+    v_message:='The final file could not be checked. Refresh the import before trying again.';
+  end if;
+  if v_code is null and p_uploaded_at_utc<v_earliest then
+    v_local:=v_earliest at time zone 'Europe/London';
+    v_code:='WEEKLY_SOURCE_FINAL_FILE_UPLOADED_TOO_EARLY';
+    v_message:='The final file can be uploaded from '
+      ||v_days[extract(dow from v_local)::integer+1]||' '||to_char(v_local,'HH24:MI')
+      ||' ('||to_char(v_local,'DD/MM/YYYY')||').';
+  end if;
+  if p_profile<>'ACACIUM_SELF_BILL_REPORT_V1' then
+  v_required_start:=greatest(p_week_ending-6,p_coverage_floor);
+  if v_code is null and (p_coverage_state is distinct from 'COMPLETE' or p_coverage_start is null
+      or p_coverage_end is null or p_coverage_start>p_coverage_end) then
+    v_code:='WEEKLY_SOURCE_FINAL_FILE_COVERAGE_INCOMPLETE';
+    v_message:='Upload an export covering the whole week.';
+  elsif v_code is null and p_coverage_start<p_coverage_floor then
+    v_code:='WEEKLY_SOURCE_COVERAGE_BEFORE_RULE_SET';
+    v_message:='Import coverage starts from '||to_char(p_coverage_floor,'DD/MM/YYYY')
+      ||', the first week using these settings.';
+  elsif v_code is null and (p_coverage_start>v_required_start or p_coverage_end<p_week_ending) then
+    v_code:='WEEKLY_SOURCE_FINAL_FILE_COVERAGE_INCOMPLETE';
+    v_message:='The current file covers '||to_char(p_coverage_start,'DD/MM/YYYY')||'–'
+      ||to_char(p_coverage_end,'DD/MM/YYYY')||' only. Upload an export covering the whole week.';
+  end if;
+  end if;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_FINAL_UPLOAD_GATE_V1','allowed',v_code is null,
+    'code',v_code,'message',v_message,'earliest_upload_at_utc',v_earliest,
+    'coverage_floor_local_date',p_coverage_floor);
+end;
+$function$;
+
+create or replace function private.weekly_source_final_upload_gate_v1(p_upload_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_upload public.weekly_source_uploads%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype; v_rules jsonb; v_floor date; v_client uuid;
+begin
+  select * into strict v_upload from public.weekly_source_uploads where id=p_upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  v_client:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+  v_rules:=private.weekly_source_effective_rule_set_v1(v_client,v_cycle.id);
+  if v_profile.profile_code='ACACIUM_SELF_BILL_REPORT_V1' then
+    v_rules:=private.weekly_source_self_bill_report_rules_assert_v1(v_client,v_cycle.id);
+    if not exists(select 1 from public.weekly_source_report_scopes s join public.weekly_source_self_bill_reports r on r.id=s.self_bill_report_id
+      where s.id=v_upload.report_scope_id and s.source_cycle_id=v_cycle.id and s.client_id=v_client
+        and r.content_sha256=v_upload.content_sha256) then
+      raise exception 'WEEKLY_SOURCE_REPORT_TIMING_SCOPE_INVALID' using errcode='55000'; end if;
+  elsif v_rules is not null then
+    -- Retained activation receipts and frozen revisions prove this client's
+    -- first applicable rule week, including historical disabled assignments.
+    v_floor:=private.weekly_source_rule_coverage_floor_v1(v_client,v_cycle.id);
+  end if;
+  return private.weekly_source_final_upload_facts_v1(v_profile.profile_code,v_cycle.finalisation_week_ending,
+    v_cycle.cutoff_at_utc,v_upload.uploaded_at_utc,v_upload.coverage_state,
+    v_upload.confirmed_coverage_start_local_date,v_upload.confirmed_coverage_end_local_date,v_rules->'values',v_floor);
+end;
+$function$;
