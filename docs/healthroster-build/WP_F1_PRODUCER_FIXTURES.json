@@ -1,0 +1,102 @@
+{
+  "status": "Illustrative source contracts; no installed/runtime claim",
+  "get_route": "GET /api/weekly-source/v1/settings/rule-sets",
+  "get_response": {
+    "contract": "WEEKLY_SOURCE_RULE_SETS_V1",
+    "rule_sets": [{
+      "id": "f7110000-0000-4000-8000-000000000200",
+      "code": "F1_VERIFY_RULES",
+      "display_name": "Surrey rules",
+      "version": 1,
+      "versions": [{
+        "id": "f7110000-0000-4000-8000-000000000201",
+        "version_number": 1,
+        "values_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "created_by_user_id": "f7110000-0000-4000-8000-000000000001",
+        "created_at_utc": "2026-10-13T12:00:00Z",
+        "values": {
+          "checking_profile_kind": "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1",
+          "self_bill_source": "SAME_FILE",
+          "final_report_profile_kind": "NONE",
+          "invoice_membership": "FINALISED_IN_CYCLE_WINDOW",
+          "pay_membership": "ALL_FINALISED_IN_FILE",
+          "invoice_amount_basis": "SOURCE_AMOUNT",
+          "source_amount_basis": "EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY",
+          "line_vat_method": "LINE_GROSS_MINUS_NET_FROM_SOURCE",
+          "invoice_vat_method": "SUM_OF_LINES",
+          "rate_difference_policy": "FLAG_ALLOW_IGNORE",
+          "negative_adjustment_policy": "NEGATIVE_ADJUSTMENT_LINE",
+          "lookback_warning": "WARN_IF_AFTER_OLDEST_PROTECTED",
+          "identical_rekey": "COMPLETE_AUTOMATICALLY",
+          "authorised_late_addition": "COMPLETE_AUTOMATICALLY",
+          "equal_protected_hours": "CLEAR_AUTOMATICALLY",
+          "signed_comparison": "ON_EVERY_PUBLICATION",
+          "unfinalised_action": "ASK_CLIENT_TO_FINALISE",
+          "unfinalised_chase": "ASK_FROM_FIRST_CHECKING_IMPORT_SHOWING_IT",
+          "changed_query_clocks": "REASK_WITH_NEW_CLOCKS_EXCLUDE_UNCHANGED",
+          "invoice_sender": "CLIENT_SELF_BILL",
+          "earliest_final_weekday": 4,
+          "earliest_final_local_time": "00:00",
+          "attach_healthroster_section": true
+        }
+      }]
+    }],
+    "assignments": [{
+      "id": "f7110000-0000-4000-8000-000000000202",
+      "source_group_id": "f7110000-0000-4000-8000-000000000050",
+      "source_group_version": 2,
+      "rule_set_version_id": "f7110000-0000-4000-8000-000000000201",
+      "version": 1,
+      "effective_from_week_ending": "2026-11-08",
+      "effective_to_week_ending": null,
+      "feature_enabled": false,
+      "feature_purpose": null,
+      "created_by_user_id": "f7110000-0000-4000-8000-000000000001",
+      "created_at_utc": "2026-10-13T12:00:00Z"
+    }]
+  },
+  "save_route": "PUT /api/weekly-source/v1/settings/rule-sets",
+  "save_request": {
+    "source_group_id": "f7110000-0000-4000-8000-000000000050",
+    "rule_set": {"id": null, "code": "SURREY_RULES", "display_name": "Surrey rules", "expected_version": 0},
+    "values": {"checking_profile_kind": "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1"},
+    "request_id": "f7110000-0000-4000-8000-000000000100"
+  },
+  "save_response": {
+    "contract": "WEEKLY_SOURCE_RULE_SET_SAVED_V1",
+    "rule_set_id": "f7110000-0000-4000-8000-000000000200",
+    "rule_set_version_id": "f7110000-0000-4000-8000-000000000201",
+    "version_number": 1,
+    "rule_set_version": 1,
+    "values_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "replayed": false
+  },
+  "assign_route": "PUT /api/weekly-source/v1/settings/source-groups/f7110000-0000-4000-8000-000000000050/rules",
+  "assign_request": {
+    "rule_set_version_id": "f7110000-0000-4000-8000-000000000201",
+    "effective_from_week_ending": "2026-11-08",
+    "effective_to_week_ending": null,
+    "expected_group_version": 1,
+    "request_id": "f7110000-0000-4000-8000-000000000110"
+  },
+  "assign_response": {
+    "contract": "WEEKLY_SOURCE_RULE_ASSIGNED_V1",
+    "assignment_id": "f7110000-0000-4000-8000-000000000202",
+    "assignment_version": 1,
+    "source_group_id": "f7110000-0000-4000-8000-000000000050",
+    "source_group_version": 2,
+    "rule_set_version_id": "f7110000-0000-4000-8000-000000000201",
+    "effective_from_week_ending": "2026-11-08",
+    "effective_to_week_ending": null,
+    "feature_enabled": false,
+    "replayed": false
+  },
+  "notes": [
+    "Zero SHA strings identify illustrative fixtures; persisted owners compute actual SHA values.",
+    "GET lists saved disabled choices. Saving a version and assigning it never enables a feature.",
+    "A NULL rule_set_version_id clears rules from a future unfinalised range and always resolves to NULL effective rules.",
+    "NULL assignments can be activated for SIGNED_CHECK_ONLY by the root setup owner only, after every group gate.",
+    "Only S30 attach_healthroster_section varies for AGENCY_INVOICE; all other fields use the approved fixed From/To preset.",
+    "Actor, agency and environment are injected by the server. Activation has no mounted Office or Worker route."
+  ]
+}

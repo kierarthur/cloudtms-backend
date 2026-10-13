@@ -21,6 +21,9 @@ set search_path to 'pg_catalog','pg_temp'
 as $function$
   values
     ('weekly_source_groups','STATEFUL_SERVER_OWNED'),
+    ('weekly_source_rule_sets','STATEFUL_SERVER_OWNED'),
+    ('weekly_source_rule_set_versions','IMMUTABLE_APPEND_ONLY'),
+    ('weekly_source_group_rule_assignments','STATEFUL_SERVER_OWNED'),
     ('weekly_source_group_clients','STATEFUL_SERVER_OWNED'),
     ('weekly_source_client_policies','STATEFUL_SERVER_OWNED'),
     ('weekly_source_contract_policies','STATEFUL_SERVER_OWNED'),
@@ -265,6 +268,15 @@ set search_path to 'pg_catalog','pg_temp'
 as $function$
   values
     -- proof/32 section 9: the distinct-array proof a CHECK cannot express
+    ('private._weekly_source_rule_values_v1(jsonb)'),
+    ('private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)'),
+    ('private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)'),
+    ('private.weekly_source_effective_rule_set_v1(uuid,uuid)'),
+    ('private.weekly_source_has_self_bill_rules_v1(uuid,uuid)'),
+    ('private.weekly_source_agency_invoice_check_only_v1(uuid)'),
+    ('private.weekly_source_signed_check_only_v1(uuid)'),
+    ('private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)'),
+    ('private.weekly_source_final_rule_version_guard_v1()'),
     -- (it cannot contain a subquery), and the BEFORE UPDATE OR DELETE /
     -- BEFORE TRUNCATE guard that raises
     -- WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE.
@@ -422,6 +434,12 @@ set search_path to 'pg_catalog','pg_temp'
 as $function$
   values
     ('public.weekly_source_import_prepare_atomic_v1(jsonb)'),
+    -- Retain the reviewed WP-PP service-only actor helper union.
+    ('private.weekly_source_pay_actor_allowed_v1(uuid)'),
+    ('public.weekly_source_rule_sets_get_v1(jsonb)'),
+    ('public.weekly_source_rule_set_version_save_atomic_v1(jsonb)'),
+    ('public.weekly_source_group_rule_assign_atomic_v1(jsonb)'),
+    ('public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)'),
     ('public.weekly_source_office_recheck_begin_v1(jsonb)'),
     -- Report-first completed History is a service-only read. Its grant is
     -- intentionally unavailable to browser roles.
@@ -681,11 +699,11 @@ begin
     into v_contract_count,v_distinct_contract_count
   from private._weekly_source_acl_table_contract_v1();
 
-  if v_contract_count<>99
-     or v_distinct_contract_count<>99 then
+  if v_contract_count<>102
+     or v_distinct_contract_count<>102 then
     raise exception 'WEEKLY_SOURCE_ACL_CONTRACT_INVALID'
       using errcode='55000',
-            detail='The table ACL contract must contain exactly 99 unique relations.';
+            detail='The table ACL contract must contain exactly 102 unique relations.';
   end if;
 
   -- A private helper is never part of the granted RPC surface. Listing one in

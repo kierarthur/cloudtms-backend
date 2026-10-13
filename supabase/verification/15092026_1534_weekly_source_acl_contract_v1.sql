@@ -14,6 +14,7 @@ declare
   v_names text;
   v_service_role_oid oid;
   v_expected_immutable text[]:=array[
+    'weekly_source_rule_set_versions',
     'weekly_candidate_app_mutation_receipts',
     'weekly_discrepancy_events',
     'weekly_exceptional_c1_component_records',
@@ -141,6 +142,8 @@ declare
     'weekly_source_pending_entitlement_bundles.updated_at_utc'
   ]::text[];
   v_expected_stateful text[]:=array[
+    'weekly_source_rule_sets',
+    'weekly_source_group_rule_assignments',
     'weekly_candidate_cohorts',
     'weekly_candidate_outreach_generations',
     'weekly_candidate_outreach_memberships',
@@ -198,6 +201,15 @@ declare
   -- a signature listed in the service array but not actually granted makes the
   -- routine sweep fail, which is how the two lists stay honest.
   v_expected_private_helpers text[]:=array[
+    'private._weekly_source_rule_values_v1(jsonb)',
+    'private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)',
+    'private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)',
+    'private.weekly_source_effective_rule_set_v1(uuid,uuid)',
+    'private.weekly_source_has_self_bill_rules_v1(uuid,uuid)',
+    'private.weekly_source_agency_invoice_check_only_v1(uuid)',
+    'private.weekly_source_signed_check_only_v1(uuid)',
+    'private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)',
+    'private.weekly_source_final_rule_version_guard_v1()',
     'private.weekly_source_import_is_prepared_v1(uuid)',
     'private.weekly_source_manager_due_event_covers_v1(uuid,uuid)',
     'private.weekly_source_candidate_generation_current_v1(uuid)',
@@ -324,6 +336,11 @@ declare
     'private.weekly_source_overlap_admission_assert_v1(uuid)'
   ]::text[];
   v_expected_service_rpcs text[]:=array[
+    'private.weekly_source_pay_actor_allowed_v1(uuid)',
+    'public.weekly_source_rule_sets_get_v1(jsonb)',
+    'public.weekly_source_rule_set_version_save_atomic_v1(jsonb)',
+    'public.weekly_source_group_rule_assign_atomic_v1(jsonb)',
+    'public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)',
     'public.weekly_source_import_prepare_atomic_v1(jsonb)',
     'public.weekly_source_office_recheck_begin_v1(jsonb)',
     'public.weekly_source_report_history_v1(jsonb)',
@@ -511,16 +528,17 @@ begin
   -- it uses the pre-existing weekly_completed_pack_copy_events relation and
   -- classifies its provider_command_id/state pair as the only mutable delivery
   -- lifecycle on that otherwise frozen record.  The exact final independent
-  -- sets below are therefore 36 immutable, 19 lifecycle and 44 stateful tables
-  -- (99 total).  Lifecycle columns remain 67: 64 - 3 + 4 = 65 for the Gate 1
+  -- F1 adds one immutable version and two stateful configuration tables:
+  -- 37 immutable, 19 lifecycle and 46 stateful (102 total). Lifecycle columns
+  -- remain 67: 64 - 3 + 4 = 65 for the Gate 1
   -- movement, then +2 for the head supersession reason and predecessor link of
   -- HANDOVER 2 round-5 ruling A3 step 3 (package WP-07c), with the completed-
   -- pack pair already represented in the sealed set.
-  if v_contract_count<>99
-     or v_distinct_contract_count<>99
-     or v_immutable_count<>36
+  if v_contract_count<>102
+     or v_distinct_contract_count<>102
+     or v_immutable_count<>37
      or v_lifecycle_count<>19
-     or v_stateful_count<>44 then
+     or v_stateful_count<>46 then
     raise exception 'weekly source table contract count mismatch: total %, distinct %, immutable %, lifecycle %, stateful %',
       v_contract_count,v_distinct_contract_count,v_immutable_count,v_lifecycle_count,v_stateful_count;
   end if;
