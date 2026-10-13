@@ -18,8 +18,13 @@ test('source definitions remain in the outer transaction and are not isolated li
   const out=renderFullRehearsalUnits([unit('select 1;','repeatable')]);
   assert.ok(!out.sql.includes('savepoint'));assert.equal(out.units[0].clientVariableIsolation,false);
 });
+test('reviewed verifier paths under tests and native inner rollback-to behavior are retained',()=>{
+  const u={...unit('savepoint native_case;\nselect 1;\nrollback to savepoint native_case;\nrelease savepoint native_case;'),file:'tests/13102026_native_case.sql'};
+  assert.ok(renderFullRehearsalUnits([u]).sql.includes(u.sql));
+  assert.throws(()=>renderFullRehearsalUnits([{...u,kind:'migration'}]),/IDENTITY_REFUSED/);
+});
 test('transaction or connection escape and error-control override are refused before any script is returned',()=>{
-  for(const sql of ['commit;','rollback;','begin;','prepare transaction \'other\';','\\connect other','\\quit','\\! echo unsafe','\\ir other.sql','\\gexec','\\set ON_ERROR_STOP on','\\set ON_ERROR_ROLLBACK off']){
+  for(const sql of ['commit;','rollback;','begin;','prepare transaction \'other\';','\\connect other','\\quit','\\! echo unsafe','\\ir other.sql','\\gexec','\\g private-output.txt','\\watch 1','\\setenv OTHER unsafe','\\echo `unsafe-command`','\\pset pager on','\\gset `unsafe-command`','\\set ON_ERROR_STOP on','\\set ON_ERROR_ROLLBACK off']){
     assert.throws(()=>renderFullRehearsalUnits([unit(sql)]),/REFUSED/);
   }
 });

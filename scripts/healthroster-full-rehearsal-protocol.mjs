@@ -7,23 +7,30 @@ export function renderFullRehearsalUnits(units) {
   if (!Array.isArray(units) || !units.length) throw Error('REHEARSAL_UNITS_REQUIRED');
   const rendered = [], census = [];
   for (const [index, unit] of units.entries()) {
+    const verifier = ['verifier','final_browser_verifier'].includes(unit.kind);
+    const pathAllowed = typeof unit.file === 'string' &&
+      (/^supabase\/(?:migrations|repeatable|verification)\/[A-Za-z0-9_./-]+\.sql$/.test(unit.file)
+        || verifier && /^tests\/[A-Za-z0-9_./-]+\.sql$/.test(unit.file));
     if (!['migration','repeatable','verifier','final_browser_verifier'].includes(unit.kind)
-      || !/^supabase\/(?:migrations|repeatable|verification)\/[A-Za-z0-9_./-]+\.sql$/.test(unit.file)
+      || !pathAllowed
       || unit.file.split('/').includes('..') || typeof unit.sql !== 'string'
       || digest(unit.sql) !== unit.sqlHash) throw Error('REHEARSAL_UNIT_IDENTITY_REFUSED');
     const parsed = scanManagedSql(unit.sql);
-    if (parsed.statements.some(s => ['BEGIN','COMMIT','ROLLBACK','END','START','ABORT','PREPARE'].includes(s.tokens[0]))) {
+    if (parsed.statements.some(s => ['BEGIN','COMMIT','END','START','ABORT','PREPARE'].includes(s.tokens[0])
+      || s.tokens[0] === 'ROLLBACK' && s.tokens[1] !== 'TO')) {
       throw Error('REHEARSAL_OUTER_TRANSACTION_ESCAPE_REFUSED');
     }
     for (const meta of parsed.meta) {
-      if (/^\\(?:connect|c\b|quit|q\b|!|copy|o\b|out\b|w\b|write\b|i\b|ir\b|gexec\b)/i.test(meta.text)) {
+      if (!/^\\(?:echo|if|elif|else|endif|set|unset|gset|pset)\b/i.test(meta.text)
+        || meta.text.includes('`')
+        || /^\\pset\b/i.test(meta.text) && !/^\\pset\s+pager\s+off\s*$/i.test(meta.text)
+        || /^\\gset\b/i.test(meta.text) && !/^\\gset(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$/i.test(meta.text)) {
         throw Error('REHEARSAL_META_ESCAPE_REFUSED');
       }
       if (/^\\set\s+ON_ERROR_(?:STOP|ROLLBACK)\b/i.test(meta.text)) {
         throw Error('REHEARSAL_ERROR_CONTROL_OVERRIDE_REFUSED');
       }
     }
-    const verifier = ['verifier','final_browser_verifier'].includes(unit.kind);
     const parts = [`\\echo HR_FILE_BEGIN ${index}`, 'reset role;', 'reset session authorization;',
       'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;'];
     // psql variables are client state: SQL savepoint rollback cannot clear them.
