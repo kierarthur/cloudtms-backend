@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "source_only": true,
+  "branch": "codex/healthroster-v2-candidate-build-13102026",
+  "base_commit": "e286533e90c0658c252ba1bcc909b9af909be785",
+  "hash_scope": "UTF-8 saved source with CRLF normalized to LF; manifest excluded from its own hash list",
+  "files": [
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256_lf": "2c9a45fac03e4f52b12d32b8576f7990825b8c49d63b3c3cabc6e19272dc960e"
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.contract.json",
+      "sha256_lf": "a0aea69c370ea8b9d877cb09e96034ec561ad1ba5a8d6c724640b5dd5930beec"
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.js",
+      "sha256_lf": "6fbec686f6fc775bda6fb35ea4c24a333c3427e5292b85c49ea971934899027c"
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.validator.js",
+      "sha256_lf": "3eb48eaf91e55fce5d60572e71c56a863eda17ec52c7441040799b0e3c514a99"
+    },
+    {
+      "path": "candidate-broker/src/candidate-broker.js",
+      "sha256_lf": "b0efc2222aa8dba3acc94ca2f6d731e1e781a32b650f8a8b3c808ae6453ad2a9"
+    },
+    {
+      "path": "docs/healthroster-build/WP_CANDIDATE_IMPLEMENTATION.md",
+      "sha256_lf": "13418f58909cf9abe3318b0bb1bb4dccbf4abd8c59a2cce7dae014628a6a0531"
+    },
+    {
+      "path": "tests/candidate-app-backend.test.js",
+      "sha256_lf": "d411c8b3453e1abbbfc3c91d5510bccb9aaf29f242eb88ee78bda0d5d456cf10"
+    },
+    {
+      "path": "tests/candidate-correction-v1.test.js",
+      "sha256_lf": "c514431b9e439b2fe3f6dcb6eaad8d6b6704a7c7d026f4ca0fe7ef7252ce6445"
+    }
+  ]
+}
