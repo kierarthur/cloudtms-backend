@@ -1,0 +1,19 @@
+{
+  "status": "FROZEN_A0_ISOLATION_SOURCE_EVIDENCE_RETAINED_NO_RUNTIME_INTEGRATION",
+  "laneCommit": "9201cb609a9f952811c99460f55717ec6d3d9175",
+  "rootInputCommit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "manifestSha256": "f031b83e3b17c609260ae34508e4f859f8d49f91277ca49c5f43c84851fc7e50",
+  "retainedFiles": 12,
+  "completeRootInputPinsVerified": 1625,
+  "rawLaneGitAndSavedBytesMatch": true,
+  "scannerCorrection": "Quoted internal char vs ordinary character aliases kept distinct; full current census unchanged. Await independent focused critic.",
+  "nativeHolds": [
+    "Actual deployed supported PostgREST/table/RPC isolation and hidden-P0 RR schedule",
+    "Validation-first/invoice-first/Candidate alias-rank/raw-booking/native FIN late-hook schedules",
+    "All financial/security/document/API/phone/release and final PartB gates"
+  ],
+  "newSqlSignatures": 0,
+  "rootRuntimeSqlOrContractFilesChanged": 0,
+  "databaseCalls": 0,
+  "sourceGraphObservedNativeEdges": 0
+}
