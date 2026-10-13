@@ -55,6 +55,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_resolution_scope_validate_v1(jsonb,text)",
   "private.bpay_next_resolution_offer_context_v1(uuid,uuid)",
   "private.bpay_next_resolution_context_v1(uuid,jsonb)",
+  "private.bpay_next_bucket_resolution_review_v1(uuid,jsonb)",
+  "private.bpay_next_bucket_resolution_evidence_v1(uuid,jsonb)",
   // WB29: bounded exact accepted references on the existing Create cut.
   'private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)',
   // WB29: one qualified incoming/saved quote; unchanged1157 arithmetic.
@@ -240,7 +242,9 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)": ["private.bpay_next_segment_pay_basis_v1"],
   "private.bpay_next_resolution_scope_validate_v1(jsonb,text)": ["jsonb_typeof","octet_length","jsonb_array_length","jsonb_array_elements","array_append","length","upper","btrim","jsonb_build_array","trunc"],
   "private.bpay_next_resolution_offer_context_v1(uuid,uuid)": ["current_setting","public.pay_banking_official_date_context_v1","jsonb_build_object","upper","octet_length"],
-  "private.bpay_next_resolution_context_v1(uuid,jsonb)": ["private.bpay_next_resolution_live_snooze_v1","private.bpay_next_resolution_scope_validate_v1","private.bpay_next_resolution_offer_context_v1","private.bpay_next_component_resolution_basis_v1","private.bpay_next_contract_rate_rows_v1","private.bpay_next_component_resolution_active_v1","private.bpay_next_component_resolution_input_quote_v1","private.bpay_next_component_resolution_quote_v1","jsonb_array_elements","jsonb_build_object","jsonb_build_array","greatest","octet_length","jsonb_each","jsonb_set","to_jsonb"],
+  "private.bpay_next_bucket_resolution_review_v1(uuid,jsonb)": ["jsonb_agg","octet_length","jsonb_object_keys","private.bpay_next_resolution_offer_context_v1","private.bpay_next_resolution_context_v1","private.bpay_next_component_resolution_need_v1","private.bpay_next_component_resolution_active_v1","array_position","array_append","jsonb_set","to_jsonb","by","distinct"],
+  "private.bpay_next_bucket_resolution_evidence_v1(uuid,jsonb)": ["octet_length","jsonb_object_keys","private.bpay_next_resolution_context_v1","lateral","distinct","by"],
+  "private.bpay_next_resolution_context_v1(uuid,jsonb)": ["jsonb_object_keys","private.bpay_next_bucket_resolution_review_v1","private.bpay_next_bucket_resolution_evidence_v1","private.bpay_next_resolution_live_snooze_v1","private.bpay_next_resolution_scope_validate_v1","private.bpay_next_resolution_offer_context_v1","private.bpay_next_component_resolution_basis_v1","private.bpay_next_contract_rate_rows_v1","private.bpay_next_component_resolution_active_v1","private.bpay_next_component_resolution_input_quote_v1","private.bpay_next_component_resolution_quote_v1","jsonb_array_elements","jsonb_build_object","jsonb_build_array","greatest","octet_length","jsonb_each","jsonb_set","to_jsonb"],
   "private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)": ["private.bpay_next_component_resolution_active_v1","upper","jsonb_build_array","jsonb_build_object","array_append","octet_length"],
   "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)": ["private.bpay_next_component_resolution_basis_v1","private.pay_finance_selected_quote_v1","isfinite","length","jsonb_typeof","jsonb_object_keys","jsonb_each","jsonb_each_text","trunc","btrim","octet_length","count","jsonb_build_object"],
   "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)": ["private.bpay_next_resolution_live_snooze_v1","private.bpay_next_component_resolution_basis_v1","private.bpay_next_component_resolution_input_quote_v1","greatest","jsonb_build_object"],

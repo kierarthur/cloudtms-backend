@@ -1,0 +1,51 @@
+{
+  "item": "WB-30",
+  "sequence": 141,
+  "stage": "Reader/source complete; independent screen policy review pending",
+  "builderDecisions": [
+    "BD171"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+      "sha256": "a482a5aeed03a9c2e0206da41a26370dbd59e5e1a4d8601e621da65779546981"
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "e638be80f1cf96e31cad575dbb69a1f003480cb6627b33a1b88761624a144309"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "031b1dfc4e5b27ab74f6496776bf11fe7b99f3df88e70e0cd16b77cc38fb8cd0"
+    },
+    {
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "88d4b9331c2d143aa4ecf357d34f0d1eb2ab127c6687453e96100b00ea98d74b"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "03c6b8663ec690086fcbc3028184fc68c5be43aa56f1bd3c08ee247cc245fcda"
+    }
+  ],
+  "owners": {
+    "privateContext": "2302 -> 0201 (complete explicit body retained)",
+    "newPrivateHelpers": [
+      "private.bpay_next_bucket_resolution_review_v1(uuid,jsonb)",
+      "private.bpay_next_bucket_resolution_evidence_v1(uuid,jsonb)"
+    ],
+    "publicW1": "13102026_0117 unchanged",
+    "atomicW2": "12102026_2320 unchanged",
+    "sharedMoney": "06102026_1157 unchanged"
+  },
+  "checks": {
+    "dbCheck": "384 migrations/998 repeatables PASS",
+    "sourceGates": "1558 SQL/31 RPC/173 routine-work/37 typed transports PASS",
+    "localPG17": "0 migrations/4 closures compiled; three exact catalogue bodies/configuration/owner/ACL PASS; no business SQL/data",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf unchanged; both existing isolation DO PASS",
+    "changedJS": "node --check PASS",
+    "contract": "b9c6079fd9a3652db396e765f7de47782c542067800f4b7856be35d0d29f4399 export/seal/coupling PASS"
+  },
+  "review": "DESIGN/SOURCE PASS; final catalogue/inverse review requested; A4 pending",
+  "acceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; not ticked yet"
+}

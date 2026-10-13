@@ -1,0 +1,77 @@
+{
+  "source": "Sole local PG17 schema catalogue and isolation DO only; no business calls/data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_bucket_resolution_evidence_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+      "sourceMd5": "f37adf0dbeae9345a7bf00580f72c74e",
+      "installed": {
+        "bodyMd5": "f37adf0dbeae9345a7bf00580f72c74e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_bucket_resolution_review_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+      "sourceMd5": "1da5c757bd78177ab7471b79b9e5faee",
+      "installed": {
+        "bodyMd5": "1da5c757bd78177ab7471b79b9e5faee",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+      "sourceMd5": "e052893187cb9bf1c2449299c1f668fb",
+      "installed": {
+        "bodyMd5": "e052893187cb9bf1c2449299c1f668fb",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

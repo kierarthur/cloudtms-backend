@@ -1,3 +1,75 @@
+function bucketInput(s){
+  if(exact(s,['bucket_review'])){const q=s.bucket_review;return exact(q,['candidate_id','work_id','expected_revision_id','approved_line_id'])&&[q.candidate_id,q.work_id,q.expected_revision_id].every(id)&&nullable(q.approved_line_id,id);}
+  if(!exact(s,['bucket_evidence']))return false;
+  const q=s.bucket_evidence;if(!exact(q,['candidate_id','works','context','after'])||!id(q.candidate_id)||!commandContext(q.context)||q.context.candidate_id!==q.candidate_id)return false;
+  try{normalizeResolutionInput({resolution:{candidate_id:q.candidate_id,works:q.works,reason:null}});}catch{return false;}
+  return q.works.every(w=>w.rows.every(r=>r.rate_family==='STANDARD'&&r.intent===null))&&nullable(q.after,a=>exact(a,['approved_line_id','detail_no','shift_id'])&&id(a.approved_line_id)&&integer(a.detail_no,true,2147483647n)&&id(a.shift_id)&&q.works.some(w=>w.rows.some(r=>r.approved_line_id===a.approved_line_id)));
+}
+function bucketResponse(payload,args,actorId){
+  const bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};
+  const review=Object.hasOwn(args.resolution,'bucket_review'),q=args.resolution[review?'bucket_review':'bucket_evidence'];
+  const key=review?'bucket_review':'bucket_evidence';
+  if(!exact(payload,['ok','kind','context','works',key])||encoder.encode(JSON.stringify(payload)).length>120000)bad();
+  const scope={candidate_id:q.candidate_id,works:review?payload.works?.map(w=>({work_id:w.work_id,expected_revision_id:w.expected_revision_id,rows:w.rows?.map(r=>({approved_line_id:r.approved_line_id,rate_family:r.rate_family,rate_code:r.rate_code,intent:null}))})):q.works,reason:null};
+  const native={ok:payload.ok,kind:payload.kind,context:payload.context,works:payload.works};
+  validateResolutionResponse(native,{resolution:scope},actorId);
+  if(review){
+    const b=payload.bucket_review;
+    if(!exact(b,['work_id','expected_revision_id','groups','linked_count','excluded','excluded_count','header','complete'])||b.work_id!==q.work_id||b.expected_revision_id!==q.expected_revision_id||b.complete!==true
+      ||!integer(b.excluded_count,false,1000n)||!exact(b.header,['candidate_display_name','candidate_reference','client_display_name','timesheet_reference','week_ending_date','job_title','band_label'])||!date(b.header.week_ending_date)||!['candidate_display_name','client_display_name'].every(k=>text(b.header[k])&&encoder.encode(b.header[k]).length<=8192)||!['candidate_reference','timesheet_reference','job_title','band_label'].every(k=>nullable(b.header[k],v=>text(v)&&encoder.encode(v).length<=8192))
+      ||!integer(b.linked_count,false,99n)||b.linked_count!==String(payload.works.length-1)||!Array.isArray(b.groups)||!b.groups.length||b.groups.length>100
+      ||!Array.isArray(b.excluded)||b.excluded.length>1000||payload.works[0].work_id!==q.work_id||payload.works[0].expected_revision_id!==q.expected_revision_id)bad();
+    if(payload.works.some(w=>w.rows.some(r=>r.rate_family!=='STANDARD'))||q.approved_line_id!==null&&payload.works[0].rows.some(r=>r.approved_line_id!==q.approved_line_id)||b.header.week_ending_date!==payload.context.works[0].week_ending_date)bad();
+    const seen=new Set(),excluded=new Set();let last=-1;
+    const rawMembers=new Map(payload.works.flatMap(w=>w.rows.map(r=>[JSON.stringify([w.work_id,r.approved_line_id,r.rate_code]),{w,r}])));
+    for(const g of b.groups){
+      const order=['DAY','NIGHT','SAT','SUN','BH'].indexOf(g?.rate_code);
+      if(!exact(g,['signature','rate_code','current_pay_rate','current_charge_rate','current_margin','suggested_pay_rate','suggested_margin','saved_target_rate','units','root_units','members','has_evidence'])||typeof g.has_evidence!=='boolean'||order<last||order<0
+        ||!['current_pay_rate','current_charge_rate','suggested_pay_rate','saved_target_rate'].every(k=>nullable(g[k],v=>decimal(v,6,120000)))
+        ||!['current_margin','suggested_margin'].every(k=>nullable(g[k],v=>decimal(v,6,120000,true)))||!exact(g.signature,['rate_code','component_kind','tax_treatment','unit_label','saved_mode','valuation_window_id','source_kind','source_pay_channel','source_umbrella_id','target_pay_channel','target_umbrella_id','target_umbrella_vat_chargeable','valuation_policy_id','valuation_date','source_rate','source_charge_rate','available_rates','suggested_target_rate','saved_target_rate'])||g.saved_target_rate!==g.signature.saved_target_rate||!nullable(g.signature.saved_mode,v=>modes.includes(v))
+        ||!decimal(g.units,6,16)||!decimal(g.root_units,6,16)||!Array.isArray(g.members)||!g.members.length||g.members.length>100)bad();
+      last=order;let ownUnits=0n,rootUnits=0n,nativeGroupAnchor=false;
+      for(const m of g.members){
+        if(!exact(m,['work_id','expected_revision_id','approved_line_id','rate_family','rate_code','expected_decision','linked'])||!id(m.work_id)||!id(m.expected_revision_id)||!identity(m)||m.rate_family!=='STANDARD'||m.rate_code!==g.rate_code
+          ||typeof m.linked!=='boolean'||m.linked!==(m.work_id!==q.work_id)||!nullable(m.expected_decision,pair))bad();
+        const k=JSON.stringify([m.work_id,m.approved_line_id,m.rate_code]),nativeRow=rawMembers.get(k);if(!nativeRow||seen.has(k))bad();seen.add(k);
+        const {w,r}=nativeRow,basis=r.original_basis;if(r.rate_family!==m.rate_family||w.expected_revision_id!==m.expected_revision_id||!same(r.expected_decision,m.expected_decision))bad();
+        const signature={rate_code:r.rate_code,component_kind:basis.component_kind,tax_treatment:basis.tax_treatment,unit_label:basis.unit_label,
+          saved_mode:r.saved_decision?.resolution_mode??null,valuation_window_id:r.suggestion?.valuation_window_id??null,source_kind:basis.source_kind,
+          source_pay_channel:basis.source_pay_channel,source_umbrella_id:basis.source_umbrella_id,target_pay_channel:payload.context.target_pay_channel,
+          target_umbrella_id:payload.context.target_umbrella_id,target_umbrella_vat_chargeable:payload.context.target_umbrella_vat_chargeable,
+          valuation_policy_id:basis.valuation_policy_id,valuation_date:payload.context.official_pay_date,source_rate:basis.source_rate,source_charge_rate:basis.source_charge_rate,
+          available_rates:r.available_rates,suggested_target_rate:r.suggestion?.quote.rate??null,saved_target_rate:r.saved_quote?.quote.rate??null};
+        if(same(signature,g.signature))nativeGroupAnchor=true;
+        const matching= same(signature,g.signature)||m.linked&&r.saved_decision===null&&same(Object.fromEntries(Object.entries(signature).filter(([k])=>!['saved_target_rate','saved_mode'].includes(k))),Object.fromEntries(Object.entries(g.signature).filter(([k])=>!['saved_target_rate','saved_mode'].includes(k))));
+        if(!matching||g.current_pay_rate!==basis.source_rate||g.current_charge_rate!==basis.source_charge_rate||g.suggested_pay_rate!==signature.suggested_target_rate||!m.linked&&g.saved_target_rate!==signature.saved_target_rate)bad();
+        ownUnits+=scaled(basis.source_units,6);if(!m.linked)rootUnits+=scaled(basis.source_units,6);
+      }
+      if(rootUnits!==scaled(g.root_units,6)||!nativeGroupAnchor||ownUnits===0n||ownUnits!==scaled(g.units,6))bad();
+    }
+    if(seen.size!==rawMembers.size)bad();
+    for(const x of b.excluded){if(!exact(x,['work_id','expected_revision_id','reason','partly_included'])||!id(x.work_id)||!id(x.expected_revision_id)||!['IN_DRAFT','CHANGED','UNAVAILABLE'].includes(x.reason)||typeof x.partly_included!=='boolean'||x.partly_included!==payload.works.some(w=>w.work_id===x.work_id)||excluded.has(x.work_id)||x.work_id===q.work_id)bad();excluded.add(x.work_id);}
+    if(b.excluded_count!==String(b.excluded.filter(x=>!x.partly_included).length))bad();
+  }else{
+    if(!same(resolutionWriteContext(payload.context),q.context))bad();const e=payload.bucket_evidence;
+    if(!exact(e,['rows','has_more','after'])||!Array.isArray(e.rows)||e.rows.length>25||typeof e.has_more!=='boolean'||e.has_more!==(e.after!==null)||e.has_more&&e.rows.length!==25)bad();
+    let previous=q.after;const parents=new Set(q.works.flatMap(w=>w.rows.map(r=>r.approved_line_id)));
+    for(const r of e.rows){
+      if(!exact(r,['approved_line_id','shift_id','detail_no','work_date','shift_start_at','shift_end_at','shift_start_local','shift_end_local','shift_overnight','submitted_minutes','approved_minutes','approved_hours','detail_label'])
+        ||!parents.has(r.approved_line_id)||!id(r.shift_id)||!integer(r.detail_no,true,2147483647n)||!date(r.work_date)
+        ||!['shift_start_at','shift_end_at'].every(k=>nullable(r[k],v=>text(v)&&Number.isFinite(Date.parse(v))))
+        ||!['shift_start_local','shift_end_local'].every(k=>nullable(r[k],v=>text(v)&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v)))
+        ||(r.shift_start_at===null)!==(r.shift_end_at===null)||(r.shift_start_local===null)!==(r.shift_end_local===null)
+        ||!nullable(r.shift_overnight,v=>typeof v==='boolean')||!['submitted_minutes','approved_minutes'].every(k=>nullable(r[k],v=>integer(v,false,2147483647n)))
+        ||!nullable(r.approved_hours,rate)||!nullable(r.detail_label,v=>text(v)&&encoder.encode(v).length<=8192))bad();
+      const next={approved_line_id:r.approved_line_id,detail_no:r.detail_no,shift_id:r.shift_id};
+      if(previous&&!(next.approved_line_id>previous.approved_line_id||next.approved_line_id===previous.approved_line_id&&(BigInt(next.detail_no)>BigInt(previous.detail_no)||next.detail_no===previous.detail_no&&next.shift_id>previous.shift_id)))bad();previous=next;
+    }
+    if(e.after!==null&&!same(e.after,previous))bad();
+  }
+  return payload;
+}
+
 /** WB29 typed native decisions. Validation only; prices and units belong to SQL. */
 const encoder=new TextEncoder(),uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const modes=['SUGGESTED_EQUIVALENT_BASIS','MANUAL_REPLACEMENT_RATE','MANUAL_AMOUNT'];
@@ -26,6 +98,7 @@ const fault=(code,status=503,retryable=false,reload=false)=>Object.assign(new Er
 export function normalizeResolutionInput(input){
   const bad=()=>{throw fault('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);};
   if(!exact(input,['resolution']))bad();const s=input.resolution;
+  if(exact(s,['bucket_review'])||exact(s,['bucket_evidence'])){if(!bucketInput(s)||encoder.encode(JSON.stringify(input)).length>32768)bad();return input;}
   if(!exact(s,['candidate_id','works','reason'])||!id(s.candidate_id)||!reason(s.reason)||!Array.isArray(s.works)||s.works.length<1||s.works.length>100||encoder.encode(JSON.stringify(input)).length>32768)bad();
   const works=new Set();let count=0;
   for(const w of s.works){
@@ -154,7 +227,9 @@ function manualEcho(q,choice){
 }
 
 export function validateResolutionResponse(payload,args,actorId){
-  normalizeResolutionInput(args);const scope=args.resolution,bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};
+  normalizeResolutionInput(args);
+  if(exact(args.resolution,['bucket_review'])||exact(args.resolution,['bucket_evidence']))return bucketResponse(payload,args,actorId);
+ const scope=args.resolution,bad=()=>{throw fault('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};
   if(!exact(payload,['ok','kind','context','works'])||payload.ok!==true||payload.kind!=='RESOLUTION_CONTEXT'||encoder.encode(JSON.stringify(payload)).length>120000)bad();
   const c=payload.context;
   if(!exact(c,['agency_id','actor_user_id','candidate_id','owner_epoch','metadata_version','financial_view_revision','workbench_revision','adoption_revision','last_command_sequence','target_pay_channel','target_umbrella_id','target_umbrella_vat_chargeable','target_umbrella_enabled','official_pay_date','works'])
