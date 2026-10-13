@@ -1,0 +1,16 @@
+alter function private.weekly_source_qualification_closed_object_v1(jsonb,text[]) owner to postgres;
+revoke all on function private.weekly_source_qualification_closed_object_v1(jsonb,text[]) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text) owner to postgres;
+revoke all on function private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text) owner to postgres;
+revoke all on function private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_test_authorization_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_test_authorization_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_test_setup_atomic_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_protected_test_setup_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid) owner to postgres;
+revoke all on function private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid) from public,anon,authenticated,service_role;

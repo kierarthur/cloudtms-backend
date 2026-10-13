@@ -1,5 +1,45 @@
 import {scanManagedSql, digest} from './cloudtms-managed-release-sql.mjs';
 
+// A source safety reviewer authorises exact envelope removals before rendering.
+// Hash-bound full SQL remains retained; this never opens a connection or grants
+// permission to execute a verifier, or substitutes for its effect review.
+export function neutraliseReviewedVerifierEnvelope(unit, review) {
+  if (!['verifier','final_browser_verifier'].includes(unit?.kind)
+    || typeof unit.sql !== 'string' || digest(unit.sql) !== unit.sqlHash
+    || review?.sourceSqlHash !== unit.sqlHash || !Array.isArray(review.removedCommands)) {
+    throw Error('REHEARSAL_ENVELOPE_REVIEW_REFUSED');
+  }
+  const parsed=scanManagedSql(unit.sql), removals=[];
+  for (const statement of parsed.statements) {
+    const first=statement.tokens[0], command=statement.tokens.join(' ');
+    if (!['BEGIN','COMMIT','END','START','ABORT','PREPARE','ROLLBACK'].includes(first)
+      || first==='ROLLBACK' && statement.tokens[1]==='TO') continue;
+    if (!['BEGIN','BEGIN READ ONLY','BEGIN ISOLATION LEVEL REPEATABLE READ',
+      'BEGIN ISOLATION LEVEL SERIALIZABLE','COMMIT','ROLLBACK','END'].includes(command)
+      || command==='BEGIN READ ONLY' && review.readOnlyBodyReviewed!==true) {
+      throw Error('REHEARSAL_ENVELOPE_COMMAND_REFUSED');
+    }
+    removals.push({...statement,command});
+  }
+  for (const meta of parsed.meta) {
+    if (!/^\\set\s+ON_ERROR_(?:STOP|ROLLBACK)\b/i.test(meta.text)) continue;
+    if (!/^\\set\s+ON_ERROR_STOP\s+(?:on|off)\s*$/i.test(meta.text)) {
+      throw Error('REHEARSAL_ENVELOPE_ERROR_CONTROL_REFUSED');
+    }
+    removals.push({...meta,command:meta.text.trim()});
+  }
+  removals.sort((a,b)=>a.start-b.start);
+  if (JSON.stringify(removals.map(x=>x.command))!==JSON.stringify(review.removedCommands)) {
+    throw Error('REHEARSAL_ENVELOPE_CENSUS_REFUSED');
+  }
+  let sql=unit.sql;
+  for (const removal of [...removals].reverse()) sql=sql.slice(0,removal.start)+sql.slice(removal.end);
+  const envelope=removals.map(x=>({command:x.command,start:x.start,end:x.end,
+    sha256:digest(unit.sql.slice(x.start,x.end))}));
+  return {...unit,sql,sqlHash:digest(sql),sourceSqlHash:unit.sqlHash,envelope,
+    readOnlyBodyReviewed:review.readOnlyBodyReviewed===true};
+}
+
 // Source-only renderer. This module opens no database/network connection.
 // The post-Banking coordinator must supply exact pushed, independently reviewed
 // units, hold SEND_7 before its before probes, and retain it through fresh proof.
@@ -42,7 +82,8 @@ export function renderFullRehearsalUnits(units) {
     parts.push(`\\echo HR_FILE_END ${index}`);
     rendered.push(parts.join('\n'));
     census.push({index, file:unit.file, kind:unit.kind, sqlHash:unit.sqlHash, statements:parsed.statements.length,
-      clientVariableIsolation:verifier});
+      clientVariableIsolation:verifier, sourceSqlHash:unit.sourceSqlHash??unit.sqlHash,
+      reviewedEnvelope:unit.envelope??[]});
   }
   const sql = rendered.join('\n')+'\n';
   return {sql, sha256:digest(sql), bytes:Buffer.byteLength(sql), units:census};

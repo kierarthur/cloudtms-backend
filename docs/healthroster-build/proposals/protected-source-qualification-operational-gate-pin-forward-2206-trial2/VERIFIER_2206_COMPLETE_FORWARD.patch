@@ -1,0 +1,43 @@
+diff --git a/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql b/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql
+index b32b9505e53bbe150c79a2c0dfb9e7f932ee1c73..693ae8f1be8aa372f3bd90f2bd74ed1b74e04be2 100644
+--- a/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql
++++ b/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql
+@@ -38,8 +38,8 @@ begin
+     ('private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)','37cb2de5cf4038903079a965171540cb08be6277d3f8ba038bcf9643ca2d3923'),
+     ('private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)','037b250753c5230362737684061bef25e9f1e3673155326784b76240213be711')
+   ) expected(signature,body_sha256) loop
+-    if not exists(select 1 from pg_catalog.pg_proc p where p.oid=pg_catalog.to_regprocedure(r.signature)
+-      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p.prosrc,'UTF8')),'hex')=r.body_sha256) then
++    if not exists(select 1 from pg_catalog.pg_proc retained_proc where retained_proc.oid=pg_catalog.to_regprocedure(r.signature)
++      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(retained_proc.prosrc,'UTF8')),'hex')=r.body_sha256) then
+       raise exception 'AUTOMATIC_NATIVE_EXISTING_OWNER_BODY_CHANGED' using errcode='55000',detail=r.signature;
+     end if;
+   end loop;
+@@ -62,18 +62,24 @@ begin
+     if sqlerrm<>'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' then raise; end if; refused:=true;
+   end;
+   if not refused then raise exception 'AUTOMATIC_NATIVE_NULL_DELTA_NOT_REFUSED'; end if;
+-  -- Prove the missing selector before calling SELECT STRICT; never touch a real request.
++  -- Prove the missing selector before calling the complete owner; it maps
++  -- SELECT STRICT no_data_found to its closed 55000 unavailable refusal.
++  -- Never touch a real request or accept an arbitrary exception.
+   if exists(select 1 from public.weekly_exceptional_c1_publication_requests where id=missing_id) then
+     raise exception 'AUTOMATIC_NATIVE_VERIFIER_SENTINEL_COLLISION'; end if;
+   refused:=false;
+   begin
+     perform private.weekly_source_staged_publication_context_v1(missing_id,missing_id);
+-  exception when no_data_found then refused:=true; end;
++  exception when sqlstate '55000' then
++    if sqlerrm<>'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' then raise; end if; refused:=true;
++  end;
+   if not refused then raise exception 'AUTOMATIC_NATIVE_MISSING_STAGE_NOT_REFUSED'; end if;
+   refused:=false;
+   begin
+     perform private.weekly_source_automatic_reconcile_delta_assert_v1(missing_id,missing_id);
+-  exception when no_data_found then refused:=true; end;
++  exception when sqlstate '55000' then
++    if sqlerrm<>'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' then raise; end if; refused:=true;
++  end;
+   if not refused then raise exception 'AUTOMATIC_NATIVE_MISSING_DELTA_NOT_REFUSED'; end if;
+   -- Presence is never readiness. Only exercise the proven missing-dependency arm.
+   if pg_catalog.to_regprocedure('private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)') is null then

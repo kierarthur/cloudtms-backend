@@ -1,0 +1,21 @@
+{
+  "contract": "HEALTHROSTER_A0_CREATOR_SUCCESSORS_SOURCE_GUARD_V1",
+  "status": "UNMOUNTED_REVIEW_PROPOSAL_NATIVE_HELD",
+  "request": {
+    "target": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+    "beforeSha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675",
+    "afterSha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+    "anchor": "  -- Lock every existing invoice first, using the same authority as all credit writers.",
+    "replacement": "  -- New missing-A0 purpose acquires canonical native Candidate/I-1 before\n  -- the existing invoice/chain/workflow/TS order. All other arms return unchanged.\n  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);\n  -- Lock every existing invoice first, using the same authority as all credit writers.",
+    "reverseByteExact": true
+  },
+  "lockFence": {
+    "input": "../cn-a0-lock-fence/13102026_2034_a0_native_lock_fence.sqlinc",
+    "beforeSha256": "455768aaa41bf9d949a1c4f52830938a86c1ba231f45a95c72f772fc89b58f8f",
+    "afterSha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+    "anchor": "  v_scope:=private.timesheet_correction_a0_clock_scope_v1(r.id);",
+    "replacement": "  if current_setting('transaction_isolation')<>'read committed' then\n    raise exception 'CORRECTION_A0_TRANSACTION_SNAPSHOT_UNPROVED' using errcode='55000'; end if;\n  v_scope:=private.timesheet_correction_a0_clock_scope_v1(r.id);",
+    "reverseByteExact": true
+  },
+  "nativeHolds": "No ordinary RR changes. New missing-A0 SEND/atomic/visible-active writer arms explicitly refuse non-RC; old snapshot unable to see parent/request still needs exact native admission/visibility qualification. All previous holds retained."
+}

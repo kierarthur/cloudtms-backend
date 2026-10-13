@@ -1,0 +1,33 @@
+create or replace function private.weekly_source_protected_capability_receipt_v1(p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  a public.weekly_source_group_rule_assignments%rowtype; q jsonb; receipt jsonb;
+begin
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER';
+  select * into strict a from public.weekly_source_group_rule_assignments where source_group_id=g.id and feature_enabled
+    and c.finalisation_week_ending between effective_from_week_ending and coalesce(effective_to_week_ending,'infinity'::date);
+  receipt:=a.feature_receipt_json;
+  if a.feature_purpose is null or a.feature_purpose not in ('RULE_SET','PROTECTED_SOURCE')
+    or (a.feature_purpose='PROTECTED_SOURCE' and a.rule_set_version_id is not null)
+    or receipt->>'contract' is distinct from 'WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1'
+    or receipt->>'assignment_id' is distinct from a.id::text or receipt->>'assignment_version' is distinct from a.version::text
+    or receipt->>'source_group_id' is distinct from g.id::text
+    or receipt->>'rule_set_version_id' is distinct from a.rule_set_version_id::text
+    or receipt->>'feature_purpose' is distinct from a.feature_purpose or receipt->'feature_enabled' is distinct from 'true'::jsonb
+    or receipt->>'actor_user_id' is distinct from a.feature_changed_by_user_id::text
+    or receipt->>'request_id' is distinct from a.feature_request_id::text or receipt->>'release_id' is distinct from a.feature_release_id
+    or receipt->>'effective_from_week_ending' is distinct from a.effective_from_week_ending::text
+    or a.feature_request_sha256 is null or a.feature_changed_at_utc is null
+    or not exists(select 1 from public.tms_users actor where actor.id=a.feature_changed_by_user_id and actor.is_active and actor.role='admin') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_ACTIVATION_UNQUALIFIED' using errcode='55000'; end if;
+  q:=private.weekly_source_protected_capability_release_evidence_v1(g.id,a.effective_from_week_ending,a.effective_to_week_ending,
+    receipt#>>'{protected_capability_qualification,qualification_sha256}');
+  if q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'
+    or q->>'phase' is distinct from 'ALL_PRE_SWITCH_GATES_QUALIFIED'
+    or q is distinct from receipt->'protected_capability_qualification' or q->>'release_id' is distinct from a.feature_release_id then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_ACTIVATION_UNQUALIFIED' using errcode='55000'; end if;
+  return q;
+end;
+$function$;

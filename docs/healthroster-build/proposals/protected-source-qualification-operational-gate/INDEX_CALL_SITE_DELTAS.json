@@ -1,0 +1,20 @@
+{
+  "schema_version": "PROTECTED_SOURCE_BULK_TRUSTED_WORKER_CALL_SITE_V1",
+  "native_path": "broker/src/index.js",
+  "input_sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86",
+  "proposed_complete_owner_sha256": "662ac74abfeab65bf2e291c2a806b6913e3ca47db2fb9c107d04b8b5a35c19f6",
+  "reverse_hunk_matches_entire_input_definition": true,
+  "hunks": [
+    {
+      "before": "import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';",
+      "after": "import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';\nimport { orchestrateWeeklyProtectedBulk } from './weekly-source/protected-bulk-action.mjs';"
+    },
+    {
+      "before": "        orchestrateProtectedAction: ({ action, request }) => orchestrateWeeklyProtectedAction({",
+      "after": "        orchestrateProtectedBulk: ({ request, actor }) => orchestrateWeeklyProtectedBulk({\n          request,\n          actorUserId: actor.id,\n          dependencies: {\n            dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),\n            calculateWeeklySnapshot: (calculationInput) => calculateWeeklyProtectedSnapshot(env, calculationInput),\n            c1RawRpc: createWeeklySourceC1RawRpc({ baseUrl: env.SUPABASE_URL, headers: sbHeaders(env), fetchImpl: fetch })\n          }\n        }),\n        orchestrateProtectedAction: ({ action, request }) => orchestrateWeeklyProtectedAction({"
+    }
+  ],
+  "qualification_admission_owner": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+  "operational_ready_never_overridden": true,
+  "root_must_reconcile_concurrent_index_deltas": true
+}

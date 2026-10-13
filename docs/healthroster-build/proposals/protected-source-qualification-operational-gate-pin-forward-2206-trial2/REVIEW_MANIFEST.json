@@ -1,0 +1,45 @@
+{
+  "schema_version": "PROTECTED_SOURCE_STRICT_GATE_ROOT_PIN_FORWARD_TRIAL2_REVIEW_V1",
+  "status": "FROZEN_SOURCE_PIN_FORWARD_NATIVE_OPERATIONAL_ACCEPTANCE_UNEXECUTED",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/generate-pin-forward.mjs",
+      "bytes": 8076,
+      "sha256": "3c6b90fc8c7a2cbe1676f2baeb6102b59a5c29f73bfe176125d6220e8d51edfe"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/README.md",
+      "bytes": 1699,
+      "sha256": "5be867addeaef89fbc8ea07ad708f470ca69ac31d4eb1f6d89c03c06c41c8b66"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/ROOT_B65_TO_D67_FULL_DIFF.patch",
+      "bytes": 964111,
+      "sha256": "a36169e114436f69c8dd39d40ba7c9ff9fa70338b0ef4c12c9ebd820e20aac78"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/ROOT_PIN_FORWARD.json",
+      "bytes": 11389,
+      "sha256": "cfecdcda19fccc1269ce2455a6ec5fa689e9f09e2db553ee41fb01d472110e90"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/VERIFIER_2206_COMPLETE_FORWARD.patch",
+      "bytes": 3159,
+      "sha256": "109c2a06b8316ef75c982bcf2c2d338ce44fcc0d51559b46589e993f5db4529b"
+    }
+  ],
+  "root_source_commit": "d67f94e19000a612ee4f1099c14429d8a8b4bee1",
+  "frozen_predecessor_backup": "adec5f8b8a3955ac725c0da15ee344ac891b7674",
+  "frozen_strict45_manifest_sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+  "frozen_pin6_manifest_sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f",
+  "source_generator_assertions_pass": true,
+  "frozen51_unchanged": true,
+  "complete_reverse_hunks_match_entire_b65_verifier": true,
+  "preserved_root232": true,
+  "planned_complete_private_union": 258,
+  "actual_sql_trial_acceptance": false,
+  "actual_financial_acceptance": false,
+  "actual_api_ui_phone_acceptance": false,
+  "actual_activation": false,
+  "lane_database_calls": 0
+}

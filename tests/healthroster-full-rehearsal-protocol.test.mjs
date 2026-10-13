@@ -1,8 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {digest} from '../scripts/cloudtms-managed-release-sql.mjs';
-import {renderFullRehearsalUnits,closedRehearsalDiagnostic} from '../scripts/healthroster-full-rehearsal-protocol.mjs';
+import {renderFullRehearsalUnits,closedRehearsalDiagnostic,neutraliseReviewedVerifierEnvelope} from '../scripts/healthroster-full-rehearsal-protocol.mjs';
 const unit=(sql,kind='verifier')=>({file:'supabase/verification/13102026_example.sql',kind,sql,sqlHash:digest(sql)});
+
+test('a reviewed read-only envelope is removed while every native assertion and inner rollback remains exact',()=>{
+  const body="do $native$ begin if false then raise exception 'NATIVE_ASSERTION'; end if; end; $native$;\nsavepoint native_case;\nselect 1;\nrollback to native_case;\nrelease native_case;";
+  const original=unit('\\set ON_ERROR_STOP on\nbegin read only;\n'+body+'\nrollback;');
+  const reviewed={sourceSqlHash:original.sqlHash,readOnlyBodyReviewed:true,
+    removedCommands:['\\set ON_ERROR_STOP on','BEGIN READ ONLY','ROLLBACK']};
+  const neutral=neutraliseReviewedVerifierEnvelope(original,reviewed);
+  assert.ok(neutral.sql.includes(body));assert.equal(neutral.sourceSqlHash,original.sqlHash);
+  assert.deepEqual(neutral.envelope.map(x=>x.command),reviewed.removedCommands);
+  assert.equal(renderFullRehearsalUnits([neutral]).units[0].reviewedEnvelope.length,3);
+  for (const changed of [{sourceSqlHash:'0'.repeat(64)},{readOnlyBodyReviewed:false},
+    {removedCommands:['BEGIN READ ONLY','ROLLBACK']}]) {
+    assert.throws(()=>neutraliseReviewedVerifierEnvelope(original,{...reviewed,...changed}),/REFUSED/);
+  }
+});
+test('envelope review cannot permit prepared transactions, alternate modes or error rollback overrides',()=>{
+  for(const sql of ['begin read write;','start transaction;','prepare transaction \'other\';',
+    '\\set ON_ERROR_ROLLBACK off']) {
+    const original=unit(sql);
+    assert.throws(()=>neutraliseReviewedVerifierEnvelope(original,
+      {sourceSqlHash:original.sqlHash,removedCommands:[],readOnlyBodyReviewed:true}),/REFUSED/);
+  }
+});
 
 test('verifier client variable is cleared before and after each complete savepoint, while its native body is retained',()=>{
   const first=unit('\\set weekly_source_verification_outer_transaction on\nselect 1;');
