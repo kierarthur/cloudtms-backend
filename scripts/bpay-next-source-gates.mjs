@@ -286,7 +286,9 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_review_simple_run_v1(uuid)": ["private.bpay_next_prepare_attention_v1"],
+  "private.bpay_next_paye_net_preview_v1(uuid,uuid,numeric,jsonb,integer)": ["octet_length","trunc","jsonb_build_array","private.bpay_next_case_allocation_row_v1","private.bpay_next_paye_net_capacity_v1","private.bpay_next_paye_net_cash_v1","private.bpay_next_paye_net_entry_in_progress_v1"],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "private.bpay_next_paye_net_preview_v1",
     "private.bpay_next_case_channel_preview_v1",
     "private.bpay_next_case_channel_receipt_v1",
     "private.bpay_next_case_restructure_preview_v1",
@@ -446,6 +448,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.transaction_timestamp"
   ],
   "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)": [
+    "private.bpay_next_paye_net_entry_in_progress_v1",
     "private.bpay_next_begin_case_transfer_v1",
     "private.bpay_next_receive_command_v1",
     "pg_catalog.jsonb_build_object",
@@ -464,6 +467,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object"
   ],
   "private.bpay_next_begin_case_transfer_v1(uuid,uuid)": [
+    "private.bpay_next_paye_net_entry_in_progress_v1",
     "private.bpay_next_receive_command_v1",
     "pg_catalog.hashtextextended",
     "pg_catalog.jsonb_build_object",
@@ -604,6 +608,7 @@ export function assertNextExactNumericTypes(source,file){
 }
 
 export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_paye_net_preview_v1(uuid,uuid,numeric,jsonb,integer)",
   "private.bpay_next_decisions_clear_result_v1(uuid,jsonb)",
   "private.bpay_next_decisions_clear_command_v1(uuid,jsonb,boolean)",
   "private.bpay_next_accept_preparation_discard_v1(uuid,uuid,uuid,bigint,text)",
@@ -688,6 +693,17 @@ const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,
 const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
 // Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
 const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
+  "private.bpay_next_paye_net_preview_v1(uuid,uuid,numeric,jsonb,integer)": [
+  "jsonb_build_object('actor_user_id',p_actor_user_id,'owner_epoch',v_epoch::text, 'run_id',v_run.id,'run_worker_id',v_w.id,'candidate_id',v_w.candidate_id, 'preparation_revision',v_w.captured_preparation_revision::text,'selection_revision',v_w.case_selection_revision::text, 'expected_projection_revision',v_w.net_projection_revision::text,'financial_view_revision',v_financial_revision::text, 'net_request_revision',v_w.net_request_revision::text,'net_request_high_water',v_w.net_request_high_water::text,'capacity_revision',v_capacity_revision::text, 'week_revision',v_week_revision::text,'draft_state_id',v_d.id,'projection_id',v_p.id, 'entered_paye_net',p_entered_paye_net::numeric(18,2)::text)",
+  "jsonb_build_object( 'instruction_id',v_i.id,'case_id',v_i.case_id,'case_component_id',v_i.case_component_id,'case_kind',v_i.case_kind, 'before',case when v_p.id is null then null else v_prior_result.allocated_target_ex_vat::numeric(18,2)::text end, 'after',v_k.taken_amount::numeric(18,2)::text)",
+  "jsonb_build_object('age_key',v_i.age_key::text,'case_id',v_i.case_id, 'component_ordinal',v_i.component_ordinal::text,'case_component_id',v_i.case_component_id)",
+  "jsonb_build_object('pay_date',v_row.pay_date,'created_at_utc',v_row.created_at_utc,'id',v_row.id)",
+  "jsonb_build_object('pay_date',v_row.original_pay_date,'created_at_utc',v_row.original_created_at_utc,'id',v_row.original_run_worker_id)",
+  "jsonb_build_object('requires_week',v_requires_week,'prechecked',v_prechecked::text,'processed',v_processed::text, 'e',v_e::numeric(38,2)::text,'h',v_t::numeric(38,2)::text,'net_additions',v_add::numeric(38,2)::text, 'gross_additions',v_gross_add::numeric(38,2)::text,'gross_deductions',v_gross_deduct::numeric(38,2)::text,'recoveries',v_recovered::numeric(38,2)::text, 'before_advance',v_before_advance::numeric(38,2)::text,'after_advance',v_after_advance::numeric(38,2)::text, 'before_overpayment',v_before_overpayment::numeric(38,2)::text,'after_overpayment',v_after_overpayment::numeric(38,2)::text, 'before_debt',v_before_debt::numeric(38,2)::text,'after_debt',v_after_debt::numeric(38,2)::text)",
+  "jsonb_build_object('context',v_context,'complete',v_complete,'rows_visited',v_seen::text,'recovery_rows',v_recovery_rows, 'next_cursor',case when v_complete then null else jsonb_build_object('context',v_context,'stage',v_stage, 'instruction_after',v_instruction_after,'run_after',v_run_after,'carry',v_carry) end, 'summary',case when not v_complete then null else jsonb_build_object( 'accepted_net',v_p.entered_paye_net::text,'accepted_recoveries',v_p.accepted_recoveries::text,'accepted_cash',v_p.cash_amount::text, 'proposed_net',p_entered_paye_net::numeric(18,2)::text,'proposed_recoveries',v_recovered::numeric(18,2)::text,'proposed_cash',v_cash::numeric(18,2)::text, 'net_additions',v_add::numeric(18,2)::text,'gross_additions',v_gross_add::numeric(18,2)::text,'gross_deductions',v_gross_deduct::numeric(18,2)::text, 'advance_before',case when v_p.id is null then null else v_before_advance::numeric(18,2)::text end,'advance_after',v_after_advance::numeric(18,2)::text, 'overpayment_before',case when v_p.id is null then null else v_before_overpayment::numeric(18,2)::text end,'overpayment_after',v_after_overpayment::numeric(18,2)::text, 'debt_before',case when v_p.id is null then null else v_before_debt::numeric(18,2)::text end,'debt_after',v_after_debt::numeric(18,2)::text) end)",
+  "jsonb_build_object('context',v_context,'stage',v_stage, 'instruction_after',v_instruction_after,'run_after',v_run_after,'carry',v_carry)",
+  "jsonb_build_object( 'accepted_net',v_p.entered_paye_net::text,'accepted_recoveries',v_p.accepted_recoveries::text,'accepted_cash',v_p.cash_amount::text, 'proposed_net',p_entered_paye_net::numeric(18,2)::text,'proposed_recoveries',v_recovered::numeric(18,2)::text,'proposed_cash',v_cash::numeric(18,2)::text, 'net_additions',v_add::numeric(18,2)::text,'gross_additions',v_gross_add::numeric(18,2)::text,'gross_deductions',v_gross_deduct::numeric(18,2)::text, 'advance_before',case when v_p.id is null then null else v_before_advance::numeric(18,2)::text end,'advance_after',v_after_advance::numeric(18,2)::text, 'overpayment_before',case when v_p.id is null then null else v_before_overpayment::numeric(18,2)::text end,'overpayment_after',v_after_overpayment::numeric(18,2)::text, 'debt_before',case when v_p.id is null then null else v_before_debt::numeric(18,2)::text end,'debt_after',v_after_debt::numeric(18,2)::text)"
+],
   "private.bpay_next_preparation_progress_v1(uuid)": [
     "pg_catalog.jsonb_build_object('needs_attention',exists(select 1 from private.bpay_next_job j join private.bpay_next_run_worker w on w.run_id=v_run.id and w.candidate_id=j.candidate_id and w.active_prepare_job_id=j.id where j.retry_run_id=v_run.id and j.job_kind='PREPARE' and j.needs_attention), 'waiting_on_other_run',exists(select 1 from private.bpay_next_selection_candidate sc cross join lateral private.bpay_next_preparation_wait_owner_v1(v_run.id,sc.candidate_id) wait where sc.run_id=v_run.id), 'run_id',v_run.id,'status',v_run.status,'selection_state',v_run.selection_state, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'review_revision',v_run.review_revision::text,'discard_phase',v_discard.status, 'discard_actor_display_name',v_discard_actor,'discarded_at_utc',v_discard.finished_at_utc, 'discard_removed_candidates',coalesce(v_discard.removed_candidate_count,0)::text, 'discard_already_removed_candidates',coalesce(v_discard.already_removed_candidate_count,0)::text, 'discard_blocked_candidates',coalesce(v_discard.blocked_candidate_count,0)::text, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"
   ],
@@ -899,6 +915,8 @@ export function assertTypedFinancialProjection(source,file,signature){
   if(!signature.startsWith('public.bpay_next_payment_history_page_v1('))for(const match of flat.matchAll(/'([a-z_][a-z0-9_]*)'\s*,\s*/g)){
     if(!money.test(match[1]))continue;
     if(/->>?\s*$/.test(flat.slice(0,match.index)))continue; // operand key, not a reply key
+    // A closed SQL key-name array is input validation, not a JSON reply pair.
+    if(/\barray\s*\[(?:\s*'(?:''|[^'])*'\s*,)*\s*$/.test(flat.slice(0,match.index)))continue;
     const start=match.index+match[0].length;let end=start,depth=0,quote=false;
     for(;end<flat.length;end++){
       const token=flat[end];

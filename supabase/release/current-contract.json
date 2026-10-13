@@ -10643,7 +10643,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e8bd82fc684ab91016060893b4a7528122b65554fc987df47036da143fcde945"
+      "definition_sha256": "b90c60af428c57b98f898e52a55d409ddc87263278b1a6681209004f44abb987"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accept_case_net_request_v1(p_command_id uuid, p_run_worker_id uuid, p_actor_user_id uuid, p_input_kind text, p_entered_paye_net numeric, p_expected_projection_revision bigint, p_preview_capacity_revision bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "eb228c94e9aaf66ef4555988f6c9d49ff9f76afccdb88e029e2ca44b978edf10"
     },
     {
       "acl": [
@@ -10814,7 +10833,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4eace5598f1dc6a5a9c060ed759da5f946818d414dce8e4a62b5829d440b4887"
+      "definition_sha256": "e2cf6b41fcee817f1f17f4593a633c9aa3370978211a0aa81e36093c55b82708"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accept_simple_paye_net_v1(p_command_id uuid, p_run_worker_id uuid, p_entered_paye_net numeric, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6db0c4bbef94fd553ac480281cf87a2b669507f1665bc9493446fb6e42117c7d"
     },
     {
       "acl": [
@@ -11327,7 +11365,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a56fa41e43253597bbd3628a0dc683df37357d2aa654defb759db09b438109bd"
+      "definition_sha256": "bd1701f07b4bc383e827a2aa6733430b023ff7c81e4719270af10151294d3718"
     },
     {
       "acl": [
@@ -11631,7 +11669,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "24bce41ef97c34ae8f082182f2ff462838f6d94f5a15b470bb464847db9e4b5e"
+      "definition_sha256": "964250bb028131af11e5692658920a5444cda4ac7eb0edde0ec6473ae76815fa"
     },
     {
       "acl": [
@@ -11669,7 +11707,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "df5c71cc0a6abd22904890a38dbbe359d5a3f5d6787830e2ea9dfa77875e1bb2"
+      "definition_sha256": "0a394305dd3c4d0426b4478786e4aca9753e8771f538fa13d467697a3e01f9ae"
     },
     {
       "acl": [
@@ -15077,6 +15115,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_net_capacity_revision_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "2cb336a0d16ac4e62c4d3779cdc22e96e2768fc8458e227cd9015261287fd6c4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_net_commit_fence_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -15462,6 +15519,83 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "4b87318d9cced24670cdf270b912a0db50f02b7d88379b4790d360c7eef494fe"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_net_capacity_v1(p_draft_capacity numeric, p_period_available numeric, p_component_available numeric, p_case_outstanding numeric, p_case_active numeric, p_case_release numeric, p_case_reserve numeric, p_own numeric)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "bb09a2dccb8c52fca1d1e33e6fcd2cbf1a9989731a9861fba65a656dddf16506"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_net_cash_v1(p_entered_net numeric, p_net_additions numeric, p_recoveries numeric)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "30113b0991a2978afa29c8b9c0be3f2d2bb619cdd7dc22843bfd5b0f173e261a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_net_entry_in_progress_v1(p_run_worker_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "367b5057a70a07c84b4fe4baa03b6cfbc2a899d98ccb604fb6c8efa89cb5f6fc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public",
+        "statement_timeout=5s"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_net_preview_v1(p_actor_user_id uuid, p_run_worker_id uuid, p_entered_paye_net numeric, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e519900d55607f63f5378d0970d7b259fc0f4fff29416075df2d827819d9362f"
     },
     {
       "acl": [
@@ -19091,7 +19225,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "49c5d9d767dca4dd52fc055921a709787c8eef7519f09356af3f0c4cd229701b"
+      "definition_sha256": "9e18db23edcad880b2a6da4c0c186a8b436e1533fbc8735717675172dbe3b456"
     },
     {
       "acl": [
@@ -19281,7 +19415,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "c2013a107581a3c14c1db3258cb9807fcd9e4c3b19860fdc56a6aeb800660e3c"
+      "definition_sha256": "206ef8e77b7f8543678337de0b97623f3e910a78163be91d2e57bab045fe2daa"
     },
     {
       "acl": [
@@ -35268,7 +35402,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "85c569083556c7f2c864b56e289b39edd61c300c14face4c911b7bdd7f94fb37"
+      "definition_sha256": "125001c028d2056c86adffd69be281a02a2687e2a1a6e96336863995289d4d7b"
     },
     {
       "acl": [
@@ -35582,7 +35716,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d99f9798a0f06000b2eab4c46983e4d1881f4445957dd848b9435c503e4dc62a"
+      "definition_sha256": "e07f622cda03bddb9a298b5ae9eef576cadbba60f0ac74d14873c78b70e3206e"
     },
     {
       "acl": [
@@ -56845,6 +56979,13 @@
       "definition": "CREATE TRIGGER bpay_next_case_capacity_use_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_capacity_use FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_capacity_use_guard_v1()"
     },
     {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_case_capacity_use",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_capacity_use FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+    },
+    {
       "name": "bpay_next_case_channel_component_immutable_v1",
       "table": "bpay_next_case_channel_component",
       "schema": "private",
@@ -56892,6 +57033,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_component DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_case_component",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_component FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
     },
     {
       "name": "bpay_next_work_collection_component_identity_guard_v1",
@@ -56964,6 +57112,13 @@
       "definition": "CREATE TRIGGER bpay_next_case_hold_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_hold_guard_v1()"
     },
     {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_case_hold",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+    },
+    {
       "name": "bpay_next_segment_case_hold_commit_guard",
       "table": "bpay_next_case_hold",
       "schema": "private",
@@ -57025,6 +57180,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_period DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_case_period",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_period FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
     },
     {
       "name": "bpay_next_work_collection_period_guard_v1",
@@ -57340,6 +57502,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_finance_case DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_finance_case",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_finance_case FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
     },
     {
       "name": "bpay_next_work_collection_case_identity_guard_v1",
@@ -58649,6 +58818,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_worker_action_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_worker_reprepare_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_worker_action_guard_v1()"
+    },
+    {
+      "name": "bpay_next_net_capacity_revision",
+      "table": "bpay_next_worker_week_contribution",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_worker_week_contribution FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
     },
     {
       "name": "bpay_next_week_projection_guard_v1",
@@ -106859,6 +107035,30 @@
           "generated": ""
         },
         {
+          "name": "preview_capacity_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_entered_paye_net",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_projection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "request_no",
           "type": "bigint",
           "default": null,
@@ -106910,7 +107110,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (case_draft_state_id IS NULL AND actor_user_id IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND expected_projection_revision IS NULL AND input_kind = 'PAYE_MANUAL'::text OR case_draft_state_id IS NOT NULL AND actor_user_id IS NOT NULL AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL AND expected_projection_revision IS NOT NULL AND request_no > expected_projection_revision)"
+          "definition": "CHECK (case_draft_state_id IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND expected_projection_revision IS NULL AND input_kind = 'PAYE_MANUAL'::text OR case_draft_state_id IS NOT NULL AND actor_user_id IS NOT NULL AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL AND expected_projection_revision IS NOT NULL AND request_no > expected_projection_revision)"
         },
         {
           "name": "bpay_next_net_request_case_state_fk",
@@ -106927,6 +107127,30 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (input_kind = 'PAYE_MANUAL'::text AND entered_paye_net IS NOT NULL OR input_kind = 'CASE_PAYOUT'::text AND entered_paye_net IS NULL AND frozen_gross_inc_vat::numeric = 0::numeric)"
+        },
+        {
+          "name": "bpay_next_net_request_prior_net_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((prior_projection_id IS NULL) = (prior_entered_paye_net IS NULL))"
+        },
+        {
+          "name": "bpay_next_net_request_prior_projection_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_projection_id, run_worker_id) REFERENCES private.bpay_next_net_projection(id, run_worker_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_net_request_prior_revision",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_projection_id IS NULL OR expected_projection_revision IS NOT NULL AND expected_projection_revision > 0)"
         },
         {
           "name": "bpay_next_paye_net_request_actor_user_id_fkey",
@@ -107007,6 +107231,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (preparation_revision > 0)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_preview_capacity_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preview_capacity_revision >= 0)"
+        },
+        {
+          "name": "bpay_next_paye_net_request_prior_entered_paye_net_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_entered_paye_net::numeric >= 0::numeric)"
         },
         {
           "name": "bpay_next_paye_net_request_request_no_check",
@@ -138231,6 +138471,14 @@
           "generated": ""
         },
         {
+          "name": "net_capacity_revision",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "pending_outcome_count",
           "type": "integer",
           "default": "0",
@@ -138279,6 +138527,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (financial_view_revision >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_control_net_capacity_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (net_capacity_revision >= 0)"
         },
         {
           "name": "bpay_next_worker_control_pending_outcome_count_check",

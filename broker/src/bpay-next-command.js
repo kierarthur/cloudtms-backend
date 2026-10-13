@@ -238,7 +238,7 @@ function commandCall(body) {
   const schema = body.action === 'CANCEL_REQUEST' && (Object.hasOwn(body, 'run_id') || Object.hasOwn(body, 'pay_channel'))
     ? { ...INPUTS.CANCEL_REQUEST, run_id: 'uuid', pay_channel: 'payChannel' }
     : body.action === 'PAYE_NET' && Object.hasOwn(body, 'expected_projection_revision')
-    ? { ...INPUTS.PAYE_NET, expected_projection_revision: 'projectionRevision' }
+    ? { ...INPUTS.PAYE_NET, expected_projection_revision: 'projectionRevision',...(Object.hasOwn(body,'preview_capacity_revision')?{preview_capacity_revision:'bigint'}:{}) }
     : body.action === 'WRITE_OFF' && body.scope === 'AMOUNT'
       ? { ...INPUTS.WRITE_OFF, amount: 'positiveCaseMoney' } : INPUTS[body.action];
   const tokenPresent = Object.hasOwn(body, 'reauth_token');
@@ -399,6 +399,8 @@ function pennies(value) {
 function dependencyError(error, attempted = false, action = null) {
   if (error instanceof CommandError) return error;
   const db = error?.json ?? error;
+  if(db?.code==='55000'&&['BPAY_NEXT_PAYE_NET_ENTRY_IN_PROGRESS','BPAY_NEXT_PAYE_NET_REQUIRED'].includes(db.message))return fault(db.message,409);
+  if(action==='PAYE_NET'&&db?.code==='23514'&&db.message==='BPAY_NEXT_NET_PREVIEW_CHANGED')return fault(db.message,409);
   if(action==='CASE_CREATE'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')return fault(db.message,409);
   if(['CASE_PAUSE','CASE_RESUME'].includes(action)&&['BPAY_NEXT_CASE_PAUSE_UNSUPPORTED','BPAY_NEXT_CASE_PAUSE_STATE_CHANGED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID','BPAY_NEXT_CASE_PAUSE_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
   if(action==='CASE_CHANNEL_RESOLVE'&&[...CHANNEL_ISSUES,'BPAY_NEXT_CASE_CHANNEL_FIXED_AMOUNT','BPAY_NEXT_CASE_CHANNEL_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);

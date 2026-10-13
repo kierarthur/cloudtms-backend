@@ -1,4 +1,5 @@
 import {caseFinanceQuery,caseFinanceResult} from './bpay-next-case-audit-contract.js';
+import {payeNetPreviewInput,payeNetPreviewResult} from './bpay-next-paye-net-contract.js';
 import {caseChannelInput,caseChannelToken,caseChannelCursor,caseChannelPreview,caseChannelReceipt,CHANNEL_ISSUES,CHANNEL_RECEIPT_SCHEMA,channelValue,caseRestructureInput,caseRestructurePreview,caseRestructureReceipt,RESTRUCTURE_ISSUES,caseInput,casePreview,caseEditState,caseEditReceipt,casePauseState,casePauseReceipt} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
@@ -291,6 +292,7 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  PAYE_NET_PREVIEW:{run_worker_id:'uuid',entered_paye_net:'money',after:'payeNetCursor?',limit:'limit'},
   CHANNEL_DRAFT_LIST:{...CHANNEL_DRAFT_INPUT,after:'channelDraftCursor?',limit:'limit'},
   CHANNEL_DRAFT_COUNT:CHANNEL_DRAFT_INPUT,
   ACTIVE_PREPARATIONS:ACTIVE_PREPARATION_INPUT,
@@ -776,6 +778,14 @@ function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
   const kind=url.searchParams.get('kind');
+  if(kind==='PAYE_NET_PREVIEW'){
+    if([...url.searchParams.keys()].some(k=>!['kind','run_worker_id','entered_paye_net','after','limit'].includes(k)||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
+    let after=null;const raw=url.searchParams.get('after');
+    if(raw!==null){if(ENCODER.encode(raw).byteLength>8192)throw fault('REQUEST_INVALID',400);try{after=JSON.parse(raw);}catch{throw fault('REQUEST_INVALID',400);}}
+    const limit=url.searchParams.get('limit')??'50';if(!/^[1-9]\d{0,2}$/.test(limit))throw fault('REQUEST_INVALID',400);
+    const args={run_worker_id:url.searchParams.get('run_worker_id')?.toLowerCase(),entered_paye_net:url.searchParams.get('entered_paye_net'),after,limit:Number(limit)};
+    if(!payeNetPreviewInput(args))throw fault('REQUEST_INVALID',400);return {kind,args:Object.freeze(args)};
+  }
   if(['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(kind)){try{return caseFinanceQuery(kind,url.searchParams);}catch{throw fault('REQUEST_INVALID',400);}}
   let schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{}),...(url.searchParams.has('restructure_command_id')?{restructure_command_id:'uuid'}:{}),...(url.searchParams.has('channel_command_id')?{channel_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(kind==='CURRENT_STORED_CREDITS'&&url.searchParams.has('sort'))schema={...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CURRENT_STORED_CREDITS,sort:'storedCreditSort'};
@@ -836,6 +846,7 @@ function result(payload,call,mutation){
   if(!mutation&&['REVIEW_TOTALS','REVIEW_CASES'].includes(call.kind))return reviewResult(payload,call.kind,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='LINES'&&Object.hasOwn(call.args,'worksheet_run_id'))return worksheetLinesResult(payload,call.args,exact,bad);
   if(!mutation&&call.kind==='PAYE_WORKSHEET')return worksheetResult(payload,call.args,call.actorUserId,field,exact,bad);
+  if(!mutation&&call.kind==='PAYE_NET_PREVIEW'){if(!payeNetPreviewResult(payload,call.args,call.actorUserId))bad();return payload;}
   if(!mutation&&['CHANNEL_DRAFT_LIST','CHANNEL_DRAFT_COUNT'].includes(call.kind))return channelDraftResult(payload,call.kind,call.args,call.actorUserId,exact,bad);
   if(!mutation&&call.kind==='ACTIVE_PREPARATIONS')return activePreparationsResult(payload,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='PREPARE_ISSUES')return prepareIssuesResult(payload,call.args,call.actorUserId,field,exact,bad);
@@ -1081,6 +1092,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(e instanceof PreparationError)return e;
   if(['BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(e?.code))return new PreparationError(e.code,403,false,false);
   const db=e?.json??e;
+  if(!mutation&&action==='PAYE_NET_PREVIEW'&&['55000','23514'].includes(db?.code)&&['BPAY_NEXT_PAYE_NET_ENTRY_IN_PROGRESS','BPAY_NEXT_NET_PREVIEW_CHANGED','BPAY_NEXT_NET_PREVIEW_NOT_READY','BPAY_NEXT_NET_PREVIEW_INPUT_UNBOUND','BPAY_NEXT_NET_PREVIEW_WEEK_UNBOUND'].includes(db.message))return new PreparationError(db.message,409,false,false);
   // FC-03 correction discovered by FC-04: preserve the named creation refusal.
   if(action==='CASE_CHANNEL_SUGGEST'&&[...CHANNEL_ISSUES,'BPAY_NEXT_CASE_CHANNEL_FIXED_AMOUNT'].includes(db?.message))return fault(db.message,409);
   if(action==='CASE_RESTRUCTURE_PREVIEW'&&RESTRUCTURE_ISSUES.includes(db?.message))return fault(db.message,409);
