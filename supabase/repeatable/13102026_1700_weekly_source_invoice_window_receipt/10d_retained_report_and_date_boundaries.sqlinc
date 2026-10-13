@@ -1,0 +1,609 @@
+-- Isolated complete source proposal. No installation/runtime acceptance.
+create or replace function private.weekly_source_self_bill_report_finalise_v1(p_request jsonb,p_vat_rounding_variant text)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid; v_cycle public.weekly_source_cycles%rowtype; v_scope public.weekly_source_report_scopes%rowtype;
+  v_report public.weekly_source_self_bill_reports%rowtype; v_upload public.weekly_source_uploads%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype; v_rules jsonb; v_revision uuid; v_manifest uuid;
+  v_policy bytea; v_hash bytea; v_row uuid; v_movement uuid; v_rounding uuid; v_count integer; v_client_hash bytea;
+  v_rounding_pence bigint;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501'; end if;
+  if p_vat_rounding_variant is null or p_vat_rounding_variant not in ('A','B') then
+    raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_COMPOSITION_UNPROVED' using errcode='55000'; end if;
+  if jsonb_typeof(p_request) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_request) k where k not in (
+    'actor_user_id','source_cycle_id','authority_scope_kind','report_scope_id','upload_id','projection_publication_id',
+    'expected_authority_scope_version','expected_row_manifest_hash','expected_comparison_manifest_hash','expected_issue_set_hash','exclude_unfinalised_acknowledged'))
+    or p_request->>'authority_scope_kind' is distinct from 'SELF_BILL_REPORT_SCOPE' then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_FINALISE_REQUEST_INVALID' using errcode='22023'; end if;
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  if v_actor is null then raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_ACTOR_REQUIRED' using errcode='22023'; end if;
+  perform 1 from public.weekly_source_groups where id=(select source_group_id from public.weekly_source_cycles where id=(p_request->>'source_cycle_id')::uuid) for update;
+  select * into strict v_cycle from public.weekly_source_cycles where id=(p_request->>'source_cycle_id')::uuid for update;
+  select * into strict v_scope from public.weekly_source_report_scopes where id=(p_request->>'report_scope_id')::uuid for update;
+  select * into strict v_report from public.weekly_source_self_bill_reports where id=v_scope.self_bill_report_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=(p_request->>'upload_id')::uuid for share;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=(p_request->>'projection_publication_id')::uuid for share;
+  perform private.weekly_source_office_authority_v1(v_actor,'FINALISE_WEEK',v_cycle.source_group_id,v_scope.client_id,v_cycle.finalisation_week_ending);
+  v_rules:=private.weekly_source_self_bill_report_rules_assert_v1(v_scope.client_id,v_cycle.id);
+  if v_scope.source_cycle_id<>v_cycle.id or v_scope.source_group_id<>v_cycle.source_group_id
+    or v_scope.cutoff_at_utc<>v_cycle.cutoff_at_utc or v_report.source_cycle_id<>v_cycle.id
+    or v_report.client_id<>v_scope.client_id or v_scope.version is distinct from (p_request->>'expected_authority_scope_version')::bigint
+    or v_scope.current_complete_upload_id is distinct from v_upload.id or v_scope.current_projection_publication_id is distinct from v_publication.id
+    or v_scope.projection_state<>'CURRENT' or v_upload.state<>'CURRENT' or v_upload.report_scope_id<>v_scope.id
+    or v_publication.state<>'CURRENT' or v_publication.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE'
+    or v_publication.upload_id<>v_upload.id or v_publication.report_scope_id<>v_scope.id or v_publication.authority_scope_version<>v_scope.version
+    or v_upload.row_manifest_hash is distinct from private.weekly_source_hex32_v1(p_request->>'expected_row_manifest_hash','WEEKLY_SOURCE_ROW_MANIFEST_HASH_INVALID')
+    or v_publication.comparison_manifest_hash is distinct from private.weekly_source_hex32_v1(p_request->>'expected_comparison_manifest_hash','WEEKLY_SOURCE_COMPARISON_MANIFEST_HASH_INVALID')
+    or v_publication.issue_set_hash is distinct from private.weekly_source_hex32_v1(p_request->>'expected_issue_set_hash','WEEKLY_SOURCE_ISSUE_SET_HASH_INVALID') then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_FINALISE_CAS_STALE' using errcode='40001'; end if;
+  if v_scope.current_final_revision_id is not null then
+    if not exists(select 1 from public.weekly_source_final_revisions fr where fr.id=v_scope.current_final_revision_id
+      and fr.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and fr.report_scope_id=v_scope.id and fr.upload_id=v_upload.id and fr.state='CURRENT') then
+      raise exception 'WEEKLY_SOURCE_REPORT_FINAL_POINTER_CORRUPT' using errcode='55000'; end if;
+    return jsonb_build_object('ok',true,'status','FINALISED','final_revision_id',v_scope.current_final_revision_id,
+      'source_cycle_id',v_cycle.id,'report_scope_id',v_scope.id,'invoice_only',true,'idempotent',true);
+  end if;
+  if v_scope.state not in ('OPEN','FINALISABLE') then raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_NOT_OPEN' using errcode='55000'; end if;
+  perform private.weekly_source_self_bill_report_seal_assert_v1(v_upload.id);
+  perform private.weekly_source_final_upload_assert_v1(v_upload.id);
+  if not private.weekly_source_import_is_prepared_v1(v_upload.id) then
+    raise exception 'WEEKLY_SOURCE_REPORT_IMPORT_NOT_PREPARED' using errcode='55000'; end if;
+  if exists(select 1 from public.weekly_source_upload_rows r where r.upload_id=v_upload.id
+    and r.source_shift_charge_pence::numeric+r.source_vat_pence::numeric is distinct from r.source_gross_pence::numeric) then
+    raise exception 'WEEKLY_SOURCE_REPORT_LITERAL_GROSS_MISMATCH' using errcode='55000'; end if;
+  v_policy:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_FINAL_POLICY_V1',v_rules);
+  v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_FINAL_MANIFEST_V1',jsonb_build_object(
+    'source_cycle_id',v_cycle.id,'report_scope_id',v_scope.id,'self_bill_report_id',v_report.id,'upload_id',v_upload.id,
+    'publication_id',v_publication.id,'authority_scope_version',v_scope.version,'row_manifest_hash',encode(v_upload.row_manifest_hash,'hex'),
+    'report_row_manifest_hash',encode(v_report.row_manifest_hash,'hex'),'policy_fingerprint',encode(v_policy,'hex')));
+  insert into public.weekly_source_final_revisions(source_cycle_id,authority_scope_kind,report_scope_id,revision_number,upload_id,
+    reason,finalised_by_user_id,manifest_hash,policy_fingerprint,state,rule_set_version_id)
+    values(v_cycle.id,'SELF_BILL_REPORT_SCOPE',v_scope.id,1,v_upload.id,'INITIAL_FINALISATION',v_actor,v_hash,v_policy,'CURRENT',
+      (v_rules->>'rule_set_version_id')::uuid) returning id into v_revision;
+  for v_row in select id from public.weekly_source_upload_rows where upload_id=v_upload.id order by source_row_ordinal loop
+    v_movement:=private.weekly_source_self_bill_report_movement_insert_v1(v_row,v_revision);
+  end loop;
+  select count(*) into v_count from public.weekly_source_billing_movements where final_revision_id=v_revision and source_line_kind='SELF_BILL_REPORT_LINE';
+  if v_count<>v_report.line_count or not exists(select 1 from public.weekly_source_billing_movements where final_revision_id=v_revision
+    having sum(invoice_presentation_charge_pence)=v_report.net_pence and sum(vat_amount*100)=v_report.vat_pence and sum(total_inc_vat*100)=v_report.gross_pence) then
+    raise exception 'WEEKLY_SOURCE_REPORT_MOVEMENT_TOTALS_MISMATCH' using errcode='55000'; end if;
+  -- A/B is selected solely by the root integration after real proof. No default.
+  v_rounding:=private.weekly_source_vat_rounding_movement_insert_v1(v_revision,v_scope.client_id,
+    case when p_vat_rounding_variant='B' then v_movement else null end);
+  select coalesce(sum(vat_amount*100),0)::bigint into v_rounding_pence from public.weekly_source_billing_movements
+    where id=v_rounding and vat_rounding_revision_id=v_revision and actual_client_id=v_scope.client_id and source_line_kind='INVOICE_VAT_ROUNDING';
+  if not exists(select 1 from public.weekly_source_billing_movements where final_revision_id=v_revision
+    having sum(invoice_presentation_charge_pence)=v_report.net_pence
+      and sum(vat_amount*100)=v_report.vat_pence::numeric+v_rounding_pence
+      and sum(total_inc_vat*100)=v_report.net_pence::numeric+v_report.vat_pence::numeric+v_rounding_pence) then
+    raise exception 'WEEKLY_SOURCE_REPORT_INVOICE_TARGET_TOTALS_MISMATCH' using errcode='55000'; end if;
+  select private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CLIENT_MANIFEST_V1',jsonb_build_object(
+    'final_revision_id',v_revision,'source_group_id',v_cycle.source_group_id,'source_cycle_id',v_cycle.id,'client_id',v_scope.client_id,
+    'finalisation_week_ending',v_cycle.finalisation_week_ending,'backing_report_number',v_report.report_number,
+    'movements',jsonb_agg(jsonb_build_object('movement_id',id,'movement_economic_hash',encode(movement_economic_hash,'hex')) order by encode(movement_economic_hash,'hex')),
+    'expense_authorities','[]'::jsonb)) into v_client_hash from public.weekly_source_billing_movements where final_revision_id=v_revision;
+  insert into public.weekly_source_client_manifests(final_revision_id,source_group_id,source_cycle_id,client_id,finalisation_week_ending,
+    backing_report_number,manifest_hash,movement_count,unchanged_snapshot_count,expense_line_count,invoice_state)
+    values(v_revision,v_cycle.source_group_id,v_cycle.id,v_scope.client_id,v_cycle.finalisation_week_ending,v_report.report_number,v_client_hash,
+      v_count+(v_rounding is not null)::integer,0,0,'READY') returning id into v_manifest;
+  insert into public.weekly_source_manifest_movements(client_manifest_id,billing_movement_id,manifest_ordinal,movement_hash)
+    select v_manifest,id,row_number() over(order by encode(movement_economic_hash,'hex'))::integer,movement_economic_hash
+    from public.weekly_source_billing_movements where final_revision_id=v_revision;
+  update public.weekly_source_report_scopes set current_final_revision_id=v_revision,state='FINALISED',updated_at_utc=transaction_timestamp()
+    where id=v_scope.id and current_final_revision_id is null and version=v_scope.version
+      and current_complete_upload_id=v_upload.id and current_projection_publication_id=v_publication.id;
+  if not found then raise exception 'WEEKLY_SOURCE_REPORT_FINALISE_CAS_LOST' using errcode='40001'; end if;
+  return jsonb_build_object('ok',true,'status','FINALISED','idempotent',false,'final_revision_id',v_revision,
+    'source_cycle_id',v_cycle.id,'authority_scope_kind','SELF_BILL_REPORT_SCOPE','report_scope_id',v_scope.id,
+    'self_bill_report_id',v_report.id,'invoice_date',v_report.invoice_date,'movement_count',v_count+(v_rounding is not null)::integer,
+    'snapshot_count',0,'transition_count',0,'expense_generation_count',0,'invoice_only',true);
+end;
+$function$;
+
+create or replace function private.weekly_source_rule_coverage_floor_v1(p_client_id uuid,p_cycle_id uuid)
+returns date language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_cycle public.weekly_source_cycles%rowtype; v_floor date;
+begin
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  if private.weekly_source_effective_rule_set_v1(p_client_id,p_cycle_id) is null then return null; end if;
+  -- F1's only feature writer refuses false->false. A RULE_SET purpose and
+  -- complete receipt remain after disable; a never-enabled draft has neither.
+  -- Refuse malformed activated history rather than advancing a client's floor.
+  if exists(select 1 from public.weekly_source_group_rule_assignments a
+    join public.weekly_source_group_clients gc on gc.source_group_id=a.source_group_id and gc.client_id=p_client_id
+      and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]')
+        && daterange(a.effective_from_week_ending,coalesce(a.effective_to_week_ending,'infinity'::date),'[]')
+    where a.source_group_id=v_cycle.source_group_id and a.feature_purpose='RULE_SET'
+      and a.effective_from_week_ending<=v_cycle.finalisation_week_ending and (
+        a.rule_set_version_id is null or a.feature_release_id is null or a.feature_changed_at_utc is null
+        or a.feature_changed_by_user_id is null or a.feature_request_id is null or a.feature_request_sha256 is null
+        or a.feature_receipt_json->>'contract' is distinct from 'WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1'
+        or a.feature_receipt_json->>'assignment_id' is distinct from a.id::text
+        or a.feature_receipt_json->>'source_group_id' is distinct from a.source_group_id::text
+        or a.feature_receipt_json->>'rule_set_version_id' is distinct from a.rule_set_version_id::text
+        or a.feature_receipt_json->>'effective_from_week_ending' is distinct from a.effective_from_week_ending::text
+        or a.feature_receipt_json->>'release_id' is distinct from a.feature_release_id
+        or a.feature_receipt_json->>'actor_user_id' is distinct from a.feature_changed_by_user_id::text
+        or a.feature_receipt_json->>'request_id' is distinct from a.feature_request_id::text
+        or (a.feature_receipt_json->>'changed_at_utc')::timestamptz is distinct from a.feature_changed_at_utc
+        or a.feature_receipt_json->>'feature_purpose' is distinct from 'RULE_SET'
+        or a.feature_receipt_json->'feature_enabled' is distinct from to_jsonb(a.feature_enabled)
+      )) then
+    raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000';
+  end if;
+  with applicable_assignments as (
+    select greatest(a.effective_from_week_ending+((7-extract(dow from a.effective_from_week_ending)::integer)%7),
+      gc.valid_from+((7-extract(dow from gc.valid_from)::integer)%7)) first_week,
+      least(coalesce(a.effective_to_week_ending,'infinity'::date),coalesce(gc.valid_to,'infinity'::date),
+        v_cycle.finalisation_week_ending) last_week
+    from public.weekly_source_group_rule_assignments a
+    join public.weekly_source_group_clients gc on gc.source_group_id=a.source_group_id and gc.client_id=p_client_id
+    join public.weekly_source_rule_set_versions version on version.id=a.rule_set_version_id
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id
+    join public.weekly_source_groups source_group on source_group.id=a.source_group_id
+      and source_group.agency_id=rules.agency_id and source_group.environment=rules.environment
+    where a.source_group_id=v_cycle.source_group_id and a.feature_purpose='RULE_SET'
+      and a.feature_release_id is not null and a.feature_changed_at_utc is not null
+  ), frozen_use as (
+    select source_cycle.finalisation_week_ending first_week
+    from public.weekly_source_final_revisions final
+    join public.weekly_source_cycles source_cycle on source_cycle.id=final.source_cycle_id
+      and source_cycle.source_group_id=v_cycle.source_group_id
+    join public.weekly_source_group_clients gc on gc.source_group_id=source_cycle.source_group_id
+      and gc.client_id=p_client_id and source_cycle.finalisation_week_ending
+        between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    join public.weekly_source_rule_set_versions version on version.id=final.rule_set_version_id
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id
+    join public.weekly_source_groups source_group on source_group.id=source_cycle.source_group_id
+      and source_group.agency_id=rules.agency_id and source_group.environment=rules.environment
+    where source_cycle.finalisation_week_ending<=v_cycle.finalisation_week_ending
+      and (source_cycle.scope_client_id=p_client_id or exists(
+        select 1 from public.weekly_source_client_manifests manifest
+        where manifest.final_revision_id=final.id and manifest.client_id=p_client_id)
+        or exists(select 1 from public.weekly_source_report_scopes report
+          where report.id=final.report_scope_id and report.source_cycle_id=source_cycle.id and report.client_id=p_client_id))
+  ) select min(first_week)-6 into v_floor from (
+    select first_week from applicable_assignments where first_week<=last_week
+    union all select first_week from frozen_use
+  ) history;
+  if v_floor is null then raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000'; end if;
+  return v_floor;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_source_upload_coverage_context_v1(p_client_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_cycle public.weekly_source_cycles%rowtype; v_rules jsonb; v_floor date;
+  v_oldest date; v_completed date; v_has_final boolean;
+begin
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  v_rules:=private.weekly_source_effective_rule_set_v1(p_client_id,p_cycle_id);
+  if v_rules is null then return null; end if;
+  v_floor:=private.weekly_source_rule_coverage_floor_v1(p_client_id,p_cycle_id);
+  select min(event.work_date) into v_oldest
+  from public.weekly_exceptional_pay_family_events event
+  join public.weekly_exceptional_payment_approvals approval on approval.id=event.evidence_approval_id
+    and approval.client_id=p_client_id and approval.withdrawn_at_utc is null
+  join public.weekly_source_cycles origin on origin.id=approval.source_cycle_id
+    and origin.source_group_id=v_cycle.source_group_id
+  where event.state='WAIT' and event.work_date>=v_floor
+    and event.event_sequence=(select max(latest.event_sequence)
+      from public.weekly_exceptional_pay_family_events latest
+      where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id);
+  -- A completed Contract week has ended in UK local time; planned future weeks
+  -- and cancelled weeks are not evidence of a completed period.
+  select max(week.week_ending_date) into v_completed
+  from public.contract_weeks week join public.contracts contract on contract.id=week.contract_id
+  where contract.client_id=p_client_id and week.status::text<>'CANCELLED'
+    and week.week_ending_date<(statement_timestamp() at time zone 'Europe/London')::date;
+  select exists(select 1 from public.weekly_source_final_revisions final
+    join public.weekly_source_cycles cycle on cycle.id=final.source_cycle_id
+      and cycle.source_group_id=v_cycle.source_group_id
+    join public.weekly_source_client_manifests manifest on manifest.final_revision_id=final.id
+      and manifest.client_id=p_client_id
+    where final.state='CURRENT' and final.authority_scope_kind='CYCLE') into v_has_final;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_UPLOAD_COVERAGE_CONTEXT_V1',
+    'coverage_floor_local_date',v_floor,'oldest_protected_work_date',v_oldest,
+    'last_completed_contract_week',v_completed,'has_current_final_source',v_has_final,
+    'lookback_warning_enabled',v_rules#>>'{values,lookback_warning}'='WARN_IF_AFTER_OLDEST_PROTECTED');
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.weekly_source_client_settings_save_atomic_v1(p_request jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+declare
+  v_actor uuid;
+  v_agency uuid;
+  v_environment text;
+  v_client uuid;
+  v_expected text;
+  v_input jsonb;
+  v_effective_from date;
+  v_current_shape jsonb;
+  v_group_id uuid;
+  v_group public.weekly_source_groups%rowtype;
+  v_old_group_id uuid;
+  v_locked_old_group_id uuid;
+  v_membership public.weekly_source_group_clients%rowtype;
+  v_policy public.weekly_source_client_policies%rowtype;
+  v_policy_found boolean:=false;
+  v_contract_count integer;
+  v_client_nhsp_basis boolean:=false;
+  v_client_agency_basis boolean:=false;
+  v_family_count integer;
+  v_mode_count integer;
+  v_self_bill_count integer;
+  v_family text;
+  v_authority text;
+  v_document text;
+  v_self_bill boolean;
+  v_correction text;
+  v_source_expenses boolean;
+  v_source_expense_vat boolean;
+  v_rate_method text;
+  v_tie_rule text;
+  v_candidate_queries boolean;
+  v_manager_queries boolean;
+  v_manager_recipient text;
+  v_completed_copy boolean;
+  v_completed_recipient text;
+  v_expense_supported boolean;
+  v_prior_end date;
+  v_nhsp_group_count integer;
+  v_membership_history_count integer;
+  v_policy_history_count integer;
+  v_membership_effective_from date;
+  v_policy_effective_from date;
+begin
+  perform private._weekly_source_settings_assert_request_v1(
+    p_request,array[
+      'actor_user_id','agency_id','environment','client_id',
+      'expected_settings_version','settings'
+    ],'WEEKLY_SOURCE_CLIENT_SETTINGS_SAVE_REQUEST_INVALID'
+  );
+  v_input:=p_request->'settings';
+  perform private._weekly_source_settings_assert_request_v1(
+    v_input,array[
+      'source_group_id','effective_from','authority_mode','document_mode','self_bill_enabled',
+      'self_bill_correction_presentation','source_fixed_expenses_enabled','source_expense_vat_enabled',
+      'weekly_rate_classification_method','duration_break_tie_rule',
+      'candidate_queries_enabled','manager_queries_enabled','manager_query_recipient',
+      'completed_pack_copy_enabled','completed_pack_recipient'
+    ],'WEEKLY_SOURCE_CLIENT_SETTINGS_VALUES_INVALID'
+  );
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_agency:=(p_request->>'agency_id')::uuid;
+    v_client:=(p_request->>'client_id')::uuid;
+    v_expected:=pg_catalog.btrim(p_request->>'expected_settings_version');
+    v_effective_from:=coalesce(nullif(v_input->>'effective_from','')::date,current_date);
+    v_group_id:=nullif(v_input->>'source_group_id','')::uuid;
+    v_correction:=nullif(pg_catalog.upper(pg_catalog.btrim(v_input->>'self_bill_correction_presentation')),'');
+    v_source_expenses:=(v_input->>'source_fixed_expenses_enabled')::boolean;
+    v_source_expense_vat:=(v_input->>'source_expense_vat_enabled')::boolean;
+    v_rate_method:=pg_catalog.upper(pg_catalog.btrim(v_input->>'weekly_rate_classification_method'));
+    v_tie_rule:=nullif(pg_catalog.upper(pg_catalog.btrim(v_input->>'duration_break_tie_rule')),'');
+    v_candidate_queries:=(v_input->>'candidate_queries_enabled')::boolean;
+    v_manager_queries:=(v_input->>'manager_queries_enabled')::boolean;
+    v_manager_recipient:=nullif(pg_catalog.btrim(v_input->>'manager_query_recipient'),'');
+    v_completed_copy:=(v_input->>'completed_pack_copy_enabled')::boolean;
+    v_completed_recipient:=nullif(pg_catalog.btrim(v_input->>'completed_pack_recipient'),'');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CLIENT_SETTINGS_SAVE_REQUEST_INVALID' using errcode='22023';
+  end;
+  perform private._weekly_source_settings_require_admin_v1(v_actor);
+  v_environment:=private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  if v_effective_from<current_date or nullif(v_expected,'') is null then
+    raise exception 'WEEKLY_SOURCE_CLIENT_SETTINGS_SAVE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'weekly-source-settings-client:'||v_client::text,0
+  ));
+  v_current_shape:=private._weekly_source_settings_client_shape_v1(
+    v_agency,v_environment,v_client,v_effective_from
+  );
+  if v_current_shape->>'settings_version'<>v_expected then
+    raise exception 'WEEKLY_SOURCE_SETTINGS_STALE' using errcode='40001';
+  end if;
+  if not (v_current_shape->>'eligible')::boolean then
+    raise exception 'WEEKLY_SOURCE_CLIENT_SETTINGS_NOT_APPLICABLE' using errcode='22023';
+  end if;
+
+  select pg_catalog.count(*),
+         pg_catalog.count(distinct case
+           when contract.weekly_timesheet_source::text='NHSP' then 'NHSP'
+           when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
+         end),
+         pg_catalog.count(distinct case
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           else 'TIMESHEET_AUTHORITY'
+         end),
+         pg_catalog.count(distinct contract.self_bill),
+         pg_catalog.min(case
+           when contract.weekly_timesheet_source::text='NHSP' then 'NHSP'
+           when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
+         end),
+         pg_catalog.min(case
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           else 'TIMESHEET_AUTHORITY'
+         end),
+         pg_catalog.bool_and(contract.self_bill)
+  into v_contract_count,v_family_count,v_mode_count,v_self_bill_count,
+       v_family,v_authority,v_self_bill
+  from public.contracts contract
+  where contract.client_id=v_client
+    and contract.weekly_timesheet_source::text<>'NONE'
+    and contract.end_date>=v_effective_from;
+
+  -- Client setup precedes contracts. Only the currently effective dedicated
+  -- NHSP client mode may supply this pre-contract configuration basis.
+  -- Existing source contracts (including conflicting ones) remain authoritative.
+  if v_contract_count=0 and coalesce((
+    select settings.is_nhsp
+      and not coalesce(settings.requires_hr,false)
+      and not coalesce(settings.autoprocess_hr,false)
+      and not coalesce(settings.no_timesheet_required,false)
+    from public.client_settings settings
+    where settings.client_id=v_client
+      and (settings.effective_from is null or settings.effective_from<=v_effective_from)
+    order by settings.effective_from desc nulls last,settings.updated_at desc,settings.id desc
+    limit 1
+  ),false) then
+    v_family:='NHSP';
+    v_authority:='SOURCE_AUTHORITY';
+    v_self_bill:=true;
+    v_family_count:=1;
+    v_mode_count:=1;
+    v_self_bill_count:=1;
+    v_client_nhsp_basis:=true;
+  end if;
+
+  -- F1: derive the SOURCE/CHECK_ONLY exception only from an exact saved
+  -- dated agency assignment and actual unsigned Client/Contract settings.
+  v_client_agency_basis:=private.weekly_source_configured_agency_invoice_v1(
+    v_client,v_group_id,v_agency,v_environment,v_effective_from);
+  if v_client_agency_basis then
+    v_authority:='SOURCE_AUTHORITY';
+    v_self_bill:=false;
+  end if;
+  if (v_contract_count=0 and not v_client_nhsp_basis) or v_family_count<>1 or v_mode_count<>1 or v_self_bill_count<>1
+     or (v_authority='SOURCE_AUTHORITY' and not v_self_bill and not v_client_agency_basis)
+     or (v_authority='TIMESHEET_AUTHORITY' and v_self_bill) then
+    raise exception 'WEEKLY_SOURCE_CLIENT_CONTRACT_POLICY_INCONSISTENT' using errcode='55000';
+  end if;
+  v_document:=case v_authority when 'SOURCE_AUTHORITY' then 'CHECK_ONLY'
+    else 'INVOICE_EVIDENCE_REQUIRED' end;
+  if (v_input ? 'authority_mode' and v_input->>'authority_mode'<>v_authority)
+     or (v_input ? 'document_mode' and v_input->>'document_mode'<>v_document)
+     or (v_input ? 'self_bill_enabled' and (v_input->>'self_bill_enabled')::boolean<>v_self_bill) then
+    raise exception 'WEEKLY_SOURCE_CLIENT_READ_ONLY_POLICY_MISMATCH' using errcode='22023';
+  end if;
+
+  if v_family='NHSP' then
+    select pg_catalog.count(*) into v_nhsp_group_count
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=v_agency
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and source_group.active;
+    if v_nhsp_group_count<>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_GROUP_REQUIRED' using errcode='55000';
+    end if;
+    select source_group.id into strict v_group_id
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=v_agency
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and source_group.active;
+  end if;
+
+  -- F8/G1: all finalisers lock their group row before cycle/revision writes.
+  -- Preserve client-advisory-first; acquire both groups in the same UUID order
+  -- before the established target-group lock and before any membership write.
+  select membership.source_group_id into v_locked_old_group_id
+  from public.weekly_source_group_clients membership
+  join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+  where membership.client_id=v_client and source_group.agency_id=v_agency
+    and source_group.environment=v_environment
+    and v_effective_from between membership.valid_from and coalesce(membership.valid_to,'infinity'::date);
+  perform 1 from public.weekly_source_groups source_group
+  where source_group.id=v_group_id or source_group.id=v_locked_old_group_id
+  order by source_group.id for update;
+
+  select * into v_group from public.weekly_source_groups source_group
+  where source_group.id=v_group_id for update;
+  if not found or v_group.agency_id<>v_agency or v_group.environment<>v_environment
+     or not v_group.active or v_group.source_family<>v_family then
+    raise exception 'WEEKLY_SOURCE_CLIENT_GROUP_NOT_APPLICABLE' using errcode='22023';
+  end if;
+  if v_rate_method not in ('SPLIT_RATE_WINDOWS','WHOLE_SHIFT_START_DAY')
+     or (v_rate_method='SPLIT_RATE_WINDOWS' and v_tie_rule not in ('EARLIEST_LONGEST_PORTION','LATEST_LONGEST_PORTION')) then
+    raise exception 'WEEKLY_SOURCE_CLIENT_RATE_SETTINGS_INVALID' using errcode='22023';
+  end if;
+  if v_rate_method<>'SPLIT_RATE_WINDOWS' then v_tie_rule:=null; end if;
+
+  if v_self_bill and v_family='ROSTER' then
+    if v_correction not in ('FULL_REVERSAL_REPLACEMENT','NET_DIFFERENCE_PRESENTATION') then
+      raise exception 'WEEKLY_SOURCE_CLIENT_CORRECTION_SETTING_REQUIRED' using errcode='22023';
+    end if;
+  elsif v_correction is not null then
+    raise exception 'WEEKLY_SOURCE_CLIENT_CORRECTION_SETTING_NOT_APPLICABLE' using errcode='22023';
+  end if;
+
+  select exists(
+    select 1
+    from public.weekly_source_uploads upload
+    join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+    join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+    where cycle.source_group_id=v_group_id
+      and profile.profile_json ? 'expense_column'
+      and upload.state in ('SEALED','CURRENT','SUPERSEDED','CORRECTION_READY')
+  ) or coalesce((v_current_shape->'settings'->>'source_fixed_expenses_enabled')::boolean,false)
+  into v_expense_supported;
+  if v_client_agency_basis and (v_source_expenses or v_source_expense_vat) then
+    raise exception 'WEEKLY_SOURCE_RULE_R13' using errcode='22023';
+  end if;
+  if v_source_expenses and not v_expense_supported then
+    raise exception 'WEEKLY_SOURCE_CLIENT_SOURCE_EXPENSES_NOT_APPLICABLE' using errcode='22023';
+  end if;
+  if not v_source_expenses then v_source_expense_vat:=false; end if;
+
+  if v_authority<>'SOURCE_AUTHORITY' then
+    if v_candidate_queries or v_manager_queries or v_manager_recipient is not null
+       or v_completed_copy or v_completed_recipient is not null then
+      raise exception 'WEEKLY_SOURCE_CLIENT_QUERY_SETTINGS_NOT_APPLICABLE' using errcode='22023';
+    end if;
+  else
+    if not v_manager_queries then v_manager_recipient:=null; end if;
+    if v_manager_queries and v_manager_recipient is null then
+      select nullif(pg_catalog.btrim(client.ts_queries_email),'') into v_manager_recipient
+      from public.clients client where client.id=v_client;
+    end if;
+    if v_manager_queries and v_manager_recipient is null then
+      raise exception 'WEEKLY_SOURCE_MANAGER_QUERY_RECIPIENT_REQUIRED' using errcode='22023';
+    end if;
+    if not v_completed_copy then v_completed_recipient:=null; end if;
+    if v_completed_copy and v_completed_recipient is null then
+      select coalesce(
+        v_manager_recipient,
+        nullif(pg_catalog.btrim(client.ts_queries_email),'')
+      ) into v_completed_recipient
+      from public.clients client where client.id=v_client;
+    end if;
+    if v_completed_copy and v_completed_recipient is null then
+      raise exception 'WEEKLY_SOURCE_COMPLETED_PACK_RECIPIENT_REQUIRED' using errcode='22023';
+    end if;
+  end if;
+
+  select membership.* into v_membership
+  from public.weekly_source_group_clients membership
+  join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+  where membership.client_id=v_client
+    and source_group.agency_id=v_agency and source_group.environment=v_environment
+    and v_effective_from between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+  for update of membership;
+  if found then v_old_group_id:=v_membership.source_group_id; end if;
+  if v_old_group_id is distinct from v_locked_old_group_id then
+    raise exception 'WEEKLY_SOURCE_SETTINGS_STALE' using errcode='40001';
+  end if;
+  if v_old_group_id is not null and v_old_group_id<>v_group_id and exists(
+    select 1 from public.weekly_source_final_revisions final
+    join public.weekly_source_cycles cycle on cycle.id=final.source_cycle_id
+      and cycle.source_group_id=v_old_group_id
+    where final.state='CURRENT' and (
+      cycle.scope_client_id=v_client
+      or exists(select 1 from public.weekly_source_client_manifests manifest
+        where manifest.final_revision_id=final.id and manifest.client_id=v_client)
+      or exists(select 1 from public.weekly_source_report_scopes report
+        where report.id=final.report_scope_id and report.client_id=v_client
+          and report.source_cycle_id=cycle.id and report.source_group_id=v_old_group_id)
+    )
+  ) then
+    raise exception 'WEEKLY_SOURCE_CLIENT_GROUP_HAS_CURRENT_FINAL_REVISION' using errcode='55000',
+      detail='This client has a finalised report in its current group and cannot be moved.';
+  end if;
+
+
+  select pg_catalog.count(*) into v_membership_history_count
+  from public.weekly_source_group_clients membership
+  join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+  where membership.client_id=v_client
+    and source_group.agency_id=v_agency and source_group.environment=v_environment;
+  v_membership_effective_from:=case when v_membership_history_count=0
+    then date '1900-01-01' else v_effective_from end;
+
+  if v_old_group_id is null then
+    insert into public.weekly_source_group_clients(
+      source_group_id,client_id,valid_from,created_by_user_id
+    ) values (v_group_id,v_client,v_membership_effective_from,v_actor)
+    returning * into v_membership;
+  elsif v_old_group_id<>v_group_id then
+    if v_membership.valid_from=v_effective_from then
+      update public.weekly_source_group_clients
+      set source_group_id=v_group_id
+      where id=v_membership.id returning * into v_membership;
+    else
+      v_prior_end:=v_membership.valid_to;
+      update public.weekly_source_group_clients set valid_to=v_effective_from-1
+      where id=v_membership.id;
+      insert into public.weekly_source_group_clients(
+        source_group_id,client_id,valid_from,valid_to,created_by_user_id
+      ) values (v_group_id,v_client,v_effective_from,v_prior_end,v_actor)
+      returning * into v_membership;
+    end if;
+  end if;
+
+  if v_old_group_id is not null then
+    select * into v_policy
+    from public.weekly_source_client_policies policy
+    where policy.source_group_id=v_old_group_id and policy.client_id=v_client
+      and v_effective_from between policy.effective_from and coalesce(policy.effective_to,'infinity'::date)
+    for update;
+    v_policy_found:=found;
+  end if;
+  select pg_catalog.count(*) into v_policy_history_count
+  from public.weekly_source_client_policies policy
+  join public.weekly_source_groups source_group on source_group.id=policy.source_group_id
+  where policy.client_id=v_client
+    and source_group.agency_id=v_agency and source_group.environment=v_environment;
+  v_policy_effective_from:=case when v_policy_history_count=0
+    then date '1900-01-01' else v_effective_from end;
+  if v_policy_found and v_policy.effective_from=v_effective_from then
+    update public.weekly_source_client_policies
+    set source_group_id=v_group_id,authority_mode=v_authority,document_mode=v_document,
+        self_bill_enabled=v_self_bill,self_bill_correction_presentation=v_correction,
+        source_fixed_expenses_enabled=v_source_expenses,
+        source_expense_vat_enabled=v_source_expense_vat,
+        weekly_rate_classification_method=v_rate_method,duration_break_tie_rule=v_tie_rule,
+        candidate_queries_enabled=v_candidate_queries,manager_queries_enabled=v_manager_queries,
+        manager_query_recipient=v_manager_recipient,
+        completed_pack_copy_enabled=v_completed_copy,completed_pack_recipient=v_completed_recipient,
+        created_by_user_id=v_actor,created_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_policy.id;
+  else
+    if v_policy_found then
+      v_prior_end:=v_policy.effective_to;
+      update public.weekly_source_client_policies set effective_to=v_effective_from-1
+      where id=v_policy.id;
+    else
+      v_prior_end:=null;
+    end if;
+    insert into public.weekly_source_client_policies(
+      source_group_id,client_id,effective_from,effective_to,
+      authority_mode,document_mode,self_bill_enabled,self_bill_correction_presentation,
+      source_fixed_expenses_enabled,source_expense_vat_enabled,
+      weekly_rate_classification_method,duration_break_tie_rule,
+      candidate_queries_enabled,manager_queries_enabled,manager_query_recipient,
+      completed_pack_copy_enabled,completed_pack_recipient,created_by_user_id
+    ) values (
+      v_group_id,v_client,v_policy_effective_from,v_prior_end,
+      v_authority,v_document,v_self_bill,v_correction,
+      v_source_expenses,v_source_expense_vat,v_rate_method,v_tie_rule,
+      v_candidate_queries,v_manager_queries,v_manager_recipient,
+      v_completed_copy,v_completed_recipient,v_actor
+    );
+  end if;
+
+  if v_old_group_id is not null and v_old_group_id<>v_group_id then
+    perform private._weekly_source_settings_stale_open_v1(v_old_group_id,v_client);
+  end if;
+  perform private._weekly_source_settings_stale_open_v1(v_group_id,v_client);
+  return private._weekly_source_settings_client_shape_v1(
+    v_agency,v_environment,v_client,v_effective_from
+  );
+exception when exclusion_violation then
+  raise exception 'WEEKLY_SOURCE_CLIENT_SETTINGS_EFFECTIVE_RANGE_CONFLICT' using errcode='23P01';
+end;
+$function$;

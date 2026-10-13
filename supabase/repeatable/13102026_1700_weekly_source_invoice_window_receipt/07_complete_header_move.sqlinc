@@ -1,0 +1,580 @@
+-- Isolated complete source proposal. No installation/runtime acceptance.
+create or replace function private.weekly_source_invoice_header_refresh_v1(
+  p_invoice_id uuid
+) returns void
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_manifest_ids jsonb;
+  v_cycle_ids jsonb; v_invoice_window_ids jsonb;
+  v_week_endings jsonb;
+  v_backing_reports jsonb;
+begin
+  with facts as materialized (
+    select distinct manifest.id as manifest_id,manifest.source_cycle_id,coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id) invoice_window_cycle_id,
+           manifest.finalisation_week_ending,manifest.backing_report_number
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_manifest_movements manifest_movement
+      on manifest_movement.billing_movement_id=binding.billing_movement_id
+    join public.weekly_source_client_manifests manifest
+      on manifest.id=manifest_movement.client_manifest_id
+    where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+  )
+  select
+    coalesce((select pg_catalog.jsonb_agg(f.manifest_id order by f.manifest_id)
+              from facts f),'[]'::jsonb),
+    coalesce((select pg_catalog.jsonb_agg(c.source_cycle_id order by c.source_cycle_id)
+              from (select distinct source_cycle_id from facts) c),'[]'::jsonb),
+    coalesce((select pg_catalog.jsonb_agg(w.finalisation_week_ending order by w.finalisation_week_ending)
+              from (select distinct finalisation_week_ending from facts) w),'[]'::jsonb),
+    coalesce((select pg_catalog.jsonb_agg(r.backing_report_number order by r.backing_report_number)
+              from (select distinct backing_report_number from facts
+                    where backing_report_number is not null) r),'[]'::jsonb)
+    ,coalesce((select jsonb_agg(w.invoice_window_cycle_id order by w.invoice_window_cycle_id)
+      from (select distinct invoice_window_cycle_id from facts) w),'[]'::jsonb)
+  into v_manifest_ids,v_cycle_ids,v_week_endings,v_backing_reports,v_invoice_window_ids;
+
+  update public.invoices invoice
+  set header_snapshot_json=pg_catalog.jsonb_set(
+        invoice.header_snapshot_json,'{meta}',
+        (coalesce(invoice.header_snapshot_json->'meta','{}'::jsonb)-'contained_invoice_window_cycle_ids')
+          ||pg_catalog.jsonb_build_object(
+            'contained_client_manifest_ids',v_manifest_ids,
+            'contained_source_cycle_ids',v_cycle_ids,
+            'contained_finalisation_week_endings',v_week_endings,
+            'backing_report_numbers',v_backing_reports
+          )||case when v_invoice_window_ids=v_cycle_ids then '{}'::jsonb else jsonb_build_object(
+            'contained_invoice_window_cycle_ids',v_invoice_window_ids
+          ) end,true
+      ),
+      updated_at=pg_catalog.statement_timestamp()
+  where invoice.id=p_invoice_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_INVOICE_NOT_FOUND' using errcode='22023';
+  end if;
+end;
+$function$;
+
+create or replace function public.weekly_source_invoice_move_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_keys constant text[]:=array[
+    'actor_user_id','source_invoice_id','destination_invoice_id',
+    'presentation_line_id','invoice_line_id','expected_presentation_hash',
+    'expected_source_document_revision',
+    'expected_destination_document_revision','reason'
+  ]::text[];
+  v_required_keys constant text[]:=array[
+    'actor_user_id','source_invoice_id','destination_invoice_id',
+    'expected_presentation_hash','expected_source_document_revision',
+    'expected_destination_document_revision','reason'
+  ]::text[];
+  v_unknown text;
+  v_actor uuid;
+  v_source_invoice_id uuid;
+  v_destination_invoice_id uuid;
+  v_presentation_line_id uuid;
+  v_invoice_line_id uuid;
+  v_expected_presentation_hash bytea;
+  v_expected_source_revision bigint;
+  v_expected_destination_revision bigint;
+  v_reason text;
+  v_selected public.weekly_source_invoice_presentation_lines%rowtype;
+  v_presentation_ids uuid[];
+  v_companion_count integer;
+  v_source public.invoices%rowtype;
+  v_destination public.invoices%rowtype;
+  v_source_manifest public.weekly_source_client_manifests%rowtype;
+  v_destination_manifest public.weekly_source_client_manifests%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_source_fingerprint bytea;
+  v_destination_fingerprint bytea;
+  v_line_ids uuid[];
+  v_line_count integer;
+  v_updated_line_count integer;
+  v_movement_count integer;
+  v_binding_invoice_ids uuid[];
+  v_binding record;
+  v_placement public.weekly_source_invoice_placements%rowtype;
+  v_new_binding_version integer;
+  v_new_placement_revision integer;
+  v_binding_hash bytea;
+  v_placement_hash bytea;
+  v_replay_count integer;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(pg_catalog.current_setting('request.jwt.claim.role',true),
+       nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role','')
+       <>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select key into v_unknown from pg_catalog.jsonb_object_keys(p_request) key
+  where not (key=any(v_allowed_keys)) order by key limit 1;
+  if v_unknown is not null then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown;
+  end if;
+  if not (p_request ?& v_required_keys) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  -- 24 section 12 is a contract over VALUES; ?& above proves only that a key
+  -- EXISTS.  A key present with a JSON null passes ?&, and ->> on a JSON null
+  -- yields SQL NULL, which no cast rejects, so a null would reach a predicate
+  -- and be swallowed by three-valued logic.  Every required value is therefore
+  -- type-gated here, before anything is parsed.  The two optional identity keys
+  -- may be JSON null, which is how "not supplied" has always been expressed,
+  -- but may not be any other non-string type.
+  if pg_catalog.jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(p_request->'source_invoice_id') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(p_request->'destination_invoice_id') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(p_request->'expected_presentation_hash') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(p_request->'reason') is distinct from 'string'
+     or pg_catalog.jsonb_typeof(p_request->'expected_source_document_revision')
+          is distinct from 'number'
+     or pg_catalog.jsonb_typeof(p_request->'expected_destination_document_revision')
+          is distinct from 'number'
+     or coalesce(pg_catalog.jsonb_typeof(p_request->'presentation_line_id'),'null')
+          not in ('string','null')
+     or coalesce(pg_catalog.jsonb_typeof(p_request->'invoice_line_id'),'null')
+          not in ('string','null') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_VALUE_INVALID' using errcode='22023';
+  end if;
+  -- Exactly one of the two identities 24 section 12 allows.
+  if ((nullif(p_request->>'presentation_line_id','') is not null)::integer
+     +(nullif(p_request->>'invoice_line_id','') is not null)::integer)<>1 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_IDENTITY_REQUIRED' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_source_invoice_id:=(p_request->>'source_invoice_id')::uuid;
+    v_destination_invoice_id:=(p_request->>'destination_invoice_id')::uuid;
+    v_presentation_line_id:=nullif(p_request->>'presentation_line_id','')::uuid;
+    v_invoice_line_id:=nullif(p_request->>'invoice_line_id','')::uuid;
+    v_expected_source_revision:=(p_request->>'expected_source_document_revision')::bigint;
+    v_expected_destination_revision:=(p_request->>'expected_destination_document_revision')::bigint;
+    if coalesce(p_request->>'expected_presentation_hash','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'invalid presentation hash';
+    end if;
+    v_expected_presentation_hash:=pg_catalog.decode(
+      p_request->>'expected_presentation_hash','hex'
+    );
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_VALUE_INVALID' using errcode='22023';
+  end;
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  if v_source_invoice_id=v_destination_invoice_id
+     or coalesce(v_expected_source_revision,0)<1
+     or coalesce(v_expected_destination_revision,0)<1
+     or pg_catalog.char_length(v_reason) not between 1 and 1000 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_source_fingerprint:=private.weekly_source_invoice_expected_version_fingerprint_v1(
+    v_source_invoice_id,v_expected_source_revision
+  );
+  v_destination_fingerprint:=private.weekly_source_invoice_expected_version_fingerprint_v1(
+    v_destination_invoice_id,v_expected_destination_revision
+  );
+
+  -- Resolve the selected presentation line.  The invoice-line identity is the
+  -- alternative 24 section 12 allows; it resolves to exactly one presentation,
+  -- otherwise the selection is ambiguous and is refused.
+  if v_presentation_line_id is null then
+    select pg_catalog.count(distinct binding.presentation_line_id)::integer,
+           pg_catalog.min(binding.presentation_line_id::text)::uuid
+      into v_companion_count,v_presentation_line_id
+    from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_line_id=v_invoice_line_id and binding.state='CURRENT';
+    if coalesce(v_companion_count,0)<>1 then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_FOUND' using errcode='22023';
+    end if;
+  end if;
+  select * into v_selected from public.weekly_source_invoice_presentation_lines
+  where id=v_presentation_line_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_FOUND' using errcode='22023';
+  end if;
+  -- The expected presentation hash is the Office's proof that it is moving the
+  -- immutable line it was shown.
+  if v_selected.presentation_hash is distinct from v_expected_presentation_hash then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_PRESENTATION_HASH_MISMATCH'
+      using errcode='40001';
+  end if;
+  if v_invoice_line_id is not null and not exists(
+    select 1 from public.weekly_source_invoice_line_bindings binding
+    where binding.presentation_line_id=v_selected.id and binding.state='CURRENT'
+      and binding.invoice_line_id=v_invoice_line_id
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_FOUND' using errcode='22023';
+  end if;
+  -- A source-fixed expense follows its companion; it is never the unit of
+  -- selection while it has one.  The Office moves the shift presentation and
+  -- the expense goes with it.
+  if v_selected.companion_presentation_line_id is not null then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_COMPANION_REQUIRED'
+      using errcode='55000',detail=v_selected.companion_presentation_line_id::text;
+  end if;
+  select pg_catalog.array_agg(distinct member.id)
+    into v_presentation_ids
+  from public.weekly_source_invoice_presentation_lines member
+  where member.id=v_selected.id
+     or member.companion_presentation_line_id=v_selected.id;
+  -- Nothing unrelated: every member is the selected line or an expense that
+  -- declared it as its companion, on the same work event.
+  if exists(
+    select 1 from public.weekly_source_invoice_presentation_lines member
+    where member.id=any(v_presentation_ids)
+      and (member.work_event_id is distinct from v_selected.work_event_id
+        or member.client_manifest_id is distinct from v_selected.client_manifest_id
+        or (member.id<>v_selected.id and member.line_kind<>'SOURCE_FIXED_EXPENSE'))
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_COMPANION_INVALID' using errcode='55000';
+  end if;
+
+  perform 1 from public.invoices invoice
+  where invoice.id=any(array[v_source_invoice_id,v_destination_invoice_id])
+  order by invoice.id for update;
+  if (select pg_catalog.count(*) from public.invoices invoice
+      where invoice.id=any(array[v_source_invoice_id,v_destination_invoice_id]))<>2 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_INVOICE_NOT_FOUND' using errcode='22023';
+  end if;
+  select * into strict v_source from public.invoices where id=v_source_invoice_id;
+  select * into strict v_destination from public.invoices where id=v_destination_invoice_id;
+
+  -- Gate 13 finding F6.  `->>` and `#>>` yield SQL NULL for an ABSENT key, and
+  -- `NULL <> 'X'` is NULL, not true, so each of these four limbs evaluated to
+  -- NULL and the whole `if` was not taken.  Executed on a build from empty
+  -- before the change: with `schema_version` removed from either header the
+  -- move was ACCEPTED and COMMITTED (`status=MOVED`); with `{meta,source}`
+  -- removed it was refused only by the neighbouring G7-4 header trigger
+  -- (`WEEKLY_SOURCE_INVOICE_HEADER_INVALID`), never by this guard.
+  -- `is distinct from` is null-safe, so absent, JSON null and wrong value are
+  -- all unsafe, exactly as the self_bill and manifest-id limbs beside them
+  -- already treat them. PHD-003 intentionally has no cross-week confirmation
+  -- gate: same Client plus two idle, unissued Draft invoices is the complete
+  -- business compatibility rule.
+  if v_source.header_snapshot_json->>'schema_version'
+       is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+     or v_destination.header_snapshot_json->>'schema_version'
+       is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+     or v_source.header_snapshot_json#>>'{meta,source}'
+       is distinct from 'WEEKLY_FINAL_SOURCE'
+     or v_destination.header_snapshot_json#>>'{meta,source}'
+       is distinct from 'WEEKLY_FINAL_SOURCE'
+     or v_source.header_snapshot_json#>>'{meta,self_bill}' is distinct from 'true'
+     or v_destination.header_snapshot_json#>>'{meta,self_bill}' is distinct from 'true'
+     or not pg_catalog.pg_input_is_valid(
+          coalesce(v_source.header_snapshot_json#>>'{meta,client_manifest_id}',''),'uuid')
+     or not pg_catalog.pg_input_is_valid(
+          coalesce(v_destination.header_snapshot_json#>>'{meta,client_manifest_id}',''),'uuid') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_SOURCE_INVOICE_REQUIRED' using errcode='55000';
+  end if;
+  select * into strict v_source_manifest
+  from public.weekly_source_client_manifests
+  where id=(v_source.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid;
+  select * into strict v_destination_manifest
+  from public.weekly_source_client_manifests
+  where id=(v_destination.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid;
+  select * into strict v_event from public.weekly_work_events
+  where id=v_selected.work_event_id;
+  if v_source.client_id is distinct from v_destination.client_id
+     or v_source.client_id is distinct from v_source_manifest.client_id
+     or v_destination.client_id is distinct from v_destination_manifest.client_id
+     or v_source.client_id is distinct from v_event.client_id
+     or v_source.client_id is distinct from v_selected.client_id
+     or v_source.type::text<>'INVOICE' or v_destination.type::text<>'INVOICE' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'MOVE_SOURCE_INVOICE',v_source_manifest.source_group_id,
+    v_source.client_id,v_event.work_date
+  );
+  if exists(select 1 from public.weekly_source_invoice_line_bindings binding join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    where binding.invoice_id in (v_source_invoice_id,v_destination_invoice_id) and binding.state='CURRENT'
+      and private.weekly_source_frozen_rule_values_v1(movement.final_revision_id)->>'invoice_sender'='CLIENT_SELF_BILL'
+      and private.weekly_source_frozen_rule_values_v1(movement.final_revision_id)->>'invoice_vat_method'<>'SUM_OF_LINES') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_VAT_MEMBERSHIP_LOCKED' using errcode='55000'; end if;
+
+  -- Where do the selected presentations currently live?  The presentation
+  -- identity is immutable, so this answers the replay question without needing
+  -- the bindings to still be on the source invoice.
+  select pg_catalog.array_agg(distinct binding.invoice_id)
+    into v_binding_invoice_ids
+  from public.weekly_source_invoice_line_bindings binding
+  where binding.presentation_line_id=any(v_presentation_ids)
+    and binding.state='CURRENT';
+  if v_binding_invoice_ids is null then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_FOUND' using errcode='22023';
+  end if;
+
+  if v_binding_invoice_ids=array[v_destination_invoice_id]::uuid[] then
+    select pg_catalog.count(*)::integer into v_replay_count
+    from public.weekly_source_invoice_placements placement
+    join public.weekly_source_invoice_placements prior
+      on prior.id=placement.prior_placement_id
+    join public.weekly_source_invoice_line_bindings binding
+      on binding.billing_movement_id=placement.billing_movement_id
+     and binding.state='CURRENT'
+    where placement.is_current
+      and binding.presentation_line_id=any(v_presentation_ids)
+      and placement.invoice_id=v_destination_invoice_id
+      and prior.invoice_id=v_source_invoice_id
+      and placement.source_invoice_version_fingerprint=v_source_fingerprint
+      and placement.destination_invoice_version_fingerprint=v_destination_fingerprint
+      and placement.placement_reason='OFFICE_MOVE_BETWEEN_UNISSUED_INVOICES';
+    if v_replay_count>0 then
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status','MOVED','idempotent',true,
+        'source_invoice_id',v_source_invoice_id,
+        'destination_invoice_id',v_destination_invoice_id,
+        'presentation_line_id',v_selected.id,
+        'presentation_line_ids',pg_catalog.to_jsonb(v_presentation_ids),
+        'movement_count',v_replay_count
+      );
+    end if;
+  end if;
+  if v_binding_invoice_ids<>array[v_source_invoice_id]::uuid[] then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_ON_SOURCE_INVOICE'
+      using errcode='55000';
+  end if;
+
+  if v_source.document_revision is distinct from v_expected_source_revision
+     or v_destination.document_revision is distinct from v_expected_destination_revision then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_STALE_REVISION' using errcode='40001';
+  end if;
+  if v_source.status::text<>'DRAFT' or v_destination.status::text<>'DRAFT'
+     or v_source.issued_at_utc is not null or v_destination.issued_at_utc is not null
+     or v_source.paid_at_utc is not null or v_destination.paid_at_utc is not null
+     or v_source.active_document_operation_id is not null
+     or v_destination.active_document_operation_id is not null
+     or v_source.active_issue_operation_id is not null
+     or v_destination.active_issue_operation_id is not null
+     or pg_catalog.upper(coalesce(v_source.issue_state,'')) in (
+       'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE'
+     )
+     or pg_catalog.upper(coalesce(v_destination.issue_state,'')) in (
+       'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE'
+     )
+     or exists(
+       select 1 from public.invoice_operation_chunks chunk
+       where chunk.entity_type='INVOICE'
+         and chunk.entity_id=any(array[v_source_invoice_id,v_destination_invoice_id])
+         and chunk.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+     ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_REQUIRES_IDLE_DRAFTS' using errcode='55000';
+  end if;
+  -- PHD-003: same Client and both invoices unissued are the only business
+  -- compatibility restrictions. Source group, cycle, week, report, profile
+  -- and original batch remain immutable lineage on the presentation but never
+  -- prevent its deliberate Office placement on another same-Client Draft.
+
+  perform private.weekly_source_invoice_allocation_assert_v1(v_source_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(v_destination_invoice_id);
+
+  perform 1
+  from public.weekly_source_invoice_line_bindings binding
+  join public.weekly_source_billing_movements movement
+    on movement.id=binding.billing_movement_id
+  where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+    and binding.presentation_line_id=any(v_presentation_ids)
+  order by movement.id
+  for update of binding,movement;
+  select pg_catalog.count(*)::integer into v_movement_count
+  from public.weekly_source_invoice_line_bindings binding
+  join public.weekly_source_billing_movements movement
+    on movement.id=binding.billing_movement_id
+  where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+    and binding.presentation_line_id=any(v_presentation_ids)
+    and movement.placement_state='PLACED';
+  if v_movement_count=0 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_NOT_FOUND' using errcode='22023';
+  end if;
+  if exists(
+    select 1
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement
+      on movement.id=binding.billing_movement_id
+    where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+      and binding.presentation_line_id=any(v_presentation_ids)
+      and movement.placement_state<>'PLACED'
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_PLACEMENT_INVALID' using errcode='55000';
+  end if;
+  select pg_catalog.array_agg(lines.invoice_line_id order by lines.invoice_line_id),
+         pg_catalog.count(*)::integer
+    into v_line_ids,v_line_count
+  from (
+    select distinct binding.invoice_line_id
+    from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+      and binding.presentation_line_id=any(v_presentation_ids)
+  ) lines;
+  -- An indivisible presentation moves whole: no visible line in the move set
+  -- may keep a CURRENT binding that is not part of the move set, and no member
+  -- of the move set may sit on a line outside it.
+  if exists(
+    select 1
+    from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_line_id=any(v_line_ids) and binding.state='CURRENT'
+      and (binding.invoice_id<>v_source_invoice_id
+        or not (binding.presentation_line_id=any(v_presentation_ids)))
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_PARTIAL_LINE_REFUSED' using errcode='55000';
+  end if;
+  perform 1 from public.weekly_source_invoice_placements placement
+  where placement.billing_movement_id in (
+    select binding.billing_movement_id
+    from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+      and binding.invoice_line_id=any(v_line_ids)
+  ) and placement.is_current
+  order by placement.billing_movement_id for update;
+
+  perform pg_catalog.set_config(
+    'cloudtms.weekly_source_invoice_owner','MOVE_SOURCE_INVOICE',true
+  );
+  update public.invoice_lines
+  set invoice_id=v_destination_invoice_id
+  where id=any(v_line_ids) and invoice_id=v_source_invoice_id;
+  get diagnostics v_updated_line_count=row_count;
+  if v_updated_line_count is distinct from v_line_count then
+    raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_LINE_CAS_LOST' using errcode='40001';
+  end if;
+
+  for v_binding in
+    select binding.*,presentation.source_shift_group_id
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    where binding.invoice_id=v_source_invoice_id and binding.state='CURRENT'
+      and binding.presentation_line_id=any(v_presentation_ids)
+    order by binding.billing_movement_id
+  loop
+    update public.weekly_source_invoice_line_bindings
+    set state='SUPERSEDED',superseded_at_utc=pg_catalog.statement_timestamp()
+    where id=v_binding.id and state='CURRENT';
+    if not found then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_BINDING_CAS_LOST' using errcode='40001';
+    end if;
+    v_new_binding_version:=v_binding.binding_version+1;
+    v_binding_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_BINDING_V1',pg_catalog.jsonb_build_object(
+        'movement_id',v_binding.billing_movement_id,
+        'presentation_line_id',v_binding.presentation_line_id,
+        'invoice_line_id',v_binding.invoice_line_id,
+        'invoice_id',v_destination_invoice_id,
+        'manifest_hash',pg_catalog.encode(v_binding.manifest_hash,'hex'),
+        'binding_version',v_new_binding_version,
+        'prior_binding_id',v_binding.id
+      )
+    );
+    insert into public.weekly_source_invoice_line_bindings(
+      billing_movement_id,presentation_line_id,invoice_line_id,invoice_id,
+      original_final_revision_id,original_cycle_id,client_id,correction_root_id,
+      correction_role,manifest_hash,materialised_line_hash,binding_version,
+      prior_binding_id,state
+    ) values (
+      v_binding.billing_movement_id,v_binding.presentation_line_id,
+      v_binding.invoice_line_id,v_destination_invoice_id,
+      v_binding.original_final_revision_id,v_binding.original_cycle_id,
+      v_binding.client_id,v_binding.correction_root_id,v_binding.correction_role,
+      v_binding.manifest_hash,v_binding_hash,v_new_binding_version,v_binding.id,'CURRENT'
+    );
+
+    select * into strict v_placement
+    from public.weekly_source_invoice_placements placement
+    where placement.billing_movement_id=v_binding.billing_movement_id
+      and placement.is_current;
+    if v_placement.invoice_id is distinct from v_source_invoice_id
+       or v_placement.invoice_line_id is distinct from v_binding.invoice_line_id
+       or v_placement.placement_state<>'PLACED' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_PLACEMENT_INVALID' using errcode='55000';
+    end if;
+    update public.weekly_source_invoice_placements
+    set is_current=false where id=v_placement.id and is_current;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVE_PLACEMENT_CAS_LOST' using errcode='40001';
+    end if;
+    v_new_placement_revision:=v_placement.placement_revision+1;
+    v_placement_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_PLACEMENT_V1',pg_catalog.jsonb_build_object(
+        'movement_id',v_binding.billing_movement_id,
+        'invoice_id',v_destination_invoice_id,
+        'invoice_line_id',v_binding.invoice_line_id,
+        'placement_revision',v_new_placement_revision,
+        'placement_reason','OFFICE_MOVE_BETWEEN_UNISSUED_INVOICES',
+        'prior_placement_id',v_placement.id,
+        'source_invoice_version_fingerprint',pg_catalog.encode(v_source_fingerprint,'hex'),
+        'destination_invoice_version_fingerprint',pg_catalog.encode(v_destination_fingerprint,'hex')
+      )
+    );
+    insert into public.weekly_source_invoice_placements(
+      billing_movement_id,source_shift_group_id,invoice_id,invoice_line_id,
+      placement_revision,placement_state,is_current,original_automatic_cycle_id,
+      current_target_cycle_id,placement_reason,actor_user_id,prior_placement_id,
+      source_invoice_version_fingerprint,destination_invoice_version_fingerprint,
+      placement_hash
+    ) values (
+      v_binding.billing_movement_id,v_binding.source_shift_group_id,
+      v_destination_invoice_id,v_binding.invoice_line_id,
+      v_new_placement_revision,'PLACED',true,v_placement.original_automatic_cycle_id,
+      coalesce(v_destination_manifest.invoice_window_cycle_id,v_destination_manifest.source_cycle_id),'OFFICE_MOVE_BETWEEN_UNISSUED_INVOICES',
+      v_actor,v_placement.id,v_source_fingerprint,v_destination_fingerprint,
+      v_placement_hash
+    );
+  end loop;
+
+  perform private.weekly_source_invoice_header_refresh_v1(v_source_invoice_id);
+  perform private.weekly_source_invoice_header_refresh_v1(v_destination_invoice_id);
+  perform public.invoice_recompute_totals(v_source_invoice_id);
+  perform public.invoice_recompute_totals(v_destination_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(v_source_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(v_destination_invoice_id);
+  perform pg_catalog.set_config('cloudtms.weekly_source_invoice_owner','',true);
+
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_source_invoice_presentation_lines',v_selected.id::text,
+         'WEEKLY_SOURCE_PRESENTATION_LINE_MOVED_BETWEEN_DRAFT_INVOICES',
+         pg_catalog.jsonb_build_object(
+           'source_invoice_id',v_source_invoice_id,
+           'source_document_revision',v_expected_source_revision,
+           'presentation_line_id',v_selected.id,
+           'expected_presentation_hash',
+             pg_catalog.encode(v_expected_presentation_hash,'hex')
+         ),
+         pg_catalog.jsonb_build_object(
+           'destination_invoice_id',v_destination_invoice_id,
+           'destination_document_revision',v_expected_destination_revision,
+           'presentation_line_ids',pg_catalog.to_jsonb(v_presentation_ids),
+           'work_event_id',v_selected.work_event_id,
+           'line_count',v_line_count,'movement_count',v_movement_count,
+           'different_finalised_week',
+             v_source_manifest.source_cycle_id is distinct from coalesce(v_destination_manifest.invoice_window_cycle_id,v_destination_manifest.source_cycle_id)
+         ),v_reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','MOVED','idempotent',false,
+    'source_invoice_id',v_source_invoice_id,
+    'destination_invoice_id',v_destination_invoice_id,
+    'presentation_line_id',v_selected.id,
+    'presentation_line_ids',pg_catalog.to_jsonb(v_presentation_ids),
+    'line_count',v_line_count,'movement_count',v_movement_count
+  );
+end;
+$function$;

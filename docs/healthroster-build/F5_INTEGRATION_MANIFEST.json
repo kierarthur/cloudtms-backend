@@ -1,0 +1,413 @@
+{
+  "contract": "HEALTHROSTER_F5_F6_SOURCE_INTEGRATION_MANIFEST_V1",
+  "freeze": "FROZEN_SOURCE_FOR_ROOT_REVIEW",
+  "branch": "codex/healthroster-v2-money-build-13102026",
+  "baseline": "e286533e90c0658c252ba1bcc909b9af909be785",
+  "files": [
+    {
+      "file": "broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "file": "broker/src/weekly-source/healthroster-normalise.js",
+      "bytes": 8831,
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "file": "broker/src/weekly-source/profiles.js",
+      "bytes": 13493,
+      "sha256": "604d7d7c215e7882933913fe82b32b47869575922ffebb5156b5cd3589f31b9a"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "bytes": 47973,
+      "sha256": "35dd9ff23503c537817437aa9da7d91d9f99a68f153f76491074c383d707aeba"
+    },
+    {
+      "file": "broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 48438,
+      "sha256": "7d2834596ddee22522429c2872eae888dd27deb1b907b350f583ee9be2ecb0ad"
+    },
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 18232,
+      "sha256": "264db6fd02df890d556885ccf1214466da253d2454f33d8b72df87f3e7d6f342"
+    },
+    {
+      "file": "broker/src/weekly-source/source-invoice-money.js",
+      "bytes": 6221,
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "file": "broker/src/weekly-source/source-finalised-time.js",
+      "bytes": 2786,
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16112,
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 81915,
+      "sha256": "7b73c6ef3b06f3fdb12d8395189dd27752c21180d4979778fd4b2a221d61daae",
+      "function_signatures": [
+        "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+        "private.weekly_source_source_amount_warnings_v1(uuid,uuid)",
+        "private.weekly_source_billing_movement_hash_v1(jsonb)",
+        "private.weekly_source_frozen_rule_values_v1(uuid)",
+        "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+        "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+        "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+        "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()",
+        "private.weekly_source_invoice_window_cycle_v1(uuid,uuid)",
+        "private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)",
+        "private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)",
+        "private.weekly_source_invoice_movement_money_v1(uuid,uuid)",
+        "private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)",
+        "private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)",
+        "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)",
+        "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+        "private.weekly_source_invoice_placement_identity_guard_v1()",
+        "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+      "bytes": 168559,
+      "sha256": "3e95883d721b0d977d8874d8ff508a27b178b1d4492b362776928dcee99c4c7c",
+      "function_signatures": [
+        "public.weekly_source_upload_context_v1(jsonb)",
+        "public.weekly_source_upload_stage_rows_atomic_v1(jsonb)",
+        "private.weekly_source_upload_seal_core_v1(uuid,uuid)",
+        "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+        "public.weekly_source_charge_accept_atomic_v1(jsonb)"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "bytes": 206075,
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "function_signatures": [
+        "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+        "private.weekly_source_finalisation_insert_reversal_v1(uuid,uuid,uuid,uuid,uuid,text,jsonb)",
+        "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+        "private.weekly_source_ordinary_projection_expense_movement_assert_v1(uuid,uuid,uuid,uuid,uuid)",
+        "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+        "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "bytes": 110745,
+      "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+      "function_signatures": [
+        "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+        "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+        "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+        "private.weekly_source_invoice_issue_validate_v1(uuid)"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "bytes": 164237,
+      "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190",
+      "function_signatures": [
+        "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+        "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+        "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+        "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+        "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+        "private.weekly_source_finalisation_pay_context_v1(uuid,uuid)",
+        "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+        "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+        "public.weekly_source_finalisation_pay_task_finish_atomic_v1(jsonb)",
+        "public.weekly_source_finalisation_pay_task_recover_atomic_v1(jsonb)",
+        "private.weekly_source_office_proposal_revision_v1(uuid[],bytea)"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "bytes": 34262,
+      "sha256": "bb0c5afa4ffe66aea47d686d2bcf05718541c9ce17f5bc9d5480d77f12ea5bd8",
+      "function_signatures": [
+        "private._weekly_source_acl_table_contract_v1()",
+        "private._weekly_source_acl_private_helper_contract_v1()",
+        "private._weekly_source_acl_service_rpc_contract_v1()"
+      ]
+    },
+    {
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "bytes": 20608,
+      "sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531"
+    },
+    {
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "bytes": 6907,
+      "sha256": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32"
+    },
+    {
+      "file": "tests/weekly-source/healthroster-invoice-money.test.mjs",
+      "bytes": 8559,
+      "sha256": "2504f861cd89621dbd3a27926c63d78fe7125eaf42bc7f86036c6925f5acc85c"
+    },
+    {
+      "file": "tests/weekly-source/invoice-money-source-contract.test.mjs",
+      "bytes": 7819,
+      "sha256": "d80635d51fc1959d422ed9a18d4493e892a1040e9c8a885321c90a818816af14"
+    },
+    {
+      "file": "tests/weekly-source/harness/f5-first-use-fixture.mjs",
+      "bytes": 13393,
+      "sha256": "4ac11f1640b5d3d4e839bc00a04dcf6130ab01a7ced6a5c70e80663e1e6f7b9a"
+    },
+    {
+      "file": "scripts/healthroster-build/compose-invoice-money-source.mjs",
+      "bytes": 56712,
+      "sha256": "e044a7e40791dcfae40178e19ee356f789b17a1f64dacd33c093e0bdfadef829"
+    },
+    {
+      "file": "scripts/healthroster-build/write-invoice-money-integration-manifest.mjs",
+      "bytes": 5348,
+      "sha256": "4821fcf76880ea41d13f85529d89de571f18756d00d92257f9d30a67a4bc01eb"
+    },
+    {
+      "file": "docs/healthroster-build/F5_ACL_ADDITIONS.json",
+      "bytes": 2590,
+      "sha256": "49157c9d60065f99c16df24624080813dec5aa20eeec7450fb32c0afb3a1fb73"
+    },
+    {
+      "file": "docs/healthroster-build/F5_PAY_SOURCE_CENSUS.json",
+      "bytes": 23739,
+      "sha256": "323a69aa820cfe7ed6038d2bb71ee46d407f4cf0453c9749336374cba4ff3ab0"
+    },
+    {
+      "file": "docs/healthroster-build/F5_PRODUCER_FIXTURE.json",
+      "bytes": 17870,
+      "sha256": "1ff454667b45a303b64c5be43611b329b56e8cefe71653b680a4ed7693e06acd"
+    },
+    {
+      "file": "docs/healthroster-build/F5_SOURCE_INPUTS.json",
+      "bytes": 4831,
+      "sha256": "945e687be055c62aa604b994b4c9e8665f293bcb4db6cf17486b27cad17b5c01"
+    },
+    {
+      "file": "docs/healthroster-build/WP_F5_F6_IMPLEMENTATION.md",
+      "bytes": 14800,
+      "sha256": "ad3456d0e6203f4dd2d6bba5d3a02c169c59caebf54594dfc9164eb8c5b410b3"
+    }
+  ],
+  "source_inputs": [
+    {
+      "file": "../healthroster-v2-date-guards-build-13102026/supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+      "sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_charge_acceptance_v1.sql",
+      "sha256": "05217b8f913073e58b7f9f673c62a425306d6d3830121fdc23c039b643acc7b0"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "file": "../healthroster-v2-f2-build-13102026/supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+      "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+      "sha256": "c3dff66b482f92c34eead365cd9ca674c9ff03680f6cb79710ff16de141cc382"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+    },
+    {
+      "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "sha256": "48d1e30514857162ed3d6af55474ee31a10cc33615079628033d539f643c0fe0"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "sha256": "1d455ca1a9088ce591b046e9c4659b5994967a5f901808faf5ab7fbd1ce04c8d"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+    }
+  ],
+  "schema": {
+    "new_public_tables": [
+      {
+        "name": "weekly_source_invoice_hold_releases",
+        "record_class": "IMMUTABLE_APPEND_ONLY"
+      }
+    ],
+    "new_columns": {
+      "weekly_source_upload_rows": [
+        "source_gross_pence bigint",
+        "source_vat_pence bigint",
+        "finalised_at_utc timestamptz"
+      ],
+      "weekly_source_billing_movements": [
+        "self_bill_report_row_id uuid",
+        "vat_rounding_revision_id uuid"
+      ],
+      "weekly_source_invoice_presentation_lines": [
+        "invoice_hold_release_id uuid"
+      ]
+    },
+    "triggers": [
+      "weekly_source_invoice_placement_identity_guard on weekly_source_invoice_placements",
+      "weekly_source_immutable_record_guard on weekly_source_invoice_hold_releases",
+      "weekly_source_immutable_truncate_guard on weekly_source_invoice_hold_releases"
+    ],
+    "expected_class_count_before_report_f7": {
+      "total": 103,
+      "immutable": 38,
+      "lifecycle": 19,
+      "stateful": 46
+    }
+  },
+  "fixtures": {
+    "prefix": "f5510000-0000-4000-8000-",
+    "scope": {
+      "environment": "TEST",
+      "agency_id": "f5510000-0000-4000-8000-000000000099",
+      "source_group_id": "f5510000-0000-4000-8000-000000000050",
+      "source_cycle_id": "f5510000-0000-4000-8000-000000000080",
+      "client_id": "f5510000-0000-4000-8000-000000000010"
+    },
+    "fixed_week": "2026-11-01",
+    "source_sha256": "4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d",
+    "source_bytes": 16924,
+    "rows_by_exact_seed_or_parent": {
+      "tms_users": 2,
+      "clients": 1,
+      "client_settings": 1,
+      "weekly_source_groups": 1,
+      "weekly_source_group_clients": 1,
+      "weekly_source_client_policies": 1,
+      "weekly_source_cycles": 1,
+      "weekly_source_rule_sets": 1,
+      "weekly_source_rule_set_versions": 1,
+      "weekly_source_group_rule_assignments": 1,
+      "weekly_source_uploads": 1,
+      "weekly_source_physical_rows": 2,
+      "weekly_source_upload_rows": 1,
+      "weekly_source_money_cell_evidence": 2,
+      "weekly_source_invoice_hold_releases": 1
+    },
+    "financial_rows_expected": 0,
+    "root_must_add_all_native_audit_attempt_or_generated_id_parent_counts": true
+  },
+  "source_checks": {
+    "behavior_and_source_tests": 67,
+    "passed": 67,
+    "skipped": 0,
+    "failed": 0,
+    "node_syntax": "PASS",
+    "git_diff_check": "PASS",
+    "database_check": "Expected new migration unregistered stage; root registers/seals",
+    "hosted_database_proof": false
+  },
+  "root_composition": [
+    "F2+F1+F3+F8+Money complete FIN",
+    "Report arm in ONE four-fact self-bill helper",
+    "Acacium profile/normaliser dispatcher with HealthRoster hunks",
+    "full admin Source difference warning reader",
+    "invoice Report origins/admission/placement/renderer",
+    "Protection source G1 closure",
+    "final ACL/include/generated contract union"
+  ],
+  "engineering_holds": [
+    "Earlier different OPEN window native routing",
+    "Post-final VAT_FIT with non-SUM S09 immutable rounding authority",
+    "Report protected/NEXT/proposed effective pay witness",
+    "Operational VAT rounding identity A/B actual native proof",
+    "Actual hosted financial/API/Office/PDF/concurrency/Bank-hook gates"
+  ],
+  "permissions": {
+    "database_calls": false,
+    "docker": false,
+    "commit": false,
+    "push": false,
+    "release": false,
+    "activation": false,
+    "bank_owners_edited": false
+  }
+}

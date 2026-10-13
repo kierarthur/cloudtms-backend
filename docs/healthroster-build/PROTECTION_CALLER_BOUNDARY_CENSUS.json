@@ -1,0 +1,290 @@
+{
+  "contract": "HEALTHROSTER_PROTECTION_CALLER_BOUNDARY_CENSUS_V1",
+  "status": "AUTOMATED_SOURCE_LOCATIONS_WITH_SCOPED_REVIEW_NOT_JOINED_LOCK_OR_RUNTIME_PROOF",
+  "banking_worktree_reads": false,
+  "owners": [
+    {
+      "function": "public.weekly_source_candidate_check_materialise_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "file_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6",
+      "body_sha256_lf": "4b7db1c22bb8e0d9d8c13b783f6c031f31b464ed61261ff5860f03e12cf93d69",
+      "qualification": "Workflow -> outreach generation -> Contract Week -> signature component -> Timesheet -> comparison cycle. Existing outer boundary remains an activation hold.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 2291,
+          "source": "p_request-'request_idempotency_key'\n  );\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 2296,
+          "source": "select * into v_workflow from public.candidate_submission_workflows\n  where id=v_workflow_id for update;"
+        },
+        {
+          "source_line": 2323,
+          "source": "select * into strict v_generation from public.weekly_candidate_outreach_generations\n  where id=v_candidate_generation_id and candidate_id=v_candidate_id\n    and request_kind=v_kind and state='ACTIVE' for update;"
+        },
+        {
+          "source_line": 2385,
+          "source": "and week_ending_date=v_workflow.week_ending_date\n    and additional_seq=0 and not is_adjustment\n  for update;"
+        },
+        {
+          "source_line": 2415,
+          "source": "and source_content_sha256 is not null\n    and pg_catalog.octet_length(source_content_sha256)=32\n  for update;"
+        },
+        {
+          "source_line": 2544,
+          "source": "if v_contract_week.timesheet_id is not null then\n    select * into strict v_timesheet from public.timesheets\n    where timesheet_id=v_contract_week.timesheet_id for update;"
+        },
+        {
+          "source_line": 2716,
+          "source": "and current_projection_publication_id=v_projection_publication_id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    for update;"
+        },
+        {
+          "source_line": 2720,
+          "source": "from public.weekly_timesheet_submission_request_memberships\n    where id=v_scope_id and submission_request_id=v_submission.id and state='WAITING'\n    for update;"
+        },
+        {
+          "source_line": 2721,
+          "source": "where id=v_scope_id and submission_request_id=v_submission.id and state='WAITING'\n    for update;\n    v_compare:=private.weekly_source_candidate_submission_compare_sync_v1("
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_source_candidate_app_submit_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "file_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6",
+      "body_sha256_lf": "bacebf22fe592c5ae522133a29c329d6b3438b1e7e6efecd00b443629bd78715",
+      "qualification": "Outreach generation precedes materialise; no claim that inner Source family-first changes fix this outer lock.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 2841,
+          "source": ")\n  );\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 2852,
+          "source": "select * into strict v_generation from public.weekly_candidate_outreach_generations\n  where id=p_request_id and candidate_id=v_candidate_id for update;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_source_timesheet_submission_complete_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "file_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "body_sha256_lf": "1af77213fc5b04c89df295a4712740569393674133ff42cba4b6c0cad23bb508",
+      "qualification": "Submission -> outreach generation -> membership. No direct comparator invocation in this complete function; materialise owns its comparator call separately.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 435,
+          "source": "end;\n  select * into strict v_submission from public.weekly_timesheet_submission_requests\n  where id=v_submission_id for update;"
+        },
+        {
+          "source_line": 450,
+          "source": "and generation.request_kind='SUBMIT_TIMESHEET' and generation.state='ACTIVE'\n    and cohort.current_submission_generation_id=generation.id\n  for update of generation;"
+        },
+        {
+          "source_line": 468,
+          "source": "where id=(v_completion->>'membership_id')::uuid\n        and submission_request_id=v_submission.id and state='WAITING'\n      for update;"
+        }
+      ]
+    },
+    {
+      "function": "public.candidate_submission_finalize_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "body_sha256_lf": "391dc6f1f0f30f32f93f3ac935f9f53b132855716a2eedd800c42f862288593c",
+      "qualification": "Workflow -> approved request -> Daily Timesheet/current financial, or Contract/Contract Week -> canonical save/process -> authorise. Complete nested writer/trigger graph is not certified.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 4525,
+          "source": "if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023'; end if;\n\n  select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id for update;"
+        },
+        {
+          "source_line": 4775,
+          "source": "and lower(coalesce(v_finalisation_identity->>'review_manifest_sha256_hex',''))\n              =encode(a.review_manifest_sha256,'hex')\n      for update;"
+        },
+        {
+          "source_line": 4803,
+          "source": "and sheet_scope='DAILY'::public.timesheet_scope_enum\n      and nullif(btrim(coalesce(booking_id,'')),'') is not null\n    for update;"
+        },
+        {
+          "source_line": 4814,
+          "source": "order by computed_at_utc desc nulls last,updated_at desc,id desc\n    limit 1\n    for update;"
+        },
+        {
+          "source_line": 4833,
+          "source": "from public.contracts\n      where id=v_daily_timesheet.contract_id and candidate_id=v_candidate_id\n      for update;"
+        },
+        {
+          "source_line": 4859,
+          "source": "from public.contracts\n    where id=v_workflow.contract_id and candidate_id=v_candidate_id\n    for update;"
+        },
+        {
+          "source_line": 4866,
+          "source": "and contract_id=v_contract.id\n      and week_ending_date=v_workflow.week_ending_date\n    for update;"
+        },
+        {
+          "source_line": 4991,
+          "source": "where a.workflow_id=v_workflow.id and a.workflow_generation=v_workflow.generation\n        and a.state='APPROVED' and a.review_manifest_sha256=v_workflow.review_manifest_sha256\n    for update;"
+        },
+        {
+          "source_line": 5011,
+          "source": "where c.workflow_id=v_workflow.id and c.workflow_generation=v_workflow.generation\n      and c.component_kind='HOURS_TIMESHEET' and c.required=true and c.state='IMMUTABLE'\n    for update;"
+        },
+        {
+          "source_line": 5024,
+          "source": "select * into v_candidate_signature from public.candidate_submission_components c\n      where c.id=v_workflow.candidate_signature_component_id and c.workflow_id=v_workflow.id\n        and c.document_role='CANDIDATE_SIGNATURE' and c.state='IMMUTABLE' for update;"
+        },
+        {
+          "source_line": 5032,
+          "source": "where c.id=v_workflow.manager_signature_component_id and c.workflow_id=v_workflow.id\n      and c.document_role='MANAGER_SIGNATURE' and c.state='IMMUTABLE'\n      and c.approval_request_id=v_approved_request.id for update;"
+        },
+        {
+          "source_line": 5115,
+          "source": "if v_workflow.scope='WEEKLY' then\n    select * into v_week from public.contract_weeks where id=v_workflow.contract_week_id for update;"
+        },
+        {
+          "source_line": 5242,
+          "source": ");\n    select * into v_daily_timesheet from public.timesheets\n    where timesheet_id=v_target_timesheet_id and is_current=true for update;"
+        },
+        {
+          "source_line": 5246,
+          "source": "where id=nullif(v_daily_save_receipt->>'financials_id','')::uuid\n      and timesheet_id=v_target_timesheet_id and is_current=true\n    for update;"
+        },
+        {
+          "source_line": 5294,
+          "source": "and c.component_kind='SIGNED_RETURN' and c.paper_return_page_key='HOURS_TIMESHEET'\n      and c.state='IMMUTABLE' and c.source_content_sha256 is not null\n    for update;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_exceptional_pay_complete_local_v1",
+      "source_worktree": "healthroster-v2-backend-13102026 (READ ONLY)",
+      "path": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "file_sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae",
+      "body_sha256_lf": "0023259b8cc936d0324965499ce0a6ba85c363655b091a757b00f471e749b995",
+      "qualification": "Current PP successor preserves native Candidate gate before complete I-1 then original Source locks; authorised publisher reenters the same gate/I-1. Banking external entry/trigger graph remains a joined gate.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 1332,
+          "source": "create or replace function public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)"
+        },
+        {
+          "source_line": 1417,
+          "source": "select * into strict v_request from public.weekly_exceptional_c1_publication_requests where id=v_request_id;\n  -- I-1: Candidate serial gate, then all canonical family members, then rows.\n  v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,"
+        },
+        {
+          "source_line": 1433,
+          "source": "end if;\n  select * into strict v_family from public.weekly_exceptional_pay_target_families\n    where id=v_request.family_id for update;"
+        },
+        {
+          "source_line": 1435,
+          "source": "where id=v_request.family_id for update;\n  select * into strict v_request from public.weekly_exceptional_c1_publication_requests\n    where id=v_request_id for update;"
+        },
+        {
+          "source_line": 1437,
+          "source": "where id=v_request_id for update;\n  select * into strict v_generation from public.weekly_exceptional_pay_generations\n    where id=v_request.generation_id and family_id=v_family.id for update;"
+        },
+        {
+          "source_line": 1439,
+          "source": "where id=v_request.generation_id and family_id=v_family.id for update;\n  select * into strict v_run from public.weekly_exceptional_orchestration_runs\n    where id=v_request.orchestration_run_id and family_id=v_family.id for update;"
+        },
+        {
+          "source_line": 1441,
+          "source": "where id=v_request.orchestration_run_id and family_id=v_family.id for update;\n  select * into strict v_approval from public.weekly_exceptional_payment_approvals\n    where creation_orchestration_run_id=v_run.id and pay_target_family_id=v_family.id for share;"
+        },
+        {
+          "source_line": 1442,
+          "source": "select * into strict v_approval from public.weekly_exceptional_payment_approvals\n    where creation_orchestration_run_id=v_run.id and pay_target_family_id=v_family.id for share;\n  select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;"
+        },
+        {
+          "source_line": 1444,
+          "source": "select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;\n  select * into strict v_fin from public.timesheets_financials\n    where timesheet_id=v_root.timesheet_id and is_current for update;"
+        },
+        {
+          "source_line": 1734,
+          "source": "before_state_fingerprint,bounded_owner_response_json,owner_response_hash,after_state_fingerprint,outcome,completed_at_utc)\n    select v_run.id,coalesce(max(step.sequence),0)+1,'COMPLETE_LOCAL_PROTECTED_DECISION',v_key,\n      'CloudTMS.weekly_exceptional_pay_complete_local_v1','jsonb',v_hash,v_run.before_state_fingerprint,"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_source_protect_all_signed_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+      "file_sha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa",
+      "body_sha256_lf": "eccb2b1c1f700a3cdf3ebe827ace397778cf36ca64214c83fd6cd9a3569b626c",
+      "qualification": "One real shift per round: every Candidate gate first -> full I-1 -> group UPDATE -> cycle UPDATE -> native complete_local savepoint; partial command/continuation is explicit.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 38,
+          "source": "-- No family/gate call is made in this phase. The original cycle mutex owns\n    -- admission idempotence, and is released before Worker preparation starts.\n    perform 1 from public.weekly_source_groups where id=v_cycle.source_group_id for share;"
+        },
+        {
+          "source_line": 40,
+          "source": "perform 1 from public.weekly_source_groups where id=v_cycle.source_group_id for share;\n    v_group:=v_cycle.source_group_id;\n    select * into strict v_cycle from public.weekly_source_cycles where id=v_cycle_id for update;"
+        },
+        {
+          "source_line": 126,
+          "source": "-- native I-1 still receives the complete round set and owns its raw order.\n  perform private.weekly_source_pay_query_admit_v2();\n  v_gate:=private.weekly_source_candidate_serial_gate_v1(v_request.candidate_id,'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',"
+        },
+        {
+          "source_line": 132,
+          "source": "where sheet.timesheet_id=v_request.root_timesheet_id and contract.candidate_id=v_request.candidate_id) then\n    raise exception 'WEEKLY_SOURCE_BULK_ROOT_CANDIDATE_MISMATCH' using errcode='55000'; end if;\n  v_lock:=private.weekly_source_lock_family_rows_v1(array[v_request.root_timesheet_id],null);"
+        },
+        {
+          "source_line": 135,
+          "source": "if v_lock->>'ok' is distinct from 'true' then return v_lock||jsonb_build_object('phase','BLOCKED','accepted',false); end if;\n  v_group:=v_cycle.source_group_id;\n  perform 1 from public.weekly_source_groups where id=v_group and active for update;"
+        },
+        {
+          "source_line": 136,
+          "source": "v_group:=v_cycle.source_group_id;\n  perform 1 from public.weekly_source_groups where id=v_group and active for update;\n  select * into strict v_cycle from public.weekly_source_cycles where id=v_cycle_id for update;"
+        },
+        {
+          "source_line": 152,
+          "source": "raise exception 'WEEKLY_SOURCE_BULK_SELECTION_CHANGED' using errcode='40001'; end if;\n  begin\n    v_result:=public.weekly_exceptional_pay_complete_local_v1(jsonb_build_object('schema_version','WEEKLY_PROTECTED_LOCAL_COMPLETE_V1',"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_source_automatic_reconcile_atomic_v1",
+      "source_worktree": "healthroster-v2-protection-build-13102026",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "file_sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+      "body_sha256_lf": "b1b0e953488598b9ad4df54b35c87077a2a5043ba2f9d628c28c023912971363",
+      "qualification": "COMPLETE Candidate gate -> full I-1 -> group UPDATE -> cycle UPDATE -> root complete-component assertion -> native complete_local. Stage assertion/refusal inside the stage transaction is separate.",
+      "lock_and_native_owner_sites": [
+        {
+          "source_line": 241,
+          "source": "'native_result',v_replay->'native_result','delta_certificate',v_replay->'delta_certificate'); end if;\n  perform private.weekly_source_pay_query_admit_v2();\n  v_gate:=private.weekly_source_candidate_serial_gate_v1(r.candidate_id,'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',r.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');"
+        },
+        {
+          "source_line": 246,
+          "source": "where sheet.timesheet_id=r.root_timesheet_id and contract.candidate_id=r.candidate_id) then\n    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;\n  v_lock:=private.weekly_source_lock_family_rows_v1(array[r.root_timesheet_id],null);"
+        },
+        {
+          "source_line": 249,
+          "source": "if v_lock->>'ok' is distinct from 'true' then return v_lock; end if;\n  select source_group_id into strict v_source_group from public.weekly_source_cycles where id=v_cycle;\n  perform 1 from public.weekly_source_groups where id=v_source_group and active for update;"
+        },
+        {
+          "source_line": 250,
+          "source": "select source_group_id into strict v_source_group from public.weekly_source_cycles where id=v_cycle;\n  perform 1 from public.weekly_source_groups where id=v_source_group and active for update;\n  perform 1 from public.weekly_source_cycles where id=v_cycle and source_group_id=v_source_group for update;"
+        },
+        {
+          "source_line": 256,
+          "source": "raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;\n  v_certificate:=private.weekly_source_automatic_reconcile_certificate_v1(r.id,v_actor,v_cycle);\n  v_result:=public.weekly_exceptional_pay_complete_local_v1(jsonb_build_object('schema_version','WEEKLY_PROTECTED_LOCAL_COMPLETE_V1',"
+        }
+      ]
+    }
+  ],
+  "remaining_joined_gates": [
+    "Candidate outer workflow/Timesheet/Contract Week and signed materialise entry",
+    "Root complete projection publisher with early signed-family fence",
+    "Mode A and D10 comparator callers",
+    "Native Banking external entry, complete nested bounded writers/triggers",
+    "Client/group save and correction callers",
+    "Native module/inventory operation/GUC cleanup",
+    "Real two-session tests in both winner orders"
+  ]
+}

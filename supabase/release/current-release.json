@@ -193,7 +193,18 @@
     "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
     "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
     "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
-    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql"
+    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+    "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+    "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+    "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+    "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+    "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+    "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+    "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+    "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+    "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
@@ -353,6 +364,17 @@
     "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
     "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
     "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
-    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql"
+    "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+    "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+    "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+    "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+    "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+    "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+    "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+    "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+    "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+    "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql"
   ]
 }

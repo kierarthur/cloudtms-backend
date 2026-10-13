@@ -1,0 +1,105 @@
+-- Root-owned rollback fixture verification. Never run against an empty fixture
+-- set or treat this source file as installed/native acceptance. Root creates
+-- real fixture identities through native owners in its outer rollback only.
+-- Required pg_temp tables/closed fixture columns are documented in the recipe.
+do $verification$
+declare f record; result jsonb; p record; v_count integer;
+begin
+  if to_regclass('pg_temp.wp_u3_submission_fixtures') is null
+    or to_regclass('pg_temp.wp_u3_read_admission_fixtures') is null
+    or to_regclass('pg_temp.wp_u3_context_fixtures') is null
+    or to_regclass('pg_temp.wp_u3_query_fixtures') is null then
+    raise exception 'WP_U3_NATIVE_FIXTURES_REQUIRED';
+  end if;
+  select count(*) into v_count from pg_proc routine join pg_namespace namespace on namespace.oid=routine.pronamespace
+    where namespace.nspname='private' and routine.oid in(
+      to_regprocedure('private.weekly_source_actual_timesheet_submission_v1(uuid)'),
+      to_regprocedure('private.weekly_source_signed_submission_read_context_v1(uuid,uuid)'),
+      to_regprocedure('private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)'),
+      to_regprocedure('private.weekly_source_healthroster_checklist_leaf_v1(jsonb)'));
+  if v_count<>4 then raise exception 'WP_U3_NATIVE_READ_SIGNATURE_SET_UNAVAILABLE'; end if;
+  for p in select routine.* from pg_proc routine where routine.oid in(
+    to_regprocedure('private.weekly_source_actual_timesheet_submission_v1(uuid)'),
+    to_regprocedure('private.weekly_source_signed_submission_read_context_v1(uuid,uuid)'),
+    to_regprocedure('private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)'),
+    to_regprocedure('private.weekly_source_healthroster_checklist_leaf_v1(jsonb)')) loop
+    if p.provolatile<>'s' or not p.prosecdef or not exists(select 1 from unnest(p.proconfig) config
+      where replace(config,' ','')='search_path=pg_catalog,public,private,pg_temp') then
+      raise exception 'WP_U3_NATIVE_READ_CONFIGURATION_INVALID:%',p.oid::regprocedure;
+    end if;
+    if exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) privilege
+      left join pg_roles role on role.oid=privilege.grantee
+      where privilege.privilege_type='EXECUTE' and (privilege.grantee=0 or role.rolname in('anon','authenticated','service_role'))) then
+      raise exception 'WP_U3_NATIVE_READ_PRIVILEGE_LEAK:%',p.oid::regprocedure;
+    end if;
+  end loop;
+  if not exists(select 1 from pg_temp.wp_u3_submission_fixtures)
+    or not exists(select 1 from pg_temp.wp_u3_read_admission_fixtures)
+    or not exists(select 1 from pg_temp.wp_u3_context_fixtures)
+    or not exists(select 1 from pg_temp.wp_u3_query_fixtures) then
+    raise exception 'WP_U3_NATIVE_FIXTURE_SET_EMPTY';
+  end if;
+  for f in select * from pg_temp.wp_u3_submission_fixtures order by scenario loop
+    result:=private.weekly_source_actual_timesheet_submission_v1(f.timesheet_id);
+    if (result->>'actual_submitted')::boolean is distinct from f.expected_actual_submitted
+      or result->>'support_state' is distinct from f.expected_support_state
+      or (f.expected_reason is not null and result->>'reason' is distinct from f.expected_reason) then
+      raise exception 'WP_U3_ACTUAL_SUBMISSION_REFUSED:%:%',f.scenario,result;
+    end if;
+    if f.expected_actual_submitted and (result->>'timesheet_id' is distinct from f.timesheet_id::text
+      or result->>'client_id' is distinct from f.expected_client_id::text
+      or result->>'candidate_id' is distinct from f.expected_candidate_id::text
+      or result->>'sheet_scope' is distinct from f.expected_sheet_scope) then
+      raise exception 'WP_U3_ACTUAL_SUBMISSION_OWNER_MISMATCH:%',f.scenario;
+    end if;
+  end loop;
+  for f in select * from pg_temp.wp_u3_read_admission_fixtures order by scenario loop
+    result:=private.weekly_source_signed_submission_read_context_v1(f.timesheet_id,f.source_group_id);
+    if (result->>'eligible')::boolean is distinct from f.expected_eligible
+      or (f.expected_eligible and ((result->>'pending_materialisation')::boolean is distinct from f.expected_pending
+        or (result->>'query_route_available')::boolean is distinct from f.expected_query_route_available)) then
+      raise exception 'WP_U3_READ_ADMISSION_MISMATCH:%:%',f.scenario,result;
+    end if;
+    if f.expected_pending and ((result->>'actions_held')::boolean is distinct from true
+      or result->>'route_state' is distinct from 'SUBMITTED_PENDING_NATIVE_MATERIALISATION'
+      or (result->>'query_route_available')::boolean is distinct from false) then
+      raise exception 'WP_U3_PENDING_NATIVE_SUBMISSION_ACTION_LEAK:%',f.scenario;
+    end if;
+  end loop;
+  for f in select * from pg_temp.wp_u3_context_fixtures order by scenario loop
+    result:=private.weekly_source_healthroster_checklist_leaf_v1(f.request_json);
+    if (result->>'applies')::boolean is distinct from f.expected_applies
+      or (f.expected_applies and (result->>'admitted')::boolean is distinct from f.expected_admitted)
+      or (f.expected_route is not null and result->>'route' is distinct from f.expected_route)
+      or (f.expected_actual_count is not null and (result->>'actual_timesheet_count')::integer is distinct from f.expected_actual_count) then
+      raise exception 'WP_U3_CLIENT_WEEK_CONTEXT_MISMATCH:%:%',f.scenario,result;
+    end if;
+    -- No process fact can publish paid=true or an invented known-zero hold.
+    if result ? 'paid' or result ? 'holds_pay' or result ? 'withheld_amount_pence' then
+      raise exception 'WP_U3_CONTEXT_FINANCIAL_CLASSIFIER_LEAK:%',f.scenario;
+    end if;
+  end loop;
+  for f in select * from pg_temp.wp_u3_query_fixtures order by scenario loop
+    result:=private.weekly_source_check_only_query_rows_v1(f.source_cycle_id,f.client_id,f.filters_json);
+    if result->>'contract' is distinct from 'WEEKLY_SOURCE_CHECK_ONLY_QUERY_ROWS_V1'
+      or (result->>'invoice_subjects_hidden')::boolean is distinct from f.expected_invoice_hidden
+      or jsonb_array_length(result->'rows')>coalesce((f.filters_json->>'limit')::integer,50) then
+      raise exception 'WP_U3_QUERY_CONTEXT_MISMATCH:%',f.scenario;
+    end if;
+    if f.expected_invoice_hidden and exists(select 1 from jsonb_array_elements(result->'rows') item
+      where jsonb_array_length(item->'native_issues')>0 or item->'query_evidence'<>'null'::jsonb
+        or item->>'item_kind'='SOURCE_INFORMATION') then
+      raise exception 'WP_U3_REDUCED_QUERY_DETAILS_LEAK:%',f.scenario;
+    end if;
+    if exists(select 1 from jsonb_array_elements(result->'rows') item where item->>'item_kind'='SOURCE_INFORMATION'
+      and (item->'timesheet_id'<>'null'::jsonb or item->'counted_timesheet_id'<>'null'::jsonb
+        or (item->>'counts_for_row_admission')::boolean is distinct from false or item->'writable_action'<>'null'::jsonb)) then
+      raise exception 'WP_U3_SOURCE_INFORMATION_TARGET_LEAK:%',f.scenario;
+    end if;
+    if f.expected_item_id is not null and not exists(select 1 from jsonb_array_elements(result->'rows') item
+      where item->>'item_id'=f.expected_item_id) then raise exception 'WP_U3_QUERY_REQUIRED_ITEM_ABSENT:%',f.scenario; end if;
+    if f.forbidden_item_id is not null and exists(select 1 from jsonb_array_elements(result->'rows') item
+      where item->>'item_id'=f.forbidden_item_id) then raise exception 'WP_U3_QUERY_FORBIDDEN_ITEM_PRESENT:%',f.scenario; end if;
+  end loop;
+end;
+$verification$;

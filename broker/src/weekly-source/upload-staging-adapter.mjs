@@ -1,4 +1,5 @@
 import { XLSX_BINARY64_SAME_VALUE_PENCE_V1 } from './money.js';
+import { assertWeeklySourceCoverageFloor } from './coverage-warnings.mjs';
 
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
 const HEALTHROSTER = new Set([
@@ -192,15 +193,21 @@ function normalisedRow(parsed, row, context) {
       role_band_source: null,
       source_commission_pence: null,
       source_total_cost_pence: null,
-      source_shift_charge_pence: null,
-      source_money_parse_state: 'NOT_APPLICABLE',
-      source_qualification_profile_version: null,
+      source_shift_charge_pence: row.invoiceMoney?.netPence ?? null,
+      source_money_parse_state: row.invoiceMoney ? 'VALID' : 'NOT_APPLICABLE',
+      source_qualification_profile_version: row.invoiceMoney ? 'SOURCE_INVOICE_MONEY_PENCE_V1' : null,
+      ...(Object.hasOwn(row, 'invoiceMoney') ? {
+        source_gross_pence: row.invoiceMoney?.grossPence ?? null,
+        source_vat_pence: row.invoiceMoney?.vatPence ?? null,
+      } : {}),
+      ...(Object.hasOwn(row, 'finalisedAtUtc') ? { finalised_at_utc: row.finalisedAtUtc } : {}),
       source_expense_pence: null,
       source_expense_parse_state: 'NOT_APPLICABLE',
       bounded_raw_columns_json: {
         worker_name: row.workerName,
         request_id: row.requestId,
         finalised_by: row.finalisedBy ?? null,
+        ...(row.invoiceMoney ? { source_invoice_money: row.invoiceMoney } : {}),
       },
     };
   }
@@ -319,6 +326,7 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       fatalErrors: parsed?.fatalErrors ?? [],
     });
   }
+  assertWeeklySourceCoverageFloor(parsed, body, context);
   const physicalRows = classifications(parsed);
   if (physicalRows.length !== Number(parsed.selectedWorksheet?.physicalOrdinalSpan ?? 0)) {
     fail('WEEKLY_SOURCE_PHYSICAL_CENSUS_INCOMPLETE', 'The source row census is incomplete.');
@@ -397,7 +405,11 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
     },
     physicalRows,
     normalisedRows,
-    moneyEvidence: NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed) : [],
+    moneyEvidence: NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed)
+      : (parsed.rows ?? []).flatMap((row) => !row.invoiceMoney ? [] : [
+        { ...evidenceRecord(parsed, row.physicalRow, 'sourceNet', row.invoiceMoney.evidence.net, row.invoiceMoney.netPence, 'VALID'), money_field_kind: 'SOURCE_NET' },
+        { ...evidenceRecord(parsed, row.physicalRow, 'sourceGross', row.invoiceMoney.evidence.gross, row.invoiceMoney.grossPence, 'VALID'), money_field_kind: 'SOURCE_GROSS' },
+      ]),
     expenseEvidence: parsed.profileId === 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
       ? rosterExpenseEvidence(parsed) : [],
   });

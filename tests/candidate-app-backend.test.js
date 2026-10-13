@@ -6,11 +6,24 @@ import { PDFDocument } from 'pdf-lib';
 
 import {
   candidateAppBackendInternals,
-  handleCandidateAppRequest,
+  handleCandidateAppRequest as actualHandleCandidateAppRequest,
   processPendingCandidatePaperPacks,
   resumePendingCandidateReviewRenders,
   resumePendingCandidateExpenseUpdateRenders
 } from '../broker/src/candidate-app-backend.js';
+
+// These existing fixtures describe ordinary workflows with no correction
+// request. Keep their mutation/replay assertions focused on those unchanged
+// owners; correction-request route fixtures drive the real handler separately.
+function handleCandidateAppRequest(request, env, context, deps) {
+  const originalRpc = deps?.rpc;
+  const ordinaryDeps = originalRpc ? { ...deps, rpc(name, ...args) {
+    if (['timesheet_correction_request_projection_v1', 'timesheet_correction_workflow_projection_v1', 'timesheet_correction_create_projection_v1',
+      'timesheet_correction_manager_summary_v1'].includes(name)) return Promise.resolve(null);
+    return originalRpc.call(deps, name, ...args);
+  } } : deps;
+  return actualHandleCandidateAppRequest(request, env, context, ordinaryDeps);
+}
 
 const {
   enrichCandidatePageAdvancedExpenses,
@@ -2827,6 +2840,7 @@ test('combined PAPER removal submit restores frozen hours, untouched expenses an
         if (name === 'candidate_break_entry_context_get_v1') {
           throw new Error('unchanged frozen hours requested a new break context');
         }
+        if (name === 'timesheet_correction_request_projection_v1') return null;
         if (name === 'candidate_expense_update_submit_atomic_v1') {
           return {
             ok: true, contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',

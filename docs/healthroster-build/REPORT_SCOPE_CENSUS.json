@@ -1,0 +1,494 @@
+{
+  "status": "SOURCE_DECISIONS_COMPLETE_RUNTIME_AND_ROOT_COMPOSITION_UNPROVED",
+  "base": "83547d19",
+  "routines": [
+    {
+      "name": "private.weekly_source_scope_fingerprint_v1",
+      "final_root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_charge_accept_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_charge_acceptance_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_charge_acceptance_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "private.weekly_source_correct_final_preconditions_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_correct_final_open_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_correct_final_review_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_finalisation_insert_current_movement_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "private.weekly_source_finalise_engine_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "final_root": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "page": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_query_current_publication_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "public.weekly_source_query_sync_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "public.weekly_source_office_workspace_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_timesheet_lineage_ensure_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "public.weekly_source_upload_context_v1",
+      "final_root": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "page": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_upload_stage_begin_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_begin.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_upload_attempt_append_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "private.weekly_source_attempt_append_without_upload_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_upload_attempt_record_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_upload_stage_rows_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_upload_seal_core_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_seal.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_upload_seal_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_upload_abort_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_projection_begin_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_current_publication_guard_v1",
+      "final_root": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "page": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_publication_guard.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_finalisation_pay_context_v1",
+      "final_root": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "page": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "decision": "NATIVE_REPORT_PAY_OR_QUERY_EXCLUSION_UNCHANGED",
+      "note": "Report rows have no resolutions/economic/pay snapshots. Existing closed profile/kind guard excludes SELF_BILL_REPORT from this pay/checking/acceptance path; prove typed refusal and no write in root rollback."
+    },
+    {
+      "name": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "final_root": "supabase/repeatable/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "page": "supabase/repeatable/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "decision": "NAMED_REPORT_REFUSAL_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_nhsp_report_scope_resolve_atomic_v1",
+      "final_root": "supabase/repeatable/22092026_1700_weekly_source_nhsp_report_scope_v1.sql",
+      "page": "supabase/repeatable/22092026_1700_weekly_source_nhsp_report_scope_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_nhsp_scope.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_import_prepare_atomic_v1",
+      "final_root": "supabase/repeatable/30092026_2052_weekly_source_import_preparation_v1.sql",
+      "page": "supabase/repeatable/30092026_2052_weekly_source_import_preparation_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "final_root": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "page": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "public.weekly_source_protected_editor_context_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "private.weekly_source_completed_rows_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "public.weekly_source_combined_finalise_workspace_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "public.weekly_source_combined_review_workspace_v1",
+      "final_root": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "page": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "public.weekly_source_upload_detail_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_report_history_v1",
+      "final_root": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "page": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    },
+    {
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "final_root": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "page": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "private.bpay_next_source_current_revision_v1",
+      "final_root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "page": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.bpay_next_source_current_retract_origin_v1",
+      "final_root": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "page": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.bpay_next_source_current_observe_v1",
+      "final_root": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "page": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.bpay_next_source_current_observe_expense_row_v1",
+      "final_root": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "page": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.bpay_next_source_current_publish_revision_v1",
+      "final_root": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "page": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.bpay_next_source_current_apply_correction_v1",
+      "final_root": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "page": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "decision": "EXTERNAL_NEXT_OWNER_NO_EDIT",
+      "note": "Root preserves exact native hooks. Required joined report invoice-only exclusion/pinned NEW+UPGRADE proof is outstanding; source census is not banking acceptance."
+    },
+    {
+      "name": "private.weekly_source_manual_review_source_v2",
+      "final_root": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "page": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "final_root": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "page": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "final_root": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "page": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "decision": "ROOT_SHARED_COMPOSITION_REQUIRED",
+      "note": "Root/PP controlling owner must use exact report scope/member facts or retain named unsupported admission. No report pay origin may enter row_resolution_id lineage. Actual final owner/contract/hash census required before exposure."
+    },
+    {
+      "name": "private.weekly_source_invoice_duty_v1",
+      "final_root": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "page": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "decision": "REPORT_SUPPORT_SUCCESSOR",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+      "note": "Complete source definition included under final1544. Native ordinary/NHSP guards retained; root must preserve PP/F8/NEXT later hunks when integrating shared owners."
+    },
+    {
+      "name": "private.weekly_source_upload_client_eligible_v1",
+      "final_root": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "page": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "decision": "GENERIC_REPORT_UUID_HANDLING_UNCHANGED",
+      "note": "Existing scope FK/actual scope client and generic audit/read ownership remain applicable. Report history obtains report number from actual client manifest. The exact runtime/scope negatives remain root proof."
+    }
+  ],
+  "dynamic_patches": "Literal source inventory is not the final installed owner catalogue: dynamic pg_get_functiondef patches, NEXT hooks and later PP/F8/Money root composition require root final catalogue/hash inspection.",
+  "new_report_routines": [
+    {
+      "name": "private.weekly_source_self_bill_report_projection_rows_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_bind_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_report_shift_facts_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_duplicate_prior_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_duplicate_hold_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_movement_insert_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_finalise_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_binding_guard_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_pay_witness_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_prior_binding_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_rules_assert_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "public.weekly_source_self_bill_report_scope_resolve_atomic_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_workspace_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_row_dto_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_row_hash_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_manifest_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_stored_rows_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_seal_assert_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_seal_assert.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_final_upload_facts_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    },
+    {
+      "name": "private.weekly_source_final_upload_gate_v1",
+      "proposed_page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+      "decision": "NEW_PURPOSE_BOUND_REPORT_OWNER"
+    }
+  ]
+}

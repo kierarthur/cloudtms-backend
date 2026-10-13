@@ -1,0 +1,33 @@
+create or replace function private.weekly_source_self_bill_report_prior_binding_v1(p_report_row_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare row_fact public.weekly_source_upload_rows%rowtype; s public.weekly_source_report_scopes%rowtype;
+  report public.weekly_source_self_bill_reports%rowtype; v_date date; v_count integer; result jsonb;
+begin
+  select * into strict row_fact from public.weekly_source_upload_rows where id=p_report_row_id;
+  if row_fact.row_finalisation_state<>'SOURCE_REPORT_LINE' or row_fact.source_shift_charge_pence>=0 then return null; end if;
+  select rs.* into strict s from public.weekly_source_report_scopes rs join public.weekly_source_uploads u on u.report_scope_id=rs.id where u.id=row_fact.upload_id;
+  select * into strict report from public.weekly_source_self_bill_reports where id=s.self_bill_report_id;
+  select max(pr.invoice_date) into v_date from public.weekly_source_billing_movements m
+    join public.weekly_source_upload_rows rr on rr.id=m.self_bill_report_row_id
+    join public.weekly_source_final_revisions fr on fr.id=m.final_revision_id and fr.state='CURRENT'
+    join public.weekly_source_report_scopes ps on ps.id=fr.report_scope_id and ps.current_final_revision_id=fr.id
+    join public.weekly_source_self_bill_reports pr on pr.id=ps.self_bill_report_id
+    where m.source_line_kind='SELF_BILL_REPORT_LINE' and m.movement_role='POSITIVE' and m.actual_client_id=s.client_id
+      and ps.source_group_id=s.source_group_id and rr.external_source_key=row_fact.external_source_key and pr.invoice_date<report.invoice_date;
+  if v_date is null then return null; end if;
+  select count(*),jsonb_agg(jsonb_build_object('prior_movement_id',m.id,'row_id',b.export_upload_row_id,
+    'resolution_id',b.bound_row_resolution_id,'publication_id',b.export_projection_publication_id,'work_event_id',b.work_event_id))->0
+    into v_count,result from public.weekly_source_billing_movements m
+    join public.weekly_source_upload_rows rr on rr.id=m.self_bill_report_row_id
+    join public.weekly_source_final_revisions fr on fr.id=m.final_revision_id and fr.state='CURRENT'
+    join public.weekly_source_report_scopes ps on ps.id=fr.report_scope_id and ps.current_final_revision_id=fr.id
+    join public.weekly_source_self_bill_reports pr on pr.id=ps.self_bill_report_id
+    join public.weekly_source_self_bill_report_line_bindings b on b.id=(m.source_facts_json->>'report_line_binding_id')::uuid
+      and b.report_row_id=rr.id and b.self_bill_report_id=pr.id and b.work_event_id=m.work_event_id
+    where m.source_line_kind='SELF_BILL_REPORT_LINE' and m.movement_role='POSITIVE' and m.actual_client_id=s.client_id
+      and ps.source_group_id=s.source_group_id and rr.external_source_key=row_fact.external_source_key and pr.invoice_date=v_date;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_REPORT_PRIOR_BINDING_UNPROVED' using errcode='55000'; end if;
+  return result;
+end;
+$function$;

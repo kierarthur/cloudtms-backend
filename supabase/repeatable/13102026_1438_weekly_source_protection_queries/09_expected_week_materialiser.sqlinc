@@ -1,0 +1,148 @@
+-- Unsigned expected weeks use the existing incident/revision/event stores.
+-- No candidate schedule, signature, lineage or money is fabricated.
+create or replace function private.weekly_source_expected_week_unsigned_materialise_v1(p_publication_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_incident public.weekly_discrepancy_incidents%rowtype;
+  v_comparison public.weekly_issue_comparison_revisions%rowtype;
+  v_row record; v_week public.contract_weeks%rowtype; v_policy jsonb; v_issue jsonb;
+  v_fingerprint bytea; v_revision integer; v_episode integer; v_count integer;
+  v_issue_family text; v_presence text;
+  v_new integer:=0; v_changed integer:=0; v_unchanged integer:=0; v_resolved integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_publication from public.weekly_source_projection_publications
+    where id=p_publication_id and state='CURRENT' and authority_scope_kind='CYCLE';
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id for update;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  if v_upload.confirmed_coverage_start_local_date is null or v_upload.confirmed_coverage_end_local_date is null then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000'; end if;
+  for v_row in
+    select source.*,resolution.id as resolution_id,resolution.contract_id,resolution.candidate_id,resolution.client_id,
+      resolution.work_event_id,work.first_source_group_id,contract.candidate_id as contract_candidate_id,
+      contract.client_id as contract_client_id,work.candidate_id as event_candidate_id,work.client_id as event_client_id,
+      work.work_date as event_work_date
+    from public.weekly_source_upload_rows source
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source.id
+      and resolution.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version)
+      and resolution.mapping_state='RESOLVED'
+    join public.weekly_work_events work on work.id=resolution.work_event_id
+    join public.contracts contract on contract.id=resolution.contract_id
+    where source.upload_id=v_upload.id and source.work_date between
+      v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date
+      and source.row_finalisation_state in ('SOURCE_UNFINALISED','SOURCE_WORKED')
+      and private.weekly_source_is_import_authoritative_v1(resolution.client_id,resolution.contract_id,source.work_date)
+      and (private.weekly_source_checking_client_scope_v1(v_publication.id) is null
+        or resolution.client_id=private.weekly_source_checking_client_scope_v1(v_publication.id))
+    order by source.work_date,resolution.work_event_id,source.id
+  loop
+    if (v_row.candidate_id,v_row.client_id,v_row.work_date,v_cycle.source_group_id)
+      is distinct from (v_row.event_candidate_id,v_row.event_client_id,v_row.event_work_date,v_row.first_source_group_id)
+      or (v_row.candidate_id,v_row.client_id) is distinct from (v_row.contract_candidate_id,v_row.contract_client_id) then
+      raise exception 'WEEKLY_SOURCE_EXPECTED_WEEK_SCOPE_INVALID' using errcode='55000'; end if;
+    select count(*) into v_count from public.contract_weeks expected
+      where expected.contract_id=v_row.contract_id and expected.additional_seq=0 and not coalesce(expected.is_adjustment,false)
+        and expected.status in ('PLANNED','OPEN','SUBMITTED')
+        and v_row.work_date between expected.week_ending_date-6 and expected.week_ending_date;
+    if v_count=0 then continue; end if;
+    if v_count<>1 then raise exception 'WEEKLY_SOURCE_EXPECTED_WEEK_AMBIGUOUS' using errcode='55000'; end if;
+    select * into strict v_week from public.contract_weeks expected
+      where expected.contract_id=v_row.contract_id and expected.additional_seq=0 and not coalesce(expected.is_adjustment,false)
+        and expected.status in ('PLANNED','OPEN','SUBMITTED')
+        and v_row.work_date between expected.week_ending_date-6 and expected.week_ending_date;
+    if exists(select 1 from public.timesheets signed where signed.contract_id=v_row.contract_id
+      and signed.week_ending_date=v_week.week_ending_date and signed.is_current and signed.revoked_at is null
+      and signed.archived_at_utc is null and signed.sheet_scope='WEEKLY' and signed.line_type='HOURS'
+      and signed.r2_nurse_key is not null and signed.img_sha256_nurse is not null) then continue; end if;
+    if (select count(*) from public.weekly_source_row_resolutions resolution
+      where resolution.upload_row_id in(select source.id from public.weekly_source_upload_rows source where source.upload_id=v_upload.id)
+        and resolution.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version)
+        and resolution.mapping_state='RESOLVED' and resolution.work_event_id=v_row.work_event_id)<>1 then
+      raise exception 'WEEKLY_SOURCE_EXPECTED_WEEK_EVENT_AMBIGUOUS' using errcode='55000'; end if;
+    perform 1 from public.weekly_work_events where id=v_row.work_event_id for update;
+    select * into v_incident from public.weekly_discrepancy_incidents
+      where source_group_id=v_cycle.source_group_id and work_event_id=v_row.work_event_id and state='OPEN' for update;
+    if found then
+      select * into strict v_comparison from public.weekly_issue_comparison_revisions
+        where id=v_incident.current_comparison_revision_id and incident_id=v_incident.id;
+      if v_incident.source_cycle_id is distinct from v_cycle.id or v_comparison.contract_id is distinct from v_row.contract_id
+        or v_incident.candidate_id is distinct from v_row.candidate_id or v_incident.client_id is distinct from v_row.client_id then
+        raise exception 'WEEKLY_SOURCE_EXPECTED_WEEK_SCOPE_INVALID' using errcode='55000'; end if;
+      if v_comparison.candidate_timesheet_id is not null then continue; end if;
+    else v_comparison.id:=null; end if;
+    v_issue_family:='HEALTHROSTER_NOT_FINALISED'; v_presence:='UNFINALISED';
+    if v_row.row_finalisation_state='SOURCE_WORKED' then
+      if v_incident.id is null then continue; end if;
+      if v_incident.id is not null and v_comparison.issue_family='HEALTHROSTER_NOT_FINALISED'
+        and (v_comparison.system_start_at_local,v_comparison.system_end_at_local,v_comparison.system_break_minutes)
+          is not distinct from (v_row.start_at_local,v_row.end_at_local,v_row.break_minutes) then
+        update public.weekly_discrepancy_incidents set state='RESOLVED',reconciliation_state='RECONCILED',
+          candidate_action_state='NOT_REQUIRED',manager_action_state='NOT_REQUIRED',manager_potential_state='NOT_REQUIRED',
+          waiting_source_state='SOURCE_MATCHED',resolved_at_utc=transaction_timestamp(),resolution_kind='SOURCE_MATCHED'
+          where id=v_incident.id;
+        perform private.weekly_source_incident_contact_retire_v1(v_incident.id);
+        insert into public.weekly_discrepancy_events(incident_id,issue_episode,projection_publication_id,
+          event_kind,actor_kind,bounded_payload_json,idempotency_key)
+        values(v_incident.id,v_incident.episode_number,v_publication.id,'RESOLVED','SYSTEM',
+          jsonb_build_object('resolution','SOURCE_MATCHED','origin','EXPECTED_CONTRACT_WEEK'),
+          'SOURCE_MATCHED:'||v_incident.id::text||':'||v_publication.id::text)
+        on conflict(event_kind,idempotency_key) do nothing;
+        v_resolved:=v_resolved+1;
+        continue;
+      end if;
+      -- The manager question changes; Candidate evidence remains absent.
+      v_issue_family:='SOURCE_HOURS_DIFFER'; v_presence:='PRESENT';
+    end if;
+    v_policy:=private._weekly_source_effective_policy_v1(v_row.client_id,v_row.contract_id,v_row.work_date);
+    v_issue:=jsonb_build_object('work_event_id',v_row.work_event_id,'contract_week_id',v_week.id,
+      'candidate_timesheet_id',null,'candidate_timesheet_revision',null,'candidate_shift_fingerprint',null,
+      'contract_id',v_row.contract_id,'issue_family',v_issue_family,'source_presence',v_presence,
+      'candidate_start_at_local',null,'candidate_end_at_local',null,'candidate_break_minutes',null,
+      'system_start_at_local',v_row.start_at_local,'system_end_at_local',v_row.end_at_local,'system_break_minutes',v_row.break_minutes);
+    if v_incident.id is null then
+      select coalesce(max(episode_number),0)+1 into v_episode from public.weekly_discrepancy_incidents
+        where source_group_id=v_cycle.source_group_id and work_event_id=v_row.work_event_id;
+      insert into public.weekly_discrepancy_incidents(source_group_id,work_event_id,episode_number,candidate_id,client_id,
+        source_cycle_id,state,reconciliation_state,candidate_action_state,manager_potential_state,manager_action_state,waiting_source_state)
+      values(v_cycle.source_group_id,v_row.work_event_id,v_episode,v_row.candidate_id,v_row.client_id,v_cycle.id,'OPEN','UNRESOLVED','NOT_REQUIRED',
+        case when coalesce((v_policy->>'manager_queries_enabled')::boolean,false) and nullif(v_policy->>'manager_query_recipient','') is not null
+          then 'AVAILABLE' else 'NOT_AVAILABLE' end,
+        case when coalesce((v_policy->>'manager_queries_enabled')::boolean,false) and nullif(v_policy->>'manager_query_recipient','') is not null
+          then 'NOT_SENT' else 'NOT_REQUIRED' end,'NOT_WAITING') returning * into v_incident;
+      v_new:=v_new+1;
+    end if;
+    v_fingerprint:=private.weekly_source_query_comparison_fingerprint_v1(v_incident.id,v_incident.episode_number,v_row.work_event_id,v_issue);
+    if v_comparison.id is not null and v_comparison.material_comparison_fingerprint=v_fingerprint then
+      v_unchanged:=v_unchanged+1; continue; end if;
+    select coalesce(max(revision_number),0)+1 into v_revision from public.weekly_issue_comparison_revisions where incident_id=v_incident.id;
+    insert into public.weekly_issue_comparison_revisions(incident_id,revision_number,projection_publication_id,comparison_upload_id,
+      source_row_id,source_work_event_link_id,contract_id,issue_family,source_presence,
+      system_start_at_local,system_end_at_local,system_break_minutes,material_comparison_fingerprint)
+    values(v_incident.id,v_revision,v_publication.id,v_upload.id,v_row.id,
+      (select link.id from public.weekly_work_event_source_links link where link.upload_row_id=v_row.id
+        and link.row_resolution_id=v_row.resolution_id and link.work_event_id=v_row.work_event_id),
+      v_row.contract_id,v_issue_family,v_presence,v_row.start_at_local,v_row.end_at_local,v_row.break_minutes,v_fingerprint)
+    returning * into v_comparison;
+    update public.weekly_discrepancy_incidents set current_comparison_revision_id=v_comparison.id,candidate_action_state='NOT_REQUIRED',
+      manager_action_state=case when manager_potential_state='AVAILABLE' then 'NOT_SENT' else 'NOT_REQUIRED' end,
+      waiting_source_state='NOT_WAITING',reconciliation_state='UNRESOLVED' where id=v_incident.id;
+    insert into public.weekly_discrepancy_events(incident_id,issue_episode,projection_publication_id,
+      expected_comparison_fingerprint,event_kind,actor_kind,bounded_payload_json,idempotency_key)
+    values(v_incident.id,v_incident.episode_number,v_publication.id,v_fingerprint,'SOURCE_RECHECKED','SYSTEM',
+      jsonb_build_object('issue_family',v_issue_family,'comparison_revision_id',v_comparison.id,
+        'contract_week_id',v_week.id,'origin','EXPECTED_CONTRACT_WEEK'),
+      'SOURCE_RECHECKED:'||v_incident.id::text||':'||encode(v_fingerprint,'hex'))
+    on conflict(event_kind,idempotency_key) do nothing;
+    if v_revision>1 then v_changed:=v_changed+1; end if;
+  end loop;
+  return jsonb_build_object('ok',true,'new_incidents',v_new,'changed_comparisons',v_changed,
+    'unchanged_incidents',v_unchanged,'resolved_incidents',v_resolved);
+end;
+$function$;
+alter function private.weekly_source_expected_week_unsigned_materialise_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_expected_week_unsigned_materialise_v1(uuid) from public,anon,authenticated,service_role;

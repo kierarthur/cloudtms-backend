@@ -1,0 +1,19 @@
+{
+  "contract":"HEALTHROSTER_M1_NATIVE_JOURNEYS_V1",
+  "status":"SOURCE_PROPOSAL_ONLY",
+  "fixture_prefix":"f5530000-0000-4000-8000-",
+  "hosted_compile":false,
+  "financial_acceptance":false,
+  "source_vectors":{"paid_minutes":450,"break_minutes":30,"pay_rates":{"day":10,"night":11,"sat":12,"sun":13,"bh":14},"charge_rates":{"day":20,"night":21,"sat":22,"sun":23,"bh":24},"expected_pence":{"day":{"pay":7500,"charge":15000},"night":{"pay":8250,"charge":15750},"sat":{"pay":9000,"charge":16500},"sun":{"pay":9750,"charge":17250},"bh":{"pay":10500,"charge":18000}},"source_expense_pence":"1234","source_total_cost":"THIS IS NOT MONEY","source_band_sub_cost":"FORGED SOURCE BAND","source_band_unit_cost":"999999999"},
+  "journeys":[
+    {"id":"MG1","purpose":"Actual native65-header weekly summary parser→StageBegin/Rows/Seal→projection→genuine FIN→invoice admission/render. Whole450 paid minutes in one Contract band; source Total Cost/Sub Cost/Unit Cost are ignored; line pay/charge from actual dated Contract rates."},
+    {"id":"MG2","purpose":"Current source-fixed expense1234p preserved in worker pay and client charge through original expense generation/movement/companion/VALIDATED_SOURCE_PENCE invoice. Actual published SP-20 and joined fixed-expense/NON_TAXABLE no-conversion proof required for NEXT; LEGACY never substitutes for it."},
+    {"id":"MG3","purpose":"Start-date BH→Sunday→Saturday→cross-midnight weekday night→same-day weekday day, strict positive rates and break deducted once; ordinary native negative/reversal keeps category/signed hours/pence and existing Policy X."},
+    {"id":"MG4","purpose":"S05/S25 summary work-date membership only: future-work row excluded from same single-cycle invoice/pay; Approved Date ignored; no fabricated Finalised Date or source amounts."},
+    {"id":"MG5","purpose":"Own actual group cutoff S11, S12NULL: upload before cutoff remains ineligible even after checking time passes, uploaded after cutoff and correct whole-week coverage admitted; no Thursday substitute. F8 and F3 current readers/guards remain."},
+    {"id":"MG6","purpose":"Zero-hour expense-only row with native SOURCE_ABSENT_ZERO lineage/expense policy, positive/omitted-zero/absent expenses, correction/omission expense reversal and genuine AMEND/CANCEL. Ordinary receipt expenses never convert into imported source-fixed expense authority."},
+    {"id":"MG7","purpose":"Saved disabled preset remains OFF/no effective rule, no policy mutation; NULL/unassigned/agency/NHSP/split legacy/source-negatives remain unchanged. Wrong client/dated Contract override to SPLIT or malformed/multiple-band claim refused before projection/finalisation. Current hashes/ACL/actor/group/Contract identities all retained."},
+    {"id":"MG8","purpose":"Exact same upload/projection/finalisation replay produces no second source/pay/expense/invoice authority. Next native publication and selected witness retain complete shift+expense meaning with actual deployed compatible SP-20 owner receipts."}
+  ],
+  "root_setup":["Exact legal real-clock native fixtures, schema/owner MD5 and prefix/unique/parent vacancy proof before transaction.","Existing source rate/expense settings are saved only through their existing admin owner; preset save/assign never silently changes policy or enables a group.","No invented SP-20 capability/name-only evidence, fake READY/source publication/signatures or expense conversion.","Require physical agencyTEST, rolledBacktrue/freshtrue and restored hashes/zero fixture/outbox after every rehearsal. Publication/activation remains root-held."]
+}

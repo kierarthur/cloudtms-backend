@@ -1,4 +1,6 @@
 import { signCandidatePrivateRequest } from '../../broker/src/candidate-service-auth.js';
+import { CORRECTION_CAPABILITY_HEADER, CORRECTION_CAPABILITY } from '../../broker/src/candidate-correction-v1.js';
+import { validateCandidateCorrectionV1, validateManagerCorrectionV1 } from '../../broker/src/candidate-correction-v1.validator.js';
 import { signCandidateRouteContext } from '../../broker/src/candidate-route-context.js';
 import {
   candidateDataPlaneRegistryEntry
@@ -254,7 +256,7 @@ function preflight(request, env) {
   if (!allowedMethods.has(method)) throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
   const allowedHeaders = new Set([
     'authorization', 'cache-control', 'content-type', 'idempotency-key', 'x-request-id', 'x-cloudtms-client',
-    'x-candidate-session-token', 'x-candidate-device-id'
+    'x-candidate-session-token', 'x-candidate-device-id', CORRECTION_CAPABILITY_HEADER
   ]);
   const requestedHeaders = text(request.headers.get('access-control-request-headers'))
     .toLowerCase().split(',').map((value) => value.trim()).filter(Boolean);
@@ -963,6 +965,13 @@ function enforceManagerMethod(path, method) {
 
 function privateRequestHeaders(request, authorization) {
   const headers = new Headers();
+  const correctionContract = request.headers.get(CORRECTION_CAPABILITY_HEADER);
+  if (correctionContract !== null) {
+    if (correctionContract !== CORRECTION_CAPABILITY) {
+      throw new CandidateBrokerError(409, 'CANDIDATE_CORRECTION_CLIENT_REQUIRED');
+    }
+    headers.set(CORRECTION_CAPABILITY_HEADER, correctionContract);
+  }
   for (const name of ['content-type', 'idempotency-key', 'x-request-id', 'x-correlation-id']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -1082,14 +1091,14 @@ async function forwardPrivate(request, env, {
   const signed = await signCandidatePrivateRequest(unsigned, env);
   let timeout = null;
   try {
-    if (!controller) return await destination.fetch(signed);
+    if (!controller) return await correctionPrivateResponse(await destination.fetch(signed), operation, request);
     const deadline = new Promise((_resolve, reject) => {
       timeout = setTimeout(() => {
         controller.abort();
         reject(new DOMException('Manager private request timed out', 'TimeoutError'));
       }, timeoutMs);
     });
-    return await Promise.race([destination.fetch(signed), deadline]);
+    return await correctionPrivateResponse(await Promise.race([destination.fetch(signed), deadline]), operation, request);
   } catch (error) {
     if (controller?.signal.aborted || error?.name === 'AbortError' || error?.name === 'TimeoutError'
         || /timed out|timeout/i.test(text(error?.message))) {
@@ -1099,6 +1108,28 @@ async function forwardPrivate(request, env, {
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+async function correctionPrivateResponse(response, operation, request) {
+  if (response.status !== 200 || !['getCandidateTimesheet', 'getCandidateContractWeekDetail',
+    'getCandidateWorkflowTimesheetDetail', 'startManagerReview'].includes(operation?.operation_id)
+      || !text(response.headers.get('content-type')).includes('application/json')) return response;
+  let body;
+  try { body = await response.clone().json(); } catch { return response; }
+  if (!isObject(body) || !Object.hasOwn(body, 'correction')) return response;
+  if (encoder.encode(JSON.stringify(body.correction)).byteLength > MAX_PUBLIC_JSON_BYTES) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
+  }
+  const manager = operation.operation_id === 'startManagerReview';
+  if (!(manager ? validateManagerCorrectionV1(body.correction) : validateCandidateCorrectionV1(body.correction))) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
+  }
+  if (!manager && body.correction.state === 'WAITING' && body.timesheet?.id === body.correction.replacement_timesheet_id
+      && request.headers.get(CORRECTION_CAPABILITY_HEADER) !== CORRECTION_CAPABILITY) {
+    throw new CandidateBrokerError(409, 'CANDIDATE_CORRECTION_CLIENT_REQUIRED');
+  }
+  // Keep the original response bytes and headers for every successful read.
+  return response;
 }
 
 async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
@@ -3513,6 +3544,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
 }
 
 export const candidateBrokerInternals = Object.freeze({
+  correctionPrivateResponse,
   allowedOrigins,
   withCors,
   assertPublicCredentialSecrets,

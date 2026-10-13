@@ -1,0 +1,349 @@
+{
+  "scope": "Historical native input bodies read-only; no runtime or concurrency acceptance. Current PP complete_local and newer Source caller boundaries are separately pinned in PROTECTION_CALLER_BOUNDARY_CENSUS.json; Money owns the current FIN/standalone-lineage successors.",
+  "owners": [
+    {
+      "function": "public.weekly_exceptional_pay_prepare_family_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "file_sha256": "960b5ec7f2ed18898615fa0321d1b93434c1549576d75f8ad9e3f6e29152c933",
+      "body_sha256": "341a2ecf419b9243ae79b38b8c9137b668a91240d7bb0dd99fadf7f154eb5371",
+      "locks": [
+        {
+          "source_line": 223,
+          "source": "-- takes: no row lock, no FOR UPDATE and no other advisory key before it,"
+        },
+        {
+          "source_line": 238,
+          "source": "v_lock_result:=private.weekly_source_lock_family_rows_v1("
+        },
+        {
+          "source_line": 252,
+          "source": "perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 261,
+          "source": "for update;"
+        },
+        {
+          "source_line": 269,
+          "source": "for update;"
+        },
+        {
+          "source_line": 274,
+          "source": "for share;"
+        },
+        {
+          "source_line": 296,
+          "source": "for update;"
+        },
+        {
+          "source_line": 330,
+          "source": "perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 346,
+          "source": "for update;"
+        },
+        {
+          "source_line": 356,
+          "source": "-- that case fell through to \"select timesheet ... for update\" before the"
+        },
+        {
+          "source_line": 430,
+          "source": "for update;"
+        },
+        {
+          "source_line": 436,
+          "source": "-- booking family rows FOR UPDATE) and re-resolve the canonical current"
+        },
+        {
+          "source_line": 442,
+          "source": "v_lock_result:=private.weekly_source_lock_family_rows_v1("
+        },
+        {
+          "source_line": 505,
+          "source": "for share;"
+        },
+        {
+          "source_line": 583,
+          "source": "for update;"
+        },
+        {
+          "source_line": 662,
+          "source": "for share;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_exceptional_pay_prepare_action_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "file_sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19",
+      "body_sha256": "f1d4fbef05901d3c8cab7cdf6ee58f61ec1a783b0c96fbeecf26ae6fb91ec6d2",
+      "locks": [
+        {
+          "source_line": 87,
+          "source": "perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 93,
+          "source": "where run.idempotency_key=v_key for update;"
+        },
+        {
+          "source_line": 98,
+          "source": "where family.id=v_family_id for update;"
+        },
+        {
+          "source_line": 100,
+          "source": "from public.weekly_source_cycles cycle where cycle.id=v_cycle_id for share;"
+        },
+        {
+          "source_line": 103,
+          "source": "where source_group.id=v_cycle.source_group_id and source_group.active for share;"
+        },
+        {
+          "source_line": 105,
+          "source": "from public.contracts contract where contract.id=v_family.contract_id for share;"
+        },
+        {
+          "source_line": 112,
+          "source": "for share;"
+        },
+        {
+          "source_line": 119,
+          "source": "for share;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_exceptional_pay_action_context_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "file_sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19",
+      "body_sha256": "7918532f649b17e7d7f6975764234f24c5e753d2cb2914fdf695e4a692d2fd4f",
+      "locks": [
+        {
+          "source_line": 857,
+          "source": "where family.id=v_family_id for share;"
+        },
+        {
+          "source_line": 860,
+          "source": "where run.id=v_run_id and run.family_id=v_family.id for share;"
+        },
+        {
+          "source_line": 862,
+          "source": "from public.weekly_source_cycles cycle where cycle.id=v_cycle_id for share;"
+        },
+        {
+          "source_line": 865,
+          "source": "where source_group.id=v_cycle.source_group_id and source_group.active for share;"
+        },
+        {
+          "source_line": 867,
+          "source": "from public.contracts contract where contract.id=v_family.contract_id for share;"
+        },
+        {
+          "source_line": 872,
+          "source": "and contract_week.additional_seq=0 for share;"
+        },
+        {
+          "source_line": 875,
+          "source": "-- timesheet_id order the installed code here already uses (`for share`), and"
+        },
+        {
+          "source_line": 876,
+          "source": "-- before the root's own `for share` so no new lock ordering is introduced."
+        },
+        {
+          "source_line": 892,
+          "source": "order by lock_row.timesheet_id for share;"
+        },
+        {
+          "source_line": 895,
+          "source": "where timesheet.timesheet_id=v_family.root_timesheet_id for share;"
+        },
+        {
+          "source_line": 905,
+          "source": "and work_event.client_id=v_contract.client_id for share;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "file_sha256": "c74ea692273600ce753ee92c09efca5e812d8a61c4a536058c2a405c9be3f790",
+      "body_sha256": "1efd461061b3ae793162347ce8ffdb57760ca3dbe1c202925061ac86ef4e9188",
+      "locks": [
+        {
+          "source_line": 1160,
+          "source": "for update;"
+        },
+        {
+          "source_line": 1179,
+          "source": "for update;"
+        },
+        {
+          "source_line": 1183,
+          "source": "for update;"
+        },
+        {
+          "source_line": 1187,
+          "source": "for share;"
+        },
+        {
+          "source_line": 1191,
+          "source": "for share;"
+        },
+        {
+          "source_line": 1219,
+          "source": "for share;"
+        },
+        {
+          "source_line": 1225,
+          "source": "for share;"
+        },
+        {
+          "source_line": 1232,
+          "source": "for share;"
+        },
+        {
+          "source_line": 1298,
+          "source": "for share;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_exceptional_pay_complete_local_v1",
+      "path": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "file_sha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+      "body_sha256": "f0ab0f97134b034f016d6d29ef92da4799f8992ea21400311249fa595755cfef",
+      "locks": [
+        {
+          "source_line": 128,
+          "source": "v_locks:=private.weekly_source_lock_and_resolve_families_v1(v_request.candidate_id,"
+        },
+        {
+          "source_line": 144,
+          "source": "where id=v_request.family_id for update;"
+        },
+        {
+          "source_line": 146,
+          "source": "where id=v_request_id for update;"
+        },
+        {
+          "source_line": 148,
+          "source": "where id=v_request.generation_id and family_id=v_family.id for update;"
+        },
+        {
+          "source_line": 150,
+          "source": "where id=v_request.orchestration_run_id and family_id=v_family.id for update;"
+        },
+        {
+          "source_line": 152,
+          "source": "where creation_orchestration_run_id=v_run.id and pay_target_family_id=v_family.id for share;"
+        },
+        {
+          "source_line": 153,
+          "source": "select * into strict v_root from public.timesheets where timesheet_id=v_family.root_timesheet_id for update;"
+        },
+        {
+          "source_line": 155,
+          "source": "where timesheet_id=v_root.timesheet_id and is_current for update;"
+        }
+      ]
+    },
+    {
+      "function": "public.weekly_source_timesheet_lineage_ensure_atomic_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+      "file_sha256": "c3dff66b482f92c34eead365cd9ca674c9ff03680f6cb79710ff16de141cc382",
+      "body_sha256": "8285eaeda75e346e123743ad1fa0e37803323b8e929217658f0eb858ad01cc21",
+      "locks": [
+        {
+          "source_line": 260,
+          "source": "for update;"
+        },
+        {
+          "source_line": 269,
+          "source": "for update;"
+        },
+        {
+          "source_line": 279,
+          "source": "for share;"
+        },
+        {
+          "source_line": 325,
+          "source": "for share;"
+        },
+        {
+          "source_line": 335,
+          "source": "for share;"
+        },
+        {
+          "source_line": 369,
+          "source": "for update;"
+        },
+        {
+          "source_line": 596,
+          "source": "v_lock_result:=private.weekly_source_lock_family_rows_v1("
+        },
+        {
+          "source_line": 609,
+          "source": "perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended("
+        },
+        {
+          "source_line": 629,
+          "source": "for update;"
+        },
+        {
+          "source_line": 637,
+          "source": "for update;"
+        },
+        {
+          "source_line": 676,
+          "source": "for update;"
+        },
+        {
+          "source_line": 806,
+          "source": "v_lock_result:=private.weekly_source_lock_family_rows_v1("
+        }
+      ]
+    },
+    {
+      "function": "private.weekly_source_lock_family_rows_v1",
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "file_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "body_sha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "locks": [
+        {
+          "source_line": 127,
+          "source": "create or replace function private.weekly_source_lock_family_rows_v1("
+        },
+        {
+          "source_line": 235,
+          "source": "perform pg_catalog.pg_advisory_xact_lock("
+        },
+        {
+          "source_line": 239,
+          "source": "perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(v_family.booking_id));"
+        },
+        {
+          "source_line": 244,
+          "source": "for update;"
+        }
+      ]
+    },
+    {
+      "function": "private.weekly_source_lock_and_resolve_families_v1",
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "file_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "body_sha256": "103e1ec22286beb8e83900db598ca6d96bf452e498d676faa7ea7656a64b57b5",
+      "locks": [
+        {
+          "source_line": 417,
+          "source": "create or replace function private.weekly_source_lock_and_resolve_families_v1("
+        },
+        {
+          "source_line": 440,
+          "source": "v_locked:=private.weekly_source_lock_family_rows_v1("
+        }
+      ]
+    }
+  ]
+}

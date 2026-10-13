@@ -1,0 +1,74 @@
+-- Exact complete signed-week discovery for the checking publication owner.
+-- Malformed schedule JSON is not parsed here: per-sheet comparison isolation
+-- owns that refusal after its physical family is protected.
+create or replace function private.weekly_source_publication_signed_roots_v1(p_publication_id uuid)
+returns uuid[] language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select coalesce(array_agg(distinct sheet.timesheet_id order by sheet.timesheet_id),'{}'::uuid[])
+  from public.weekly_source_projection_publications publication
+  join public.weekly_source_uploads upload on upload.id=publication.upload_id and upload.source_cycle_id=publication.source_cycle_id
+  join public.weekly_source_cycles cycle on cycle.id=publication.source_cycle_id
+  join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+  join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+  join public.timesheets sheet on sheet.week_ending_date>=upload.confirmed_coverage_start_local_date
+    and sheet.week_ending_date-6<=upload.confirmed_coverage_end_local_date
+  join public.contracts contract on contract.id=sheet.contract_id
+  where publication.id=p_publication_id and publication.authority_scope_kind='CYCLE'
+    and publication.correction_session_id is null
+    and sheet.is_current and sheet.revoked_at is null and sheet.archived_at_utc is null
+    and sheet.sheet_scope='WEEKLY' and sheet.line_type='HOURS' and sheet.authorised_at_server is null
+    and sheet.r2_nurse_key is not null and sheet.img_sha256_nurse is not null
+    and (private.weekly_source_checking_client_scope_v1(publication.id) is null
+      or contract.client_id=private.weekly_source_checking_client_scope_v1(publication.id))
+    and exists(select 1 from public.weekly_source_group_clients member where member.source_group_id=source_group.id
+      and member.client_id=contract.client_id
+      and member.valid_from<=sheet.week_ending_date and coalesce(member.valid_to,'infinity'::date)>=sheet.week_ending_date-6)
+    and (profile.profile_code='NHSP_PREFINAL_RELEASED_V1'
+      or (profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')
+        and private.weekly_source_is_import_authoritative_v1(contract.client_id,contract.id,sheet.week_ending_date)));
+$function$;
+alter function private.weekly_source_publication_signed_roots_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_publication_signed_roots_v1(uuid) from public,anon,authenticated,service_role;
+
+-- First call before any outer business lock captures and locks I-1 once.
+-- Second call after the original owner locks/re-reads its publication/cycle
+-- must match all captured selectors and the complete discovery set exactly.
+create or replace function private.weekly_source_publication_signed_family_fence_v1(
+  p_publication_id uuid,p_before jsonb default null
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_roots uuid[]; v_lock jsonb; v_proof jsonb;
+begin
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_publication_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  if v_upload.source_cycle_id is distinct from v_cycle.id then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='55000'; end if;
+  v_roots:=private.weekly_source_publication_signed_roots_v1(v_publication.id);
+  v_proof:=jsonb_build_object('publication_id',v_publication.id,'source_cycle_id',v_cycle.id,
+    'source_group_id',v_cycle.source_group_id,'upload_id',v_upload.id,'report_scope_id',v_publication.report_scope_id,
+    'authority_scope_kind',v_publication.authority_scope_kind,'authority_scope_version',v_publication.authority_scope_version,
+    'projection_generation',v_publication.projection_generation,'correction_session_id',v_publication.correction_session_id,
+    'source_format_profile_id',v_upload.source_format_profile_id,'coverage_start',v_upload.confirmed_coverage_start_local_date,
+    'coverage_end',v_upload.confirmed_coverage_end_local_date,
+    'client_id',private.weekly_source_checking_client_scope_v1(v_publication.id),'signed_root_ids',to_jsonb(v_roots));
+  if p_before is not null then
+    if p_before is distinct from v_proof then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_SIGNED_ROOT_SET_CHANGED' using errcode='40001'; end if;
+    return v_proof;
+  end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  if cardinality(v_roots)>0 then
+    v_lock:=private.weekly_source_lock_family_rows_v1(v_roots,null);
+    if v_lock->>'ok' is distinct from 'true' then
+      raise exception '%',coalesce(v_lock->>'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE') using errcode='55000'; end if;
+  end if;
+  return v_proof;
+end;
+$function$;
+alter function private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb) from public,anon,authenticated,service_role;

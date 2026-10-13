@@ -4,6 +4,7 @@ import { readHtmlEvidence } from './html-evidence.js';
 import { normaliseHealthRosterEvidence } from './healthroster-normalise.js';
 import { normaliseNhspEvidence } from './nhsp-normalise.js';
 import { normaliseRosterSummaryEvidence } from './roster-summary-normalise.js';
+import { normaliseAcaciumReportEvidence } from './acacium-report-normalise.js';
 import { publicColumnMap, resolveWeeklySourceProfile, WEEKLY_SOURCE_PROFILE_IDS } from './profiles.js';
 import { WEEKLY_SOURCE_PARSER_VERSION } from './shared.js';
 import { sha256Hex } from './shared.js';
@@ -83,7 +84,9 @@ export async function parseWeeklySourceFile(input, options = {}) {
   ].includes(profile.profileId);
   const normalised = nhspProfile
     ? normaliseNhspEvidence(evidence, profile, options)
-    : profile.profileId === WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1
+    : profile.profileId === WEEKLY_SOURCE_PROFILE_IDS.ACACIUM_SELF_BILL_REPORT_V1
+      ? normaliseAcaciumReportEvidence(evidence, profile, options)
+      : profile.profileId === WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1
       ? normaliseRosterSummaryEvidence(evidence, profile, options)
       : normaliseHealthRosterEvidence(evidence, profile, options);
   const workbookPartAndSheetFingerprint = await selectedPartFingerprint(

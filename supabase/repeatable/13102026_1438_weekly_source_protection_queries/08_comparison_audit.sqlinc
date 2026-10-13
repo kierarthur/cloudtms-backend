@@ -1,0 +1,40 @@
+-- Reuse the native append-only audit owner; no second comparison/status store.
+create or replace function private.weekly_source_publication_comparison_record_v1(
+  p_publication_id uuid,p_timesheet_id uuid,p_state text,p_refusal_code text
+) returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_sheet public.timesheets%rowtype; v_publication public.weekly_source_projection_publications%rowtype;
+  v_contract public.contracts%rowtype; v_hash bytea; v_key text; v_payload jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_state is null or p_state not in ('COMPARED','NOT_COMPARED')
+    or (p_state='NOT_COMPARED') is distinct from (p_refusal_code is not null)
+    or (p_refusal_code is not null and p_refusal_code !~ '^[A-Z][A-Z0-9_]{0,119}$') then
+    raise exception 'WEEKLY_SOURCE_COMPARISON_AUDIT_INVALID' using errcode='22023'; end if;
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_publication_id and state='CURRENT';
+  perform private.weekly_source_query_current_publication_v1(v_publication.source_cycle_id,v_publication.id);
+  -- Same native cycle mutex used by the comparator and publication writer.
+  perform 1 from public.weekly_source_cycles where id=v_publication.source_cycle_id for update;
+  select * into strict v_sheet from public.timesheets where timesheet_id=p_timesheet_id and is_current
+    and revoked_at is null and archived_at_utc is null and sheet_scope='WEEKLY' and line_type='HOURS';
+  select * into strict v_contract from public.contracts where id=v_sheet.contract_id;
+  v_hash:=private.weekly_source_query_candidate_timesheet_hash_v1(v_sheet.timesheet_id);
+  if v_hash is null then raise exception 'WEEKLY_SOURCE_COMPARISON_AUDIT_EVIDENCE_UNAVAILABLE' using errcode='55000'; end if;
+  v_key:='PUBLICATION_COMPARISON:'||v_publication.id::text||':'||v_sheet.timesheet_id::text||':'||encode(v_hash,'hex')||':'||p_state;
+  v_payload:=jsonb_build_object('idempotency_key',v_key,'state',p_state,'refusal_code',p_refusal_code,
+    'projection_publication_id',v_publication.id,'source_cycle_id',v_publication.source_cycle_id,
+    'upload_id',v_publication.upload_id,'candidate_id',v_contract.candidate_id,'client_id',v_contract.client_id,
+    'contract_id',v_contract.id,'week_ending_date',v_sheet.week_ending_date,
+    'timesheet_id',v_sheet.timesheet_id,'timesheet_revision',v_sheet.version,'timesheet_hash',encode(v_hash,'hex'));
+  if exists(select 1 from public.audit_events audit where audit.object_type='timesheets'
+    and audit.object_id_text=v_sheet.timesheet_id::text and audit.action='WEEKLY_SOURCE_PUBLICATION_COMPARISON'
+    and audit.after_json->>'idempotency_key'=v_key and audit.event_sequence_is_authoritative) then return; end if;
+  perform public._audit_insert('timesheets',v_sheet.timesheet_id::text,'WEEKLY_SOURCE_PUBLICATION_COMPARISON',
+    null,v_payload,case p_state when 'COMPARED' then 'Hours checked against the current client file'
+      else 'Hours not compared; check this Timesheet before continuing' end,null);
+end;
+$function$;
+alter function private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text) owner to postgres;
+revoke all on function private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text)
+  from public,anon,authenticated,service_role;

@@ -1,0 +1,375 @@
+{
+  "status": "SOURCE_ONLY_NOT_INSTALLED",
+  "base": "83547d19",
+  "routines": [
+    {
+      "name": "private.weekly_source_self_bill_report_projection_rows_v1",
+      "signature": "private.weekly_source_self_bill_report_projection_rows_v1(uuid,uuid,jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "0f014b40539fcedc500ecbca27880eb137ef9f5418064abc9d83a2becc30e080"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_bind_v1",
+      "signature": "private.weekly_source_self_bill_report_bind_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "b92a92450ef38243b0b96b750df5196930a5ddd53367c6b6e46334d417993804"
+    },
+    {
+      "name": "private.weekly_source_report_shift_facts_v1",
+      "signature": "private.weekly_source_report_shift_facts_v1(uuid,uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "a6cba5ea1aa3c9aa7f4c40fdd3fb99dae7e655ee20d841eb90eca53e31a13fd3"
+    },
+    {
+      "name": "private.weekly_source_completed_rows_v1",
+      "signature": "private.weekly_source_completed_rows_v1(uuid,uuid,uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "40c3e478d7e32374c27b584c8720bb3be727620051a8b9a06ed0c4bfce80807a"
+    },
+    {
+      "name": "public.weekly_source_correct_final_open_atomic_v1",
+      "signature": "public.weekly_source_correct_final_open_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "aacac487a313e5b76f87adcc37c28ff8c9b9c0433f3ea300f7d7d82af40a2b49"
+    },
+    {
+      "name": "public.weekly_source_correct_final_review_atomic_v1",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "13bedaa2eb4a45e04de9432ac818e3676342b184f956d80df6179fa6328a8f9f"
+    },
+    {
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "26519de420a3d112fed86059c48d4257f2866f73e4d950f4b03fd7c0f8df8446"
+    },
+    {
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "70d4a68db8e19e8eb6af6cdebccd661d42f93a5de2e46db135e72027b8ad12aa"
+    },
+    {
+      "name": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "signature": "public.weekly_source_correct_final_cancel_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "2054310b5554ce32ced352191e6b7710af09d289d61c32fdc98c0b87a056fad9"
+    },
+    {
+      "name": "private.weekly_source_correct_final_preconditions_v1",
+      "signature": "private.weekly_source_correct_final_preconditions_v1(uuid,uuid,uuid,boolean)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "ca3e8e3db851705cc15ee49252d9d05c22d3e38a46a263e512f80dc06a28dc24"
+    },
+    {
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "dacb4504312f3899b029d92655a0476033fa7d7f5c0608f6fdb8050b58c5cc13"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_duplicate_prior_v1",
+      "signature": "private.weekly_source_self_bill_report_duplicate_prior_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "f3ab670799886fdb81e39a2d4b314f61d54ceb273ea772447fab223610937d0d"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_duplicate_hold_v1",
+      "signature": "private.weekly_source_self_bill_report_duplicate_hold_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "c81365ad9053788c58d0091c4e701b2cadd4d513b23d157a030cbf2fed805a57"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_movement_insert_v1",
+      "signature": "private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "e114e9c0d4f1c9dfa27819330503b97b60679e970ac7999e8b0a02e0adc89124"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_finalise_v1",
+      "signature": "private.weekly_source_self_bill_report_finalise_v1(jsonb,text)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "809d397baaa958446ee00683d38ce6e9f7d3001811f65e24639f328712ed2f27"
+    },
+    {
+      "name": "private.weekly_source_self_bill_binding_guard_v1",
+      "signature": "private.weekly_source_self_bill_binding_guard_v1()",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "30dd799cdc3d8cd8462c2a96f7de35d0c45b7e43edb11fd72b34dd9723c8d7c0"
+    },
+    {
+      "name": "public.weekly_source_import_prepare_atomic_v1",
+      "signature": "public.weekly_source_import_prepare_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "260fced6251a11511029d6c426a30be05238b1fb57cc5a99f8f5598c646cde07"
+    },
+    {
+      "name": "private.weekly_source_invoice_duty_v1",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "6bbf294a956d0e2d9ac8076442831580e27aba360edcdad9b071eb24e2dee9be"
+    },
+    {
+      "name": "public.weekly_source_nhsp_report_scope_resolve_atomic_v1",
+      "signature": "public.weekly_source_nhsp_report_scope_resolve_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_nhsp_scope.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "b4d424fd01200c668ce6f2f22f43efa94b8cae2484bbd51644c94c1255f1eaed"
+    },
+    {
+      "name": "public.weekly_source_office_workspace_v1",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "731ab01dfbcece7c62a3102013fb2828e7417827e14194cc01dde2ee88f5066c"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_pay_witness_v1",
+      "signature": "private.weekly_source_self_bill_report_pay_witness_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "78acb5c7fb59f0ddc1ebe57eba8519b21f906afd3c326ab20356f1682129e83c"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_prior_binding_v1",
+      "signature": "private.weekly_source_self_bill_report_prior_binding_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "098add7f41524a5909b124a5054e5d5c6672017fb5ee782dd1a094c99631b56d"
+    },
+    {
+      "name": "public.weekly_source_projection_begin_atomic_v1",
+      "signature": "public.weekly_source_projection_begin_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "c0cade15091e00835bd55382975c01cd395d059833de152a3be93d435d477474"
+    },
+    {
+      "name": "public.weekly_source_projection_publish_atomic_v1",
+      "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "a0b7cddbc3e40c688540d02dc921a57fe9bdbcf36dfa039580270c7005f8f4ec"
+    },
+    {
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "d00423055ba73bd951a5b757655926c45ac8268bbf6a84adc1bfcfdd52667624"
+    },
+    {
+      "name": "private.weekly_source_current_publication_guard_v1",
+      "signature": "private.weekly_source_current_publication_guard_v1(uuid,text,uuid,uuid,uuid,bigint)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_publication_guard.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "243467c489ac7bd07f49819f52de8469df2afe41abf135d510faf6f531e98f01"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_rules_assert_v1",
+      "signature": "private.weekly_source_self_bill_report_rules_assert_v1(uuid,uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "4d361c89f26049d655a8a6e0ae88ca7bc3f8b7c4c2f9dadda856f5e29e9a1cfa"
+    },
+    {
+      "name": "public.weekly_source_self_bill_report_scope_resolve_atomic_v1",
+      "signature": "public.weekly_source_self_bill_report_scope_resolve_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "4873cbf9504e7a96f8c0fd06e07cb38a3324a4e7fe85399c82ba953f116cc0ee"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_workspace_v1",
+      "signature": "private.weekly_source_self_bill_report_workspace_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "7f18311e969621c0f9e6f6e0ebdff72c6a1772395b8a365988603311bb26446e"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_row_dto_v1",
+      "signature": "private.weekly_source_self_bill_report_row_dto_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "security": "DEFINER",
+      "volatility": "IMMUTABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "5ca39fcbac2d6615198a0efa720b8489554a2bcdef4b926073a159a455ecd6f4"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_row_hash_v1",
+      "signature": "private.weekly_source_self_bill_report_row_hash_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "security": "DEFINER",
+      "volatility": "IMMUTABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "c60e198733d50e2967905359142608a1b38121f88a5cfcae21f2487290f2e7ae"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_manifest_v1",
+      "signature": "private.weekly_source_self_bill_report_manifest_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "security": "DEFINER",
+      "volatility": "IMMUTABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "4b398b05e2cd39ebc8d607a411d084cd382b8bd04d5ff1e77a4ebc736961c69a"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_stored_rows_v1",
+      "signature": "private.weekly_source_self_bill_report_stored_rows_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "c8170ca388593181cf48d2470140a04a348c81a8940c9725ab9026c647a50db7"
+    },
+    {
+      "name": "private.weekly_source_self_bill_report_seal_assert_v1",
+      "signature": "private.weekly_source_self_bill_report_seal_assert_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_seal_assert.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "d3793341234321a0211ca230267b1f58593712f44f26e6947949eb31e78d920f"
+    },
+    {
+      "name": "private.weekly_source_final_upload_facts_v1",
+      "signature": "private.weekly_source_final_upload_facts_v1(text,date,timestamptz,timestamptz,text,date,date,jsonb,date)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+      "security": "INVOKER",
+      "volatility": "IMMUTABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "eb685841780f239c595a65ca928f878a848578564cf7c16d646ba3fa90fd9270"
+    },
+    {
+      "name": "private.weekly_source_final_upload_gate_v1",
+      "signature": "private.weekly_source_final_upload_gate_v1(uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "3764ce111d0848290790c54ebcd58be34401d5e6bbd80fd600b6537b6a517864"
+    },
+    {
+      "name": "public.weekly_source_upload_stage_begin_atomic_v1",
+      "signature": "public.weekly_source_upload_stage_begin_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_begin.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "78e1b9d619ad38965bbf6d1b317a4f644cb5bc3f83a6ce1697ebfa456d7f8706"
+    },
+    {
+      "name": "public.weekly_source_upload_context_v1",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "9fbe0949761036ae8bd032c01651945716ccb4e22e3568e35215bf83bce3d53f"
+    },
+    {
+      "name": "public.weekly_source_upload_stage_rows_atomic_v1",
+      "signature": "public.weekly_source_upload_stage_rows_atomic_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "eca49ae87dc8663aba4805401e7ad89bc1593eee98201293bdc42e8c037f1477"
+    },
+    {
+      "name": "private.weekly_source_upload_seal_core_v1",
+      "signature": "private.weekly_source_upload_seal_core_v1(uuid,uuid)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_seal.sqlinc",
+      "security": "DEFINER",
+      "volatility": "VOLATILE",
+      "exposure": "OWNER_ONLY",
+      "source_sha256": "bb713883089a6aed2a99b6886b37e574d4fe2adc5e97315cfea26b75a9b97d5d"
+    },
+    {
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "page": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "security": "DEFINER",
+      "volatility": "STABLE",
+      "exposure": "SERVICE_ONLY",
+      "source_sha256": "c0d9ba9fb87d279a0200b0df2339da9c58c1d5a28d4d7b86f6e2d9f05755a0f3"
+    }
+  ]
+}

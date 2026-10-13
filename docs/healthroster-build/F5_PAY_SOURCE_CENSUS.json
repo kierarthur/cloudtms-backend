@@ -1,0 +1,365 @@
+{
+  "contract": "HEALTHROSTER_F5_SOURCE_PAY_CENSUS_V1",
+  "baseline": "e286533e90c0658c252ba1bcc909b9af909be785",
+  "source_envelope": "Tracked complete function bodies in this lane. Root must reconcile installed/include closure and Banking ownership.",
+  "function_count": 51,
+  "functions": [
+    {
+      "name": "private._weekly_source_acl_lifecycle_column_contract_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "source_sha256": "5cae1d5dafd9fce93d8a3d9f5ee008e67abe14e099087388d656ae7e21956da5",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private._weekly_source_acl_table_contract_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "source_sha256": "5cae1d5dafd9fce93d8a3d9f5ee008e67abe14e099087388d656ae7e21956da5",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.bpay_next_source_current_capture_movement_v1",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "classification": "BANK_OWNER_CALL_ONLY",
+      "decision": "Preserve native Banking owner byte-identical; Source call-only boundary. Root reconciles native financial hooks and lock graph."
+    },
+    {
+      "name": "private.bpay_next_source_current_capture_transition_v1",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "classification": "BANK_OWNER_CALL_ONLY",
+      "decision": "Preserve native Banking owner byte-identical; Source call-only boundary. Root reconciles native financial hooks and lock graph."
+    },
+    {
+      "name": "private.bpay_next_source_current_event_v1",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "source_sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae",
+      "classification": "BANK_OWNER_CALL_ONLY",
+      "decision": "Preserve native Banking owner byte-identical; Source call-only boundary. Root reconciles native financial hooks and lock graph."
+    },
+    {
+      "name": "private.bpay_next_source_current_publish_revision_v1",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "source_sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51",
+      "classification": "BANK_OWNER_CALL_ONLY",
+      "decision": "Preserve native Banking owner byte-identical; Source call-only boundary. Root reconciles native financial hooks and lock graph."
+    },
+    {
+      "name": "private.weekly_source_audit_chronology_v1",
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "source_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_completed_rows_v1",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "source_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "source_sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_correct_final_preconditions_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "source_sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "source_sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_export_hours_v1",
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "source_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_export_invoice_movements_v1",
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "source_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_finalisation_insert_current_movement_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "source_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_finalisation_insert_reversal_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "source_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_finalisation_materialise_expense_invoice_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "source_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_finalisation_pay_context_v1",
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "source_sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_finalise_engine_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "source_sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_first_authorisation_withdraw_checks_v1",
+      "file": "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "source_sha256": "09fbe853b875393170ea2f538eddd41a0e4be41ab65cf5cb54cb663eae2ada71",
+      "classification": "INVOICE_OR_MONEY_BOUNDARY_RETAIN_ALL",
+      "decision": "Invoice/placement boundary for withdrawal; every invoice-only movement must remain visible. Generic Banking ownership remains call-only."
+    },
+    {
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "source_sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_batch_rows_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "source_sha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_batch_snapshot_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "source_sha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_duty_v1",
+      "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "source_sha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_issue_guard_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "source_sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_issue_validate_v1",
+      "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "source_sha256": "48d1e30514857162ed3d6af55474ee31a10cc33615079628033d539f643c0fe0",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_movement_only_integrity_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "source_sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_invoice_tsfin_state_v1",
+      "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "source_sha256": "48d1e30514857162ed3d6af55474ee31a10cc33615079628033d539f643c0fe0",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_manual_review_final_rows_v2",
+      "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "source_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Unchanged factual contained-row reader: first branch is snapshot rows, movement branch is explicitly NHSP physical kinds only; report/invoice-only rows cannot enter."
+    },
+    {
+      "name": "private.weekly_source_office_invoice_movements_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "source_sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_office_proposal_revision_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "source_sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Exclude invoice-only movement witnesses from pay completion/proposal revision discovery; canonical manifests retain full invoice census."
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_current_expenses_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_expense_movement_assert_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_expenses_materialise_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "private.weekly_source_ordinary_projection_source_units_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_protected_final_source_context_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "source_sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "file": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "source_sha256": "1d455ca1a9088ce591b046e9c4659b5994967a5f901808faf5ab7fbd1ce04c8d",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "source_sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_finalisation_pay_open_atomic_v1",
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "source_sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "public.weekly_source_finalisation_pay_task_finish_atomic_v1",
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "source_sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Exclude invoice-only movement witnesses from pay completion/proposal revision discovery; canonical manifests retain full invoice census."
+    },
+    {
+      "name": "public.weekly_source_finalisation_pay_task_recover_atomic_v1",
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "source_sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Exclude invoice-only movement witnesses from pay completion/proposal revision discovery; canonical manifests retain full invoice census."
+    },
+    {
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "source_sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_invoice_edit_context_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "source_sha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_invoice_move_atomic_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "source_sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_invoice_report_rows_v1",
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "source_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd",
+      "classification": "INVOICE_OR_CANONICAL_PRODUCER_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_office_recheck_begin_v1",
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "source_sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_office_timesheet_presentation_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "source_sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "PAY_SELECTOR_CHANGED",
+      "decision": "Add profile and all four invoice-only line-kind exclusions; root unions PP/NHSP hooks."
+    },
+    {
+      "name": "public.weekly_source_protected_editor_context_v1",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "source_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_report_history_v1",
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "source_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "classification": "FACTUAL_OR_LIFECYCLE_RETAIN_ALL",
+      "decision": "Preserve source/hash/census/origin/lifecycle checks; no pay exclusion inferred from the table reference."
+    },
+    {
+      "name": "public.weekly_source_target_managed_root_prepare_atomic_v1",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "classification": "INVOICE_ISOLATION_SAFEGUARD_RETAIN_ALL",
+      "decision": "Refuses any family billing or invoice history before target-managed prepare, including all invoice-only lines; no exclusion."
+    }
+  ]
+}

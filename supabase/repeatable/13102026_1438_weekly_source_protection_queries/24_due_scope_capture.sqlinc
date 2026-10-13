@@ -1,0 +1,59 @@
+-- Nullable legacy rows keep native behavior. A new (a) scope is captured once
+-- against the actual generation membership and cannot be repointed on consume.
+create or replace function private.weekly_source_not_finalised_due_scope_guard_v1()
+returns trigger language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_week date; v_count integer; v_clock timestamptz; v_incident uuid;
+begin
+  if TG_OP='UPDATE' then
+    if OLD.not_finalised_comparison_revision_id is distinct from NEW.not_finalised_comparison_revision_id
+      or (OLD.not_finalised_comparison_revision_id is not null and
+        (OLD.recipient_generation_id,OLD.candidate_cohort_id,OLD.event_kind,OLD.cohort_started_at_utc,
+          OLD.due_at_utc,OLD.trigger_hash,OLD.requested_week_membership_id)
+        is distinct from (NEW.recipient_generation_id,NEW.candidate_cohort_id,NEW.event_kind,NEW.cohort_started_at_utc,
+          NEW.due_at_utc,NEW.trigger_hash,NEW.requested_week_membership_id)) then
+      raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_IMMUTABLE' using errcode='55000'; end if;
+    return NEW;
+  end if;
+  if NEW.not_finalised_comparison_revision_id is null then return NEW; end if;
+  select comparison.incident_id,sheet.week_ending_date into strict v_incident,v_week
+    from public.weekly_issue_comparison_revisions comparison
+    join public.weekly_discrepancy_incidents incident on incident.id=comparison.incident_id
+      and incident.current_comparison_revision_id=comparison.id and incident.state='OPEN'
+    join public.weekly_candidate_cohorts cohort on cohort.id=NEW.candidate_cohort_id
+      and cohort.candidate_id=incident.candidate_id and cohort.source_cycle_id=incident.source_cycle_id
+    join public.weekly_manager_recipient_memberships membership on membership.recipient_generation_id=NEW.recipient_generation_id
+      and membership.candidate_cohort_id=cohort.id and membership.incident_id=incident.id
+      and membership.comparison_revision_id=comparison.id
+    join public.weekly_work_events work on work.id=incident.work_event_id
+    left join public.timesheets sheet on sheet.timesheet_id=comparison.candidate_timesheet_id
+      and sheet.contract_id=comparison.contract_id and work.work_date between sheet.week_ending_date-6 and sheet.week_ending_date
+    where comparison.id=NEW.not_finalised_comparison_revision_id
+      and (comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
+      and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work.work_date);
+  if v_week is null then
+    select count(*),min(expected.week_ending_date) into v_count,v_week
+      from public.weekly_issue_comparison_revisions comparison
+      join public.weekly_discrepancy_incidents incident on incident.id=comparison.incident_id
+      join public.weekly_work_events work on work.id=incident.work_event_id
+      join public.contract_weeks expected on expected.contract_id=comparison.contract_id
+        and expected.additional_seq=0 and not coalesce(expected.is_adjustment,false)
+        and expected.status in ('PLANNED','OPEN','SUBMITTED')
+        and work.work_date between expected.week_ending_date-6 and expected.week_ending_date
+      where comparison.id=NEW.not_finalised_comparison_revision_id;
+    if v_count<>1 then raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_INVALID' using errcode='55000'; end if;
+  end if;
+  v_clock:=((v_week+(8-extract(isodow from v_week)::integer))::timestamp at time zone 'Europe/London');
+  if NEW.event_kind is distinct from 'EARLY_ALL' or NEW.requested_week_membership_id is not null
+    or NEW.due_at_utc is null or not isfinite(NEW.due_at_utc) or NEW.due_at_utc<v_clock then
+    raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_INVALID' using errcode='55000'; end if;
+  return NEW;
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_not_finalised_due_scope_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_not_finalised_due_scope_guard_v1() from public,anon,authenticated,service_role;
+drop trigger if exists weekly_source_not_finalised_due_scope_guard on public.weekly_manager_cohort_due_events;
+create trigger weekly_source_not_finalised_due_scope_guard before insert or update on public.weekly_manager_cohort_due_events
+  for each row execute function private.weekly_source_not_finalised_due_scope_guard_v1();

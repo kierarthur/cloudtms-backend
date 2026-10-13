@@ -35,7 +35,11 @@ export function compareWeeklySourceShiftPrice(input = {}) {
   });
   const calculated = integerPence(calculation.chargePence, 'WEEKLY_CALCULATED_CHARGE_INVALID', 'Calculated charge');
 
-  if (sourceMode !== 'NHSP_WEEKLY') {
+  const sourceAmount = sourceMode === 'HEALTHROSTER_WEEKLY'
+    && input.effectiveRuleSet?.values?.invoice_sender === 'CLIENT_SELF_BILL'
+    && input.effectiveRuleSet.values.invoice_amount_basis === 'SOURCE_AMOUNT'
+    && input.effectiveRuleSet.values.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY';
+  if (sourceMode !== 'NHSP_WEEKLY' && !sourceAmount) {
     return Object.freeze({
       accepted: true,
       result: 'NOT_APPLICABLE',
@@ -47,6 +51,17 @@ export function compareWeeklySourceShiftPrice(input = {}) {
       canonicalPayPence: calculation.payPence,
       calculation,
     });
+  }
+
+  if (sourceAmount) {
+    const source = integerPence(input.sourceChargePence, 'HEALTHROSTER_SOURCE_CHARGE_INVALID', 'Source net');
+    if (source < 0n || calculated <= 0n) fail('HEALTHROSTER_SOURCE_CHARGE_SIGN_INVALID', 'A worked export needs non-negative source net and a positive canonical charge.');
+    const difference = source - calculated, magnitude = difference < 0n ? -difference : difference;
+    return Object.freeze({ accepted: true, result: magnitude === 0n ? 'EXACT' : magnitude <= 1n ? 'SOURCE_ROUNDING_EQUIVALENT' : 'SOURCE_AMOUNT_DIFFERS',
+      requiresOfficeAcceptance: false, acceptanceKind: null, blockerCode: null,
+      calculatedComparisonChargePence: calculated.toString(), sourceValidationChargePence: source.toString(),
+      invoicePresentationChargePence: source.toString(), amountAuthority: 'VALIDATED_SOURCE_PENCE',
+      canonicalPayPence: calculation.payPence, signedDifferencePence: difference.toString(), calculation });
   }
 
   const source = integerPence(input.sourceChargePence, 'NHSP_SOURCE_CHARGE_INVALID', 'NHSP source charge');

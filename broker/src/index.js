@@ -1,3 +1,4 @@
+import { validateLegacyInvoiceManifestSuppressions } from './weekly-source/invoice-render-qualification.js';
 /**
  * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets) HELLO WORLD
  *
@@ -95,6 +96,7 @@ import {
   displayedTimesheetRouteLabel
 } from './timesheet-route-sort.js';
 import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
+import { isActivePaymentActor } from './payment-actor-permission.js';
 import { createCandidateDailySpecialist, createCandidateDailyProjectionWake } from './candidate-daily-specialist.js';
 import {
   CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
@@ -173,6 +175,7 @@ import {
   testPaymentScheduleTokenMatchesRequest
 } from './test-csv-execution-bypass.js';
 import { evaluateCreateDraftRecoveryHeadroom } from './banking-pay-create-draft-headroom.js';
+import { readContractWorkedDateBoundary, readContractWorkedDatePage, contractWorkedDateRefusal } from './contract-worked-date-guard.js';
 import {
   isCertifiedDeferredFinanceOnlyInsertItemsResult,
   isCertifiedEmptyTimesheetSnapshotsResult
@@ -11135,6 +11138,13 @@ async function handleContractsFinanceGlobals(env, req) {
   }));
 }
 
+async function contractWorkedDateBoundary(env, contractId) {
+  return readContractWorkedDateBoundary({
+    baseUrl: env.SUPABASE_URL, contractId,
+    readPage: (url, options) => readContractWorkedDatePage(url, { ...options, headers: sbHeaders(env), fetcher: fetch })
+  });
+}
+
 async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -11523,6 +11533,15 @@ async function handleContractsUpdate(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
+  let protectedWorkBoundary;
+  try {
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);
+    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);
+    if (refusal) return withCORS(env, req, badRequest(refusal));
+  } catch (error) {
+    return withCORS(env, req, serverError(error.message));
+  }
+
   patch.start_date = newStart;
   patch.end_date   = newEnd;
 
@@ -11578,24 +11597,7 @@ async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  let min_ts_date = null, max_ts_date = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const r of (tsRows||[])) {
-      const st = String(r?.status||'').toUpperCase();
-      if (bad.has(st)) continue;
-      const d = r?.work_date;
-      if (!d) continue;
-      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-    }
-  } catch {}
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
 
   let min_plan_date = null, max_plan_date = null;
   try {
@@ -11728,40 +11730,15 @@ async function handleContractsUpdate(env, req, contractId) {
   if (!start_date || !end_date) return withCORS(env, req, badRequest('Invalid start_date or end_date'));
   if (start_date > end_date)    return withCORS(env, req, badRequest('start_date cannot be after end_date'));
 
-  let tsRows = [];
+  let protectedWorkBoundary;
   try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contract_id)}` +
-      `&select=id,timesheet_id,work_date,status,client_id`
-    );
-    tsRows = rows || [];
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contract_id);
   } catch (e) {
-    return withCORS(env, req, serverError('Boundary check failed to load timesheets'));
+    return withCORS(env, req, serverError(e.message));
   }
 
-  const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-  const realTs = (tsRows || []).filter(r => {
-    const st = String(r?.status || '').toUpperCase();
-    return !st || !badStatuses.has(st);
-  });
-
-  let min_ts_date = null, max_ts_date = null;
-  for (const r of realTs) {
-    const d = r?.work_date || null;
-    if (!d) continue;
-    if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-    if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-  }
-
-  const violations = realTs.filter(r => {
-    const d = r?.work_date;
-    if (!d) return false;
-    if (d < start_date) return true;
-    if (d > end_date)   return true;
-    return false;
-  });
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
+  const violations = protectedWorkBoundary.records.filter(record => record.date < start_date || record.date > end_date);
 
   let namesById = {};
   if (violations.length) {
@@ -11783,7 +11760,7 @@ async function handleContractsUpdate(env, req, contractId) {
     max_ts_date,
     violations: violations.map(v => ({
       timesheet_id: v?.timesheet_id ?? v?.id ?? null,
-      date: v?.work_date ?? null,
+      date: v?.date ?? null,
       status: v?.status ?? null,
       client_id: v?.client_id ?? null,
       client_name: namesById[String(v?.client_id)] || null
@@ -12091,33 +12068,13 @@ async function handleContractsReplace(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
-  let minProtectedWorkDate = null, maxProtectedWorkDate = null;
+  let protectedWorkBoundary;
   try {
-    const { rows: protectedRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const nonProtectedStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const row of (protectedRows || [])) {
-      const status = String(row?.status || '').trim().toUpperCase();
-      const workDate = toYmd(row?.work_date);
-      if (!workDate || nonProtectedStatuses.has(status)) continue;
-      if (!minProtectedWorkDate || workDate < minProtectedWorkDate) minProtectedWorkDate = workDate;
-      if (!maxProtectedWorkDate || workDate > maxProtectedWorkDate) maxProtectedWorkDate = workDate;
-    }
-  } catch {}
-
-  if (minProtectedWorkDate && newStart > minProtectedWorkDate) {
-    return withCORS(env, req, badRequest(
-      `start_date cannot be after earliest protected work date (${minProtectedWorkDate})`
-    ));
-  }
-  if (maxProtectedWorkDate && newEnd < maxProtectedWorkDate) {
-    return withCORS(env, req, badRequest(
-      `end_date cannot be before latest protected work date (${maxProtectedWorkDate})`
-    ));
+    protectedWorkBoundary = await contractWorkedDateBoundary(env, contractId);
+    const refusal = contractWorkedDateRefusal(protectedWorkBoundary, newStart, newEnd);
+    if (refusal) return withCORS(env, req, badRequest(refusal));
+  } catch (error) {
+    return withCORS(env, req, serverError(error.message));
   }
 
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
@@ -12343,24 +12300,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  let min_ts_date = null, max_ts_date = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&select=work_date,status`
-    );
-    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    for (const r of (tsRows||[])) {
-      const st = String(r?.status||'').toUpperCase();
-      if (bad.has(st)) continue;
-      const d = r?.work_date;
-      if (!d) continue;
-      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-    }
-  } catch {}
+  const { min_ts_date, max_ts_date } = protectedWorkBoundary;
 
   let min_plan_date = null, max_plan_date = null;
   try {
@@ -76409,7 +76349,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const presentedDetailsPayload = await attachWeeklySourceOfficeTimesheetPresentation(
       env,
       candidatePresentedDetailsPayload,
-      user.id
+      user.id,
+      sbRpc,
+      user
     );
     const expenseWorkflowRoute = await resolveExpenseWorkflowRouteForPresentation(
       env,
@@ -77434,9 +77376,25 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
 
 
 
+async function weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user) {
+  if (user?.is_active !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  if (user.role === 'admin') return { ok: true, routing: null };
+  if (!isActivePaymentActor(user)) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  const routing = await weeklySourceAuthoriseRouting(
+    (functionName, args, options) => sbRpc(env, functionName, args, options),
+    currentTimesheetId, user.id
+  );
+  if (routing.refusal) return { ok: false, response: withCORS(env, req,
+    new Response(JSON.stringify({ error: routing.refusal.error_code,
+      error_code: routing.refusal.error_code, message: routing.refusal.message,
+      refresh_required: true }), { status: routing.refusal.status, headers: JSON_HEADERS })) };
+  if (routing.bound !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  return { ok: true, routing };
+}
+
 async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, internalOptions = null) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  const user = await requireUser(env, req, []);
+  if (!user || (user.role !== 'admin' && !isActivePaymentActor(user))) return withCORS(env, req, unauthorized());
 
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -77891,6 +77849,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  const sourcePayPermission = await weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user);
+  if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
       env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
@@ -78163,6 +78123,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
 
   const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
     action: 'UNAUTHORISE',
+    weeklySourcePaymentScope: sourcePayPermission.routing?.bound === true,
+    weeklySourcePaymentActor: user,
     requestedTimesheetId,
     currentTimesheetId: finalTimesheetId,
     currentVersion: rpcPayload.current_version ?? guard.resolved?.current_version ?? null,
@@ -86990,7 +86952,8 @@ async function attachWeeklySourceOfficeTimesheetPresentation(
   env,
   payloadInput,
   actorUserId,
-  rpc = sbRpc
+  rpc = sbRpc,
+  authenticatedActor = null
 ) {
   const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)
     ? { ...payloadInput }
@@ -87060,10 +87023,27 @@ async function attachWeeklySourceOfficeTimesheetPresentation(
         : {};
     // Pass through the exact server-owned category to existing detail/patch
     // shapes. Never infer physical archive state or action permission here.
-    const result = { ...payload, ...categoryFields, weekly_source_presentation: presentation };
+    // W16: scope comes from the exact service reader, actor from the current
+    // authenticated session. No supplied row/action/role can acquire permission.
+    const paymentAllowed = authenticatedActor?.id === actorId && isActivePaymentActor(authenticatedActor);
+    const actionState = presentation.action_state || {};
+    const hintsFor = (row) => {
+      const flags = row?.actions || {};
+      const retains = (name) => row?.[name] !== false && flags[name] !== false;
+      return {
+        can_authorise: paymentAllowed && actionState.authorise_allowed === true && retains('can_authorise'),
+        can_bulk_authorise: paymentAllowed && actionState.authorise_allowed === true && retains('can_bulk_authorise'),
+        can_unauthorise: paymentAllowed && actionState.unauthorise_allowed === true && retains('can_unauthorise'),
+      };
+    };
+    const actorHints = hintsFor(payload);
+    const result = { ...payload, ...categoryFields, ...actorHints, weekly_source_presentation: presentation,
+      actions: { ...(payload.actions || {}), ...actorHints } };
     for (const key of ['timesheet', 'data_row', 'row', 'effective']) {
       if (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key])) {
-        result[key] = { ...payload[key], ...categoryFields };
+        const rowHints = hintsFor(payload[key]);
+        result[key] = { ...payload[key], ...categoryFields, ...rowHints,
+          actions: { ...(payload[key].actions || {}), ...rowHints } };
       }
     }
     return result;
@@ -93294,7 +93274,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
         && payload.ok !== false
         && payload.soft_failure !== true
         && payload.context_degraded !== true) {
-      payload = await attachWeeklySourceOfficeTimesheetPresentation(env, payload, user.id);
+      payload = await attachWeeklySourceOfficeTimesheetPresentation(env, payload, user.id, sbRpc, user);
     }
     if (profile === 'full' && payload.ok !== false && payload.soft_failure !== true && payload.context_degraded !== true) {
       try {
@@ -94973,9 +94953,16 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
     (!processingStatusUpper || ['PENDING_AUTH', 'READY_FOR_HR'].includes(processingStatusUpper))
   );
   const canUnauthorise = !!(authorised === true && !locked && currentTimesheetId);
+  // Only the authenticated route can supply these two top-level fields. Atomic
+  // RPC payloads, source rows and browser bodies cannot grant actor authority.
+  const scopedPaymentAllowed = src.weeklySourcePaymentScope === true
+    ? isActivePaymentActor(src.weeklySourcePaymentActor) : true;
   const footerActionHints = {
-    can_authorise: hasOwn(sourceActions, 'can_authorise') ? boolWithDefault(sourceActions.can_authorise, canAuthorise) : canAuthorise,
-    can_unauthorise: hasOwn(sourceActions, 'can_unauthorise') ? boolWithDefault(sourceActions.can_unauthorise, canUnauthorise) : canUnauthorise,
+    can_authorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_authorise') ? boolWithDefault(sourceActions.can_authorise, canAuthorise) : canAuthorise),
+    ...(src.weeklySourcePaymentScope === true ? {
+      can_bulk_authorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_bulk_authorise') ? boolWithDefault(sourceActions.can_bulk_authorise, canAuthorise) : canAuthorise)
+    } : {}),
+    can_unauthorise: scopedPaymentAllowed && (hasOwn(sourceActions, 'can_unauthorise') ? boolWithDefault(sourceActions.can_unauthorise, canUnauthorise) : canUnauthorise),
     can_save: canEdit,
     can_edit: canEdit,
     read_only: !canEdit,
@@ -140918,6 +140905,9 @@ async function requireUser(env, req, allowedRoles = []) {
     id: user.id,
     email: user.email,
     role: user.role,
+    is_active: user.is_active === true,
+    payment_authoriser: user.payment_authoriser === true,
+    payment_golden_key: user.payment_golden_key === true,
     sv: user.session_version|0,
     sid: p.sid,
     session_id: p.sid,
@@ -156514,6 +156504,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         }));
     }
 
+    validateLegacyInvoiceManifestSuppressions(manifest);
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
 
     const items = lineRows.map(l => ({
@@ -158335,6 +158326,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
       return { ok: false, error: 'Failed to load invoice render manifest' };
     }
 
+    validateLegacyInvoiceManifestSuppressions(manifest);
     const inv = manifest.invoice || manifest.invoice_row || null;
     if (!inv || !inv.id) {
       log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
@@ -169201,8 +169193,8 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
 
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null, internalOptions = null) {
   const enc = encodeURIComponent;
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  const user = await requireUser(env, req, []);
+  if (!user || (user.role !== 'admin' && !isActivePaymentActor(user))) return withCORS(env, req, unauthorized());
 
   const jsonHeaders = (typeof JSON_HEADERS !== 'undefined') ? JSON_HEADERS : { 'Content-Type': 'application/json' };
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -169702,6 +169694,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  const sourcePayPermission = await weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user);
+  if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
       env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
@@ -169862,7 +169856,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   // the ordinary owner writes no root-authorisation generation, so the week
   // silently stays unmanaged and every later entitlement publication then raises
   // at the pointer update.  See `weeklySourceAuthoriseRouting` above.
-  const weeklySourceRouting = await weeklySourceAuthoriseRouting(
+  const weeklySourceRouting = sourcePayPermission.routing ?? await weeklySourceAuthoriseRouting(
     (functionName, args, options) => sbRpc(env, functionName, args, options),
     currentTimesheetId, user?.id || null
   );
@@ -170196,6 +170190,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
 
   const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
     action: 'AUTHORISE',
+    weeklySourcePaymentScope: weeklySourceRouting.bound === true,
+    weeklySourcePaymentActor: user,
     requestedTimesheetId,
     currentTimesheetId: finalTimesheetId,
     currentVersion: decision.current_version,

@@ -1,0 +1,154 @@
+create or replace function private.weekly_source_self_bill_report_projection_rows_v1(p_actor_user_id uuid,p_publication_id uuid,p_rows jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_projection_publications%rowtype; s public.weekly_source_report_scopes%rowtype; c public.weekly_source_cycles%rowtype;
+begin
+  if p_actor_user_id is null or jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows)<>0 then
+    raise exception 'WEEKLY_SOURCE_REPORT_PAY_RESOLUTIONS_FORBIDDEN' using errcode='22023'; end if;
+  select * into strict p from public.weekly_source_projection_publications where id=p_publication_id;
+  perform 1 from public.weekly_source_groups where id=(select source_group_id from public.weekly_source_cycles where id=p.source_cycle_id) for update;
+  select * into strict c from public.weekly_source_cycles where id=p.source_cycle_id for update;
+  select * into strict s from public.weekly_source_report_scopes where id=p.report_scope_id for update;
+  select * into strict p from public.weekly_source_projection_publications where id=p_publication_id for update;
+  if p.authority_scope_kind<>'SELF_BILL_REPORT_SCOPE' or s.self_bill_report_id is null or p.state<>'BUILDING'
+    or p.correction_session_id is not null or s.current_complete_upload_id is distinct from p.upload_id
+    or s.version<>p.authority_scope_version or s.projection_state<>'REBUILDING' then
+    raise exception 'WEEKLY_SOURCE_REPORT_PROJECTION_STALE' using errcode='40001'; end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'RECHECK_SOURCE',c.source_group_id,s.client_id,c.finalisation_week_ending);
+  perform private.weekly_source_self_bill_report_seal_assert_v1(p.upload_id);
+  return jsonb_build_object('ok',true,'status','APPLIED','publication_id',p.id,'rows_applied',0,'expected_rows',0,'invoice_only',true);
+end;
+$function$;
+
+create or replace function private.weekly_source_self_bill_report_bind_v1(p_publication_id uuid)
+returns integer language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_projection_publications%rowtype; c public.weekly_source_cycles%rowtype;
+  line record; target record; old public.weekly_source_self_bill_report_line_bindings%rowtype;
+  v_count integer; v_event_count integer; v_latest timestamptz; v_added integer:=0; v_prior jsonb;
+begin
+  select * into strict p from public.weekly_source_projection_publications where id=p_publication_id;
+  select * into strict c from public.weekly_source_cycles where id=p.source_cycle_id;
+  perform 1 from public.weekly_source_groups where id=c.source_group_id for update;
+  if p.state<>'CURRENT' or p.correction_session_id is not null then
+    raise exception 'WEEKLY_SOURCE_REPORT_BIND_PUBLICATION_NOT_ACCEPTED' using errcode='55000'; end if;
+  -- Accepted is a CURRENT publication under its exact scope head. Metadata
+  -- registration, staging and sealed uploads are never membership witnesses.
+  for line in select r.*,s.self_bill_report_id,s.client_id from public.weekly_source_report_scopes s
+    join public.weekly_source_projection_publications rp on rp.id=s.current_projection_publication_id
+      and rp.report_scope_id=s.id and rp.upload_id=s.current_complete_upload_id and rp.state='CURRENT'
+      and rp.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and rp.authority_scope_version=s.version
+    join public.weekly_source_uploads u on u.id=rp.upload_id and u.state='CURRENT'
+    join public.weekly_source_upload_rows r on r.upload_id=u.id and r.row_finalisation_state='SOURCE_REPORT_LINE'
+    where s.source_group_id=c.source_group_id and s.self_bill_report_id is not null
+      and (p.authority_scope_kind='CYCLE' or rp.id=p.id) order by r.id
+  loop
+    v_prior:=private.weekly_source_self_bill_report_prior_binding_v1(line.id);
+    if v_prior is not null then
+      select (v_prior->>'row_id')::uuid as row_id,(v_prior->>'resolution_id')::uuid as resolution_id,
+        (v_prior->>'work_event_id')::uuid as work_event_id,(v_prior->>'publication_id')::uuid as publication_id into target;
+    else
+    select count(distinct rr.work_event_id),max(ep.published_at_utc) into v_event_count,v_latest
+      from public.weekly_source_projection_publications ep join public.weekly_source_cycles ec on ec.id=ep.source_cycle_id
+      join public.weekly_source_uploads eu on eu.id=ep.upload_id and eu.state='CURRENT'
+      join public.weekly_source_upload_rows er on er.upload_id=eu.id and er.external_source_key=line.external_source_key
+      join public.weekly_source_row_resolutions rr on rr.upload_row_id=er.id and rr.mapping_state='RESOLVED'
+        and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+      where ec.source_group_id=c.source_group_id and ep.authority_scope_kind='CYCLE' and ep.state='CURRENT'
+        and ec.current_projection_publication_id=ep.id and ec.current_complete_upload_id=eu.id
+        and rr.client_id=line.client_id
+        and (p.authority_scope_kind<>'CYCLE' or ep.id=p.id);
+    if v_event_count>1 then raise exception 'WEEKLY_SOURCE_REPORT_BIND_IDENTITY_AMBIGUOUS' using errcode='55000'; end if;
+    if v_event_count=0 then continue; end if; -- Omission preserves any earlier current binding.
+    select count(*) into v_count from public.weekly_source_projection_publications ep
+      join public.weekly_source_cycles ec on ec.id=ep.source_cycle_id
+      join public.weekly_source_upload_rows er on er.upload_id=ep.upload_id and er.external_source_key=line.external_source_key
+      join public.weekly_source_row_resolutions rr on rr.upload_row_id=er.id and rr.mapping_state='RESOLVED'
+        and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+      where ec.source_group_id=c.source_group_id and ep.authority_scope_kind='CYCLE' and ep.state='CURRENT'
+        and ec.current_projection_publication_id=ep.id and ec.current_complete_upload_id=ep.upload_id
+        and rr.client_id=line.client_id and ep.published_at_utc=v_latest
+        and (p.authority_scope_kind<>'CYCLE' or ep.id=p.id);
+    if v_count<>1 then raise exception 'WEEKLY_SOURCE_REPORT_BIND_GENERATION_AMBIGUOUS' using errcode='55000'; end if;
+    select er.id as row_id,rr.id as resolution_id,rr.work_event_id,ep.id as publication_id into strict target
+      from public.weekly_source_projection_publications ep join public.weekly_source_cycles ec on ec.id=ep.source_cycle_id
+      join public.weekly_source_upload_rows er on er.upload_id=ep.upload_id and er.external_source_key=line.external_source_key
+      join public.weekly_source_row_resolutions rr on rr.upload_row_id=er.id and rr.mapping_state='RESOLVED'
+        and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+      where ec.source_group_id=c.source_group_id and ep.authority_scope_kind='CYCLE' and ep.state='CURRENT'
+        and ec.current_projection_publication_id=ep.id and ec.current_complete_upload_id=ep.upload_id
+        and rr.client_id=line.client_id and ep.published_at_utc=v_latest
+        and (p.authority_scope_kind<>'CYCLE' or ep.id=p.id);
+    end if;
+    select * into old from public.weekly_source_self_bill_report_line_bindings where report_row_id=line.id and state='CURRENT' for update;
+    if found and old.export_upload_row_id=target.row_id and old.bound_row_resolution_id=target.resolution_id
+      and old.export_projection_publication_id=target.publication_id then continue; end if;
+    if old.id is not null then
+      if old.work_event_id<>target.work_event_id then raise exception 'WEEKLY_SOURCE_REPORT_BIND_IDENTITY_CHANGED' using errcode='55000'; end if;
+      update public.weekly_source_self_bill_report_line_bindings set state='SUPERSEDED',superseded_at_utc=transaction_timestamp() where id=old.id;
+    end if;
+    insert into public.weekly_source_self_bill_report_line_bindings(report_row_id,export_upload_row_id,bound_row_resolution_id,
+      export_projection_publication_id,work_event_id,self_bill_report_id,state)
+      values(line.id,target.row_id,target.resolution_id,target.publication_id,target.work_event_id,line.self_bill_report_id,'CURRENT');
+    v_added:=v_added+1;
+  end loop;
+  return v_added;
+end;
+$function$;
+
+create or replace function private.weekly_source_report_shift_facts_v1(p_work_event_id uuid,p_cycle_or_report uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare e public.weekly_work_events%rowtype; c public.weekly_source_cycles%rowtype; s public.weekly_source_report_scopes%rowtype;
+  v_on boolean:=false; v_bound boolean:=false; v_ready boolean:=false; v_protected boolean:=false; v_wait jsonb;
+  v_pay_export_worked boolean:=false;
+begin
+  select * into e from public.weekly_work_events where id=p_work_event_id;
+  if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_EVENT_NOT_FOUND' using errcode='22023'; end if;
+  select * into c from public.weekly_source_cycles where id=p_cycle_or_report;
+  if not found then
+    select * into s from public.weekly_source_report_scopes where id=p_cycle_or_report and self_bill_report_id is not null;
+    if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_NOT_FOUND' using errcode='22023'; end if;
+    if s.client_id is distinct from e.client_id then
+      raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+    select * into strict c from public.weekly_source_cycles where id=s.source_cycle_id;
+  end if;
+  if e.first_source_group_id is distinct from c.source_group_id
+    or (c.scope_client_id is not null and c.scope_client_id is distinct from e.client_id)
+    or (s.id is not null and (s.source_group_id is distinct from c.source_group_id
+      or not exists(select 1 from public.weekly_source_groups source_group where source_group.id=c.source_group_id
+        and source_group.agency_id=s.agency_id and source_group.environment=s.environment))) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+  -- The actual event's client is the F1 helper's first parameter.
+  if private.weekly_source_effective_rule_set_v1(e.client_id,c.id)#>>'{values,self_bill_source}' is distinct from 'SEPARATE_FINAL_REPORT' then
+    return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',false,'invoice_ready',false,'s25_pay_selected',false); end if;
+  select coalesce(bool_or(true),false),coalesce(bool_or(b.id is not null and er.row_finalisation_state='SOURCE_WORKED'
+      and nullif(btrim(er.finalised_by),'') is not null),false),
+    coalesce(bool_or(b.id is not null and er.row_finalisation_state='SOURCE_WORKED' and nullif(btrim(er.finalised_by),'') is not null
+      and private.weekly_source_self_bill_report_pay_witness_v1(b.id) is not null),false)
+    into v_on,v_bound,v_ready
+    from public.weekly_source_report_scopes rs
+    join public.weekly_source_projection_publications rp on rp.id=rs.current_projection_publication_id
+      and rp.upload_id=rs.current_complete_upload_id and rp.report_scope_id=rs.id and rp.state='CURRENT'
+      and rp.authority_scope_kind='SELF_BILL_REPORT_SCOPE' and rp.authority_scope_version=rs.version
+    join public.weekly_source_uploads ru on ru.id=rp.upload_id and ru.state='CURRENT'
+    join public.weekly_source_upload_rows rr on rr.upload_id=ru.id and rr.row_finalisation_state='SOURCE_REPORT_LINE'
+    left join public.weekly_source_self_bill_report_line_bindings b on b.report_row_id=rr.id and b.state='CURRENT'
+    left join public.weekly_source_upload_rows er on er.id=b.export_upload_row_id
+    where rs.source_group_id=c.source_group_id and rs.client_id=e.client_id
+      and (s.id is null or rs.id=s.id) and (b.work_event_id=e.id
+        or (e.profile_external_key is not null and rr.external_source_key=e.profile_external_key));
+  v_wait:=private.weekly_source_protected_wait_witness_v1(e.id,c.id);
+  v_protected:=v_wait is not null and v_wait->>'state'='QUALIFIED_WAIT';
+  select exists(select 1 from public.weekly_source_projection_publications ep
+    join public.weekly_source_uploads eu on eu.id=ep.upload_id and eu.state='CURRENT'
+    join public.weekly_source_upload_rows er on er.upload_id=eu.id and er.row_finalisation_state='SOURCE_WORKED'
+      and nullif(btrim(er.finalised_by),'') is not null and er.work_date<=c.finalisation_week_ending
+    join public.weekly_source_row_resolutions rr on rr.upload_row_id=er.id and rr.mapping_state='RESOLVED'
+      and rr.work_event_id=e.id and rr.client_id=e.client_id and rr.generation=coalesce(ep.projection_generation,ep.authority_scope_version)
+    where ep.id=c.current_projection_publication_id and ep.upload_id=c.current_complete_upload_id
+      and ep.authority_scope_kind='CYCLE' and ep.state='CURRENT') into v_pay_export_worked;
+  return jsonb_build_object('on_accepted_report',v_on,'bound_to_finalised_export',v_bound,
+    'invoice_ready',v_bound and v_ready,'s25_pay_selected',v_protected or (v_bound and v_pay_export_worked));
+end;
+$function$;

@@ -1,0 +1,168 @@
+-- Purpose-bound bulk preview. Claim identity and hours come from the immutable
+-- MyTMS submission and its exact comparison fingerprint, never booked/current Rota.
+create or replace function private.weekly_source_bulk_signed_claim_v1(p_comparison_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_comparison public.weekly_issue_comparison_revisions%rowtype;
+  v_sheet public.timesheets%rowtype; v_workflow public.candidate_submission_workflows%rowtype;
+  v_evidence jsonb; v_input jsonb; v_units jsonb; v_schedule jsonb; v_row jsonb;
+  v_candidate_start timestamp; v_candidate_end timestamp; v_break integer; v_fingerprint bytea;
+  v_matches integer:=0; v_claim jsonb;
+begin
+  select * into strict v_comparison from public.weekly_issue_comparison_revisions where id=p_comparison_id;
+  if v_comparison.candidate_timesheet_id is null then
+    raise exception 'WEEKLY_PROTECTED_EVIDENCE_UNSIGNED' using errcode='55000'; end if;
+  v_evidence:=private.weekly_exceptional_candidate_signed_evidence_v1(v_comparison.candidate_timesheet_id);
+  if v_evidence->>'signature_kind' is distinct from 'CANDIDATE_WORKFLOW' then
+    return jsonb_build_object('eligible',false,'code','SIGNED_PAPER_OR_QR','reason','Signed on paper/QR - protect individually'); end if;
+  select * into strict v_sheet from public.timesheets where timesheet_id=v_comparison.candidate_timesheet_id;
+  select * into strict v_workflow from public.candidate_submission_workflows
+    where id=v_sheet.candidate_workflow_id and generation=v_sheet.candidate_workflow_generation;
+  if v_comparison.candidate_timesheet_revision is distinct from v_sheet.version
+    or v_comparison.contract_id is distinct from v_sheet.contract_id
+    or v_workflow.immutable_submission_sha256 is null
+    or private._candidate_sha256_jsonb_v1(v_workflow.immutable_submission_json)
+      is distinct from v_workflow.immutable_submission_sha256 then
+    raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000'; end if;
+  v_input:=v_workflow.immutable_submission_json;
+  v_units:=coalesce(v_input->'additional_units_per_day',v_input#>'{timesheet_patch_json,additional_units_per_day}',
+    v_input#>'{hours_submission,additional_units_per_day}',v_input#>'{hours_submission,timesheet_patch_json,additional_units_per_day}','{}'::jsonb);
+  v_schedule:=private.weekly_source_candidate_app_schedule_v1(coalesce(
+    v_input->'actual_schedule_json',v_input->'schedule_json',v_input#>'{timesheet_patch_json,actual_schedule_json}',
+    v_input#>'{timesheet_patch_json,schedule_json}',v_input#>'{hours_submission,actual_schedule_json}',
+    v_input#>'{hours_submission,schedule_json}',v_input#>'{hours_submission,timesheet_patch_json,actual_schedule_json}',
+    v_input#>'{hours_submission,timesheet_patch_json,schedule_json}'),v_units);
+  for v_row in select value from jsonb_array_elements(v_schedule) loop
+    v_candidate_start:=(v_row->>'date')::date+(v_row->>'start')::time;
+    v_candidate_end:=(v_row->>'date')::date+(v_row->>'end')::time;
+    if v_candidate_end<=v_candidate_start then v_candidate_end:=v_candidate_end+interval '1 day'; end if;
+    v_break:=coalesce(nullif(v_row#>>'{break_entry,break_minutes}','')::integer,
+      nullif(v_row#>>'{break_entry,calculated_break_minutes}','')::integer,0);
+    v_fingerprint:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CANDIDATE_SHIFT_V1',jsonb_build_object(
+      'timesheet_id',v_sheet.timesheet_id,'timesheet_revision',v_sheet.version,'row_key',v_row->>'row_key',
+      'work_date',v_row->>'date','start_at_local',v_candidate_start,'end_at_local',v_candidate_end,
+      'break_minutes',v_break,'additional_units',coalesce(v_row->'additional_units','[]'::jsonb)));
+    if v_fingerprint=v_comparison.candidate_shift_fingerprint
+      and (v_candidate_start,v_candidate_end,v_break) is not distinct from
+        (v_comparison.candidate_start_at_local,v_comparison.candidate_end_at_local,v_comparison.candidate_break_minutes) then
+      v_matches:=v_matches+1;
+      v_claim:=jsonb_build_object('eligible',true,'evidence_timesheet_id',v_sheet.timesheet_id,
+        'timesheet_revision',v_sheet.version,'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
+        'immutable_submission_sha256',encode(v_workflow.immutable_submission_sha256,'hex'),
+        'signature_kind',v_evidence->>'signature_kind','signature_sha256',v_evidence->>'signature_sha256',
+        'signed_at_utc',v_evidence->'signed_at_utc','candidate_shift_fingerprint',encode(v_fingerprint,'hex'),
+        'week_ending_date',v_sheet.week_ending_date,'work_date',(v_row->>'date')::date,
+        'start',v_row->>'start','end',v_row->>'end','break_minutes',v_break,
+        'start_at_local',v_candidate_start,'end_at_local',v_candidate_end);
+    end if;
+  end loop;
+  if v_matches<>1 then raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000'; end if;
+  return v_claim;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow
+  or numeric_value_out_of_range or invalid_parameter_value then
+  raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_bulk_signed_claim_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_bulk_signed_claim_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_protect_all_signed_selection_v1(p_source_cycle_id uuid,p_actor_user_id uuid,p_own_stage_context jsonb default null)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_cycle public.weekly_source_cycles%rowtype; v_publication public.weekly_source_projection_publications%rowtype;
+  v_row record; v_claim jsonb; v_facts jsonb; v_witness jsonb; v_selection jsonb; v_key text;
+  v_eligible jsonb:='[]'::jsonb; v_skipped jsonb:='[]'::jsonb; v_reason text; v_code text; v_count integer; v_clients uuid[]:='{}'::uuid[]; v_cas jsonb; v_own_stage boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',v_cycle.source_group_id,null,v_cycle.finalisation_week_ending);
+  select * into strict v_publication from public.weekly_source_projection_publications
+    where id=v_cycle.current_projection_publication_id and source_cycle_id=v_cycle.id and state='CURRENT'
+      and authority_scope_kind='CYCLE' and correction_session_id is null;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
+  for v_row in select incident.id as incident_id,incident.episode_number,incident.candidate_id,incident.client_id,
+      incident.work_event_id,comparison.id as comparison_id,comparison.contract_id,comparison.issue_family,
+      comparison.material_comparison_fingerprint,work.work_date
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=v_cycle.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=incident.candidate_id
+      and contract.client_id=incident.client_id
+    where incident.source_cycle_id=v_cycle.id and incident.state='OPEN'
+      and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work.work_date)
+      and (private.weekly_source_checking_client_scope_v1(v_publication.id) is null
+        or incident.client_id=private.weekly_source_checking_client_scope_v1(v_publication.id))
+    order by incident.candidate_id,work.id,incident.id
+  loop
+    v_code:=null; v_reason:=null; v_claim:=null;
+    if not (v_row.client_id=any(v_clients)) then v_clients:=array_append(v_clients,v_row.client_id); end if;
+    if v_row.issue_family not in ('HEALTHROSTER_NOT_FINALISED','SOURCE_MISSING_OR_NOT_AUTHORISED') then
+      v_code:='DECIDE_INDIVIDUALLY'; v_reason:=case v_row.issue_family when 'SOURCE_HOURS_DIFFER'
+        then 'Hours differ - decide individually' else 'Review this shift individually' end;
+    elsif private.weekly_source_covered_hours_incident_v1(v_row.incident_id) then
+      v_code:='ALREADY_PROTECTED'; v_reason:='Already protected';
+    else
+      -- A bare or partial WAIT is unknown, never treated as unprotected.
+      v_own_stage:=exists(select 1 from jsonb_array_elements(p_own_stage_context->'exclusions') exclusion
+        where exclusion->>'work_event_id'=v_row.work_event_id::text);
+      v_witness:=case when v_own_stage then null else private.weekly_source_protected_wait_witness_v1(v_row.work_event_id,v_cycle.id) end;
+      if v_witness is not null then v_code:='ALREADY_PROTECTED'; v_reason:='Already protected'; end if;
+      if v_code is null then
+        if p_own_stage_context is null then
+          v_facts:=private.weekly_source_shift_on_self_bill_v1(v_row.work_event_id,v_cycle.id);
+        else
+          if to_regprocedure('private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)') is null then
+            raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+          execute 'select private.weekly_source_shift_on_self_bill_context_v1($1,$2,$3)' into v_facts
+            using v_row.work_event_id,v_cycle.id,p_own_stage_context;
+        end if;
+        if jsonb_typeof(v_facts) is distinct from 'object' or not (v_facts ?& array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected'])
+          or exists(select 1 from unnest(array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected']) field
+            where jsonb_typeof(v_facts->field) is distinct from 'boolean') then
+          raise exception 'WEEKLY_SOURCE_SELF_BILL_FACTS_UNAVAILABLE' using errcode='55000'; end if;
+        if (v_facts->>'s25_pay_selected')::boolean or (v_facts->>'on_accepted_report')::boolean then
+          v_code:='ON_SELF_BILL'; v_reason:='Already on the client self-bill';
+        end if;
+      end if;
+      if v_code is null then
+        begin
+          v_claim:=private.weekly_source_bulk_signed_claim_v1(v_row.comparison_id);
+          if v_claim->>'eligible' is distinct from 'true' then v_code:=v_claim->>'code'; v_reason:=v_claim->>'reason'; end if;
+        exception when others then
+          if sqlerrm='WEEKLY_PROTECTED_EVIDENCE_UNSIGNED' then v_code:='NO_SIGNED_SUBMISSION'; v_reason:='No signed submission';
+          elsif sqlerrm='WEEKLY_PROTECTED_EVIDENCE_INVALID' then v_code:='SIGNED_SUBMISSION_UNAVAILABLE'; v_reason:='Signed submission changed - protect individually';
+          else raise; end if;
+        end;
+      end if;
+    end if;
+    if v_code is not null then
+      v_skipped:=v_skipped||jsonb_build_array(jsonb_build_object('incident_id',v_row.incident_id,'work_event_id',v_row.work_event_id,
+        'work_date',v_row.work_date,'code',v_code,'reason',v_reason));
+    else
+      v_eligible:=v_eligible||jsonb_build_array(jsonb_build_object('incident_id',v_row.incident_id,'issue_episode',v_row.episode_number,
+        'comparison_revision_id',v_row.comparison_id,'comparison_fingerprint',encode(v_row.material_comparison_fingerprint,'hex'),
+        'candidate_id',v_row.candidate_id,'client_id',v_row.client_id,'contract_id',v_row.contract_id,
+        'work_event_id',v_row.work_event_id,'claim',v_claim,'self_bill_facts',v_facts));
+    end if;
+  end loop;
+  -- Protected/skipped questions retain their Client in the Source CAS census.
+  -- Completing a round must not shrink its original relevant Client authority.
+  select coalesce(array_agg(item order by item),'{}'::uuid[]) into v_clients from unnest(v_clients) item;
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1(v_cycle.id,v_clients);
+  v_count:=jsonb_array_length(v_eligible);
+  v_selection:=jsonb_build_object('contract','WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1','source_cycle_id',v_cycle.id,
+    'source_cycle_version',v_cycle.version,'projection_publication_id',v_publication.id,
+    'source_cas',v_cas,'eligible',v_eligible,'skipped',v_skipped);
+  return v_selection||jsonb_build_object('selection_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1',v_selection),'hex'),'eligible_count',v_count,
+    'skipped_count',jsonb_array_length(v_skipped));
+end;
+$function$;
+alter function private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

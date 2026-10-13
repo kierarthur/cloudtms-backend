@@ -1,9 +1,11 @@
+import { assertMagnitContractPricing, assertMagnitWholeShiftResult } from './magnit-contract-price-admission.js';
 import { createHash } from 'node:crypto';
 import { adaptWeeklySourceParserOutput } from './upload-staging-adapter.mjs';
 import { qualifyWeeklySourceContract } from './contract-qualification.js';
 import { canonicalWeeklyShiftFinancialSegment } from './weekly-rate-owner.js';
 import { compareWeeklySourceShiftPrice } from './source-price-comparator.js';
 import { buildWeeklySourceCanonicalEconomicSnapshot } from './economic-snapshot.js';
+import { weeklySourceCoverageWarnings } from './coverage-warnings.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
@@ -170,6 +172,10 @@ function parserOptions(body, context) {
       expectedTrust: context.client_name,
     } : {}),
     ...(!NHSP.has(profileId) ? { expectedClient: context.client_name } : {}),
+    // Database-resolved and disabled by default. Browser parser_options cannot
+    // activate source invoice money or choose an immutable rule version.
+    ...(!NHSP.has(profileId) && context.effective_rule_set != null
+      ? { effectiveRuleSet: context.effective_rule_set } : {}),
   };
 }
 
@@ -308,6 +314,8 @@ function calculationFor(row, contract) {
   const startInstant = localToUtc(row.start_at_local, timezone);
   const endInstant = localToUtc(row.end_at_local, timezone);
   const mode = upper(policy.weekly_rate_classification_method);
+  try { assertMagnitContractPricing(contract.effective_rule_set?.values, policy); }
+  catch (error) { return { valid: false, code: error.code ?? 'WEEKLY_SOURCE_MAGNIT_PRESET_INVALID' }; }
   const sign = NHSP.has(row.profile_id) && BigInt(String(row.source_shift_charge_pence ?? 0)) < 0n ? -1 : 1;
   const financialInput = mode === 'WHOLE_SHIFT_START_DAY' ? {
     mode,
@@ -333,8 +341,11 @@ function calculationFor(row, contract) {
     const comparison = compareWeeklySourceShiftPrice({
       sourceMode,
       financialInput,
-      ...(sourceMode === 'NHSP_WEEKLY' ? { sourceChargePence: row.source_shift_charge_pence } : {}),
+      ...((sourceMode === 'NHSP_WEEKLY' || contract.effective_rule_set?.values?.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY')
+        ? { sourceChargePence: row.source_shift_charge_pence } : {}),
+      effectiveRuleSet: contract.effective_rule_set,
     });
+    assertMagnitWholeShiftResult(contract.effective_rule_set?.values, comparison.calculation);
     if (Number(comparison.calculation.paidMinutes) !== Number(row.actual_net_minutes)
         || Number(comparison.calculation.breakMinutes) !== Number(row.break_minutes)) {
       return { valid: false, code: 'WEEKLY_SOURCE_ACTUAL_MINUTES_DO_NOT_MATCH_LOCAL_INTERVAL' };
@@ -496,6 +507,7 @@ function projectionRow(source, body) {
         rateMethod: upper(policy.weekly_rate_classification_method),
         payRates: economic.payRates,
         chargeRates: economic.chargeRates,
+        effectiveRuleSet: contract.effective_rule_set,
       },
       priceComparison: economic.comparison,
     });
@@ -530,6 +542,16 @@ function projectionRow(source, body) {
           ? 'PROVISIONAL_WARNING'
           : 'NONE',
         blocker_code: null,
+      };
+    } else if (contract.effective_rule_set?.values?.invoice_sender === 'CLIENT_SELF_BILL'
+        && contract.effective_rule_set.values.invoice_amount_basis === 'SOURCE_AMOUNT') {
+      if (contract.effective_rule_set.values.source_amount_basis !== 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY') return result;
+      result.charge_check = {
+        row_sign_kind: 'POSITIVE', source_commission_pence: null, source_total_cost_pence: null,
+        source_shift_charge_pence: String(row.source_shift_charge_pence),
+        calculated_segment_charge_pence: economic.comparison.calculatedComparisonChargePence,
+        comparison_result: economic.comparison.result, comparison_reason_code: economic.comparison.result,
+        phase_severity: economic.comparison.result === 'SOURCE_AMOUNT_DIFFERS' ? 'INFORMATION' : 'NONE', blocker_code: null,
       };
     }
   }
@@ -751,6 +773,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
       return {
         parsed,
         context,
+        ...(context.coverage_context == null ? {} : { coverage_warnings: weeklySourceCoverageWarnings(parsed, body, context) }),
         accept_context: {
           source_group_id: context.source_group_id,
           source_cycle_id: context.source_cycle_id,
@@ -758,6 +781,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           client_id: context.client_id ?? null,
           authority_scope_version: context.authority_scope_version,
           previous_coverage: context.previous_coverage ?? null,
+          ...(context.coverage_context == null ? {} : { coverage_context: context.coverage_context }),
         },
       };
     },

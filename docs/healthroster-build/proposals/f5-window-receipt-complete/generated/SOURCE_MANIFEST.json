@@ -1,0 +1,707 @@
+{
+  "contract": "HEALTHROSTER_COMPLETE_WINDOW_RECEIPT_PROPOSAL_V1",
+  "frozen_28_unchanged": true,
+  "source_only": true,
+  "db_executed": false,
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/F5_INTEGRATION_MANIFEST.json",
+      "bytes": 18080,
+      "sha256": "555eb549d02e19401051903cae80f9179b8741c3965378d8354fc23cd2a2fc6e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "bytes": 206075,
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "bytes": 110745,
+      "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "bytes": 164237,
+      "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "bytes": 37450,
+      "sha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "bytes": 88623,
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/SCHEMA.sqlinc",
+      "bytes": 3576,
+      "sha256": "dd39289dec36fed9ece0e09ec82dadf3cdfc8d43e1772be29d223ee65d7b23ad"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/COMPLETE_MONEY_OWNER_PROPOSALS.sqlinc",
+      "bytes": 19792,
+      "sha256": "277722b8b3fe8bf20d9b26dc930fa9c2900cdd7643a43799a0194d6de8b1cd6e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/PROPOSED_PRIVATE_OWNERS.sqlinc",
+      "bytes": 16877,
+      "sha256": "d53b758881994af2312bb84142aa7e4e6b8ee52489a859fc6740aedc2942c29c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/PRIVATE_OWNERS.sqlinc",
+      "bytes": 20514,
+      "sha256": "9aebc1e83edabc50c700b247c854741cdcb29c880e2851622dc85dbf3802c07e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/FIN_MANIFEST_WINDOW_PARTITION.sqlinc",
+      "bytes": 5204,
+      "sha256": "aa8992505fac306a73c5fa896b33180880c81f2f848ba9c158f4a60e55813506"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "bytes": 116274,
+      "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "bytes": 345066,
+      "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+    },
+    {
+      "file": "supabase/repeatable/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "bytes": 30175,
+      "sha256": "a9df2135d5f7845997ca726e388b9353421fb4fc77bf9ac31ccd6e5dd2a5b88f"
+    },
+    {
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "bytes": 138756,
+      "sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd"
+    },
+    {
+      "file": "supabase/repeatable/24092026_1440_weekly_source_invoice_evidence_lookup_v1.sql",
+      "bytes": 4529,
+      "sha256": "c637b5ca7c0679bf2e09afb626e53ff9aa861e7f9c85bd903ab8b2e56aac2aa4"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "bytes": 105442,
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "file": "supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
+      "bytes": 13814,
+      "sha256": "171e141aadc8cff9dd055b2479e54c222350863f54d0f035dbc865abfbe2ec2c"
+    },
+    {
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "bytes": 22317,
+      "sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "bytes": 38249,
+      "sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "bytes": 34565,
+      "sha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f"
+    },
+    {
+      "file": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "bytes": 30904,
+      "sha256": "3682178b5da113aac0587a08b0f07cab893a61b6d5c9332fd1d3925a8361967b"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "bytes": 136375,
+      "sha256": "be9f1e7dd5b3351510b027044dd00bca32b54c58a0c9e6fc6bf47f94dd79c40f"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+      "bytes": 35793,
+      "sha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "bytes": 11717,
+      "sha256": "9ec33620f3e240e87d4160dc86df894d2b6a1d15b6f66af354ac2daf1e2f15cf"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "bytes": 20419,
+      "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "bytes": 16849,
+      "sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "bytes": 19824,
+      "sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "bytes": 112267,
+      "sha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073"
+    },
+    {
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+      "bytes": 118254,
+      "sha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "bytes": 29910,
+      "sha256": "aa028c6d01eef67e6ddfc1c04eca6ceaf8f193184b40c1a2abedbdb85224eda3"
+    },
+    {
+      "file": "broker/src/invoice-presentation-contract.js",
+      "bytes": 39564,
+      "sha256": "352adefe83df09826ebe5d0b8201735c73cdfc8cc28bc71320e922fa833801c5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/zero-rounding-model-qualification.js",
+      "bytes": 1991,
+      "sha256": "42fc2e44203fbe9915dd606e16668e8d14526413679a19514b2d3c3751f763c5"
+    },
+    {
+      "file": "broker/src/invoice-document-templates.js",
+      "bytes": 26465,
+      "sha256": "ab203ad04c46aa5160852b9fd9d66b72d1907ae33d7c606c7a7fadb901fe5bab"
+    },
+    {
+      "file": "broker/src/invoice-queue-runtime.js",
+      "bytes": 83082,
+      "sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d"
+    },
+    {
+      "file": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "bytes": 58216,
+      "sha256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a"
+    },
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8945838,
+      "sha256": "b5bd251bdc664737ced5e125d5b1596c3faa97922cec3e99ff22a6f4a97b9dc0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/legacy-render-qualification.js",
+      "bytes": 616,
+      "sha256": "09aa0d9a044e1c9f2b674169bdefd562b836a2992727ccafcfb97432db3da9cc"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/01_schema.sqlinc",
+      "bytes": 3651,
+      "sha256": "babfbd1609276b4778b75d0ee7d43e1ac68dfa03d48e63f4afe665e241ef0a2d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "bytes": 19716,
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "bytes": 38923,
+      "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/04_complete_fin.sqlinc",
+      "bytes": 102228,
+      "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/05_complete_admission.sqlinc",
+      "bytes": 40040,
+      "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/06_complete_allocation_issue.sqlinc",
+      "bytes": 47513,
+      "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/07_complete_header_move.sqlinc",
+      "bytes": 30544,
+      "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "bytes": 37250,
+      "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "bytes": 161809,
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "bytes": 154453,
+      "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "bytes": 141761,
+      "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "bytes": 184614,
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10d_retained_report_and_date_boundaries.sqlinc",
+      "bytes": 38619,
+      "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/11_complete_native_snapshot_assembler.sqlinc",
+      "bytes": 120810,
+      "sha256": "9f8ca268516c8dba615bef7f01a6711699582d962adb936fb18a0021626cefb1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/12_retained_final_issue_transport.sqlinc",
+      "bytes": 118329,
+      "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/13_private_acl.sqlinc",
+      "bytes": 3826,
+      "sha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/13b_complete_acl_helper_service_union.sqlinc",
+      "bytes": 22698,
+      "sha256": "4cad7fb1317de367a4b8f2db70e6c7ca090db0e4f0ab4fc04516afe36f9a8805"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/14_complete_legacy_render_manifest.sqlinc",
+      "bytes": 24851,
+      "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/READER_CENSUS.json",
+      "bytes": 48400,
+      "sha256": "89bb1b08f4fc6e32121da86f9dce28ec8c93f4674bfa534a2fb502bbe89e8c07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/invoice-document-templates.js",
+      "bytes": 26542,
+      "sha256": "3acf89db285a6eb1834cf773f3763ed9bd33abe0ce4e8eca26f3beb0e4026346"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/invoice-presentation-contract.js",
+      "bytes": 41599,
+      "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/invoice-queue-runtime.js",
+      "bytes": 83082,
+      "sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/legacy-index-owner-successors.js",
+      "bytes": 108925,
+      "sha256": "2c18eae53319f4861b3d9122bdb44e5e0f4fdb1a746dd1a3c20ac6df20766d68"
+    }
+  ],
+  "functions": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "name": "private.weekly_source_billing_movement_hash_v1",
+      "definition_header": "create or replace function private.weekly_source_billing_movement_hash_v1(p_state jsonb)\nreturns bytea language plpgsql immutable set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "name": "private.weekly_source_invoice_movement_window_id_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_movement_window_id_v1(p_movement_id uuid)\nreturns uuid language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "name": "private.weekly_source_invoice_correction_insert_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_correction_insert_v1(p_transition_id uuid,p_work_event_id uuid,p_final_revision_id uuid)\nreturns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "name": "private.weekly_source_vat_rounding_movement_insert_v1",
+      "definition_header": "create or replace function private.weekly_source_vat_rounding_movement_insert_v1(p_final_revision_id uuid,p_client_id uuid,p_identity_movement_id uuid,p_invoice_window_cycle_id uuid)\nreturns uuid language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/02_money_origins.sqlinc",
+      "name": "private.weekly_source_vat_rounding_movement_insert_v1",
+      "definition_header": "create or replace function private.weekly_source_vat_rounding_movement_insert_v1(p_final_revision_id uuid,p_client_id uuid,p_identity_movement_id uuid)\nreturns uuid language sql volatile security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_vat_target_pence_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_vat_target_pence_v1(\n  p_net_pence numeric,p_line_vat_pence numeric,p_method text,p_rate_pct numeric\n) returns bigint language plpgsql immutable set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_window_scope_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_window_scope_v1(\n  p_source_cycle_id uuid,p_client_id uuid,p_upload_row_id uuid,p_window_cycle_id uuid\n) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_rounding_receipt_set_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_rounding_receipt_set_v1(\n  p_client_manifest_id uuid,p_receipt_set jsonb\n) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_rounding_suppression_witness_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_rounding_suppression_witness_v1(p_invoice_line_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_legacy_render_support_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_legacy_render_support_v1(p_invoice_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_window_lock_inventory_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_window_lock_inventory_v1(\n  p_upload_id uuid,p_generation bigint,p_source_cycle_id uuid,p_client_id uuid\n) returns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_receipt_support_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_receipt_support_v1(p_invoice_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_window_cycle_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_window_cycle_v1(p_upload_row_id uuid,p_source_group_id uuid)\nreturns uuid language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_admission_receipt_map_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_admission_receipt_map_v1(p_client_manifest_id uuid)\nreturns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_manifest_admission_money_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_manifest_admission_money_v1(p_client_manifest_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_rounding_authority_rebuild_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_rounding_authority_rebuild_v1(p_presentation_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_presentation_expected_source_hash_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_presentation_expected_source_hash_v1(p_presentation_id uuid)\nreturns bytea language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_admitted_member_money_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_admitted_member_money_v1(p_presentation_id uuid,p_movement_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/03_receipt_and_window_owners.sqlinc",
+      "name": "private.weekly_source_invoice_receipt_projection_assert_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_receipt_projection_assert_v1(p_invoice_id uuid)\nreturns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/04_complete_fin.sqlinc",
+      "name": "private.weekly_source_finalise_engine_v1",
+      "definition_header": "create or replace function private.weekly_source_finalise_engine_v1(\n  p_request jsonb,\n  p_correction_session_id uuid,\n  p_prepare_only boolean\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/05_complete_admission.sqlinc",
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_admit_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/06_complete_allocation_issue.sqlinc",
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_allocation_assert_v1(\n  p_invoice_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/06_complete_allocation_issue.sqlinc",
+      "name": "private.weekly_source_invoice_issue_validate_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_issue_validate_v1(\n  p_invoice_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/07_complete_header_move.sqlinc",
+      "name": "private.weekly_source_invoice_header_refresh_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_header_refresh_v1(\n  p_invoice_id uuid\n) returns void\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/07_complete_header_move.sqlinc",
+      "name": "public.weekly_source_invoice_move_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_move_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "name": "private.weekly_source_invoice_batch_snapshot_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_batch_snapshot_v1()\nreturns text\nlanguage sql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "name": "private.weekly_source_invoice_batch_rows_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_batch_rows_v1(\n  p_filters jsonb default '{}'::jsonb,\n  p_selection jsonb default pg_catalog.jsonb_build_object(\n    'contract_version','INVOICE_BATCH_SELECTION_V2',\n    'mode','IMPLICIT_ALL','default_selected',true,'rules','[]'::jsonb\n  )\n) returns table(\n  manifest_id uuid,\n  selection_key text,\n  source_revision text,\n  source_group_id uuid,\n  source_cycle_id uuid,\n  client_id uuid,\n  client_name text,\n  finalisation_week_ending date,\n  backing_report_number text,\n  movement_count integer,\n  candidate_ids uuid[],\n  candidate_names text[],\n  total_ex_vat numeric,\n  vat_amount numeric,\n  total_inc_vat numeric,\n  released_after_dispute boolean,\n  selectable boolean,\n  blocker_codes text[],\n  selected boolean\n)\nlanguage sql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "name": "public.weekly_source_invoice_batch_candidates_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_batch_candidates_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "name": "public.weekly_source_invoice_batch_admit_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_batch_admit_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/08_complete_batch_detail.sqlinc",
+      "name": "public.weekly_source_invoice_edit_context_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_edit_context_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_ordinary_pay_projection_apply_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_ordinary_projection_source_units_v1",
+      "definition_header": "create or replace function private.weekly_source_ordinary_projection_source_units_v1(\n  p_final_revision_id uuid,\n  p_root_timesheet_id uuid\n) returns jsonb\nlanguage sql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_ordinary_projection_active_movements_v1",
+      "definition_header": "create or replace function private.weekly_source_ordinary_projection_active_movements_v1(\n  p_root_timesheet_id uuid,\n  p_through_final_revision_id uuid\n) returns setof public.weekly_source_billing_movements\nlanguage sql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_selected_source_witness_v1",
+      "definition_header": "create or replace function private.weekly_source_selected_source_witness_v1(\n  p_family_id uuid,p_action_cycle_id uuid,p_work_event_id uuid\n) returns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_protected_final_source_context_v1",
+      "definition_header": "create or replace function private.weekly_source_protected_final_source_context_v1(\n  p_family_id uuid,p_cycle_id uuid,p_event_id uuid\n) returns jsonb language plpgsql stable security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_finalisation_pay_context_v1",
+      "definition_header": "create or replace function private.weekly_source_finalisation_pay_context_v1(\n  p_final_revision_id uuid,\n  p_root_timesheet_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "public.weekly_source_finalisation_pay_open_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_finalisation_pay_open_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_correct_final_prepared_context_v1",
+      "definition_header": "create or replace function private.weekly_source_correct_final_prepared_context_v1(\n  p_correction_session_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "public.weekly_source_finalisation_pay_task_finish_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_finalisation_pay_task_finish_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "public.weekly_source_finalisation_pay_task_recover_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_finalisation_pay_task_recover_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/09_complete_pay_consumers.sqlinc",
+      "name": "private.weekly_source_office_proposal_revision_v1",
+      "definition_header": "create or replace function private.weekly_source_office_proposal_revision_v1(\n  p_member_timesheet_ids uuid[],\n  p_source_revision_digest bytea\n) returns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "private.weekly_source_correct_final_preconditions_v1",
+      "definition_header": "create or replace function private.weekly_source_correct_final_preconditions_v1(\n  p_prior_final_revision_id uuid,\n  p_actor_user_id uuid,\n  p_excluding_correction_session_id uuid,\n  p_lock_roots boolean\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_correct_final_open_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_open_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_correct_final_review_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_review_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_prepare_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_apply_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "private.weekly_source_office_query_groups_v1",
+      "definition_header": "create or replace function private.weekly_source_office_query_groups_v1(\n  p_source_cycle_id uuid,\n  p_projection_publication_id uuid,\n  p_filters jsonb default '{}'::jsonb\n) returns table(\n  group_key text,\n  candidate_id uuid,\n  client_id uuid,\n  manager_recipient_route_key bytea,\n  candidate_name text,\n  client_name text,\n  incident_ids uuid[],\n  accept_incident_ids uuid[],\n  missing_scopes jsonb,\n  children jsonb,\n  issue_count integer,\n  candidate_asked boolean,\n  manager_informed boolean,\n  outreach_eligible boolean,\n  manager_eligible boolean,\n  candidate_app_available boolean,\n  first_seen_at_utc timestamptz,\n  status_text text,\n  status_tone text,\n  issue_summary text\n)\nlanguage sql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_cancel_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_invoice_report_rows_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_report_rows_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10_complete_source_readers_correction.sqlinc",
+      "name": "public.weekly_source_invoice_evidence_v1",
+      "definition_header": "create or replace function public.weekly_source_invoice_evidence_v1(p_request jsonb)\nreturns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_protected_editor_context_v1",
+      "definition_header": "create or replace function public.weekly_source_protected_editor_context_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "definition_header": "create or replace function public.weekly_source_workspace_scopes_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_combined_review_workspace_v1",
+      "definition_header": "CREATE OR REPLACE FUNCTION public.weekly_source_combined_review_workspace_v1(p_request jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_report_history_v1",
+      "definition_header": "create or replace function public.weekly_source_report_history_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_manual_review_open_v1",
+      "definition_header": "create or replace function public.weekly_source_manual_review_open_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "public.weekly_source_manual_review_resolve_v1",
+      "definition_header": "create or replace function public.weekly_source_manual_review_resolve_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "private.weekly_source_accepted_publication_context_v1",
+      "definition_header": "create or replace function private.weekly_source_accepted_publication_context_v1(\n  p_canonical jsonb\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "private.weekly_source_manual_review_source_v2",
+      "definition_header": "create or replace function private.weekly_source_manual_review_source_v2(p_source_row_id uuid)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "private.weekly_source_manual_reviews_finalised_v1",
+      "definition_header": "create or replace function private.weekly_source_manual_reviews_finalised_v1(p_final_revision_id uuid,p_actor_user_id uuid)\nreturns integer language plpgsql volatile security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10b_complete_remaining_manifest_consumers.sqlinc",
+      "name": "private.weekly_source_invoice_duty_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_correct_final_open_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_open_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_correct_final_review_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_review_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_prepare_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_apply_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "definition_header": "create or replace function public.weekly_source_correct_final_cancel_atomic_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "private.weekly_source_correct_final_preconditions_v1",
+      "definition_header": "create or replace function private.weekly_source_correct_final_preconditions_v1(\n  p_prior_final_revision_id uuid,\n  p_actor_user_id uuid,\n  p_excluding_correction_session_id uuid,\n  p_lock_roots boolean\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "private.weekly_source_correct_final_office_preview_v1",
+      "definition_header": "create or replace function private.weekly_source_correct_final_office_preview_v1(\n  p_correction_session_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "private.weekly_source_invoice_duty_v1",
+      "definition_header": "create or replace function private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10c_complete_root_report_consumer_union.sqlinc",
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "definition_header": "create or replace function public.weekly_source_workspace_scopes_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10d_retained_report_and_date_boundaries.sqlinc",
+      "name": "private.weekly_source_self_bill_report_finalise_v1",
+      "definition_header": "create or replace function private.weekly_source_self_bill_report_finalise_v1(p_request jsonb,p_vat_rounding_variant text)\nreturns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10d_retained_report_and_date_boundaries.sqlinc",
+      "name": "private.weekly_source_rule_coverage_floor_v1",
+      "definition_header": "create or replace function private.weekly_source_rule_coverage_floor_v1(p_client_id uuid,p_cycle_id uuid)\nreturns date language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10d_retained_report_and_date_boundaries.sqlinc",
+      "name": "private.weekly_source_upload_coverage_context_v1",
+      "definition_header": "create or replace function private.weekly_source_upload_coverage_context_v1(p_client_id uuid,p_cycle_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/10d_retained_report_and_date_boundaries.sqlinc",
+      "name": "public.weekly_source_client_settings_save_atomic_v1",
+      "definition_header": "CREATE OR REPLACE FUNCTION public.weekly_source_client_settings_save_atomic_v1(p_request jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/11_complete_native_snapshot_assembler.sqlinc",
+      "name": "private._invoice_presentation_snapshot_batch",
+      "definition_header": "create or replace function private._invoice_presentation_snapshot_batch(\n    p_requests jsonb,\n    p_now_utc timestamptz default null\n)\nreturns table (\n    request_key text,\n    snapshot_schema_version text,\n    presentation_model jsonb,\n    timesheet_sources jsonb,\n    supporting_sources jsonb,\n    higher_rate_support jsonb,\n    snapshot_json jsonb,\n    snapshot_hash text,\n    valid boolean,\n    error_code text,\n    error_detail jsonb\n)\nlanguage plpgsql\nsecurity definer\nset search_path to 'public','private','extensions','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/12_retained_final_issue_transport.sqlinc",
+      "name": "private._invoice_document_advance_batch_v6_downstream",
+      "definition_header": "create or replace function private._invoice_document_advance_batch_v6_downstream(\n  p_claims jsonb,\n  p_now_utc timestamptz\n) returns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path to 'public','private','extensions','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/13b_complete_acl_helper_service_union.sqlinc",
+      "name": "private._weekly_source_acl_private_helper_contract_v1",
+      "definition_header": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/13b_complete_acl_helper_service_union.sqlinc",
+      "name": "private._weekly_source_acl_service_rpc_contract_v1",
+      "definition_header": "create or replace function private._weekly_source_acl_service_rpc_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\n"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/14_complete_legacy_render_manifest.sqlinc",
+      "name": "public.invoice_render_manifest",
+      "definition_header": "create or replace function public.invoice_render_manifest(p_invoice_id uuid)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = public\n"
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 import { boundedCellEvidence, cellText, isBlankCell, parseDateCell, serialiseIssue, stableSortByPhysicalRow, validateActualTuple } from './shared.js';
+import { classifyExportSourceInvoiceMoney } from './source-invoice-money.js';
+import { parseSourceFinalisedTimeCell } from './source-finalised-time.js';
 
 function rowHasContent(sheet, physicalRow) {
   return (sheet.rows.find((row) => row.physicalRow === physicalRow)?.cells ?? []).some((cell) => !isBlankCell(cell));
@@ -41,6 +43,10 @@ export function normaliseHealthRosterEvidence(evidence, profile, options = {}) {
   const fatalErrors = [];
   const warnings = [];
   const requestIds = new Map();
+  const rules = options.effectiveRuleSet?.values;
+  const selfBillRules = rules?.invoice_sender === 'CLIENT_SELF_BILL';
+  const sourceMoney = selfBillRules && rules.invoice_amount_basis === 'SOURCE_AMOUNT'
+    && rules.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY';
 
   for (let physicalRow = profile.headerRow + 1; physicalRow <= (sheet.lastPhysicalRow ?? profile.headerRow); physicalRow += 1) {
     if (!rowHasContent(sheet, physicalRow)) continue;
@@ -84,6 +90,22 @@ export function normaliseHealthRosterEvidence(evidence, profile, options = {}) {
       }));
     } else rowKind = 'FINALISED_WORKED';
 
+    let invoiceMoney = null, finalisedTime = null;
+    if (rowKind === 'FINALISED_WORKED' && selfBillRules && rules.invoice_membership === 'FINALISED_IN_CYCLE_WINDOW') {
+      finalisedTime = parseSourceFinalisedTimeCell(sheet.getCell(physicalRow, columns.finalisedDate), { date1904: evidence.date1904 });
+      if (!finalisedTime.ok) fatalErrors.push(serialiseIssue(finalisedTime.code, physicalRow, null, 'Finalised Date must be one unambiguous Europe/London date and time.'));
+    }
+    if (rowKind === 'FINALISED_WORKED' && sourceMoney) {
+      const netCell = sheet.getCell(physicalRow, columns.sourceNet), grossCell = sheet.getCell(physicalRow, columns.sourceGross);
+      try {
+        invoiceMoney = { ...classifyExportSourceInvoiceMoney(netCell, grossCell),
+          evidence: { net: boundedCellEvidence(netCell, evidence.sourceKind), gross: boundedCellEvidence(grossCell, evidence.sourceKind) } };
+        if (!invoiceMoney.vatFit) warnings.push(serialiseIssue('VAT_FIT', physicalRow, null, 'Invoice held: source net and gross do not fit 20% VAT. Candidate pay is unchanged.'));
+      } catch (error) {
+        fatalErrors.push(serialiseIssue(error.code ?? 'HEALTHROSTER_SOURCE_MONEY_INVALID', physicalRow, null, 'Source net and gross must be auditable literal amounts.'));
+      }
+    }
+
     const sourcePosition = rowKind === 'FINALISED_WORKED'
       ? 'WORKED'
       : finalisation.kind === 'UNFINALISED' && actual.ok && actual.kind === 'ZERO'
@@ -101,6 +123,8 @@ export function normaliseHealthRosterEvidence(evidence, profile, options = {}) {
       requestId,
       workerName,
       finalisedBy: safeLiteralText(sheet.getCell(physicalRow, columns.finalisedBy)),
+      ...(selfBillRules ? { finalisedAtUtc: finalisedTime?.ok ? finalisedTime.finalisedAtUtc : null } : {}),
+      ...(sourceMoney ? { invoiceMoney } : {}),
       date: dateResult.ok ? dateResult.value : null,
       ...(rowKind === 'FINALISED_WORKED' ? {
         actual: {

@@ -1,0 +1,106 @@
+[
+  {
+    "file": "../healthroster-v2-date-guards-build-13102026/supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+    "sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+    "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+    "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+  },
+  {
+    "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+    "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_charge_acceptance_v1.sql",
+    "sha256": "05217b8f913073e58b7f9f673c62a425306d6d3830121fdc23c039b643acc7b0"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+    "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+    "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+    "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+  },
+  {
+    "file": "../healthroster-v2-f2-build-13102026/supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+    "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+    "sha256": "c3dff66b482f92c34eead365cd9ca674c9ff03680f6cb79710ff16de141cc382"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+    "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+    "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+    "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+  },
+  {
+    "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+    "sha256": "48d1e30514857162ed3d6af55474ee31a10cc33615079628033d539f643c0fe0"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+  },
+  {
+    "file": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+    "sha256": "1d455ca1a9088ce591b046e9c4659b5994967a5f901808faf5ab7fbd1ce04c8d"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+    "sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19"
+  },
+  {
+    "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+    "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+  },
+  {
+    "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+    "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+    "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+  },
+  {
+    "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+    "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+  },
+  {
+    "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+    "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+  },
+  {
+    "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+    "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+  }
+]

@@ -204,7 +204,7 @@ function dependenciesFor(options = {}) {
 
 const preview = (dependencies, request = previewRequest()) => orchestrateWeeklyCorrectFinalPreview({
   request,
-  actor: { id: ID.actor, role: 'admin' },
+  actor: { id: ID.actor, role: 'admin', is_active: true },
   env: { marker: 'TEST' },
   ctx: { marker: 'REQUEST' },
   dependencies,
@@ -221,7 +221,7 @@ const applyRequest = (review, overrides = {}) => ({
 
 const apply = (dependencies, request) => orchestrateWeeklyCorrectFinalApply({
   request,
-  actor: { id: ID.actor, role: 'admin' },
+  actor: { id: ID.actor, role: 'admin', is_active: true },
   env: { marker: 'TEST' },
   ctx: { marker: 'REQUEST' },
   dependencies,
@@ -377,7 +377,7 @@ test('browser financial snapshots, the former one-step request and wrong actor a
 test('Office routes expose separate preview and apply commands and reject the former one-step action', async () => {
   const dependencies = dependenciesFor({ roots: [preparedRoot(ID.rootA, HASH.rootA)] });
   const routeDependencies = {
-    requireUser: async () => ({ id: ID.actor, role: 'admin' }),
+    requireUser: async () => ({ id: ID.actor, role: 'admin', is_active: true }),
     rpc: async () => { throw new Error('Direct route RPC must not run for Correct final source.'); },
     previewCorrectFinalSource: (input) => orchestrateWeeklyCorrectFinalPreview({ ...input, dependencies }),
     applyCorrectFinalSource: (input) => orchestrateWeeklyCorrectFinalApply({ ...input, dependencies }),

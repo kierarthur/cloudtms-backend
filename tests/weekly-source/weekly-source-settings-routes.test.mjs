@@ -15,7 +15,7 @@ const env = Object.freeze({
 
 function dependencies(calls) {
   return {
-    requireUser: async () => ({ id: ACTOR, role: 'admin' }),
+    requireUser: async () => ({ id: ACTOR, role: 'admin', is_active: true }),
     rpc: async (name, args) => {
       calls.push({ name, args });
       return { ok: true, name, request: args.p_request };

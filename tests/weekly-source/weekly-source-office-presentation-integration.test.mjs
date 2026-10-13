@@ -95,7 +95,7 @@ test('canonical invoice-delay category reaches all existing detail shapes withou
   assert.equal(payload.timesheet.tools_stage, undefined, 'input is not mutated');
 });
 
-test('no category override preserves the existing Stage and actions', async () => {
+test('no category override preserves Stage and fails Source action hints closed without actor evidence', async () => {
   const payload = { current_timesheet_id: TIMESHEET_ID, sheet_scope: 'WEEKLY',
     tools_stage: 'INVOICED', timesheet: { timesheet_id: TIMESHEET_ID, is_archived: false } };
   const result = await weeklySourceOfficePresentationInternals.attachWeeklySourceOfficeTimesheetPresentation(
@@ -104,7 +104,9 @@ test('no category override preserves the existing Stage and actions', async () =
   );
   assert.equal(result.tools_stage, 'INVOICED');
   assert.deepEqual(result.timesheet, { ...payload.timesheet,
-    weekly_source_operational_category: null, weekly_source_processing_reason: null });
+    weekly_source_operational_category: null, weekly_source_processing_reason: null,
+    can_authorise: false, can_bulk_authorise: false, can_unauthorise: false,
+    actions: { can_authorise: false, can_bulk_authorise: false, can_unauthorise: false } });
 });
 
 test('explicit no override clears stale category hints in every detail shape, not financial facts', async () => {
@@ -150,7 +152,7 @@ test('Simple and Bulk Authorise both attach the same server-owned projection', (
   const bulkStart = worker.indexOf('async function handleTimesheetBulkAuthoriseContext');
   const bulkEnd = worker.indexOf('\nasync function ', bulkStart + 50);
   const bulkSource = worker.slice(bulkStart, bulkEnd > bulkStart ? bulkEnd : undefined);
-  assert.match(bulkSource, /attachWeeklySourceOfficeTimesheetPresentation\(env, payload, user\.id\)/);
+  assert.match(bulkSource, /attachWeeklySourceOfficeTimesheetPresentation\(env, payload, user\.id, sbRpc, user\)/);
   assert.doesNotMatch(bulkSource, /pay_workbench|pay_batch_create|banking\/pay/);
 });
 

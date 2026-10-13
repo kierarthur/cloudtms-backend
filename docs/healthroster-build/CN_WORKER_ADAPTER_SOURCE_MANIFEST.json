@@ -1,0 +1,97 @@
+{
+  "formatVersion": 1,
+  "status": "SOURCE_HANDOFF_UNMOUNTED_NATIVE_ACCEPTANCE_HELD",
+  "capturedAtUtc": "2026-10-13T15:00:40.2990882Z",
+  "worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "assignedBase": "83547d19",
+  "sourceTests": {
+    "node": "v24.15.0",
+    "syntaxCommand": "node --check broker/src/timesheet-correction-orchestrator.mjs",
+    "syntaxPassed": true,
+    "command": "node --test tests/timesheet-correction-orchestrator.test.mjs",
+    "passed": 30,
+    "failed": 0,
+    "qualification": "Synthetic callbacks prove source sequencing/closure/identity/sign clone and receipt guards only; no real SQL/native writer/R2/API/business acceptance."
+  },
+  "boundaries": {
+    "committed": false,
+    "staged": false,
+    "pushed": false,
+    "sqlEdited": false,
+    "sharedIndexEdited": false,
+    "routesMounted": false,
+    "reportEdited": false,
+    "creditFreezeEdited": false,
+    "databaseTools": false,
+    "docker": false,
+    "hostedEffects": false,
+    "secretsRead": false,
+    "notificationsSent": false,
+    "paymentEffects": false
+  },
+  "reportFreezeVerification": {
+    "manifest": "docs/healthroster-build/REPORT_SOURCE_MANIFEST.json",
+    "inputCount": 39,
+    "driftCount": 0
+  },
+  "heldGates": [
+    "Root service-only request authority reader and final ACL/generated contract",
+    "Root existing canonical P0 producer/preloader callback wiring",
+    "Root recursive plus SEGMENTS exact money/base_hours guard extension",
+    "Missing-A0 exact native post-writer sign-clone RPC contract/proof; adapter currently refuses",
+    "Root existing whole/native mixed lifecycle resolver and pinned generic call-only delegation",
+    "Root exact P0 existing ordinary notification owner and idempotency receipt follow-up",
+    "Root existing deleteCommittedTimesheetR2Keys binding plus actual immutable asset retention and cleanup proof",
+    "Native serial rollback/first-use/CAS/concurrency/returned failures/nonzero mileage/VAT/ERNI/D1/issued-original/Candidate-manager/document/API/all18 acceptance"
+  ],
+  "files": [
+    {
+      "path": "broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 40752,
+      "sha256": "16c2bc8e4616329935e0501c0de079cd5a3c042c00981d7b5468f4372880fc23"
+    },
+    {
+      "path": "tests/timesheet-correction-orchestrator.test.mjs",
+      "bytes": 38007,
+      "sha256": "edd52fab89e2b60074d7ffcc720793f858ce2882a14a41daddd31a4a01bad7d9"
+    },
+    {
+      "path": "docs/healthroster-build/CN_WORKER_ADAPTER_HANDOFF.md",
+      "bytes": 11070,
+      "sha256": "82aa90612428a5f6db8975774e1c02c3daf6d32c1d7fc9e3678236e9f63d119c"
+    },
+    {
+      "path": "docs/healthroster-build/CN_WORKER_REVERSAL_GUARD_PROPOSAL.md",
+      "bytes": 2981,
+      "sha256": "1d9f5c936c2030888257bf301ba34fa4a09d34f21385471921ddb124b97add99"
+    }
+  ],
+  "readOnlyNativeInputs": [
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_expand.sqlinc",
+      "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+      "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f"
+    }
+  ],
+  "manifestExcludedFromOwnFileHash": true
+}

@@ -1,0 +1,43 @@
+# WP-M1 whole-shift Contract pricing source proposal
+
+The approved plan 03 §20/Q-MAGNIT-AMT explicitly keeps the coded whole-shift calculation. This package adds the missing named preset/admission qualification and preserves that calculator. It is a separate source proposal: the 28 frozen Money inputs and earlier-window/receipt package are unchanged. No database, Docker, network mutation, shared index/routes, release, commit or push was performed. Native hosted compile, financial/NEXT/expense/UI/PDF acceptance and group activation are not claimed.
+
+## Exact pricing and unchanged producers
+
+The actual producer is `canonicalWeeklyShiftFinancialSegment` in `broker/src/weekly-source/weekly-rate-owner.js`, version WEEKLY_SHIFT_FINANCIAL_SEGMENT_V1. WHOLE_SHIFT_START_DAY chooses by actual start local date: bank holiday → Sunday → Saturday → crosses local midnight night → weekday day. Every paid minute is assigned to that one bucket. Break is deducted once. Actual pay and charge rates come from the server-resolved dated Contract settings/rates; whole-shift mode requires strict positive rates. The native calculator's rounding, signs, DST behavior and split-mode compatibility remain unchanged.
+
+`upload-publication-owner.mjs` resolves the actual client/Contract, rate arrays and settings timezone/BH list and delegates to that calculator. `source-price-comparator.js` keeps summary at HEALTHROSTER_WEEKLY/Contract calculation. `economic-snapshot.js` checks the native version/method/minutes/hours and exact actual Contract rates and produces the existing closed snapshot. The DB projection owner checks the actual dated policy/method, input tuple, positive rates, bucket/hour/amount arithmetic and existing fingerprints; final economic assert checks the persisted canonical snapshot/hash. No new calculator, source band inference, policy hash field or economic snapshot field is introduced.
+
+The existing ROSTER_WEEKLY_SUMMARY_ACTUAL_V1 has exactly65 headers. The normaliser reads Booking Start/End and Total Hours, with paid minutes=Total Hours and break=booking interval−paid minutes. It maps Expenses through the existing lexical SOURCE_FIXED_EXPENSE_PENCE_V1 owner. Total Cost, Sub Cost and source Unit Cost columns are not mapped to pricing. The physical census still retains their original cells as evidence. Staging source_total_cost_pence and source_shift_charge_pence remain NULL, money evidence remains empty, and source expense evidence stays independent. A negative physical Total Hours remains refused; ordinary native financial reversals retain signed buckets/hours/pence through the unchanged canonical owner.
+
+## Complete source deltas
+
+`magnit-contract-price-admission.js` supplies the disabled saved rule preset and two admission checks. The preset uses summary, CLIENT_SELF_BILL, SAME_FILE/NONE, FINALISED_IN_CYCLE_WINDOW, ALL_FINALISED_IN_FILE, CONTRACT_CALCULATION/NONE, ROUND_EACH_LINE_FROM_NET, SUM_OF_LINES, NOT_APPLICABLE rate comparison and S12NULL. Existing S14/source expense/VAT and weekly rate-classification settings remain owned by the existing client/Contract policy. Constructing/saving/assigning this version does not change that policy or enable a group.
+
+When the actual enabled saved version identifies the CLIENT_SELF_BILL summary, the proposal requires the already-read actual dated client/Contract policy to be WHOLE_SHIFT_START_DAY. A Contract override to SPLIT is refused; no default or new flag silently replaces it. The output check requires the unchanged native calculator's single selected category to contain every paid minute and every other bucket to be zero. Old NULL/unassigned/disabled, NHSP, agency and non-summary paths return without added effects.
+
+`PRIVATE_ADMISSION_OWNER.sqlinc` has the two owner-private pure qualifications (no service/browser grants):
+
+- `private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)` consumes values and policy already resolved by the native calling owner.
+- `private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)` qualifies the existing closed canonical economic snapshot after native key/type/minute guards; the Worker native calculator remains the only start-date/BH/weekend/overnight category producer.
+
+`generate-complete-owners.mjs` asserts every frozen Money hash, reads the current root F1 group context, frozen complete F5 projection owner and original controlling economic assert, and generates complete bodies plus exact input hashes:
+
+1. Complete Worker `upload-publication-owner.mjs`: policy qualification at `calculationFor` before input selection; output qualification after native comparator calculation. Existing per-row blocked-result/error semantics, no duplicate fetch or global/caller flags.
+2. Complete `private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)`: qualifier after existing dated client policy and after each actual applicable Contract override policy. Existing admin/group/date/agency/activation/SP-20/cross-field checks stay intact.
+3. Complete `public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)`: qualifier from the already-read effective policy and server effective rule values; one-bucket qualification before native Contract-rate/economic hash generation.
+4. Complete `private.weekly_source_finalisation_economic_assert_v1(uuid,uuid,text)`: one-bucket qualifier from actual client/cycle effective rules and immutable canonical snapshot before native amount/hash validation.
+
+The generated Worker is a proposed replacement body with a relative import intended for the normal broker directory; it is syntax-checked here, not mounted or represented as independently deployed. Root merges only these actual call-site deltas into its newer Report/Protection/Date/F5 owners and copies the adjacent helper if accepted. There are no schema/table/public-RPC/profile additions. Final ACL union adds only the two exact private signatures with owner mapping and all-role revocation. Existing caller service grants are retained centrally.
+
+## Cutoff and source expenses
+
+M1 uses the actual group cutoff S11 and S12 Not used, exactly R-238. F8 must reject a file uploaded before that cutoff even if checking/Finalise occurs later; F3 supplies the summary profile in an empty fresh cycle. S05/S25 summary membership is actual work-date only (<=week ending), with no invented Approved Date/Finalised Date. Ordinary late rows are not paid independently of this single-cycle invoice set.
+
+Native source-fixed expenses are unchanged: actual imported pence remain worker pay and client charge, source-expense VAT follows the existing policy, the original generation/movement/companion line and VALIDATED_SOURCE_PENCE authority stay in place, and expense-only zero-hour/omission/correction behavior uses its existing owners. Ordinary receipt expenses are never converted. The current F1 R7 guard explicitly refuses source expense enablement because published SP-20/first-use witness is not installed in that stage; this proposal preserves that real guard. It does not fabricate readiness from a source name, return constant true or use a browser flag. Root must integrate the actually published compatible SP-20 and joined fixed-expense/NON_TAXABLE/no-conversion proof before enabling Magnit S14. A LEGACY result does not satisfy NEXT acceptance.
+
+## Validation and native proof
+
+13 new source/actual-native producer vectors plus12 existing canonical rate tests pass:25 total, zero skips/failures. Actual450 paid minutes at five distinct Contract bands produce pay/charge pence7500/15000,8250/15750,9000/16500,9750/17250 and10500/18000. Ordinary negative uses−7500/−15000 with signed native hours. An actual65-column CSV with invalid Total Cost/Sub Cost/Unit Cost still parses and stages450 minutes/30 break/1234p imported expense, while source invoice-money fields stay NULL and no money evidence is created. Zero hours retain source expense evidence; negative physical Total Hours is refused. Wrong method/multiple-band/invalid rate/break/interval fail closed.
+
+`NATIVE_JOURNEYS.json` supplies MG1–MG8: actual parser/staging/projection/FIN/admission/render; actual published SP-20 joined expense/no-conversion; all categories/negative/rounding; work-date/cutoff/early-upload; zero-hour/expense omission/correction; OFF/NULL/NHSP/agency regressions and exact replay/LEGACY/NEXT hooks. Restricted real-evidence CSV proof remains separately required under the authorized evidence directory; no unavailable corpus pass is claimed. Root owns exact legal clocks, vacancies, hashes/ACL, physical agency TEST rollback/fresh restoration and final release/activation/publication receipts.

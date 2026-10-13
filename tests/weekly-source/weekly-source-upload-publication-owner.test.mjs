@@ -245,7 +245,11 @@ test('import use defaults to checking for same-format exports and is explicit fo
 });
 
 test('strict staging adapter preserves a complete physical census for all five profiles', async () => {
-  for (const profileId of Object.values(WEEKLY_SOURCE_PROFILE_IDS)) {
+  for (const profileId of [WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1]) {
     const parsed = await parseCase(profileId);
     assert.equal(parsed.ok, true, profileId);
     const final = profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1;

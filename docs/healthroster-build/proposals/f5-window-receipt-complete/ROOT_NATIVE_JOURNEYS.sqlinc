@@ -1,0 +1,88 @@
+-- Root executes only inside its server-owned agency TEST rollback envelope,
+-- after its exact native upload/projection/CW/finance setup and fixture manifest.
+-- These are concrete owner requests built from actual saved CAS/hash witnesses;
+-- no synthetic projection/signature/payment/publication markers are installed.
+
+-- Pure native S09 authority vectors. No feature or financial acceptance claim.
+do $vectors$
+begin
+  if private.weekly_source_invoice_vat_target_pence_v1(200,30,'ONCE_ON_TOTAL_HALF_UP',20)<>40
+    or private.weekly_source_invoice_vat_target_pence_v1(200,50,'ONCE_ON_TOTAL_HALF_UP',20)<>40
+    or private.weekly_source_invoice_vat_target_pence_v1(-3,-1,'ONCE_ON_TOTAL_HALF_UP',20)<>-1
+    or private.weekly_source_invoice_vat_target_pence_v1(-3,-1,'ONCE_ON_TOTAL_TRUNCATE',20)<>0
+    or private.weekly_source_invoice_vat_target_pence_v1(10000,2100,'SUM_OF_LINES',20)<>2100 then
+    raise exception 'WINDOW_RECEIPT_S09_VECTOR_FAILED'; end if;
+end;
+$vectors$;
+
+-- FIN entry: actual legal native fixture upload/published generation is .100;
+-- actor .001 must be the actual active admin/payment actor proved by root.
+select public.weekly_source_finalise_atomic_v1(jsonb_build_object(
+  'actor_user_id','f5530000-0000-4000-8000-000000000001'::uuid,
+  'source_cycle_id',cycle.id,'authority_scope_kind','CYCLE','report_scope_id',null,
+  'upload_id',upload.id,'projection_publication_id',publication.id,
+  'expected_authority_scope_version',cycle.version,
+  'expected_row_manifest_hash',encode(upload.row_manifest_hash,'hex'),
+  'expected_comparison_manifest_hash',encode(publication.comparison_manifest_hash,'hex'),
+  'expected_issue_set_hash',encode(publication.issue_set_hash,'hex'),
+  'exclude_unfinalised_acknowledged',true))
+from public.weekly_source_uploads upload join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+join public.weekly_source_projection_publications publication on publication.id=cycle.current_projection_publication_id
+  and publication.upload_id=upload.id and publication.state='CURRENT'
+where upload.id='f5530000-0000-4000-8000-000000000100'::uuid and upload.state='CURRENT';
+
+-- Exact post-final release: .101 and .102 are native source rows with net100p,
+-- raw VAT30/10p; facts/hash/CAS are taken from the actual saved upload.
+select public.weekly_source_invoice_hold_release_atomic_v1(jsonb_build_object(
+  'actor_user_id','f5530000-0000-4000-8000-000000000001'::uuid,
+  'upload_row_id',source_row.id,'source_cycle_id',cycle.id,'report_scope_id',upload.report_scope_id,
+  'expected_source_row_hash',encode(source_row.normalised_row_hash,'hex'),
+  'expected_authority_scope_version',cycle.version,'hold_kind','VAT_FIT',
+  'action',case source_row.id when 'f5530000-0000-4000-8000-000000000101'::uuid
+    then 'BILL_AT_NET_PLUS_20' else 'BILL_AS_FILE' end))
+from public.weekly_source_upload_rows source_row join public.weekly_source_uploads upload on upload.id=source_row.upload_id
+join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+where source_row.id in ('f5530000-0000-4000-8000-000000000101'::uuid,'f5530000-0000-4000-8000-000000000102'::uuid)
+order by source_row.id;
+
+-- Admit exact original revision partitions, earlier invoice window first.
+-- Source revision membership is genuine; no hand-written financial row insert.
+select public.weekly_source_invoice_admit_atomic_v1(jsonb_build_object(
+  'actor_user_id','f5530000-0000-4000-8000-000000000001'::uuid,
+  'client_manifest_id',manifest.id,'expected_manifest_hash',encode(manifest.manifest_hash,'hex')))
+from public.weekly_source_client_manifests manifest join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+where revision.upload_id='f5530000-0000-4000-8000-000000000100'::uuid and revision.state='CURRENT'
+order by manifest.finalisation_week_ending,manifest.id;
+
+-- Independently read actual full bound provenance and native issue verdict.
+select invoice.id,private.weekly_source_invoice_allocation_assert_v1(invoice.id) allocation,
+  private.weekly_source_invoice_issue_validate_v1(invoice.id) issue_verdict,
+  private.weekly_source_invoice_receipt_support_v1(invoice.id) receipt_support
+from public.invoices invoice where exists(select 1 from public.weekly_source_invoice_line_bindings binding
+  join public.weekly_source_client_manifests manifest on manifest.final_revision_id=binding.original_final_revision_id
+  join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+  where binding.invoice_id=invoice.id and binding.state='CURRENT'
+    and revision.upload_id='f5530000-0000-4000-8000-000000000100'::uuid);
+
+-- Frozen native presentation model: root supplies the actual invoice UUIDs
+-- through this saved binding join, not guessed renderer model/pence fixtures.
+select snapshot.* from private._invoice_presentation_snapshot_batch((
+  select jsonb_agg(jsonb_build_object('request_key','window-receipt:'||invoice.id::text,
+    'entity_type','INVOICE','entity_id',invoice.id,'purpose','DRAFT_PREVIEW','template_version','invoice-professional-v2') order by invoice.id)
+  from public.invoices invoice where exists(select 1 from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_final_revisions revision on revision.id=binding.original_final_revision_id
+    where binding.invoice_id=invoice.id and binding.state='CURRENT'
+      and revision.upload_id='f5530000-0000-4000-8000-000000000100'::uuid)),null) snapshot;
+
+-- Exact root original/foreign manifest proof; whole original revision pays only
+-- through the canonical original-window manifest. Keep every member/hash.
+select manifest.id,manifest.final_revision_id,manifest.source_cycle_id,
+  coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id) invoice_window_cycle_id,
+  manifest.finalisation_week_ending,manifest.movement_count,count(movement.id) actual_member_count,
+  bool_and(mm.movement_hash=movement.movement_economic_hash) original_hashes_exact,
+  sum(movement.total_pay_ex_vat) total_pay,
+  array_agg(movement.id order by mm.manifest_ordinal) original_member_ids
+from public.weekly_source_client_manifests manifest join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+join public.weekly_source_manifest_movements mm on mm.client_manifest_id=manifest.id
+join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+where revision.upload_id='f5530000-0000-4000-8000-000000000100'::uuid group by manifest.id;

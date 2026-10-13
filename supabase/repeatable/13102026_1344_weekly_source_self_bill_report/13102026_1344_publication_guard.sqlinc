@@ -1,0 +1,100 @@
+-- Complete native current-scope guard; exact report discriminator.
+create or replace function private.weekly_source_current_publication_guard_v1(
+  p_source_cycle_id uuid,
+  p_authority_scope_kind text,
+  p_report_scope_id uuid,
+  p_upload_id uuid,
+  p_publication_id uuid,
+  p_authority_scope_version bigint
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_fingerprint bytea;
+begin
+  if p_source_cycle_id is null or p_upload_id is null or p_publication_id is null
+     or p_authority_scope_version is null or p_authority_scope_version<1
+     or p_authority_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE')
+     or (p_authority_scope_kind='CYCLE' and p_report_scope_id is not null)
+     or (p_authority_scope_kind in ('NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE') and p_report_scope_id is null) then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_GUARD_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into v_cycle
+  from public.weekly_source_cycles where id=p_source_cycle_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CYCLE_NOT_FOUND' using errcode='22023';
+  end if;
+  if p_authority_scope_kind='CYCLE' then
+    if v_cycle.current_complete_upload_id is distinct from p_upload_id
+       or v_cycle.current_projection_publication_id is distinct from p_publication_id
+       or v_cycle.version<>p_authority_scope_version
+       or v_cycle.projection_state<>'CURRENT' then
+      raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
+    end if;
+  else
+    select * into v_scope
+    from public.weekly_source_report_scopes
+    where id=p_report_scope_id;
+    if not found or (p_authority_scope_kind='SELF_BILL_REPORT_SCOPE') is distinct from (v_scope.self_bill_report_id is not null)
+       or v_scope.source_cycle_id is distinct from p_source_cycle_id
+       or v_scope.current_complete_upload_id is distinct from p_upload_id
+       or v_scope.current_projection_publication_id is distinct from p_publication_id
+       or v_scope.version<>p_authority_scope_version
+       or v_scope.projection_state<>'CURRENT' then
+      raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
+    end if;
+  end if;
+  select * into v_upload
+  from public.weekly_source_uploads where id=p_upload_id;
+  select * into v_publication
+  from public.weekly_source_projection_publications where id=p_publication_id;
+  if not found or v_upload.state<>'CURRENT' or v_upload.row_manifest_hash is null
+     or v_upload.source_cycle_id is distinct from p_source_cycle_id
+     or v_upload.report_scope_id is distinct from p_report_scope_id
+     or v_publication.state<>'CURRENT'
+     or v_publication.source_cycle_id is distinct from p_source_cycle_id
+     or v_publication.authority_scope_kind is distinct from p_authority_scope_kind
+     or v_publication.report_scope_id is distinct from p_report_scope_id
+     or v_publication.upload_id is distinct from p_upload_id
+     or v_publication.authority_scope_version<>p_authority_scope_version then
+    raise exception 'WEEKLY_SOURCE_PREVIEW_STALE' using errcode='55000';
+  end if;
+  select * into strict v_profile
+  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  if (p_authority_scope_kind='SELF_BILL_REPORT_SCOPE') is distinct from (v_profile.final_authority_kind='SELF_BILL_REPORT') then
+    raise exception 'WEEKLY_SOURCE_REPORT_PUBLICATION_PROFILE_MISMATCH' using errcode='55000'; end if;
+  if v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1'
+     or v_profile.profile_json->>'purpose'='PREFINAL_CHECKING'
+     or v_profile.row_finalisation_capability='CHECKING_ONLY' then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_NOT_FINAL_AUTHORITY' using errcode='55000';
+  end if;
+  v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CURRENT_PUBLICATION_GUARD_V1',
+    pg_catalog.jsonb_build_object(
+      'source_cycle_id',p_source_cycle_id,'authority_scope_kind',p_authority_scope_kind,
+      'report_scope_id',p_report_scope_id,'upload_id',p_upload_id,
+      'publication_id',p_publication_id,'authority_scope_version',p_authority_scope_version,
+      'row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex'),
+      'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+      'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex')
+    )
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'source_cycle_id',p_source_cycle_id,
+    'authority_scope_kind',p_authority_scope_kind,'report_scope_id',p_report_scope_id,
+    'upload_id',p_upload_id,'publication_id',p_publication_id,
+    'authority_scope_version',p_authority_scope_version,
+    'profile_code',v_profile.profile_code,'profile_version',v_profile.version,
+    'row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex'),
+    'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+    'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex'),
+    'guard_fingerprint',pg_catalog.encode(v_fingerprint,'hex')
+  );
+end;
+$function$;

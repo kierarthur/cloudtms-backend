@@ -14,7 +14,7 @@ const TIMESHEET_ID = '81000000-0000-4000-8000-000000000002';
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const officeDependencies = (overrides = {}) => ({
-  requireUser: async () => ({ id: ACTOR_ID, role: 'admin' }),
+  requireUser: async () => ({ id: ACTOR_ID, role: 'admin', is_active: true }),
   rpc: async (name, args) => ({ ok: true, name, args }),
   ...overrides,
 });

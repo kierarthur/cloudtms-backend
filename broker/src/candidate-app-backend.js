@@ -7,6 +7,10 @@ import {
 } from './timesheet-official-pdf.js';
 import { validateFrozenTimesheetPresentationModel } from './invoice-presentation-contract.js';
 import {
+  correctionCapability, correctionPresentation, correctionSchedule,
+  serializeCandidateCorrection, serializeManagerCorrection
+} from './candidate-correction-v1.js';
+import {
   candidateBootstrapCorrelation,
   composeCandidateBootstrapPhase1b,
   handleCandidateDailyPhase1bRequest
@@ -139,6 +143,8 @@ const PAPER_RETURN_PROOF_V2 = 'CANDIDATE_PAPER_RETURN_PROOF_V2';
 const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
 const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
+const CORRECTION_CONVERTERS = Object.freeze({ segmentBreak, normaliseAdaptiveBreakEntry });
+CONFLICT_ERROR_CODES.add('CANDIDATE_CORRECTION_CLIENT_REQUIRED');
 const MANAGER_FINALISATION_LEASE_MS = 3 * 60 * 1000;
 const MANAGER_FINALISATION_RPC_TIMEOUT_MS = 20 * 1000;
 const MANAGER_INTERACTIVE_DB_TIMEOUT_MS = 8 * 1000;
@@ -2775,6 +2781,9 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     candidateAccess = access;
     sessionId = access.session_id;
     ownerId = access.session_id;
+    if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+      await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+    }
   } else if (owner === 'manager') {
     authority = managerRouteAuthority(request);
     await assertManagerRouteWorkflow(env, workflowId, authority);
@@ -3079,6 +3088,13 @@ async function authenticateUploadOwner(request, env, deps, ticket) {
 async function handleComponentUpload(request, env, deps, encodedTicket) {
   const ticket = await verifyUploadTicket(env, decodeURIComponent(encodedTicket));
   const owner = await authenticateUploadOwner(request, env, deps, ticket);
+  if (ticket.owner === 'candidate' && ticket.workflow_id !== GENERIC_DOCUMENT_WORKFLOW_ID
+      && UUID_RE.test(text(ticket.candidate_account_id)) && UUID_RE.test(text(ticket.candidate_id))) {
+    // authenticateUploadOwner already proves this encrypted stable binding
+    // against the currently selected Candidate before the purpose read.
+    await admitCandidateCorrectionWorkflow(request, env, deps,
+      { selected_candidate_id: ticket.candidate_id }, ticket.workflow_id);
+  }
   if (ticket.owner === 'manager') {
     const hold = await managerRpcCall(deps, 'signature-upload-hold', 'candidate_expense_update_manager_hold_v1', {
       p_environment: environmentName(env),
@@ -3840,7 +3856,15 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
   }
   const endDate = text(workflow.week_ending_date || timesheet?.week_ending_date || workflow.work_date).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_DATE_INVALID');
-  const rawSchedule = scheduleFromImmutable(workflow, timesheet);
+  const rawSchedule = frozenPresentation.correction
+    ? correctionSchedule(frozenPresentation.correction.reviewed_schedule, CORRECTION_CONVERTERS)
+    : scheduleFromImmutable(workflow, timesheet);
+  if (frozenPresentation.correction) {
+    const submitted = correctionSchedule(scheduleFromImmutable(workflow, null), CORRECTION_CONVERTERS);
+    if (canonicalJson(submitted) !== canonicalJson(rawSchedule)) {
+      throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    }
+  }
   const lines = rawSchedule.map(scheduleLine).filter((line) => line.date && line.display_start_local && line.display_end_local);
   lines.sort((a, b) => a.date.localeCompare(b.date) || a.display_start_local.localeCompare(b.display_start_local) || a.segment_id.localeCompare(b.segment_id));
   const period = officialPeriodWithShiftLines(endDate, lines);
@@ -6256,6 +6280,74 @@ export async function resumePendingCandidateExpenseUpdateRenders(
   return { scanned: rows.length, recovered, failed };
 }
 
+async function correctionProjection(deps, timesheetId, candidateId) {
+  if (!timesheetId) return null;
+  return rpcCall(deps, 'timesheet_correction_request_projection_v1', {
+    p_timesheet_id: requireUuid(timesheetId),
+    p_candidate_id: requireUuid(candidateId, 'CANDIDATE_SELECTION_REQUIRED')
+  });
+}
+
+function admitCorrectionReplacement(request, raw, timesheetId, mutation = false) {
+  const compatible = correctionCapability(request);
+  if (!raw || raw.replacement_timesheet_id !== timesheetId) return compatible;
+  correctionCapability(request, raw.state === 'WAITING');
+  if (mutation && raw.state !== 'WAITING') {
+    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+  }
+  return compatible;
+}
+
+async function admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId) {
+  const raw = await rpcCall(deps, 'timesheet_correction_workflow_projection_v1', {
+    p_workflow_id: workflowId, p_candidate_id: access.selected_candidate_id
+  });
+  const id = raw?.replacement_timesheet_id;
+  admitCorrectionReplacement(request, raw, id, true);
+  if (raw && raw.replacement_timesheet_id === id) {
+    serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);
+  }
+  return raw;
+}
+
+function frozenCorrectionDailyShift(raw) {
+  const source = raw.frozen_daily_shift;
+  if (!isObject(source) || source.booking_id !== raw.original_booking_id
+      || !/^\d{4}-\d{2}-\d{2}$/.test(text(source.work_date))
+      || !/^\d{4}-\d{2}-\d{2}$/.test(text(source.week_ending_date))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+  }
+  const output = {};
+  for (const key of ['booking_id', 'work_date', 'week_ending_date', 'hospital', 'ward', 'job_title',
+    'shift_type', 'shift_starts_at', 'shift_ends_at']) {
+    const value = source[key];
+    if (!Object.hasOwn(source, key) || (value !== null && typeof value !== 'string')) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    output[key] = value;
+  }
+  for (const key of ['shift_starts_at', 'shift_ends_at']) {
+    if (output[key] !== null && !Number.isFinite(Date.parse(output[key]))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+  }
+  return output;
+}
+
+async function enrichCandidateCorrection(request, deps, access, detail) {
+  const id = detail?.timesheet?.id;
+  const raw = await correctionProjection(deps, id, access.selected_candidate_id);
+  const compatible = admitCorrectionReplacement(request, raw, id);
+  if (!raw || !compatible) return detail;
+  // R0 is an authorized ordinary history record, but is outside the public
+  // V1 fragment's declared root/reversed/P0 identity set.
+  if (![raw.root_timesheet_id, raw.reversed_timesheet_id, raw.replacement_timesheet_id].includes(id)) return detail;
+  const correction = serializeCandidateCorrection(raw, id, CORRECTION_CONVERTERS);
+  const replacement = correction.replacement_timesheet_id === id;
+  return { ...detail, correction, ...(replacement && detail.timesheet.sheet_scope === 'DAILY'
+    ? { daily_shift: frozenCorrectionDailyShift(raw) } : {}) };
+}
+
 async function handleCandidateRead(request, env, deps, kind, params = {}) {
   const access = await verifyCandidateAccess(request, env);
   const url = new URL(request.url);
@@ -6311,7 +6403,8 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     const expenseClaims = await enrichCandidateDetailAdvancedExpenses(
       env, deps, legacyExpenseClaims
     );
-    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, expenseClaims));
+    const corrected = await enrichCandidateCorrection(request, deps, access, expenseClaims);
+    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, corrected));
   }
   if (kind === 'missing-options') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
@@ -6420,6 +6513,32 @@ async function handleWorkflowCreate(request, env, deps) {
   const payload = normaliseCandidateWorkflowCreatePayload(
     isObject(body.workflow) ? body.workflow : body
   );
+  const correction = await rpcCall(deps, 'timesheet_correction_create_projection_v1', {
+    p_candidate_id: access.selected_candidate_id,
+    p_contract_week_id: payload.contract_week_id || null,
+    p_target_timesheet_id: payload.target_timesheet_id || (payload.anchor_timesheet_id ? null : payload.timesheet_id) || null,
+    p_anchor_timesheet_id: payload.anchor_timesheet_id || null
+  });
+  const targetId = correction?.replacement_timesheet_id;
+  admitCorrectionReplacement(request, correction, targetId, true);
+  if (correction) {
+    serializeCandidateCorrection(correction, targetId, CORRECTION_CONVERTERS);
+    if (correction.candidate_id !== access.selected_candidate_id) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    // The purpose RPC proves each supplied selector before returning these
+    // server-owned identities. Preserve the native CREATE owner and replay
+    // hash while binding its worked target to the exact physical P0.
+    payload.target_timesheet_id = requireUuid(targetId, 'CANDIDATE_CONTEXT_STALE');
+    if (correction.replacement_week_id != null) {
+      if (upper(payload.scope) !== 'WEEKLY') {
+        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+      }
+      payload.contract_week_id = requireUuid(correction.replacement_week_id, 'CANDIDATE_CONTEXT_STALE');
+    } else if (upper(payload.scope) !== 'DAILY') {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+  }
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     access, env, workflowId, 'CREATE', null, payload,
     requireCandidateIdempotency(body.idempotency_key)
@@ -6435,6 +6554,7 @@ async function handleWorkflowResubmit(request, env, deps, workflowId) {
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   const idempotencyKey = requireUuid(body.idempotency_key, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     access, env, workflowId, 'RESUBMIT_REJECTED', generation, {}, idempotencyKey
   ));
@@ -6530,9 +6650,23 @@ async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey
   const authoritySubmission = workflow.workflow_kind === 'DAILY'
     ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
     : await deps.buildWeeklySubmission({ workflow, factualSubmission: supplied, mutationKey });
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);
+  if (rawCorrection && rawCorrection.replacement_timesheet_id === id) {
+    const correction = serializeCandidateCorrection(rawCorrection, id, CORRECTION_CONVERTERS);
+    if (correction.state !== 'WAITING') throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    // Read only the canonical producer's actual submitted schedule. Never the
+    // Office proposal, mutable Rota, or the earlier signed record's schedule.
+    const reviewed = scheduleFromImmutable({ ...workflow, immutable_submission_json: authoritySubmission }, null);
+    if (!reviewed.length) throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    const frozen = correctionPresentation(rawCorrection, reviewed, CORRECTION_CONVERTERS);
+    presentation.correction = frozen;
+    presentation.wording.header.lines = [...frozen.header_lines, ...presentation.wording.header.lines];
+  }
   return {
     ...authoritySubmission,
-    official_presentation: await buildOfficialPresentationSnapshot(env, workflow)
+    official_presentation: presentation
   };
 }
 
@@ -8322,6 +8456,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
     throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
   }
+  if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+    await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+  } else correctionCapability(request);
   if ([
     'REMOVE_EXPENSE', 'WITHDRAW_EXPENSE', 'CANCEL_EXPENSE',
     'WITHDRAW_ENTIRE_CLAIM', 'CANCEL_ENTIRE_CLAIM',
@@ -8971,6 +9108,42 @@ function managerStartResult(result, routeAuthority) {
   };
 }
 
+async function enrichManagerCorrection(deps, env, result, request) {
+  let raw;
+  try {
+    raw = await managerRpcCall(deps, 'correction-summary', 'timesheet_correction_manager_summary_v1', {
+      p_workflow_id: result.workflow_id, p_workflow_generation: result.workflow_generation,
+      p_approval_request_id: result.approval_request_id, p_manifest_sha256: result.manifest_sha256
+    });
+  } catch {
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+  }
+  // The SQL owner authenticates the exact approval/render witness; this read
+  // uses that existing manager authority, never a Candidate session/detail API.
+  const owner = await restOne(env, 'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(result.workflow_id)}&generation=eq.${result.workflow_generation}&select=id,generation,immutable_submission_json`);
+  const presentation = owner?.immutable_submission_json?.official_presentation?.correction;
+  if (raw == null) {
+    if (presentation) throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+    return result;
+  }
+  try {
+    const summary = serializeManagerCorrection(raw, result, CORRECTION_CONVERTERS);
+    if (!presentation || presentation.request_id !== summary.request_id || presentation.correction_id !== summary.correction_id
+        || presentation.reason !== summary.reason
+        || canonicalJson(presentation.original_schedule) !== canonicalJson(summary.original_schedule)
+        || canonicalJson(presentation.reviewed_schedule) !== canonicalJson(summary.reviewed_schedule)) {
+      throw new Error('Frozen correction presentation changed');
+    }
+    // Legacy manager clients still see the same authoritative PDF; the optional
+    // phone summary is sent only to a client declaring this exact contract.
+    return correctionCapability(request) ? { ...result, correction: summary } : result;
+  } catch (error) {
+    if (knownErrorCode(error) === 'CANDIDATE_CORRECTION_CLIENT_REQUIRED') throw error;
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_MANIFEST_MISMATCH');
+  }
+}
+
 function managerProgressResult(result) {
   const requiredCount = requireInteger(result?.required_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
   const reviewedCount = requireInteger(result?.reviewed_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
@@ -9081,7 +9254,9 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
     if (deferred !== true) await deferred;
     return jsonResponse(202, managerTerminalResult(result, action));
   }
-  if (action === 'start') return jsonResponse(200, managerStartResult(result, routeAuthority));
+  if (action === 'start') return jsonResponse(200, await enrichManagerCorrection(
+    deps, env, managerStartResult(result, routeAuthority), request
+  ));
   if (action === 'progress') return jsonResponse(200, managerProgressResult(result));
   if (action === 'approve' || action === 'refuse') {
     return jsonResponse(200, managerTerminalResult(result, action));
@@ -12532,6 +12707,7 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 }
 
 export const candidateAppBackendInternals = Object.freeze({
+  enrichCandidateCorrection, enrichManagerCorrection, prepareImmutableSubmission,
   enrichCandidatePageAdvancedExpenses,
   enrichCandidateDetailAdvancedExpenses,
   safeCandidateTransportDiagnostic,
