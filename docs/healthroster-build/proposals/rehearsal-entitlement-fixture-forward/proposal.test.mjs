@@ -23,6 +23,8 @@ test('exact interrupted547 receipt and every current controlling input remain by
   assert.equal(trace.commit,'547c74da5f0a05b09297c042bc7f3cc0c0105b85');assert.equal(trace.affected_errors.length,18);
   for(const p of JSON.parse(read('CONTROLLING_INPUTS.json')).inputs){const bytes=fs.readFileSync(path.join(root,p.path));assert.equal(bytes.length,p.bytes,p.path);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),p.sha256,p.path);}
   assert.ok(trace.original_fixture_commit_pins.every(p=>p.matches_current_disk));
+  for(const error of JSON.parse(read('ERROR_CLASSIFICATION.json')).errors)
+    assert.ok(error.depends_on_statements.every(index=>index<error.statement),'a cascade cannot depend on a later statement');
 });
 test('only two actually included prior units set the leaked variable; no prior unset exists',()=>{
   const prior=trace.psql_variable_trace.slice(0,trace.psql_variable_trace.findIndex(s=>s.file.includes('17092026_0100')));

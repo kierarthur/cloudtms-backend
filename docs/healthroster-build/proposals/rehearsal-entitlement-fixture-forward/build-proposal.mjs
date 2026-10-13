@@ -38,8 +38,9 @@ const diagnoses=affected.map(error=>{let firstCause,classification,confidence,de
   if(error.file.includes('_0100_')){
     firstCause='PSQL_OUTER_VARIABLE_LEAK_SKIPS_FIXTURE_CAPTURE';confidence='EXACT_RENDERED_META_TRACE';
     classification=error.statement===24||error.statement===31?'FIRST_ROOT_OR_DIRECT_SAME_ROOT':'FIXTURE_PARENT_CASCADE';
-    if(error.statement>=25&&error.statement<=29)dependsOn=[24,27];
-    if(error.statement===27)dependsOn=[24,25];
+    if(error.statement===25||error.statement===27)dependsOn=[24];
+    if(error.statement===26)dependsOn=[24,25];
+    if(error.statement===28||error.statement===29)dependsOn=[27];
   }else if(error.file.includes('_0600_')){
     firstCause=error.statement===43?'D8_COMMITTED_HEAD_HAS_NO_MATCHING_SCHEMA_RECEIPT':'ORDERING_FIXTURE_ASSUMES_CALLER_FRAME_IS_TOP_LEVEL';
     classification='INDEPENDENT_FIXTURE_ROOT_CANDIDATE';confidence=error.statement===43?'MISSING_RECEIPT_SOURCE_PROVEN':'FRAME_INCOMPATIBILITY_SOURCE_PROVEN_ACTUAL_ASSERTION_LABEL_WITHHELD';

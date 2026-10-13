@@ -35,8 +35,7 @@
       "first_cause": "PSQL_OUTER_VARIABLE_LEAK_SKIPS_FIXTURE_CAPTURE",
       "confidence": "EXACT_RENDERED_META_TRACE",
       "depends_on_statements": [
-        24,
-        27
+        24
       ],
       "native_fix_proved": false,
       "production_owner_defect_claimed": false
@@ -57,7 +56,7 @@
       "confidence": "EXACT_RENDERED_META_TRACE",
       "depends_on_statements": [
         24,
-        27
+        25
       ],
       "native_fix_proved": false,
       "production_owner_defect_claimed": false
@@ -77,8 +76,7 @@
       "first_cause": "PSQL_OUTER_VARIABLE_LEAK_SKIPS_FIXTURE_CAPTURE",
       "confidence": "EXACT_RENDERED_META_TRACE",
       "depends_on_statements": [
-        24,
-        25
+        24
       ],
       "native_fix_proved": false,
       "production_owner_defect_claimed": false
@@ -98,7 +96,6 @@
       "first_cause": "PSQL_OUTER_VARIABLE_LEAK_SKIPS_FIXTURE_CAPTURE",
       "confidence": "EXACT_RENDERED_META_TRACE",
       "depends_on_statements": [
-        24,
         27
       ],
       "native_fix_proved": false,
@@ -119,7 +116,6 @@
       "first_cause": "PSQL_OUTER_VARIABLE_LEAK_SKIPS_FIXTURE_CAPTURE",
       "confidence": "EXACT_RENDERED_META_TRACE",
       "depends_on_statements": [
-        24,
         27
       ],
       "native_fix_proved": false,

@@ -36,8 +36,8 @@
     },
     {
       "path": "ERROR_CLASSIFICATION.json",
-      "bytes": 13853,
-      "sha256": "f879dd0e308f254c8241523e644eaa50b3cfc4dadf4af049a444b3360e6a985d"
+      "bytes": 13805,
+      "sha256": "b07b4057c3266644875236b4f7201606d98477a99ec0d3e7fdffe8a4f67d4477"
     },
     {
       "path": "EXACT_REHEARSAL_TRACE.json",
@@ -66,8 +66,8 @@
     },
     {
       "path": "build-proposal.mjs",
-      "bytes": 13629,
-      "sha256": "5c3727b708f3c7af3daee0c5932144b98fc275436fbfd74b9fff6c9866dfe7e2"
+      "bytes": 13694,
+      "sha256": "4422c6f190b1f999074bad9f1e8064c096be6d4a7f889c95bfa8386c95ed77bb"
     },
     {
       "path": "freeze-source.mjs",
@@ -76,11 +76,11 @@
     },
     {
       "path": "proposal.test.mjs",
-      "bytes": 7739,
-      "sha256": "461fa804af3eae856ab73b2376be6bd5ff15a323eb8dd05455731c33ff7641e4"
+      "bytes": 7941,
+      "sha256": "ace49b1039fa2485911180f30ccf91e08f9ecdb0972ea23348750cd1a467eb84"
     }
   ],
-  "package_sha256": "000a60d15cdc0605b55bf2e9956b5860a4426e629383ba6191898de1a500d1be",
+  "package_sha256": "aac743216391a770b63bb9c24b3856f5200a6e34cebc16f14b28f1c5ab5cb626",
   "local_checks": {
     "passed": 8,
     "failed": 0,
