@@ -1,0 +1,9 @@
+# Bounded integration
+
+`CONTROLLING_INPUTS.json`, the exact commit pins and `FORWARD_HUNKS.json` identify every byte read and every changed complete block. Reverse the hunks to recover the complete current inputs exactly. The original entitlement schema file is copied unchanged; the fix for its observed missing fixture capture belongs to runner psql variable scope. Root must preserve its standalone and explicit component/nested conditional behavior.
+
+Use the three complete fixture successors only as reviewed replacements for their existing canonical `supabase/verification` paths. Their original relative support includes remain tied to the existing unchanged canonical support owner. The proposal directory is not a release closure or an executable verifier root. No migration, production function, routine signature, table or ACL changes are requested.
+
+The complete archived runner successor is a reference for one exact flag-scope hunk, not permission to run archived source. Preserve its unconditional archive guard and transplant the hunk into root's newly regenerated SEND_7-owned current runner. Root must retain current safety exclusions, single outer transaction/inner fixture savepoints, all-error diagnostics, original assertion bodies, current TEST/LEGACY/Bank first-install admission and fresh rollback verification. Never set the flag to `false`: the fixture tests existence, so it must be unset. No broader variable or financial guard reset is proposed.
+
+Native positive fixture proof must distinguish schema fixture seeds from real business producer acceptance. Do not use manually inserted schema receipt/head rows to satisfy manager, transport, protected publication, Report pay readiness or Banking pay/effect qualification. A true runtime positive must pass the unchanged native producer chain separately. These proposals contain no fake accepted native financial/manager/transport receipts.
