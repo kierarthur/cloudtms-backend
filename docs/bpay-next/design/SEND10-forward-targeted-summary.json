@@ -1,0 +1,96 @@
+{
+  "codeCommit": "c42a25a4205606b150b63de88799d18295db7fe5",
+  "approvedProductCode": "2c61f97b38c31b4751177f1d1f62b815679b1193",
+  "linearTreeBeforeGate": "c2472e941575f7820c5a4207dc867c2bbe8cb080",
+  "targetedContextCommit": "c2472e941575f7820c5a4207dc867c2bbe8cb080",
+  "canonicalPendingSourceSameAsSEND9": true,
+  "pendingMigrations": 94,
+  "pendingClosures": 219,
+  "started": "2026-10-13T21:48:14.694Z",
+  "finished": "2026-10-13T21:54:42.961Z",
+  "database": "cloudtms_test_clone",
+  "sourceStatements": 4401,
+  "returnedStatements": 4401,
+  "errors": 0,
+  "explicitRollback": true,
+  "freshConnection": true,
+  "fingerprints": 18,
+  "fingerprintsEqual": true,
+  "markerAbsent": true,
+  "entry": [
+    {
+      "id": "S004366",
+      "result": {
+        "id": "S004366",
+        "sqlState": "00000",
+        "error": false
+      }
+    }
+  ],
+  "S19toS24": [
+    {
+      "id": "S004391",
+      "ordinal": 19,
+      "sourceSha256": "b684c80112d05f16a07e247472588ab54ff6a6cfd9e0c42b1a624abb8bb04015",
+      "result": {
+        "id": "S004391",
+        "sqlState": "00000",
+        "error": false
+      }
+    },
+    {
+      "id": "S004392",
+      "ordinal": 20,
+      "sourceSha256": "69350cd5213ce6a3594e623221119d71d2aa580001672ccfc46774f85983ae0a",
+      "result": {
+        "id": "S004392",
+        "sqlState": "00000",
+        "error": false
+      }
+    },
+    {
+      "id": "S004393",
+      "ordinal": 21,
+      "sourceSha256": "2d5e337a870ed9d0b8dcf2876bdd88796607cc87abdda1d3ff457e7bdb71203f",
+      "result": {
+        "id": "S004393",
+        "sqlState": "00000",
+        "error": false
+      }
+    },
+    {
+      "id": "S004394",
+      "ordinal": 22,
+      "sourceSha256": "5d47c47f903086bf364e3820f772bbcb7eeea0274894cca9f0331c6a19568128",
+      "result": {
+        "id": "S004394",
+        "sqlState": "00000",
+        "error": false
+      }
+    },
+    {
+      "id": "S004395",
+      "ordinal": 23,
+      "sourceSha256": "7535aeb80ff408eb1dec0d9cb22249450fb730658536b2131ee65345f945bde2",
+      "result": {
+        "id": "S004395",
+        "sqlState": "00000",
+        "error": false
+      }
+    },
+    {
+      "id": "S004396",
+      "ordinal": 24,
+      "sourceSha256": "d84cc6df51455509ae117702b209273751c2e91bc7059926ab14fe0fded535f4",
+      "result": {
+        "id": "S004396",
+        "sqlState": "00000",
+        "error": false
+      }
+    }
+  ],
+  "packetSha256": "3a646f80e525f1a153de047732a680d84dc680e0a281c80b01c22397f5bf9dbc",
+  "receiptSha256": "83aeaf17f1d397666c5c06e7b717a1adca981d3435780f4b006e42c176f9a9b4",
+  "sharedLockHeld": true,
+  "sharedLockOwnerPid": 475847
+}
