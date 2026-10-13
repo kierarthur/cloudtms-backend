@@ -4254,7 +4254,7 @@ Rate-bearing 8h manual £18 with reason produces server £144; manual amount on 
 
 ## WB-32 — Pay-channel decisions and the taxable-channel restructure link
 
-Seq 143; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 143; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Exact work/gross/finance owner families and delegated financial clear; no BUCKETED fallback.
 
@@ -4262,7 +4262,7 @@ Dependencies: WB-29, EX-08, FC-13, DR-38, F-16; successor positions: none. Desig
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-32-D03 | SCREEN: Channel/gross/finance-owner context and clear navigation window | MISSING | Exact owner family/IDs/versions, delegate FC restructure/clear, no BUCKETED fallback or reimbursement conversion. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-32-D03 | SCREEN: Channel/gross/finance-owner context and clear navigation window | BUILT_REVIEWED | Exact owner family/IDs/versions, delegate FC restructure/clear, no BUCKETED fallback or reimbursement conversion. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4277,6 +4277,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 After a Candidate's channel changes PAYE→Umbrella through EX-08, their 2 unpaid works appear as "Pay channel changed PAYE>UMBR" (RQ-025, RQ-058). Choosing the suggested equivalent and Apply moves both to Ready with Umbrella amounts from the shared calculator; re-opening shows the accepted figures (RQ-060, J2b). "Cancel resolved pay channel" appears only on those two saved decisions (RQ-051). For a Candidate with a taxable overpayment, the panel shows the arrangement and "Open Suggested Restructure" opens FC-13's window (LUI-058, LUI-059).
+
+13 October final source completion: WB32 ITEM+D03 BUILT_REVIEWED. BE 001e2da51d70d88704471dd71467fd5d5797d844; FE 5e2f18bab4396ca2411693da25ff76fb4915caa0. Exact independent channel/gross owner context, original SAVE/CLEAR and native FC13 link; full-card SOURCE and three full42-row A4 receipts/49real local PNGs. All joined acceptance AUTHORED_NOT_RUN; no hosted installation. Next WB33seq144 in plan order.
 
 ## WB-33 — Clear or cancel a resolved rate, pay channel or gross total
 

@@ -1,0 +1,112 @@
+{
+  "item": "WB-32",
+  "sequence": 143,
+  "builderDecisions": [
+    "BD173"
+  ],
+  "stage": "Complete independent DESIGN/SOURCE/A4 review",
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "sha256": "041126bd6ed7bf4ace370829018f46d85b16b7b95ca56fdc44c4e994bd62d449"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql",
+      "sha256": "bde7a01ce2a37208e90f79d4cfda812505ecc08e1a5f58c63f1a38705f67fc7b"
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "050304facba00435c85131935e8c28b4e709344bb046e811dd9f599a3279c6d8"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "a7493b08c42c8bc642b278c7da312eb6dee9217beae9c44a38d13677b8c1d829"
+    },
+    {
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "5a319c594821709ea422519e7a4d09843459e88558c562b30bb3129f79098b0b"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "94b41c36b1f22e425a8b3510db39f5dbaf725b483a59748548d9146dce3a97d2"
+    }
+  ],
+  "frontendFiles": [
+    {
+      "path": "js/bpay-next-pay-channel.js",
+      "sha256": "a62a343fec841779001ea800660316ceebca846bd6bd76589fca54d78d4fcfc8"
+    },
+    {
+      "path": "js/bpay-next-component-choice.js",
+      "sha256": "3a558fd0b7f8870d69395cf7c386b628367cd631926a38bacf8c3a9ee90b0dab"
+    },
+    {
+      "path": "js/bpay-next-rates.js",
+      "sha256": "eaefe6ced545df2d6da40f1417140b770c989282553e7f276c0626e75b84a6a7"
+    },
+    {
+      "path": "js/bpay-next-resolution.js",
+      "sha256": "ddb03730f5e717b3ec0cc428821433e5c970f5a78900457e9b919c2435993919"
+    },
+    {
+      "path": "js/bpay-next-workbench.js",
+      "sha256": "c19e85817f57aec3aee0bcf2f9985df32e9d7ccd7c7d42a6c6ce772551711f57"
+    },
+    {
+      "path": "js/modal-modernisation.js",
+      "sha256": "db1409c8c8496550c2271172edf8b7d58cf3995a5a516f65f2b21f51c28eabfb"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "bdca5176c8b24d00fcf26341a80ea52e2abcf330f248f144439662546eb81aa1"
+    },
+    {
+      "path": "index.html",
+      "sha256": "eb37d5018a381c656ef06d29d68e40b2842995c88f0119e23c02ea1fdd41b4d0"
+    }
+  ],
+  "owners": {
+    "context": "0314 ->0417 completebody with exact channel delegate",
+    "command": "2320 ->0417 completebody with one clear_class resultline",
+    "channelHelper": "new0417 ->0452 exact admitted per-bucket Ready metadata",
+    "publicW1": "0117 unchanged",
+    "sharedMoney": "1157/current quote unchanged",
+    "producers": "Unchanged"
+  },
+  "checks": {
+    "dbCheck": "384 migrations/1001 repeatables PASS",
+    "sourceGates": "1561 SQL/31 RPC/176 routine-work/37 typed transports PASS",
+    "localPG17": "0 migrations/4 closures, three exact catalogue body/config/owner/ACL/volatility matches; no businesscalls or data",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf unchanged; both DO PASS",
+    "changedJS": "node --check PASS",
+    "contract": "b09c6273fa546aa60cfe635c1916891a5936606f667717791ed84bbb1bd7dd04 export/seal/coupling PASS"
+  },
+  "wholeItem": "BUILT_REVIEWED; joined acceptance AUTHORED_NOT_RUN",
+  "acceptance": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "001e2da51d70d88704471dd71467fd5d5797d844",
+  "frontendImplementationCommit": "5e2f18bab4396ca2411693da25ff76fb4915caa0",
+  "frontendCoreCommit": "abcbddbc11a14752de78e4657d6c376139cba2ac",
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-32-build-boundary-review.md",
+      "sha256": "fef327173e45124d443f6b9966323fe8deba5c8dd2e369d7e2e034ceb9f39ca8"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-32-reader-source-review.md",
+      "sha256": "232a5b825eb238c63a6638327f4ac581f00270719a1d14aeade78304393c03ab"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-32-office-source-review.md",
+      "sha256": "f999971a467a5ff23aa50591d687c027f5ff99339612ced42ccbf0f693076cce"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-32-final-deliverable-review.md",
+      "sha256": "4889a4c2092881150af083866ab9752ed7f3fe4b86639ea1ee878af7ce3e6cc8"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-32-screen-policy-review.md",
+      "sha256": "38b18d5e7cad4226fa33e67db47371a7fb5b8ca11fe210f4d16566de43c66b68"
+    }
+  ]
+}
