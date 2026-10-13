@@ -1,0 +1,19 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+-- Execute on a NEW read-only connection only AFTER root's unconditional outer ROLLBACK.
+select not exists(select 1 from public.tms_users where id='e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid or email='nfx-multi-hr-20261013@example.test')
+ and not exists(select 1 from public.clients where id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid or name='NFX October Multi Client')
+ and not exists(select 1 from public.candidates where id='90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid or tms_ref='NFX-101002' or display_name='NFX October Multi Nurse')
+ and not exists(select 1 from public.contracts where id='5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid)
+ and not exists(select 1 from public.weekly_source_groups where code='NFX_MULTI_HR_20261013')
+ and not exists(select 1 from public.weekly_source_upload_rows where external_source_key in ('NFX-SHIFT-6892ED0EF75CB46F02FD6A7D','NFX-SHIFT-CEFADA3F51C71073F3C01503'))
+ and not exists(select 1 from public.weekly_source_group_clients where client_id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid)
+ and not exists(select 1 from public.weekly_source_client_policies where client_id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid)
+ and not exists(select 1 from public.weekly_source_client_manifests where client_id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid)
+ and not exists(select 1 from public.weekly_source_billing_movements where actual_client_id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid or candidate_id='90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid or contract_id='5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid)
+ and not exists(select 1 from public.contract_weeks where contract_id='5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid)
+ and not exists(select 1 from public.timesheets where contract_id='5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid)
+ and not exists(select 1 from public.weekly_source_rule_sets where created_by_user_id='e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid or code='NFX_MULTI_MONEY_OFF_20261013')
+ and not exists(select 1 from public.weekly_source_rule_set_versions where created_by_user_id='e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid)
+ and not exists(select 1 from public.weekly_source_group_rule_assignments where created_by_user_id='e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid)
+ and exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1) as all_fixture_roots_and_descendants_absent_legacy_1;

@@ -1,0 +1,54 @@
+{
+  "contract": "NFX_PENDING_NATIVE_JOURNEY_MANIFEST_V1",
+  "status": "ROOT_NATIVE_PREREQUISITES_AND_EXECUTION_REQUIRED",
+  "native_acceptance": false,
+  "actual_clock": "2026-10-13 Europe/London",
+  "first_assignment_sunday": "2026-10-18",
+  "first_coverage_floor": "2026-10-12",
+  "default_first_earliest_upload": "2026-10-22T00:00:00 Europe/London",
+  "activation": {
+    "owner": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+    "required": ["real active admin/server actor", "actual TEST agency/group/member Client census", "native saved immutable version", "native future unfinalised assignment", "exact assignment CAS", "actual latest successful VERIFIED release ID", "root reviewed group qualification/setup manifest"],
+    "forbidden": ["fake qualification PASS", "function presence READY", "backdated activation", "manual assignment feature UPDATE", "manufactured future cycle", "p_now clock bypass", "Client policy/hash overlay"]
+  },
+  "journeys": [
+    {
+      "id": "VAT_FIT_PRE_AND_POST_FIN",
+      "prerequisites": ["genuine fresh upload after native F8 opens", "source-money rule assigned and controlled enabled", "actual scoped source bytes/parser/staging/economic publication"],
+      "native_owners": ["public.weekly_source_import_prepare_atomic_v1", "public.weekly_source_invoice_hold_release_atomic_v1", "public.weekly_source_finalise_atomic_v1", "public.weekly_source_finalisation_pay_open_atomic_v1", "public.weekly_source_ordinary_pay_projection_apply_atomic_v1", "public.weekly_source_invoice_admit_atomic_v1", "private.weekly_source_invoice_allocation_assert_v1", "private.weekly_source_invoice_issue_validate_v1", "public.invoice_issue_one", "private._invoice_presentation_snapshot_batch"],
+      "exact_vector": {"raw_net_pence":10000,"raw_vat_pence":2002,"raw_gross_pence":12002,"pay_pence":16000,"net20_vat_pence":2000,"net20_gross_pence":12000,"as_file_vat_pence":2002,"as_file_gross_pence":12002},
+      "assertions": ["invoice hold never blocks pay", "pre-FIN and post-FIN native release receipt replay exact", "post-FIN original source movement/revision/manifest hashes unchanged", "immutable presentation/invoice line bind exact receipt UUID/hash/chosen VAT/gross", "stale/foreign/placed/issued release refused", "later genuine same-source NO_CHANGE money correction and later AMEND/CANCEL unwind use proven historical admitted receipt", "no new ledger/origin/overlay or pay repricing"]
+    },
+    {
+      "id": "S09_PENDING_ZERO_AND_AB",
+      "prerequisites": ["genuine native enabled cycle/report journey", "root-approved immutable pending zero authority implementation", "actual internal A/B native producer selection in qualified Report test", "actual document source bytes/support model and renderer"],
+      "exact_vector": {"net_lines_pence":[10000,10000],"raw_vat_lines_pence":[2002,1998],"raw_D_pence":0,"mixed_admitted_vat_lines_pence":[2000,1998],"admitted_round_pence":2,"final_net_pence":20000,"final_vat_pence":4000,"final_gross_pence":24000},
+      "assertions": ["original frozen movement/manifest membership remains complete", "original D=0 with no holds emits no rounding line", "pending zero authority is omitted only by exact qualified model/FINAL_ISSUE branch", "mixed admitted explicit immutable release set gives same native S09 target", "A identity-less ROUND and B real same-revision identity ROUND each admitted/allocated/issued/rendered", "all five native origin/hash checks preserved", "actual LEGACY/NEXT pay readers and invoice duty distinguish invoice-only line kind; ROUND contributes zero pay"]
+    },
+    {
+      "id": "REPORT_A_B_NATIVE_BIND_PAY",
+      "held_producer_boundaries": ["root Report row staging adapter/dispatch missing on reviewed current disk", "Report lane public FIN delegation under source review", "current protected/native publication pay-witness expansion remains root acceptance gate", "operational A/B selection not qualified"],
+      "native_sequence": ["actual export parser/stage/seal/project", "actual report parser and genuine root report adapter", "public.weekly_source_self_bill_report_scope_resolve_atomic_v1 with adapter-produced literal row manifest", "ordinary report stage/seal/projection empty-row apply/publish", "native current binding", "actual export FIN", "native ordinary-pay task calculator/start/apply/finish receipt", "private.weekly_source_self_bill_report_pay_witness_v1 on actual binding", "private.weekly_source_self_bill_report_finalise_v1 with explicit internally qualified A or B", "native invoice admission/allocation/issue/model/renderer"],
+      "assertions": ["metadata/staging alone is never accepted", "binding and invoice_ready remain distinct facts", "pay selected on accepted report or genuine protected WAIT only", "invoice_ready requires bound finalised immutable export plus actual successful pay receipt/TSFIN witness", "all report movement pay vectors zero and source facts never use row_resolution_id", "literal raw report seal totals remain distinct from frozen-rule final invoice S09 totals", "unresolved literal net+VAT/gross mismatch refuses FIN", "unbound positive held; genuine standalone negative and prior-linked negative invoice paths preserve zero pay", "historical 2025 corpus remains static oracle only"]
+    },
+    {
+      "id": "M1_WHOLE_SHIFT_AND_SP20",
+      "prerequisites": ["native existing unfinalised passed-cutoff root-bound Summary cycle, or genuine later applicable cycle", "actual saved Magnit preset and Client/Contract WHOLE_SHIFT_START_DAY", "published SP-20 source fixed expenses support for S14 positive"],
+      "exact_vector": {"work_date":"2026-10-06","local_start":"21:00","local_end":"01:00 next day","minutes":240,"fixture_pay_night_rate":30,"fixture_charge_night_rate":45,"pay_pence":12000,"charge_pence":18000,"vat_pence":3600,"gross_pence":21600,"ignored_source_total_cost_pence":999999},
+      "assertions": ["one authoritative Contract bucket for whole shift", "source Total Cost ignored", "native own cutoff/S12 Not used retained", "expense reimbursement/charge/tax/source provenance unchanged", "ordinary and NHSP negatives do not gain Magnit preset", "no native owner or operational rate guessed"]
+    },
+    {
+      "id": "SURREY_LATE_WINDOW",
+      "prerequisites": ["genuine enabled current source rule and native earlier/current target cycles", "complete root window FIN group/all-cycle inventory and I-1 locks/CAS"],
+      "assertions": ["work date <= completed Sunday and actual finalised_at <= cutoff selects same-cycle pay+invoice", "row finalised after cutoff excluded from both this cycle", "next eligible cycle canonical ADD pay+invoice unless actual prior protected pay position invokes native reconciliation", "one genuine source file and original immutable revision/movement/hash retained", "earlier open invoice window routed by native manifest/window header/readers", "all target-cycle discovery occurs before native I-1 then sorted group/cycle locks and exact growth/CAS recheck"]
+    },
+    {
+      "id": "NULL_NHSP_ORDINARY_CONTROLS",
+      "current_executable": ["NULL HealthRoster full recipe", "F1 disabled saved assignment policy equality", "NULL signed/agency check-only negatives", "absent Timesheet/invoice fail-closed negatives"],
+      "held": ["actual root-bound native NHSP cycle/report identity", "ordinary genuine native Timesheet/manager signature/document prerequisite where required", "actual PDF bytes/authority"],
+      "assertions": ["NULL rule source money/finalised_at/invoice economics hash absent", "new F2 four-authority projection is preserved as native current behavior without forcing it NULL", "original canonical pay/net policy hashes unchanged", "NHSP original Commission+Total native money and placement/negative logic unchanged", "ordinary invoice returns is_source_invoice=false", "no fake signatures, READY marker or seeded financial rows"]
+    }
+  ],
+  "fresh_verification": ["root shared turn taken before fingerprints", "physical cloudtms_test_clone/TEST/LEGACY:1", "unique namespace vacant before fixture DML", "actual mandatory native deferred constraints exercised", "unconditional root outer rollback", "fresh same ledger/catalogue hashes and marker absent", "fresh all native-generated fixture descendants absent", "root releases turn immediately"],
+  "exclusions": ["global queue claim/drain including mandatory verifier index31", "payment/provider/settlement/bank actions", "email sending", "forged APPLYING or qualification evidence", "control-row NEXT flip", "LIVE", "Banking worktree"]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "CAPABILITY_SCHEMA_FORWARD_REVIEW_V1",
+  "input": {
+    "file": "docs/healthroster-build/proposals/protected-source-capability/SOURCE_CAS.sqlinc",
+    "sha256": "a85220784725b2a386dfd9de6c9a57cabdc0659ca273e73c6ebcf03e257a7554"
+  },
+  "reason": "Native Timesheet has booking_id/contract_id, no candidate_id/family_booking_id. TSFIN has no contract_id column. Candidate derives via actual root Contract; historical financial Contract derives only from the immutable pay receipt complete movement IDs/hashes with exact single Contract. Nullable TS client guard retained; missing/foreign/ambiguous immutable witnesses fail closed.",
+  "native_source_evidence": [
+    "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql:4276",
+    "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql:1196"
+  ],
+  "altered_schema": false,
+  "native_acceptance": false
+}

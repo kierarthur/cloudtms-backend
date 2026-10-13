@@ -1,0 +1,26 @@
+// Root-executed agency TEST fixture declarations. No operational price is inferred.
+export const FIXTURE_CONTRACT_RATES = Object.freeze({
+  paye_day:20,paye_night:30,paye_sat:40,paye_sun:50,paye_bh:60,
+  umb_day:20,umb_night:30,umb_sat:40,umb_sun:50,umb_bh:60,
+  charge_day:30,charge_night:45,charge_sat:60,charge_sun:75,charge_bh:90,
+});
+export const NATIVE_CASES=Object.freeze([
+ {id:'WS-NFX-NULL-HR-20261013',kind:'NULL_RULE_HEALTHROSTER',execution:'CURRENT_DATE_BOUND',workDate:'2026-10-06',weekEnding:'2026-10-11',start:'09:00',end:'17:00',breakMinutes:0,paidMinutes:480,expected:{payPence:16000,chargePence:24000,vatPence:4800,grossPence:28800},rules:null},
+ {id:'WS-NFX-MULTI-HR-20261013',kind:'NULL_RULE_HEALTHROSTER',execution:'CURRENT_DATE_BOUND',workDate:'2026-10-06',workDates:['2026-10-06','2026-10-07'],rowCount:2,weekEnding:'2026-10-11',start:'09:00',end:'17:00',breakMinutes:0,paidMinutes:480,expected:{payPence:32000,chargePence:48000,vatPence:9600,grossPence:57600},rules:null,nativePurpose:'Two source rows in one Contract/week must share the genuinely created native root; LEGACY original EMPTY census may extend only through native INSERT RETURNING after I-1.'},
+ {id:'WS-NFX-M1-NIGHT-20261013',kind:'M1_WHOLE_SHIFT',execution:'ROOT_BOUND_EXISTING_NATIVE_CYCLE_REQUIRED',workDate:'2026-10-06',weekEnding:'2026-10-11',start:'21:00',end:'01:00',breakMinutes:0,paidMinutes:240,sourceTotalCostPence:999999,expected:{payPence:12000,chargePence:18000,vatPence:3600,grossPence:21600,bucket:'NIGHT'},rules:null},
+ {id:'WS-NFX-FIRST-RULE-UPLOAD',kind:'RULE_SET_EARLY_UPLOAD',execution:'CURRENT_NEGATIVE_ONLY',assignmentNotBefore:'2026-10-13',firstEnabledSunday:'2026-10-18',coverageFloor:'2026-10-12',expected:{effectiveRuleSetBeforeEnable:null,earlyUploadAllowed:false}},
+ {id:'WS-NFX-SOURCE-VAT-FIT',kind:'RULE_SET_EXPORT_SOURCE_MONEY',execution:'FRESH_UPLOAD_AFTER_NATIVE_GATE',coverageFloor:'2026-10-12',source:{netPence:10000,vatPence:2002,grossPence:12002},expected:{hold:'VAT_FIT',payPence:16000,net20:{netPence:10000,vatPence:2000,grossPence:12000},asFile:{netPence:10000,vatPence:2002,grossPence:12002}}},
+ {id:'WS-NFX-SOURCE-FRACTIONAL',kind:'RULE_SET_EXACT_MINUTES',execution:'FRESH_UPLOAD_AFTER_NATIVE_GATE',paidMinutes:3,minutes:{day:1,night:2},rates:{charge_day:37.13,charge_night:41.27,paye_day:10,paye_night:15},expected:{presentationNetPence:198,grossPence:239,vatPence:41,payPence:65}},
+ {id:'WS-NFX-S09-PENDING-ZERO',kind:'RECEIPT_SET_ZERO_AUTHORITY',execution:'FRESH_UPLOAD_AFTER_NATIVE_GATE',sourceLines:[{netPence:10000,vatPence:2002,grossPence:12002},{netPence:10000,vatPence:1998,grossPence:11998}],expected:{rawNetPence:20000,rawVatPence:4000,rawGrossPence:24000,rawRoundingPence:0,mixedReceiptsVatPence:3998,mixedAdmittedRoundingPence:2,invoiceVatPence:4000,invoiceGrossPence:24000,payUnaffected:true}},
+ {id:'WS-NFX-S09-A-QUALIFY',kind:'ROUNDING_A_NULL_IDENTITY',execution:'HOSTED_NATIVE_JOURNEY_REQUIRED',expected:{origin:'INVOICE_VAT_ROUNDING',candidateId:null,contractId:null,workEventId:null,totalPayPence:0}},
+ {id:'WS-NFX-S09-B-QUALIFY',kind:'ROUNDING_B_REAL_IDENTITY',execution:'REPORT_NATIVE_VARIANT_B_JOURNEY_REQUIRED',expected:{origin:'INVOICE_VAT_ROUNDING',sameRevisionClientIdentity:true,totalPayPence:0},sameFileBoundary:'Current SAME_FILE FIN passes NULL identity to its factory; no fixture may patch frozen FIN or manually insert a B movement.'},
+ {id:'WS-NFX-REPORT-LITERAL-A',kind:'REPORT_LAYOUT_A',execution:'CURRENT_STATIC_ORACLE_AND_LATER_NATIVE_REPORT',input:{net:'33.01',vat:'6.602',gross:'39.612'},expected:{netPence:3301,vatPence:660,grossPence:3961}},
+ {id:'WS-NFX-REPORT-LITERAL-B',kind:'REPORT_LAYOUT_B',execution:'CURRENT_STATIC_ORACLE_AND_LATER_NATIVE_REPORT',input:{net:'33.01',vat:'6.61',gross:'39.62'},expected:{netPence:3301,vatPence:661,grossPence:3962}},
+ {id:'WS-NFX-REPORT-BIND-PAY',kind:'REPORT_PAY_WITNESS',execution:'FRESH_UPLOAD_AFTER_NATIVE_GATE',sequence:['EXPORT_PARSE_STAGE_SEAL_PROJECT','REPORT_PARSE_STAGE_SEAL_PROJECT','NATIVE_CURRENT_BIND','EXPORT_FIN','ORDINARY_PAY_RUN_NATIVE_SNAPSHOT_AND_RECEIPT','REPORT_FIN','INVOICE_ADMIT','ALLOCATION_ASSERT','ISSUE_VALIDATE','ISSUE_ONE','MODEL_SNAPSHOT'],expected:{reportPayPence:0,invoiceReadyRequiresActualBoundFinalPay:true}},
+ {id:'WS-NFX-HISTORICAL-2025',kind:'HISTORICAL_REPORT_CORPUS',execution:'STATIC_ORACLE_ONLY',reason:'The 2025 source corpus cannot be assigned a first enabled current rule version or bound to an enabled 18 October 2026 fixture. It proves parser/literal-money oracle values only.'},
+ {id:'WS-NFX-NHSP-CONTROL',kind:'NHSP_ORIGINAL',execution:'ROOT_BOUND_EXISTING_NATIVE_NHSP_CYCLE_REQUIRED',expected:{ruleSet:null,newSourceGrossVatFields:null,unchangedNativeTwoComponentPence:true}},
+ {id:'WS-NFX-ORDINARY-CONTROL',kind:'ORDINARY_NEGATIVE',execution:'CURRENT_DATE_BOUND',expected:{sourceInvoice:false,sourceRules:null,signedCheckOnly:false,agencyInvoiceCheckOnly:false}},
+ {id:'WS-NFX-POSTCUTOFF-S1',kind:'SURREY_SINGLE_CYCLE',execution:'FRESH_UPLOAD_AFTER_NATIVE_GATE',expected:{lateInThisCyclePay:false,lateInThisCycleInvoice:false,nextEligibleCycle:'CANONICAL_ADD_PAY_AND_INVOICE'}},
+]);
+
+export function nativeCase(id){const x=NATIVE_CASES.find(x=>x.id===id);if(!x)throw Error('NFX_CASE_UNKNOWN');return x;}
