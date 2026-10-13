@@ -1,0 +1,45 @@
+{
+  "status": "PROPOSAL_UNMOUNTED",
+  "input": {
+    "path": "broker/src/timesheet-correction-orchestrator.mjs",
+    "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118"
+  },
+  "output": {
+    "path": "timesheet-correction-orchestrator.mjs",
+    "sha256": "e599576f55b7e8b498551667a052ee998214043b357ac6f2a44f53064220224c"
+  },
+  "hunks": [
+    {
+      "anchor": " * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,",
+      "replacement": " * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,\n * buildOriginalSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,"
+    },
+    {
+      "anchor": "function snapshotIdentity(snapshot, expected, { original = false } = {}) {",
+      "replacement": "function snapshotIdentity(snapshot, expected, { original = false, canonicalInput = false } = {}) {"
+    },
+    {
+      "anchor": "      snapshot.is_stale !== false || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||",
+      "replacement": "      (snapshot.is_stale !== false && !(canonicalInput && !OWN(snapshot, 'is_stale'))) || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||"
+    },
+    {
+      "anchor": "      typeof r.original_authorisation_required !== 'boolean') fail('CORRECTION_RECEIPT_INVALID');",
+      "replacement": "      typeof r.original_authorisation_required !== 'boolean' ||\n      (OWN(r, 'original_materialised_in_unit') && typeof r.original_materialised_in_unit !== 'boolean')) fail('CORRECTION_RECEIPT_INVALID');"
+    },
+    {
+      "anchor": "        !sameUuid(r.original_financial_id, a.original_financial_id) || r.original_financial_authority_hash !== a.original_financial_authority_hash ||\n        r.original_authorisation_required !== prepare.original_authorisation_required) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');",
+      "replacement": "        r.original_authorisation_required !== prepare.original_authorisation_required ||\n        r.original_materialised_in_unit !== prepare.original_materialisation_required ||\n        (!prepare.original_materialisation_required && (!sameUuid(r.original_financial_id, a.original_financial_id) ||\n          r.original_financial_authority_hash !== a.original_financial_authority_hash)) ||\n        (prepare.original_materialisation_required && r.original_authorisation_required !== true)) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');"
+    },
+    {
+      "anchor": "  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');",
+      "replacement": "  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||\n             a.original_financial_authority_hash != null || frozen.financial_authority_hash != null ||\n             frozen.financial_snapshot != null || t0.authorised_at_server != null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');"
+    },
+    {
+      "anchor": "    if (prepare.original_materialisation_required) {\n      // No claim that preview/calculator JSON equals the bounded writer's stored output.\n      // Root must prove and add an exact native normalization contract before enabling A0 missing-finance.\n      fail('CORRECTION_ORIGINAL_NORMALISATION_UNPROVED', 503);\n    }",
+      "replacement": "    let original;\n    if (prepare.original_materialisation_required) {\n      if (typeof deps.buildOriginalSnapshot !== 'function') fail('CORRECTION_CANONICAL_ORIGINAL_PRODUCER_UNAVAILABLE', 503);\n      original = cloneJson(await deps.buildOriginalSnapshot({ prepare, actor: a }));\n      snapshotIdentity(original, {\n        timesheetId: prepare.authority.original_timesheet_id, version: prepare.authority.original_timesheet_version,\n        candidateId: prepare.candidate_id, clientId: prepare.client_id\n      }, { canonicalInput: true });\n    }"
+    },
+    {
+      "anchor": "    });\n    const reversal = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {\n      timesheetId: authority.planned_reversal_timesheet_id, version: 1,\n      candidateId: prepare.candidate_id, clientId: prepare.client_id\n    });\n    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement, reversal_snapshot: reversal };",
+      "replacement": "    }, { canonicalInput: true });\n    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement };\n    if (prepare.original_materialisation_required) {\n      prepared.original_snapshot = original;\n      // No A0 reversal is calculated from preview input. The existing atomic\n      // SQL writes/rereads actual original and signs that stored output.\n    } else {\n      prepared.reversal_snapshot = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {\n        timesheetId: authority.planned_reversal_timesheet_id, version: 1,\n        candidateId: prepare.candidate_id, clientId: prepare.client_id\n      });\n    }"
+    }
+  ]
+}

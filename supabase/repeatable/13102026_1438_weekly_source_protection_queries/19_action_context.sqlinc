@@ -1,0 +1,451 @@
+-- Complete native owner: immutable replay preserved; I-1 precedes Source locks; group precedes cycle.
+create or replace function public.weekly_exceptional_pay_action_context_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_keys constant text[]:=array[
+    'schema_version','actor_user_id','family_id','orchestration_run_id',
+    'source_cycle_id','work_event_id','protected_schedule','evidence_timesheet_id'
+  ];
+  v_schedule_keys constant text[]:=array[
+    'work_date','start_at_local','end_at_local','break_minutes'
+  ];
+  v_actor uuid;
+  v_family_id uuid;
+  v_run_id uuid;
+  v_cycle_id uuid;
+  v_event_id uuid;
+  v_evidence_id uuid;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_lock_family jsonb; v_lock_group uuid;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_contract public.contracts%rowtype;
+  v_contract_week public.contract_weeks%rowtype;
+  v_root public.timesheets%rowtype;
+  -- WP-30 (WP-27 sweep finding N4), standing rule 3.  The expense-authority
+  -- selection below decides which SOURCE_EXPENSE authorities belong to this
+  -- protected root through the source-row lineage binding, which is a fact
+  -- about the Timesheet FAMILY.  Keyed on the physical root id a rotated
+  -- family's authorities were SILENTLY DROPPED from the projection rather than
+  -- refused — fail open by omission.  EXECUTED on a rotated family: 0
+  -- authorities selected by the physical id against 4 by the family.
+  v_root_family uuid[];
+  v_fin public.timesheets_financials%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_schedule jsonb;
+  v_work_date date;
+  v_start timestamp without time zone;
+  v_end timestamp without time zone;
+  v_break integer;
+  v_policy jsonb;
+  v_root_policy jsonb;
+  v_settings jsonb;
+  v_source_mode text;
+  v_source_segments jsonb:='[]'::jsonb;
+  v_client_sources jsonb:='[]'::jsonb;
+  v_decisions jsonb:='[]'::jsonb;
+  v_source_expenses jsonb:='[]'::jsonb;
+  v_current_final uuid;
+  v_comparison uuid;
+  v_signed jsonb;
+  v_candidate_submission jsonb;
+  v_selected_source_present boolean:=false;
+  v_selected_source_minutes integer:=0;
+  v_selected_source_revision text;
+  v_selected_source_hash text;
+  v_source_head_revision uuid;
+  v_source_head_count integer:=0;
+  v_ambiguous_event_count integer:=0;
+  v_fin_hash text;
+  v_provider_hash text;
+  v_rate_refs jsonb;
+  v_component_identity_inventory jsonb;
+  v_component_identity_components jsonb;
+  v_final_source jsonb;
+  v_next_context boolean:=false;
+begin
+  if pg_catalog.jsonb_typeof(p_request)<>'object'
+     or not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
+     or not (p_request ?& v_keys)
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'
+     or pg_catalog.jsonb_typeof(p_request->'protected_schedule')<>'object'
+     or not private.weekly_exceptional_json_keys_exact_v1(
+       p_request->'protected_schedule',v_schedule_keys
+     )
+     or not ((p_request->'protected_schedule') ?& v_schedule_keys) then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_family_id:=(p_request->>'family_id')::uuid;
+    v_run_id:=(p_request->>'orchestration_run_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_event_id:=(p_request->>'work_event_id')::uuid;
+    v_evidence_id:=nullif(p_request->>'evidence_timesheet_id','')::uuid;
+    v_schedule:=p_request->'protected_schedule';
+    v_work_date:=(v_schedule->>'work_date')::date;
+    v_start:=(v_schedule->>'start_at_local')::timestamp without time zone;
+    v_end:=(v_schedule->>'end_at_local')::timestamp without time zone;
+    v_break:=(v_schedule->>'break_minutes')::integer;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_INVALID' using errcode='22023';
+  end;
+  if v_end<=v_start or v_start::date<>v_work_date or v_break<0
+     or v_break>=extract(epoch from (v_end-v_start))/60 then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_INVALID' using errcode='22023';
+  end if;
+
+  -- Fresh context has no immutable decision receipt exemption. Admission
+  -- precedes its first family/business lock and is reentrant for an owner.
+  perform private.weekly_source_pay_query_admit_v2();
+
+  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);
+  select family.* into strict v_family
+  from public.weekly_exceptional_pay_target_families family
+  where family.id=v_family_id for share;
+  select run.* into strict v_run
+  from public.weekly_exceptional_orchestration_runs run
+  where run.id=v_run_id and run.family_id=v_family.id for share;
+  if (v_family.root_timesheet_id::text,v_family.candidate_id::text,v_family.contract_id::text,v_family.week_ending_date::text)
+    is distinct from (v_lock_family->>'root_timesheet_id',v_lock_family->>'candidate_id',
+      v_lock_family->>'contract_id',v_lock_family->>'week_ending_date') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  v_lock_group:=private.weekly_source_protected_group_lock_v1(v_cycle_id);
+  select cycle.* into strict v_cycle
+  from public.weekly_source_cycles cycle where cycle.id=v_cycle_id for share;
+  if v_cycle.source_group_id is distinct from v_lock_group then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  select source_group.* into strict v_group
+  from public.weekly_source_groups source_group
+  where source_group.id=v_cycle.source_group_id and source_group.active for share;
+  select contract.* into strict v_contract
+  from public.contracts contract where contract.id=v_family.contract_id for share;
+  select contract_week.* into strict v_contract_week
+  from public.contract_weeks contract_week
+  where contract_week.contract_id=v_family.contract_id
+    and contract_week.week_ending_date=v_family.week_ending_date
+    and contract_week.additional_seq=0 for share;
+  -- WP-30, standing rule 3.  The family is resolved and its rows are locked
+  -- BEFORE the family-scoped state below is read, in the SAME mode and the same
+  -- timesheet_id order the installed code here already uses (`for share`), and
+  -- before the root's own `for share` so no new lock ordering is introduced.
+  v_next_context:=(select active_owner from private.bpay_next_module_control where id=1)='NEXT'
+    and private.bpay_next_protected_owner_route_v1(v_family.id)='NEXT';
+  if v_next_context then
+    v_root_family:=array[v_family.root_timesheet_id];
+  else
+    v_root_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_family.root_timesheet_id);
+  end if;
+  -- Standing rule 3's fail-closed branch: an explicit cardinality test, never a
+  -- `limit`.  This owner already refuses on every other unprovable scope fact.
+  if v_root_family is null or pg_catalog.cardinality(v_root_family)=0 then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_FAMILY_UNRESOLVED'
+      using errcode='55000';
+  end if;
+  perform 1 from public.timesheets lock_row
+  where lock_row.timesheet_id=any(v_root_family)
+  order by lock_row.timesheet_id for share;
+  select timesheet.* into strict v_root
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=v_family.root_timesheet_id for share;
+  select financial.* into v_fin
+  from public.timesheets_financials financial
+  where financial.timesheet_id=v_root.timesheet_id and financial.is_current
+  order by financial.computed_at_utc desc nulls last,
+           financial.updated_at desc nulls last,financial.id desc limit 1;
+  select work_event.* into strict v_event
+  from public.weekly_work_events work_event
+  where work_event.id=v_event_id
+    and work_event.candidate_id=v_family.candidate_id
+    and work_event.client_id=v_contract.client_id for share;
+
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,v_event.work_date
+  );
+  v_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_event.work_date
+  );
+  -- The selected shift uses its work-date policy, but the zero-value root
+  -- financial is a weekly Timesheet. Its rate-source fingerprint must match
+  -- the root prepare owner's week-ending policy exactly.
+  v_root_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_family.week_ending_date
+  );
+  v_settings:=(private._timesheet_settings_authority_frozen_v1(v_root.timesheet_id)->'values')
+    -'resolved_at_utc';
+  v_source_mode:=v_policy->>'c1_source_mode';
+  if v_run.requested_by_user_id is distinct from v_actor
+     or v_run.state not in ('RUNNING','COMPLETE')
+     or v_run.request_kind not in ('APPROVE','AMEND','WITHDRAW','WAIT','RECONCILE','RECORD_NOT_WORKED')
+     or v_family.agency_id is distinct from v_group.agency_id
+     or v_contract.candidate_id is distinct from v_family.candidate_id
+     or v_contract_week.timesheet_id is distinct from v_root.timesheet_id
+     or v_root.contract_id is distinct from v_contract.id
+     or (v_next_context and v_root.booking_id is distinct from v_family.root_family_booking_id)
+     or v_root.week_ending_date is distinct from v_family.week_ending_date
+     or not v_root.is_current or v_root.is_adjustment
+     or v_root.revoked_at is not null or v_root.archived_at_utc is not null
+     or v_event.work_date<>v_work_date
+     or v_work_date not between v_family.week_start_date and v_family.week_ending_date
+     or v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true
+     or v_source_mode not in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY')
+     or (v_group.source_family='NHSP') is distinct from (v_source_mode='NHSP_WEEKLY') then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  -- Read the same final-source authority shown in the Office review.
+  v_final_source:=private.weekly_source_protected_final_source_context_v1(v_family.id,v_cycle.id,v_event.id);
+  v_source_segments:=v_final_source->'source_segments';
+  v_client_sources:=v_final_source->'client_sources';
+  v_current_final:=(v_final_source->>'current_final_revision_id')::uuid;
+  v_selected_source_present:=(v_final_source#>>'{source_proposal,source_present}')::boolean;
+  v_selected_source_minutes:=(v_final_source#>>'{source_proposal,source_minutes}')::integer;
+  v_selected_source_revision:=v_final_source#>>'{source_proposal,source_revision}';
+  v_selected_source_hash:=v_final_source#>>'{source_proposal,source_hash}';
+
+  with latest as (
+    select family_event.*,
+      pg_catalog.row_number() over (
+        partition by family_event.durable_work_event_id
+        order by family_event.event_sequence desc
+      ) as event_rank
+    from public.weekly_exceptional_pay_family_events family_event
+    where family_event.family_id=v_family.id
+  ), decisions as (
+    select latest.durable_work_event_id as work_event_id,
+      case when latest.durable_work_event_id=v_event.id then case
+        when v_run.request_kind in ('APPROVE','AMEND','WAIT') then 'WAIT'
+        when v_run.request_kind in ('WITHDRAW','RECONCILE') then 'ACCEPTED_SOURCE'
+        else 'NOT_WORKED' end
+      else latest.state end as decision_state,
+      case when latest.durable_work_event_id=v_event.id
+             and v_run.request_kind in ('APPROVE','AMEND','WAIT')
+        then v_schedule
+        else pg_catalog.jsonb_build_object(
+          'work_date',latest.work_date,'start_at_local',latest.start_at_local,
+          'end_at_local',latest.end_at_local,'break_minutes',latest.break_minutes
+        ) end as fixed_schedule
+    from latest where latest.event_rank=1
+  )
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'work_event_id',decision.work_event_id,'state',decision.decision_state,
+    'fixed_schedule',case when decision.decision_state='WAIT' then pg_catalog.jsonb_build_object(
+      'date',decision.fixed_schedule->>'work_date',
+      'start',pg_catalog.to_char((decision.fixed_schedule->>'start_at_local')::timestamp,'HH24:MI'),
+      'end',pg_catalog.to_char((decision.fixed_schedule->>'end_at_local')::timestamp,'HH24:MI'),
+      'break_mins',(decision.fixed_schedule->>'break_minutes')::integer
+    ) else null end
+  ) order by decision.work_event_id),'[]'::jsonb)
+  into v_decisions from decisions decision;
+  if not exists(
+    select 1 from pg_catalog.jsonb_array_elements(v_decisions) d(value)
+    where (d.value->>'work_event_id')::uuid=v_event.id
+  ) then
+    v_decisions:=v_decisions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'work_event_id',v_event.id,
+      'state',case when v_run.request_kind in ('APPROVE','AMEND','WAIT') then 'WAIT'
+        when v_run.request_kind in ('WITHDRAW','RECONCILE') then 'ACCEPTED_SOURCE'
+        else 'NOT_WORKED' end,
+      'fixed_schedule',case when v_run.request_kind in ('APPROVE','AMEND','WAIT')
+        then pg_catalog.jsonb_build_object(
+          'date',v_work_date,'start',pg_catalog.to_char(v_start,'HH24:MI'),
+          'end',pg_catalog.to_char(v_end,'HH24:MI'),'break_mins',v_break
+        ) else null end
+    ));
+  end if;
+
+  if v_run.request_kind='RECORD_NOT_WORKED' and v_selected_source_present then
+    raise exception 'WEEKLY_PROTECTED_NOT_WORKED_SOURCE_PRESENT' using errcode='55000';
+  end if;
+
+  select comparison.id into v_comparison
+  from public.weekly_issue_comparison_revisions comparison
+  join public.weekly_discrepancy_incidents incident on incident.id=comparison.incident_id
+  where incident.work_event_id=v_event.id and incident.candidate_id=v_family.candidate_id
+    and incident.client_id=v_contract.client_id
+  order by comparison.created_at_utc desc,comparison.id desc limit 1;
+
+  if v_evidence_id is null then
+    select approval.evidence_timesheet_id into v_evidence_id
+    from public.weekly_exceptional_payment_approvals approval
+    where approval.pay_target_family_id=v_family.id
+      and approval.work_event_id=v_event.id
+    order by approval.approved_at_utc desc,approval.id desc limit 1;
+  end if;
+  if v_evidence_id is not null then
+    v_signed:=private.weekly_exceptional_candidate_signed_evidence_v1(v_evidence_id);
+    v_candidate_submission:=pg_catalog.jsonb_build_object(
+      'source_system','CLOUDTMS_CANDIDATE_TIMESHEET',
+      'external_identity',v_evidence_id::text,
+      'external_revision',v_signed->>'timesheet_version',
+      'document_sha256',v_signed->>'signature_sha256',
+      'work_date',v_event.work_date,'submitted_by_candidate_id',v_family.candidate_id,
+      'submission_id',v_evidence_id,'submitted_at_utc',v_signed->>'signed_at_utc',
+      'submitted_minutes',extract(epoch from (v_end-v_start))::integer/60-v_break
+    );
+  end if;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'expense_code','SOURCE_SUPPLIED:'||authority.work_event_id::text,
+    'authority_kind','SOURCE_EXPENSE','source_expense_id',authority.id,
+    'document_sha256',pg_catalog.encode(authority.authority_hash,'hex'),
+    'pay_ex_vat',authority.candidate_reimbursement_ex_vat::text,
+    'charge_ex_vat',authority.client_charge_ex_vat::text
+  )||case when v_final_source ? 'next_source_segments'
+    then pg_catalog.jsonb_build_object('work_event_id',authority.work_event_id,
+      'final_revision_id',authority.final_revision_id,
+      'source_observation_kind',authority.source_observation_kind) else '{}'::jsonb end
+   order by authority.work_event_id),'[]'::jsonb)
+  into v_source_expenses
+  from (
+    select authority.*,
+      pg_catalog.row_number() over (
+        partition by authority.work_event_id order by source_cycle.finalisation_week_ending desc,
+          revision.finalised_at_utc desc,authority.generation desc,authority.id desc
+      ) as event_rank
+    from public.weekly_expense_authority_generations authority
+    join public.weekly_source_final_revisions revision
+      on revision.id=authority.final_revision_id and revision.state='CURRENT'
+    join public.weekly_source_cycles source_cycle on source_cycle.id=revision.source_cycle_id
+    where authority.contract_id=v_family.contract_id and authority.state='CURRENT'
+      and source_cycle.source_group_id=v_group.id
+      and ((not v_next_context and authority.source_expense_pence>0 and exists(
+          select 1 from public.weekly_source_row_timesheet_lineages lineage
+          where lineage.work_event_id=authority.work_event_id and lineage.contract_id=authority.contract_id
+            and lineage.timesheet_id=any(v_root_family)))
+        or (v_next_context and exists(
+          select 1 from public.weekly_work_events event where event.id=authority.work_event_id
+            and event.candidate_id=v_family.candidate_id and event.client_id=v_contract.client_id
+            and event.work_date between v_family.week_start_date and v_family.week_ending_date
+        ) and ((authority.source_observation_kind='OMITTED_IN_COMPLETE_COVERAGE' and authority.source_expense_pence=0)
+          or exists(
+            select 1 from public.weekly_source_row_expense_policy_snapshots expense_snapshot
+            join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=expense_snapshot.row_resolution_id
+            where expense_snapshot.id=authority.row_expense_policy_snapshot_id
+              and lineage.family_booking_id=v_family.root_family_booking_id
+              and lineage.work_event_id=authority.work_event_id and lineage.candidate_id=v_family.candidate_id
+              and lineage.client_id=v_contract.client_id and lineage.contract_id=v_family.contract_id
+              and lineage.week_ending_date=v_family.week_ending_date))))
+  ) authority where authority.event_rank=1 and authority.source_expense_pence>0;
+
+  v_fin_hash:=case when v_fin.id is null then null else pg_catalog.encode(
+    private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_PROTECTED_ROOT_FINANCIAL_V1',pg_catalog.to_jsonb(v_fin)
+    ),'hex') end;
+  v_provider_hash:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_PROVIDER_V1',
+    pg_catalog.jsonb_build_object(
+      'contract_id',v_contract.id,'pay_method',v_contract.pay_method_snapshot,
+      'umbrella_id',pg_catalog.to_jsonb(v_contract)->>'umbrella_id',
+      'candidate_id',v_contract.candidate_id
+    )
+  ),'hex');
+  v_rate_refs:=pg_catalog.jsonb_build_object(
+    'schema_version','WEEKLY_SOURCE_TARGET_MANAGED_ZERO_RATE_SOURCE_V1',
+    'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+    'source_family',v_group.source_family,'source_mode',v_source_mode,
+    'source_profile_domain',case when v_source_mode='NHSP_WEEKLY'
+      then 'NHSP_TRUST_BACKING_REPORT' else 'ROSTER_FINAL_AUTHORITY' end,
+    'target_family_id',v_family.id,'root_timesheet_id',v_root.timesheet_id,
+    'effective_policy_sha256',v_root_policy->>'policy_sha256'
+  );
+
+  -- Local/common identity admission is independent of Banking work completion.
+  -- An already authorised root requires its genuine complete current I1 basis;
+  -- an actual unauthorised first Save must not invent that approved basis.
+  if v_family.target_domain_version='C1_V1' then
+    if v_root.authorised_at_server is not null then
+      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);
+      if v_component_identity_inventory->>'ok' is distinct from 'true'
+         or v_component_identity_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'
+         or v_component_identity_inventory#>>'{approval_basis,scope,root_timesheet_id}'
+              is distinct from v_root.timesheet_id::text
+         or jsonb_typeof(v_component_identity_inventory->'components') is distinct from 'array' then
+        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
+      v_component_identity_components:=v_component_identity_inventory->'components';
+    else
+      if exists(select 1 from public.weekly_source_root_authorisations a
+          where a.family_booking_id=v_root.booking_id)
+         or exists(select 1 from public.weekly_source_entitlement_heads h
+          where h.root_family_booking_id=v_root.booking_id and h.state='COMMITTED_CURRENT') then
+        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
+      v_component_identity_components:='[]'::jsonb;
+    end if;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',
+    'action',v_run.request_kind,'family_id',v_family.id,
+    'orchestration_run_id',v_run.id,'family_bound_version',v_family.bound_version,
+    'current_target_vector_sha256',case
+      when v_family.current_complete_target_vector_hash is null then null
+      else pg_catalog.encode(v_family.current_complete_target_vector_hash,'hex') end,
+    'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+    'agency_id',v_group.agency_id,'candidate_id',v_family.candidate_id,
+    'client_id',v_contract.client_id,'contract_id',v_contract.id,
+    'contract_week_id',v_contract_week.id,'root_timesheet_id',v_root.timesheet_id,
+    'work_event_id',v_event.id,'week_ending_date',v_family.week_ending_date,
+    'source_mode',v_source_mode,'policy',v_settings,
+    'timesheet',pg_catalog.to_jsonb(v_root),'contract_week',pg_catalog.to_jsonb(v_contract_week),
+    'contract_record',pg_catalog.to_jsonb(v_contract),
+    'current_financial',case when v_fin.id is null then null else pg_catalog.to_jsonb(v_fin) end,
+    'approved_component_identity_components',v_component_identity_components,
+    'requires_zero_financial',v_fin.id is null,
+    'protected_schedule',v_schedule,'source_segments',v_source_segments,
+    'protected_decisions',v_decisions,'source_proposal',pg_catalog.jsonb_build_object(
+      'selected_work_event_id',v_event.id,'source_present',v_selected_source_present,
+      'source_minutes',v_selected_source_minutes,'source_revision',v_selected_source_revision,
+      'source_hash',v_selected_source_hash,'source_segments',v_source_segments
+    ),
+    'client_sources',v_client_sources,'source_expenses',v_source_expenses,
+    'candidate_submission',v_candidate_submission,
+    'current_comparison_revision_id',v_comparison,
+    'current_final_revision_id',v_current_final,
+    'root_financial',case when v_fin.id is null then null else pg_catalog.jsonb_build_object(
+      'source_system','CLOUDTMS_TIMESHEET_FINANCIAL','external_identity',v_fin.id::text,
+      'external_revision',v_fin.timesheet_version::text,'document_sha256',v_fin_hash,
+      'financial_row_id',v_fin.id,'root_version',v_root.version,
+      'financial_timesheet_version',v_fin.timesheet_version,
+      'financial_revision_digest',v_fin_hash
+    ) end,
+    'provider',pg_catalog.jsonb_build_object(
+      'source_system','CLOUDTMS_CONTRACT_PROVIDER','external_identity',v_contract.id::text,
+      'external_revision',v_root.version::text,'document_sha256',v_provider_hash,
+      'source_pay_method',v_contract.pay_method_snapshot,
+      'umbrella_id',nullif(pg_catalog.to_jsonb(v_contract)->>'umbrella_id','')::uuid,
+      'provider_authority_sha256',v_provider_hash,
+      'target_pay_method',v_contract.pay_method_snapshot,
+      'target_umbrella_id',nullif(pg_catalog.to_jsonb(v_contract)->>'umbrella_id','')::uuid,
+      'target_enabled',true,'target_vat_chargeable',null
+    ),
+    'expected_head_revision',coalesce((
+      select generation.generation_number::bigint
+      from private.weekly_source_local_protected_decision_receipts receipt
+      join public.weekly_exceptional_pay_generations generation on generation.id=receipt.generation_id
+      where receipt.family_id=v_family.id and receipt.state='COMPLETE'
+        and generation.id=v_family.current_generation_id
+    ),(
+      select request.c1_head_revision
+      from public.weekly_exceptional_c1_publication_requests request
+      where request.family_id=v_family.id and request.state='PUBLISHED'
+      order by request.request_sequence desc limit 1
+    ),0)::text,
+    'request_sequence',(v_family.current_generation_number+1)::text,
+    'zero_rate_source_refs',v_rate_refs
+  )||case when v_final_source ? 'next_source_segments'
+    then pg_catalog.jsonb_build_object('next_source_segments',v_final_source->'next_source_segments',
+      'family_bound_version',v_family.bound_version::text) else '{}'::jsonb end;
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function public.weekly_exceptional_pay_action_context_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_exceptional_pay_action_context_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_exceptional_pay_action_context_v1(jsonb) to service_role;

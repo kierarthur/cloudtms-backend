@@ -1,0 +1,69 @@
+{
+  "contract": "HEALTHROSTER_F4_AI_CN_WIRE_PROPOSAL_INPUT_V1",
+  "source_only": true,
+  "source_worktree": "healthroster-v2-backend-13102026",
+  "controlling_module": {
+    "path": "broker/src/timesheet-correction-orchestrator.mjs",
+    "sha256": "637c3b206b8e6700ce40e6ea9e5209bab8fb1b0702322375505a9750f1989f23"
+  },
+  "controlling_tests": {
+    "path": "tests/timesheet-correction-orchestrator.test.mjs",
+    "sha256": "039d5890e61933d0fd983622f29e4af0a2e2ad8c83e74ea25f04ca8c0b16313b",
+    "retained_existing_cases": 32
+  },
+  "other_inputs": [
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+      "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94"
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.js",
+      "sha256": "6fbec686f6fc775bda6fb35ea4c24a333c3427e5292b85c49ea971934899027c"
+    },
+    {
+      "path": "docs/healthroster-build/CORRECTION_CONTRACT.md",
+      "sha256": "0a0f998de51720897c6c37b24043e348083776a6ae3bc2f3c96e9655e35f0679"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/timesheet-correction-orchestrator.mjs",
+      "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118"
+    },
+    {
+      "path": "tests/healthroster-f4-ai-correction-wire.test.mjs",
+      "sha256": "094fcead27788b3798de9a38e589b1506a9a7bf83b7e57fa0b57754bc7441c91"
+    }
+  ],
+  "preserved_gates": [
+    "Current1649 exact decimal-text request authority decoder",
+    "Missing-A0 original normalisation hold",
+    "Native snapshot/booking/provenance/CAS/replay and complete-unit validation",
+    "Ordinary lifecycle delegation",
+    "No SQL/Git/network/runtime mutation; root integration and native journeys remain required"
+  ]
+}

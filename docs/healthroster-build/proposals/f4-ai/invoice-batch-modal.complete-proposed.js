@@ -1,0 +1,2480 @@
+(() => {
+  'use strict';
+
+  const CONTRACT_VERSION = 'INVOICE_BATCH_CANDIDATES_V2';
+  const QUERY_VERSION = 'INVOICE_BATCH_QUERY_V2';
+  const SELECTION_VERSION = 'INVOICE_BATCH_SELECTION_V2';
+  const SELECTION_ROOT_VERSION = 'INVOICE_BATCH_SELECTION_ROOT_V2';
+  const WEEKLY_SOURCE_CANDIDATES_VERSION = 'WEEKLY_SOURCE_INVOICE_BATCH_CANDIDATES_V1';
+  const WEEKLY_SOURCE_SELECTION_VERSION = 'WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_V1';
+  const RESULT_PAGE_VERSION = 'INVOICE_BATCH_RESULT_PAGE_V2';
+  const PROGRESS_VERSION = 'INVOICE_BATCH_PROGRESS_V2';
+  const PAGE_SIZE = 100;
+  const MAX_RULES = 10000;
+  const MODES = new Set(['GENERATE', 'ISSUE']);
+  const DISPLAY_MODES = ['ALL', 'BLOCKED', 'READY'];
+  const GROUP_DIMENSIONS = Object.freeze(['WEEK', 'CLIENT', 'CANDIDATE', 'STATUS']);
+  const DEFAULT_GROUP_ORDER = Object.freeze(['WEEK', 'CLIENT', 'CANDIDATE', 'STATUS']);
+  const GROUP_DIMENSION_SORT_KEYS = Object.freeze({
+    WEEK: 'WEEK_ENDING_DATE',
+    CLIENT: 'CLIENT_NAME',
+    CANDIDATE: 'CANDIDATE_NAME',
+    STATUS: 'STATUS'
+  });
+  const GROUP_DIMENSION_PRESETS = Object.freeze({
+    WEEK: 'WEEK_CLIENT_CANDIDATE',
+    CLIENT: 'CLIENT_WEEK_CANDIDATE',
+    CANDIDATE: 'CANDIDATE_WEEK_CLIENT',
+    STATUS: 'STATUS_WEEK_CLIENT'
+  });
+  const SERVER_GROUP_PRESETS = Object.freeze([
+    'WEEK_CLIENT_CANDIDATE',
+    'CLIENT_WEEK_CANDIDATE',
+    'CANDIDATE_WEEK_CLIENT',
+    'STATUS_WEEK_CLIENT'
+  ]);
+  const SORT_KEYS = {
+    GENERATE: ['WEEK_ENDING_DATE', 'CLIENT_NAME', 'CANDIDATE_NAME', 'TOTAL_EX_VAT', 'TOTAL_INC_VAT', 'STATUS'],
+    ISSUE: ['WEEK_ENDING_DATE', 'CLIENT_NAME', 'CANDIDATE_NAME', 'TOTAL_EX_VAT', 'TOTAL_INC_VAT', 'STATUS', 'INVOICE_NUMBER']
+  };
+  const STATUS_CODES = Object.freeze({
+    GENERATE: Object.freeze(['READY', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED']),
+    ISSUE: Object.freeze(['READY', 'READY_SEND_BLOCKED', 'BLOCKED', 'IN_PROGRESS', 'STALE', 'FAILED'])
+  });
+  const RESULT_CATEGORIES = {
+    GENERATE: ['ALL', 'COMPLETED', 'BLOCKED', 'FAILED', 'CHANGED'],
+    ISSUE: ['ALL', 'ISSUED', 'ISSUED_SEND_BLOCKED', 'BLOCKED', 'FAILED', 'CHANGED']
+  };
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const STATUS_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
+  const SHA256_RE = /^[0-9a-f]{64}$/;
+  const TERMINAL = new Set(['COMPLETE', 'FAILED', 'DEAD_LETTER', 'BLOCKED', 'CANCELLED', 'SUPERSEDED']);
+  const activeModalStates = new Map();
+  const rootOperationStates = new Map();
+
+  const clean = value => String(value == null ? '' : value).trim();
+  const upper = value => clean(value).toUpperCase();
+  const asObject = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const asArray = value => Array.isArray(value) ? value : [];
+  const escapeHtml = value => clean(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+  const invoiceApi = path => `${window.BROKER_BASE_URL || ''}${path}`;
+  const validIsoDate = value => {
+    if (!DATE_RE.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+
+  function normaliseMode(value) {
+    const mode = upper(value);
+    if (!MODES.has(mode)) throw new Error('INVOICE_BATCH_MODE_INVALID');
+    return mode;
+  }
+
+  function emptyFilter() {
+    return {
+      client_ids: [],
+      candidate_ids: [],
+      week_endings: [],
+      week_ending_from: null,
+      week_ending_to: null,
+      status_codes: [],
+      blocker_codes: [],
+      search: null,
+      allow_early: false,
+      display_mode: 'ALL'
+    };
+  }
+
+  function normaliseStringArray(value, transform = clean) {
+    return [...new Set(asArray(value).map(transform).filter(Boolean))].sort();
+  }
+
+  function normaliseFilter(value, modeValue = null) {
+    const source = asObject(value);
+    const allowed = new Set([
+      'client_ids', 'candidate_ids', 'week_endings', 'week_ending_from',
+      'week_ending_to', 'status_codes', 'blocker_codes', 'search',
+      'allow_early', 'display_mode'
+    ]);
+    if (Object.keys(source).some(key => !allowed.has(key))) {
+      throw new Error('INVOICE_BATCH_FILTER_UNKNOWN_FIELD');
+    }
+    const displayMode = upper(source.display_mode || 'ALL');
+    if (!DISPLAY_MODES.includes(displayMode)) throw new Error('INVOICE_BATCH_DISPLAY_MODE_INVALID');
+    const clientIds = normaliseStringArray(source.client_ids, item => clean(item).toLowerCase());
+    const candidateIds = normaliseStringArray(source.candidate_ids, item => clean(item).toLowerCase());
+    if (clientIds.some(id => !UUID_RE.test(id)) || candidateIds.some(id => !UUID_RE.test(id))) {
+      throw new Error('INVOICE_BATCH_FILTER_UUID_INVALID');
+    }
+    const weekEndings = normaliseStringArray(source.week_endings);
+    const weekFrom = clean(source.week_ending_from) || null;
+    const weekTo = clean(source.week_ending_to) || null;
+    if (weekEndings.some(value => !validIsoDate(value))
+        || (weekFrom && !validIsoDate(weekFrom))
+        || (weekTo && !validIsoDate(weekTo))
+        || (weekFrom && weekTo && weekFrom > weekTo)) {
+      throw new Error('INVOICE_BATCH_FILTER_DATE_INVALID');
+    }
+    const statusCodes = normaliseStringArray(source.status_codes, upper);
+    const blockerCodes = normaliseStringArray(source.blocker_codes, upper);
+    if (statusCodes.some(value => !STATUS_RE.test(value))
+        || blockerCodes.some(value => !STATUS_RE.test(value))) {
+      throw new Error('INVOICE_BATCH_FILTER_CODE_INVALID');
+    }
+    if (modeValue && statusCodes.some(value => !STATUS_CODES[normaliseMode(modeValue)].includes(value))) {
+      throw new Error('INVOICE_BATCH_FILTER_STATUS_INVALID');
+    }
+    const search = clean(source.search) || null;
+    if (search && [...search].length > 200) throw new Error('INVOICE_BATCH_FILTER_SEARCH_INVALID');
+    return {
+      client_ids: clientIds,
+      candidate_ids: candidateIds,
+      week_endings: weekEndings,
+      week_ending_from: weekFrom,
+      week_ending_to: weekTo,
+      status_codes: statusCodes,
+      blocker_codes: blockerCodes,
+      search,
+      allow_early: source.allow_early === true,
+      display_mode: displayMode
+    };
+  }
+
+  function normaliseSort(value, mode, options = {}) {
+    const source = asObject(value);
+    if (Object.keys(source).some(key => !['group_preset', 'sort_key', 'sort_direction'].includes(key))) {
+      throw new Error('INVOICE_BATCH_SORT_UNKNOWN_FIELD');
+    }
+    const canonicalMode = normaliseMode(mode);
+    const groupPreset = upper(source.group_preset || 'WEEK_CLIENT_CANDIDATE');
+    const sortKey = upper(source.sort_key || 'WEEK_ENDING_DATE');
+    const sortDirection = upper(source.sort_direction || 'DESC');
+    const valid = SERVER_GROUP_PRESETS.includes(groupPreset)
+      && SORT_KEYS[canonicalMode].includes(sortKey)
+      && ['ASC', 'DESC'].includes(sortDirection);
+    if (!valid && options.persisted !== true) throw new Error('INVOICE_BATCH_SORT_INVALID');
+    return {
+      group_preset: valid ? groupPreset : 'WEEK_CLIENT_CANDIDATE',
+      sort_key: valid ? sortKey : 'WEEK_ENDING_DATE',
+      sort_direction: valid ? sortDirection : 'DESC'
+    };
+  }
+
+  function normaliseGroupOrder(value, options = {}) {
+    const supplied = asArray(value).map(upper);
+    const valid = supplied.length === GROUP_DIMENSIONS.length
+      && new Set(supplied).size === GROUP_DIMENSIONS.length
+      && supplied.every(dimension => GROUP_DIMENSIONS.includes(dimension));
+    if (!valid && options.persisted !== true) throw new Error('INVOICE_BATCH_GROUP_ORDER_INVALID');
+    return valid ? supplied : [...DEFAULT_GROUP_ORDER];
+  }
+
+  function sortForGroupOrder(value, groupOrderValue, mode) {
+    const groupOrder = normaliseGroupOrder(groupOrderValue, { persisted: true });
+    const primaryDimension = groupOrder[0];
+    return normaliseSort({
+      ...normaliseSort(value, mode, { persisted: true }),
+      group_preset: GROUP_DIMENSION_PRESETS[primaryDimension],
+      sort_key: GROUP_DIMENSION_SORT_KEYS[primaryDimension]
+    }, mode);
+  }
+
+  function preferenceKey(mode) {
+    const environment = clean(window.location?.host || 'unknown').toLowerCase();
+    const userId = clean(window.__USER_ID || window.__auth?.user?.id || window.SESSION?.user?.id || 'anonymous').toLowerCase();
+    return `cloudtms.invoiceBatchPreferences.v8:${environment}:${userId}:${normaliseMode(mode)}`;
+  }
+
+  function loadInvoiceBatchPreferences(mode) {
+    try {
+      const stored = asObject(JSON.parse(localStorage.getItem(preferenceKey(mode)) || '{}'));
+      const groupOrder = normaliseGroupOrder(stored.group_order, { persisted: true });
+      return {
+        sort: sortForGroupOrder(stored.sort || stored, groupOrder, mode),
+        group_order: groupOrder
+      };
+    } catch {
+      const groupOrder = [...DEFAULT_GROUP_ORDER];
+      return {
+        sort: sortForGroupOrder({}, groupOrder, mode),
+        group_order: groupOrder
+      };
+    }
+  }
+
+  function saveInvoiceBatchPreferences(mode, value) {
+    const source = asObject(value);
+    const groupOrder = normaliseGroupOrder(source.group_order || DEFAULT_GROUP_ORDER);
+    const saved = {
+      sort: sortForGroupOrder(source.sort || source, groupOrder, mode),
+      group_order: groupOrder
+    };
+    try { localStorage.setItem(preferenceKey(mode), JSON.stringify(saved)); } catch {}
+    return saved;
+  }
+
+  function createInvoiceBatchSelectionState() {
+    return {
+      contract_version: SELECTION_VERSION,
+      mode: 'IMPLICIT_ALL',
+      default_selected: true,
+      rules: [],
+      next_sequence: 1
+    };
+  }
+
+  function canonicalSelector(value) {
+    const source = asObject(value);
+    const type = upper(source.type);
+    const fieldsByType = {
+      ROW: ['type', 'selection_key'],
+      WEEK: ['type', 'week_ending_date'],
+      CLIENT: ['type', 'client_id'],
+      CANDIDATE: ['type', 'candidate_id'],
+      STATUS: ['type', 'status_code'],
+      WEEK_CLIENT: ['type', 'week_ending_date', 'client_id'],
+      WEEK_CLIENT_CANDIDATE: ['type', 'week_ending_date', 'client_id', 'candidate_id'],
+      STATUS_WEEK: ['type', 'status_code', 'week_ending_date'],
+      STATUS_WEEK_CLIENT: ['type', 'status_code', 'week_ending_date', 'client_id'],
+      DIMENSION_GROUP: ['type', 'week_ending_date', 'client_id', 'candidate_id', 'status_code']
+    };
+    const allowedFields = fieldsByType[type];
+    if (!allowedFields || Object.keys(source).some(key => !allowedFields.includes(key))) {
+      throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    const selector = { type };
+    if (type === 'ROW') {
+      selector.selection_key = clean(source.selection_key);
+      if (!selector.selection_key || selector.selection_key.length > 512) throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+      return selector;
+    }
+    if (['WEEK', 'WEEK_CLIENT', 'WEEK_CLIENT_CANDIDATE', 'STATUS_WEEK', 'STATUS_WEEK_CLIENT'].includes(type)
+        || (type === 'DIMENSION_GROUP' && source.week_ending_date != null)) {
+      selector.week_ending_date = clean(source.week_ending_date);
+      if (!validIsoDate(selector.week_ending_date)) throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    if (['CLIENT', 'WEEK_CLIENT', 'WEEK_CLIENT_CANDIDATE', 'STATUS_WEEK_CLIENT'].includes(type)
+        || (type === 'DIMENSION_GROUP' && source.client_id != null)) {
+      selector.client_id = clean(source.client_id).toLowerCase();
+      if (!UUID_RE.test(selector.client_id)) throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    if (['CANDIDATE', 'WEEK_CLIENT_CANDIDATE'].includes(type)
+        || (type === 'DIMENSION_GROUP' && source.candidate_id != null)) {
+      selector.candidate_id = clean(source.candidate_id).toLowerCase();
+      if (!UUID_RE.test(selector.candidate_id)) throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    if (['STATUS', 'STATUS_WEEK', 'STATUS_WEEK_CLIENT'].includes(type)
+        || (type === 'DIMENSION_GROUP' && source.status_code != null)) {
+      selector.status_code = upper(source.status_code);
+      if (!STATUS_RE.test(selector.status_code)) throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    if (type === 'DIMENSION_GROUP' && Object.keys(selector).length === 1) {
+      throw new Error('BATCH_SELECTION_SELECTOR_INVALID');
+    }
+    return selector;
+  }
+
+  function selectorIdentity(selector) {
+    const value = canonicalSelector(selector);
+    return JSON.stringify(value);
+  }
+
+  function applyInvoiceBatchSelectionRule(selection, action, selector) {
+    const state = selection && typeof selection === 'object' ? selection : createInvoiceBatchSelectionState();
+    const canonicalAction = upper(action);
+    if (!['INCLUDE', 'EXCLUDE'].includes(canonicalAction)) throw new Error('BATCH_SELECTION_ACTION_INVALID');
+    const canonical = canonicalSelector(selector);
+    const identity = selectorIdentity(canonical);
+    const rules = asArray(state.rules).filter(rule => selectorIdentity(rule.selector) !== identity);
+    if (rules.length >= MAX_RULES) throw new Error('BATCH_SELECTION_RULE_LIMIT_EXCEEDED');
+    rules.push({
+      sequence: Math.max(1, Number(state.next_sequence) || 1),
+      action: canonicalAction,
+      selector: canonical
+    });
+    state.rules = rules;
+    state.next_sequence = rules[rules.length - 1].sequence + 1;
+    return state;
+  }
+
+  function rowCandidateIds(row) {
+    const ids = normaliseStringArray(row?.candidate_ids, value => clean(value).toLowerCase());
+    const direct = clean(row?.candidate_id).toLowerCase();
+    if (direct && !ids.includes(direct)) ids.push(direct);
+    return ids;
+  }
+
+  function selectorMatchesRow(selectorValue, rowValue) {
+    const selector = canonicalSelector(selectorValue);
+    const row = asObject(rowValue);
+    const week = clean(row.week_ending_date);
+    const client = clean(row.client_id).toLowerCase();
+    const candidates = rowCandidateIds(row);
+    if (selector.type === 'ROW') return clean(row.selection_key) === selector.selection_key;
+    if (selector.type === 'WEEK') return week === selector.week_ending_date;
+    if (selector.type === 'CLIENT') return client === selector.client_id;
+    if (selector.type === 'CANDIDATE') return candidates.includes(selector.candidate_id);
+    if (selector.type === 'STATUS') return upper(row.status_code || row.row_status || row.status) === selector.status_code;
+    if (selector.type === 'WEEK_CLIENT') return week === selector.week_ending_date && client === selector.client_id;
+    if (selector.type === 'WEEK_CLIENT_CANDIDATE') return week === selector.week_ending_date
+      && client === selector.client_id
+      && candidates.includes(selector.candidate_id);
+    if (selector.type === 'STATUS_WEEK') {
+      return upper(row.status_code || row.row_status || row.status) === selector.status_code
+        && week === selector.week_ending_date;
+    }
+    if (selector.type === 'DIMENSION_GROUP') {
+      return (!selector.week_ending_date || week === selector.week_ending_date)
+        && (!selector.client_id || client === selector.client_id)
+        && (!selector.candidate_id || candidates.includes(selector.candidate_id))
+        && (!selector.status_code || upper(row.status_code || row.row_status || row.status) === selector.status_code);
+    }
+    return upper(row.status_code || row.row_status || row.status) === selector.status_code
+      && week === selector.week_ending_date
+      && client === selector.client_id;
+  }
+
+  function isInvoiceBatchRowSelected(selection, rowValue) {
+    const row = asObject(rowValue);
+    if (row.selectable !== true) return false;
+    let selected = selection?.default_selected !== false;
+    for (const rule of asArray(selection?.rules).slice().sort((a, b) => Number(a.sequence) - Number(b.sequence))) {
+      if (selectorMatchesRow(rule.selector, row)) selected = upper(rule.action) === 'INCLUDE';
+    }
+    return selected;
+  }
+
+  function selectorContainsSelector(parentValue, childValue) {
+    const parent = canonicalSelector(parentValue);
+    const child = canonicalSelector(childValue);
+    if (parent.type === 'ROW') return child.type === 'ROW' && parent.selection_key === child.selection_key;
+    if (parent.week_ending_date && child.week_ending_date !== parent.week_ending_date) return false;
+    if (parent.client_id && child.client_id !== parent.client_id) return false;
+    if (parent.candidate_id && child.candidate_id !== parent.candidate_id) return false;
+    if (parent.status_code && child.status_code !== parent.status_code) return false;
+    const specificity = {
+      WEEK: 1, CLIENT: 1, CANDIDATE: 1, STATUS: 1,
+      WEEK_CLIENT: 2, STATUS_WEEK: 2,
+      WEEK_CLIENT_CANDIDATE: 3, STATUS_WEEK_CLIENT: 3, DIMENSION_GROUP: Object.keys(parent).length - 1, ROW: 5
+    };
+    return (specificity[child.type] || 0) >= (specificity[parent.type] || 0);
+  }
+
+  function deriveInvoiceBatchGroupSelectionState(selection, rows, selector, groupSelection = []) {
+    const identity = selectorIdentity(selector);
+    const record = asArray(groupSelection).find(item => {
+      const supplied = item?.selector || item?.group_selector;
+      try { return supplied && selectorIdentity(supplied) === identity; } catch { return false; }
+    });
+    if (!record) return 'DISABLED';
+    const eligible = Math.max(0, Number(record.eligible_total || 0));
+    const selected = Math.max(0, Number(record.selected_total || 0));
+    if (!eligible) return 'DISABLED';
+    if (selected === 0) return 'UNCHECKED';
+    if (selected === eligible && record.has_hidden_override !== true) return 'CHECKED';
+    return 'INDETERMINATE';
+  }
+
+  function resetInvoiceBatchSelection(stateOrSelection) {
+    const target = stateOrSelection?.selection || stateOrSelection;
+    if (!target || typeof target !== 'object') return createInvoiceBatchSelectionState();
+    Object.assign(target, createInvoiceBatchSelectionState());
+    return target;
+  }
+
+  function buildInvoiceBatchSelectionContract(state) {
+    if (!state.snapshot || typeof state.snapshot !== 'object') throw new Error('BATCH_SNAPSHOT_REQUIRED');
+    const mode = normaliseMode(state.mode);
+    const filter = normaliseFilter({ ...state.filter, display_mode: state.display_mode, allow_early: state.filter.allow_early === true }, mode);
+    const sort = normaliseSort(state.sort, mode);
+    const rules = asArray(state.selection?.rules).map(rule => ({
+      sequence: Number(rule.sequence),
+      action: upper(rule.action),
+      selector: canonicalSelector(rule.selector)
+    }));
+    return {
+      contract_version: SELECTION_ROOT_VERSION,
+      query: {
+        contract_version: QUERY_VERSION,
+        action: mode,
+        mode: 'PAGE',
+        snapshot: structuredClone(state.snapshot),
+        page_size: PAGE_SIZE,
+        cursor: null,
+        filters: filter,
+        sort
+      },
+      selection: {
+        contract_version: SELECTION_VERSION,
+        mode: 'IMPLICIT_ALL',
+        default_selected: true,
+        rules
+      }
+    };
+  }
+
+  function createInvoiceBatchModalState(mode) {
+    const canonicalMode = normaliseMode(mode);
+    const preferences = loadInvoiceBatchPreferences(canonicalMode);
+    const sort = preferences.sort;
+    return {
+      id: `invoice-batch:${canonicalMode.toLowerCase()}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+      mode: canonicalMode,
+      candidate_page: null,
+      page_cursor: null,
+      page_history: [],
+      page_start_ordinal: 0,
+      snapshot: null,
+      query_hash: null,
+      filter_hash: null,
+      selection_hash: null,
+      weekly_source_snapshot_hash: null,
+      weekly_source_rows: [],
+      healthroster_credit_notes: null,
+      credit_note_results: [],
+      weekly_source_page: null,
+      weekly_source_submission_results: [],
+      source_submission_complete: false,
+      filter: emptyFilter(),
+      display_mode: 'ALL',
+      sort,
+      group_order: preferences.group_order,
+      dragged_group_dimension: null,
+      selection_summary: null,
+      selection_summary_pending: true,
+      selection_summary_error: null,
+      group_selection: [],
+      page_group_selection_seed: [],
+      facets_by_kind: {},
+      facet_cursors: {},
+      facet_history: {},
+      facet_search: {},
+      facet_loading: {},
+      facet_error: {},
+      totals: {},
+      selection: createInvoiceBatchSelectionState(),
+      loading: false,
+      submitting: false,
+      confirmation: false,
+      root_operation_id: null,
+      progress: null,
+      result_filter: 'ALL',
+      result_page: null,
+      result_cursor: null,
+      result_history: [],
+      result_page_revision: null,
+      viewer_request: null,
+      detail_row: null,
+      filter_drawer_open: false,
+      filter_draft: null,
+      list_stale: false,
+      issue_mode: 'ISSUE_AND_SEND',
+      error: null,
+      command_token: null,
+      delivery_request_token: null,
+      candidate_abort_controller: null,
+      summary_abort_controller: null,
+      facet_abort_controllers: {},
+      request_serial: 0,
+      summary_request_serial: 0,
+      facet_request_serials: {},
+      summary_timer: null,
+      destroyed: false,
+      root_element: null,
+      delegated_handler: null,
+      keydown_handler: null
+    };
+  }
+
+  function buildInvoiceBatchCandidateRequest(state, mode = 'PAGE', options = {}) {
+    const requestMode = upper(mode);
+    const base = {
+      contract_version: QUERY_VERSION,
+      action: normaliseMode(state.mode),
+      mode: requestMode,
+      snapshot: state.snapshot ? structuredClone(state.snapshot) : null,
+      filters: normaliseFilter({ ...state.filter, display_mode: state.display_mode }, state.mode),
+      sort: normaliseSort(state.sort, state.mode),
+      selection: {
+        contract_version: SELECTION_VERSION,
+        mode: 'IMPLICIT_ALL',
+        default_selected: true,
+        rules: asArray(state.selection?.rules).map(rule => ({
+          sequence: Number(rule.sequence),
+          action: upper(rule.action),
+          selector: canonicalSelector(rule.selector)
+        }))
+      }
+    };
+    if (requestMode === 'PAGE') {
+      return { ...base, page_size: PAGE_SIZE, cursor: options.cursor || null };
+    }
+    if (!base.snapshot) throw new Error('BATCH_SNAPSHOT_REQUIRED');
+    if (requestMode === 'SUMMARY') {
+      return { ...base, group_selectors: asArray(options.group_selectors).map(canonicalSelector) };
+    }
+    if (requestMode === 'FACETS') {
+      const kinds = asArray(options.kinds).map(upper);
+      const cursors = {};
+      for (const kind of kinds) {
+        const name = kind.toLowerCase();
+        const token = options.cursors?.[name];
+        if (token) cursors[name] = token;
+      }
+      return {
+        ...base,
+        facet_request: {
+          kinds,
+          search: clean(options.search) || null,
+          limit_per_kind: Math.max(1, Math.min(100, Number(options.limit_per_kind) || 50)),
+          cursors
+        }
+      };
+    }
+    if (requestMode === 'EXPLICIT_KEYS') {
+      const keys = normaliseStringArray(options.selection_keys);
+      if (keys.length !== 1) throw new Error('BATCH_EXPLICIT_KEYS_INVALID');
+      const revisions = asObject(options.expected_source_revisions);
+      if (!Object.prototype.hasOwnProperty.call(revisions, keys[0])) throw new Error('BATCH_EXPLICIT_KEYS_INVALID');
+      return { ...base, selection_keys: keys, expected_source_revisions: { [keys[0]]: revisions[keys[0]] } };
+    }
+    throw new Error('INVOICE_BATCH_QUERY_MODE_INVALID');
+  }
+
+  async function fetchInvoiceBatchCandidatePage(state, options = {}) {
+    const path = state.mode === 'GENERATE'
+      ? '/api/invoices/batch-generate/candidates'
+      : '/api/invoices/batch-issue/candidates';
+    const requestBody = buildInvoiceBatchCandidateRequest(
+      state,
+      options.mode || 'PAGE',
+      options
+    );
+    if (state.mode === 'GENERATE') {
+      requestBody.weekly_source_snapshot_hash = state.weekly_source_snapshot_hash || null;
+    }
+    const response = await window.authFetch(invoiceApi(path), {
+      method: 'POST',
+      signal: options.signal,
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || payload.message || `Candidate page unavailable (${response.status})`);
+    const snapshot = asObject(payload.snapshot);
+    const requestMode = upper(options.mode || 'PAGE');
+    const snapshotValid = snapshot.contract_version === 'INVOICE_BATCH_SNAPSHOT_V2'
+      && upper(snapshot.action) === state.mode
+      && Number.isSafeInteger(Number(snapshot.revision))
+      && Number(snapshot.revision) >= 0
+      && Number.isFinite(Date.parse(snapshot.at_utc))
+      && Number.isFinite(Date.parse(snapshot.expires_at_utc))
+      && clean(snapshot.key_id)
+      && clean(snapshot.token);
+    if (
+      payload.contract_version !== CONTRACT_VERSION
+      || upper(payload.action) !== state.mode
+      || upper(payload.mode) !== requestMode
+      || !snapshotValid
+      || !SHA256_RE.test(clean(payload.query_hash).toLowerCase())
+      || !SHA256_RE.test(clean(payload.filter_hash).toLowerCase())
+      || !SHA256_RE.test(clean(payload.selection_hash).toLowerCase())
+      || !Array.isArray(payload.rows)
+      || !payload.page || typeof payload.page !== 'object' || Array.isArray(payload.page)
+      || !payload.totals || typeof payload.totals !== 'object' || Array.isArray(payload.totals)
+      || !payload.selection_summary || typeof payload.selection_summary !== 'object' || Array.isArray(payload.selection_summary)
+      || !Array.isArray(payload.group_selection)
+      || !payload.facets || typeof payload.facets !== 'object' || Array.isArray(payload.facets)
+    ) {
+      throw new Error('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+    }
+    if (state.snapshot) {
+      const identity = value => JSON.stringify({
+        contract_version: value.contract_version,
+        action: value.action,
+        at_utc: value.at_utc,
+        revision: Number(value.revision),
+        expires_at_utc: value.expires_at_utc,
+        key_id: value.key_id,
+        token: value.token
+      });
+      if (identity(snapshot) !== identity(state.snapshot)) {
+        throw new Error('BATCH_SNAPSHOT_MISMATCH');
+      }
+      if (state.query_hash && clean(payload.query_hash) !== state.query_hash) {
+        throw new Error('BATCH_QUERY_HASH_MISMATCH');
+      }
+      if (state.filter_hash && clean(payload.filter_hash) !== state.filter_hash) {
+        throw new Error('BATCH_FILTER_HASH_MISMATCH');
+      }
+    }
+    return payload;
+  }
+
+  async function loadInvoiceBatchCandidatePage(state, options = {}) {
+    if (state.destroyed) return null;
+    try { state.candidate_abort_controller?.abort(); } catch {}
+    const controller = new AbortController();
+    state.candidate_abort_controller = controller;
+    const serial = ++state.request_serial;
+    state.loading = true;
+    state.error = null;
+    renderInvoiceBatchModal(state);
+    try {
+      const payload = await fetchInvoiceBatchCandidatePage(state, {
+        cursor: options.cursor || null,
+        signal: controller.signal
+      });
+      if (state.destroyed || serial !== state.request_serial) return null;
+      state.candidate_page = payload;
+      if(state.mode==='GENERATE') {
+        state.healthroster_credit_notes=payload.healthroster_credit_notes||null;
+        window.CloudTmsAutomaticCreditNotes?.rows(state.healthroster_credit_notes);
+      }
+      state.snapshot = asObject(payload.snapshot);
+      state.query_hash = clean(payload.query_hash);
+      state.filter_hash = clean(payload.filter_hash);
+      state.selection_hash = clean(payload.selection_hash);
+      const hasWeeklySource = Object.prototype.hasOwnProperty.call(payload, 'weekly_source');
+      const weeklySource = asObject(payload.weekly_source);
+      if (state.mode === 'GENERATE' && hasWeeklySource) {
+        const sourceHash = clean(weeklySource.snapshot_hash).toLowerCase();
+        if (weeklySource.contract_version !== WEEKLY_SOURCE_CANDIDATES_VERSION
+            || !SHA256_RE.test(sourceHash)
+            || !Array.isArray(weeklySource.rows)
+            || !weeklySource.page || typeof weeklySource.page !== 'object'
+            || !weeklySource.selection_summary
+            || weeklySource.selection_summary.exact !== true) {
+          throw new Error('WEEKLY_SOURCE_INVOICE_BATCH_CONTRACT_MISMATCH');
+        }
+        if (state.weekly_source_snapshot_hash && sourceHash !== state.weekly_source_snapshot_hash) {
+          throw new Error('BATCH_SOURCE_CHANGED');
+        }
+        state.weekly_source_snapshot_hash = sourceHash;
+        state.weekly_source_page = asObject(weeklySource.page);
+        if (weeklySource.rows.length || !state.weekly_source_rows.length) {
+          state.weekly_source_rows = weeklySource.rows;
+        }
+      } else if (state.mode === 'GENERATE' && state.weekly_source_snapshot_hash) {
+        throw new Error('WEEKLY_SOURCE_INVOICE_BATCH_CONTRACT_MISMATCH');
+      }
+      state.page_cursor = clean(payload.page?.next_cursor) || null;
+      state.totals = asObject(payload.totals);
+      state.page_group_selection_seed = asArray(payload.group_selection);
+      state.group_selection = [];
+      state.selection_summary_pending = true;
+      state.selection_summary_error = null;
+      if (payload.selection_summary?.exact === true) {
+        state.selection_summary = asObject(payload.selection_summary);
+        state.selection_summary_pending = false;
+      }
+      state.filter = normaliseFilter(payload.normalised_filter || payload.normalized_filter || state.filter, state.mode);
+      state.display_mode = state.filter.display_mode;
+      state.sort = normaliseSort(payload.normalised_sort || payload.normalized_sort || state.sort, state.mode);
+      return payload;
+    } catch (error) {
+      if (error?.name !== 'AbortError' && serial === state.request_serial) {
+        const code = clean(error?.message || error);
+        if (/SNAPSHOT_(CHANGED|EXPIRED)|BATCH_SNAPSHOT/.test(code)) state.list_stale = true;
+        state.error = code;
+      }
+      return null;
+    } finally {
+      if (serial === state.request_serial) {
+        state.loading = false;
+        renderInvoiceBatchModal(state);
+      }
+    }
+  }
+
+  function visibleInvoiceBatchGroupSelectors(state) {
+    void state;
+    return [];
+  }
+
+  async function loadInvoiceBatchSelectionSummary(state, options = {}) {
+    if (state.destroyed || !state.snapshot) return null;
+    try { state.summary_abort_controller?.abort(); } catch {}
+    const controller = new AbortController();
+    state.summary_abort_controller = controller;
+    const serial = ++state.summary_request_serial;
+    state.selection_summary_pending = true;
+    state.selection_summary_error = null;
+    markInvoiceBatchSelectionSummaryPending(state);
+    try {
+      const requestedSelectors = asArray(
+        options.group_selectors || visibleInvoiceBatchGroupSelectors(state)
+      ).map(canonicalSelector);
+      const payload = await fetchInvoiceBatchCandidatePage(state, {
+        mode: 'SUMMARY',
+        group_selectors: requestedSelectors,
+        signal: controller.signal
+      });
+      if (state.destroyed || serial !== state.summary_request_serial) return null;
+      if (payload.selection_summary?.exact !== true) throw new Error('BATCH_SELECTION_SUMMARY_NOT_EXACT');
+      const returnedGroups = asArray(payload.group_selection);
+      const groupsByIdentity = new Map();
+      for (const group of returnedGroups) {
+        if (!group?.selector) throw new Error('INVOICE_BATCH_GROUP_SELECTION_CONTRACT_MISMATCH');
+        const identity = selectorIdentity(group.selector);
+        if (groupsByIdentity.has(identity)) {
+          throw new Error('INVOICE_BATCH_GROUP_SELECTION_CONTRACT_MISMATCH');
+        }
+        groupsByIdentity.set(identity, group);
+      }
+      if (groupsByIdentity.size !== requestedSelectors.length) {
+        throw new Error('INVOICE_BATCH_GROUP_SELECTION_CONTRACT_MISMATCH');
+      }
+      const orderedGroups = requestedSelectors.map(selector => {
+        const group = groupsByIdentity.get(selectorIdentity(selector));
+        if (!group) throw new Error('INVOICE_BATCH_GROUP_SELECTION_CONTRACT_MISMATCH');
+        return group;
+      });
+      state.selection_summary = asObject(payload.selection_summary);
+      state.selection_hash = clean(payload.selection_hash) || state.selection_hash;
+      state.group_selection = orderedGroups;
+      state.totals = asObject(payload.totals);
+      state.selection_summary_pending = false;
+      return payload;
+    } catch (error) {
+      if (error?.name !== 'AbortError' && serial === state.summary_request_serial) {
+        state.selection_summary_error = clean(error?.message || error);
+        state.selection_summary_pending = false;
+      }
+      return null;
+    } finally {
+      if (serial === state.summary_request_serial) renderInvoiceBatchModal(state);
+    }
+  }
+
+  function scheduleInvoiceBatchSelectionSummary(state) {
+    clearTimeout(state.summary_timer);
+    state.selection_summary_pending = true;
+    state.summary_timer = setTimeout(() => {
+      loadInvoiceBatchSelectionSummary(state).catch(() => {});
+    }, 180);
+    markInvoiceBatchSelectionSummaryPending(state);
+  }
+
+  async function loadInvoiceBatchFacets(state, kindValue, options = {}) {
+    const kind = upper(kindValue);
+    if (!['CLIENTS', 'CANDIDATES', 'WEEK_ENDINGS', 'STATUSES', 'BLOCKERS'].includes(kind)) {
+      throw new Error('BATCH_FACET_REQUEST_INVALID');
+    }
+    if (!state.snapshot) return null;
+    const name = kind.toLowerCase();
+    try { state.facet_abort_controllers[name]?.abort(); } catch {}
+    const controller = new AbortController();
+    state.facet_abort_controllers[name] = controller;
+    const serial = (state.facet_request_serials[name] || 0) + 1;
+    state.facet_request_serials[name] = serial;
+    state.facet_loading[name] = true;
+    state.facet_error[name] = null;
+    renderInvoiceBatchModal(state);
+    try {
+      const cursor = options.cursor === undefined ? state.facet_cursors[name] : options.cursor;
+      const payload = await fetchInvoiceBatchCandidatePage(state, {
+        mode: 'FACETS',
+        kinds: [kind],
+        search: options.search === undefined ? state.facet_search[name] : options.search,
+        limit_per_kind: 50,
+        cursors: cursor ? { [name]: cursor } : {},
+        signal: controller.signal
+      });
+      if (state.destroyed || state.facet_request_serials[name] !== serial) return null;
+      const facet = asObject(payload.facets?.[name]);
+      const existing = options.append === true ? asArray(state.facets_by_kind[name]?.items) : [];
+      state.facets_by_kind[name] = {
+        items: [...existing, ...asArray(facet.items)],
+        has_more: facet.has_more === true,
+        next_cursor: clean(facet.next_cursor) || null
+      };
+      state.facet_cursors[name] = clean(facet.next_cursor) || null;
+      return facet;
+    } catch (error) {
+      if (error?.name !== 'AbortError' && state.facet_request_serials[name] === serial) {
+        state.facet_error[name] = clean(error?.message || error);
+      }
+      return null;
+    } finally {
+      if (state.facet_request_serials[name] === serial) {
+        state.facet_loading[name] = false;
+        renderInvoiceBatchModal(state);
+      }
+    }
+  }
+
+  function formatMoney(value, currency = 'GBP') {
+    const amount = Number(value);
+    try {
+      return new Intl.NumberFormat('en-GB', {
+        style: 'currency',
+        currency: /^[A-Z]{3}$/.test(upper(currency)) ? upper(currency) : 'GBP',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(Number.isFinite(amount) ? amount : 0);
+    } catch {
+      return `£${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`;
+    }
+  }
+
+  function candidateDisplay(row) {
+    const display = clean(row?.candidate_display);
+    if (display) return display;
+    const names = normaliseStringArray(row?.candidate_names);
+    if (names.length > 1) return `Multiple candidates (${names.length})`;
+    return names[0] || '—';
+  }
+
+  function weekDisplay(row) {
+    const weeks = normaliseStringArray(row?.week_ending_dates || [row?.week_ending_date]);
+    return weeks.length > 1 ? 'Multiple weeks' : (clean(row?.week_ending_display || weeks[0]) || '—');
+  }
+
+  function diagnosticForBadge(codeValue) {
+    const code = upper(codeValue);
+    if (code === 'RELEASED_AFTER_DISPUTE') {
+      return {
+        code,
+        label: 'Released after dispute',
+        detail_label: 'Released after dispute',
+        explanation: 'This source shift was released after an earlier query.',
+        tone: 'blue',
+        family: 'INFORMATION'
+      };
+    }
+    if (code === 'SOURCE_MANIFEST_INVALID') {
+      return {
+        code,
+        label: 'Source changed',
+        detail_label: 'Source changed',
+        explanation: 'Refresh the list. CloudTMS will not create this self-bill invoice until its final source is consistent.',
+        tone: 'red',
+        family: 'SOURCE'
+      };
+    }
+    const diagnostic = window.invoiceDiagnosticForCode?.(code) || {};
+    return {
+      code,
+      label: clean(diagnostic.short_label || diagnostic.label || 'Unable to continue'),
+      detail_label: clean(diagnostic.detail_label || diagnostic.short_label || diagnostic.label || 'Unable to continue'),
+      explanation: clean(diagnostic.long_explanation || diagnostic.explanation),
+      tone: clean(diagnostic.tone || 'red'),
+      family: upper(diagnostic.family || 'UNKNOWN')
+    };
+  }
+
+  function rowBadgeCodes(row, mode) {
+    const codes = mode === 'ISSUE'
+      ? [
+        ...asArray(row.hard_issue_blocker_codes),
+        ...asArray(row.issue_blocker_codes),
+        ...asArray(row.document_dependency_codes),
+        ...asArray(row.delivery_blocker_codes),
+        ...asArray(row.warning_codes),
+        ...asArray(row.informational_codes)
+      ]
+      : [
+        ...asArray(row.action_blocker_codes),
+        ...asArray(row.document_dependency_codes),
+        ...asArray(row.warning_codes),
+        ...asArray(row.informational_codes)
+      ];
+    if (mode === 'GENERATE') {
+      const generationState = upper(row.generation_state);
+      if (['STALE', 'FAILED', 'GENERATION_FAILED'].includes(generationState)) {
+        codes.push(generationState);
+      }
+    }
+    if (row.is_early === true) codes.push('EARLY');
+    if (row.blocked_for_sending === true) codes.push('BLOCKED_FOR_SENDING');
+    if (upper(row.row_status) === 'IN_PROGRESS') codes.push('IN_PROGRESS');
+    const uniqueCodes = [...new Set(codes.map(upper).filter(Boolean))];
+    return mode === 'GENERATE'
+      ? uniqueCodes.filter(code => !['NOT_GENERATED', 'DOCUMENT_NOT_READY'].includes(code))
+      : uniqueCodes;
+  }
+
+  function diagnosticsForRow(row, mode) {
+    const codes = rowBadgeCodes(row, mode);
+    const resolved = window.invoiceDiagnosticsForCodes?.(codes);
+    if (Array.isArray(resolved)) {
+      return resolved.map(diagnostic => ({
+        code: upper(diagnostic.code),
+        label: clean(diagnostic.short_label || diagnostic.label || 'Unable to continue'),
+        detail_label: clean(diagnostic.detail_label || diagnostic.short_label || diagnostic.label || 'Unable to continue'),
+        explanation: clean(diagnostic.long_explanation || diagnostic.explanation || 'CloudTMS could not complete one of its checks. Refresh the list and try again. If the problem remains, contact support.'),
+        tone: clean(diagnostic.tone || 'red'),
+        family: upper(diagnostic.family || 'UNKNOWN')
+      }));
+    }
+    return codes.map(diagnosticForBadge);
+  }
+
+  function renderInvoiceBatchBadges(row, mode) {
+    return diagnosticsForRow(row, mode).map(badge => {
+      return `<span class="invbatch-badge invbatch-badge--${escapeHtml(badge.tone)}" title="${escapeHtml(badge.explanation)}">${escapeHtml(badge.label)}</span>`;
+    }).join('');
+  }
+
+  function rowSelector(row) {
+    return { type: 'ROW', selection_key: clean(row.selection_key) };
+  }
+
+  function renderInvoiceBatchRow(row, state) {
+    const selected = isInvoiceBatchRowSelected(state.selection, row);
+    const issue = state.mode === 'ISSUE';
+    const checkbox = row.selectable === true
+      ? `<input type="checkbox" data-batch-field="row-selection" data-selection-key="${escapeHtml(row.selection_key)}" ${selected ? 'checked' : ''} aria-label="${selected ? 'Exclude' : 'Include'} ${escapeHtml(issue ? row.invoice_number : candidateDisplay(row))}">`
+      : '<span class="invbatch-checkbox-space" aria-hidden="true"></span>';
+    const previewAction = !issue && row.selectable === true && upper(row.row_status) !== 'IN_PROGRESS'
+      ? `<button type="button" class="btn btn-xs btn-outline" data-batch-action="generate-view" data-selection-key="${escapeHtml(row.selection_key)}">${upper(row.generation_state) === 'STALE' ? 'Regenerate and view' : 'Generate and view'}</button>`
+      : (upper(row.row_status) === 'IN_PROGRESS' ? '<span class="invbatch-inline-state">Generating</span>' : '');
+    const viewAction = row.document_version_id && row.can_view === true
+      ? `<button type="button" class="btn btn-xs btn-outline" data-batch-action="view-document" data-document-version-id="${escapeHtml(row.document_version_id)}">View</button>`
+      : '';
+    return `
+      <tr class="invbatch-row ${row.selectable === true ? '' : 'is-blocked'}" data-selection-key="${escapeHtml(row.selection_key)}">
+        <td class="invbatch-cell invbatch-cell--select">${checkbox}</td>
+        ${issue ? `<td class="invbatch-cell invbatch-cell--invoice"><strong>${escapeHtml(row.invoice_number || '—')}</strong></td>` : ''}
+        <td class="invbatch-cell invbatch-cell--week">${escapeHtml(weekDisplay(row))}</td>
+        <td class="invbatch-cell invbatch-cell--client"><strong>${escapeHtml(row.client_name || '—')}</strong></td>
+        <td class="invbatch-cell invbatch-cell--candidate">${escapeHtml(candidateDisplay(row))}</td>
+        <td class="invbatch-cell invbatch-cell--status">${renderInvoiceBatchBadges(row, state.mode) || '<span class="invbatch-badge invbatch-badge--ready">Ready</span>'}</td>
+        <td class="invbatch-cell invbatch-cell--money">${escapeHtml(formatMoney(row.total_ex_vat, row.currency))}</td>
+        <td class="invbatch-cell invbatch-cell--money">${escapeHtml(formatMoney(row.total_inc_vat, row.currency))}</td>
+        <td class="invbatch-cell invbatch-cell--actions">
+          ${previewAction}${viewAction}
+          <button type="button" class="btn btn-xs btn-outline" data-batch-action="row-details" data-selection-key="${escapeHtml(row.selection_key)}">Details</button>
+        </td>
+      </tr>`;
+  }
+
+  function displaySortValue(row, key) {
+    if (key === 'WEEK_ENDING_DATE' || key === 'WEEK') return clean(row.week_ending_date || asArray(row.week_ending_dates)[0]);
+    if (key === 'CLIENT_NAME' || key === 'CLIENT') return clean(row.client_name).toLocaleLowerCase('en-GB');
+    if (key === 'CANDIDATE_NAME' || key === 'CANDIDATE') return candidateDisplay(row).toLocaleLowerCase('en-GB');
+    if (key === 'STATUS') return upper(row.row_status || row.generation_state || row.generated_state);
+    if (key === 'INVOICE_NUMBER') return clean(row.invoice_number).toLocaleLowerCase('en-GB');
+    if (key === 'TOTAL_EX_VAT') return Number(row.total_ex_vat || 0);
+    if (key === 'TOTAL_INC_VAT') return Number(row.total_inc_vat || 0);
+    return '';
+  }
+
+  function rowsInInvoiceBatchDisplayOrder(state) {
+    const rows = [...asArray(state.candidate_page?.rows)];
+    const keys = normaliseGroupOrder(state.group_order, { persisted: true });
+    const direction = upper(state.sort?.sort_direction) === 'ASC' ? 1 : -1;
+    return rows.sort((left, right) => {
+      for (const key of keys) {
+        const leftValue = displaySortValue(left, key);
+        const rightValue = displaySortValue(right, key);
+        const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue), 'en-GB', { numeric: true, sensitivity: 'base' });
+        if (comparison) return comparison * direction;
+      }
+      return clean(left.selection_key).localeCompare(clean(right.selection_key), 'en-GB');
+    });
+  }
+
+  function renderInvoiceBatchGroups(state) {
+    const rows = rowsInInvoiceBatchDisplayOrder(state);
+    const ordinaryHeader = rowHeaderSelectionState(rows, state);
+    const ordinary = rows.length ? `
+      <section class="invbatch-candidate-section" aria-label="Standard invoice candidates">
+      ${state.mode === 'GENERATE' && state.weekly_source_rows.length ? '<h3>Standard invoices</h3>' : ''}
+      <table class="invbatch-candidate-table">
+        <colgroup>
+          <col class="invbatch-col-select">
+          ${state.mode === 'ISSUE' ? '<col class="invbatch-col-invoice">' : ''}
+          <col class="invbatch-col-week">
+          <col class="invbatch-col-client">
+          <col class="invbatch-col-candidate">
+          <col class="invbatch-col-status">
+          <col class="invbatch-col-money">
+          <col class="invbatch-col-money">
+          <col class="invbatch-col-actions">
+        </colgroup>
+        <thead>
+          <tr class="invbatch-row invbatch-row--header">
+            <th class="invbatch-cell invbatch-cell--select" scope="col"><input type="checkbox" data-batch-field="ordinary-selection-all" ${ordinaryHeader.checked ? 'checked' : ''} ${ordinaryHeader.indeterminate ? 'data-indeterminate="true"' : ''} ${ordinaryHeader.disabled ? 'disabled' : ''} aria-label="Select or unselect all standard invoice rows shown"></th>
+            ${state.mode === 'ISSUE' ? '<th class="invbatch-cell invbatch-cell--invoice" scope="col">Invoice</th>' : ''}
+            <th class="invbatch-cell invbatch-cell--week" scope="col">Week ending</th>
+            <th class="invbatch-cell invbatch-cell--client" scope="col">Trust / client</th>
+            <th class="invbatch-cell invbatch-cell--candidate" scope="col">Candidate / worker</th>
+            <th class="invbatch-cell invbatch-cell--status" scope="col">Status</th>
+            <th class="invbatch-cell invbatch-cell--money" scope="col">Net</th>
+            <th class="invbatch-cell invbatch-cell--money" scope="col">Gross</th>
+            <th class="invbatch-cell invbatch-cell--actions" scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map(row => renderInvoiceBatchRow(row, state)).join('')}</tbody>
+      </table></section>` : '';
+    const source = state.mode === 'GENERATE' ? renderWeeklySourceInvoiceRows(state) : '';
+    const credits=state.mode==='GENERATE'?window.CloudTmsAutomaticCreditNotes?.render(state.healthroster_credit_notes,escapeHtml)||'':'';
+    if (!ordinary && !source && !credits) return '<div class="invbatch-empty">No matching items.</div>';
+    return `${credits}${source}${ordinary}`;
+  }
+
+  function rowHeaderSelectionState(rows, state) {
+    const eligible = asArray(rows).filter(row => row.selectable === true);
+    const selected = eligible.filter(row => isInvoiceBatchRowSelected(state.selection, row));
+    return {
+      disabled: eligible.length === 0,
+      checked: eligible.length > 0 && selected.length === eligible.length,
+      indeterminate: selected.length > 0 && selected.length < eligible.length
+    };
+  }
+
+  function weeklySourceHeaderSelectionState(state) {
+    return rowHeaderSelectionState(state.weekly_source_rows, state);
+  }
+
+  function renderWeeklySourceInvoiceRow(row, state) {
+    const selected = isInvoiceBatchRowSelected(state.selection, row);
+    const checkbox = row.selectable === true
+      ? `<input type="checkbox" data-batch-field="row-selection" data-selection-key="${escapeHtml(row.selection_key)}" ${selected ? 'checked' : ''} aria-label="${selected ? 'Exclude' : 'Include'} ${escapeHtml(row.client_name || 'self-bill')} for ${escapeHtml(weekDisplay(row))}">`
+      : '<span class="invbatch-checkbox-space" aria-hidden="true"></span>';
+    const workers = Math.max(0, Number(asArray(row.candidate_ids).length));
+    const workerLabel = workers === 1 ? candidateDisplay(row) : `${workers.toLocaleString('en-GB')} workers`;
+    return `<tr class="invbatch-row ${row.selectable === true ? '' : 'is-blocked'}" data-selection-key="${escapeHtml(row.selection_key)}">
+      <td class="invbatch-cell invbatch-cell--select">${checkbox}</td>
+      <td class="invbatch-cell invbatch-cell--week">${escapeHtml(weekDisplay(row))}</td>
+      <td class="invbatch-cell invbatch-cell--client"><strong>${escapeHtml(row.client_name || '—')}</strong></td>
+      <td class="invbatch-cell">${escapeHtml(row.report_number || '—')}</td>
+      <td class="invbatch-cell">${escapeHtml(workerLabel)}<br><span class="mini">${Number(row.movement_count || 0).toLocaleString('en-GB')} source shifts</span></td>
+      <td class="invbatch-cell invbatch-cell--status">${renderInvoiceBatchBadges(row, state.mode) || '<span class="invbatch-badge invbatch-badge--ready">Ready</span>'}</td>
+      <td class="invbatch-cell invbatch-cell--money">${escapeHtml(formatMoney(row.total_ex_vat, row.currency))}</td>
+      <td class="invbatch-cell invbatch-cell--money">${escapeHtml(formatMoney(row.total_inc_vat, row.currency))}</td>
+      <td class="invbatch-cell invbatch-cell--actions">
+        ${row.selectable === true ? `<button type="button" class="btn btn-xs btn-outline" data-batch-action="generate-view" data-selection-key="${escapeHtml(row.selection_key)}">Generate and view</button>` : ''}
+        <button type="button" class="btn btn-xs btn-outline" data-batch-action="row-details" data-selection-key="${escapeHtml(row.selection_key)}">Details</button>
+      </td>
+    </tr>`;
+  }
+
+  function renderWeeklySourceInvoiceRows(state) {
+    const rows = asArray(state.weekly_source_rows);
+    if (!rows.length) return '';
+    const header = weeklySourceHeaderSelectionState(state);
+    return `<section class="invbatch-candidate-section invbatch-source-section" aria-label="Finalised self-bill invoices">
+      <h3>Finalised self-bill</h3>
+      <p class="mini">Each row creates one client invoice for one finalised week and backing report.</p>
+      <table class="invbatch-candidate-table invbatch-source-table">
+        <thead><tr class="invbatch-row invbatch-row--header">
+          <th class="invbatch-cell invbatch-cell--select" scope="col"><input type="checkbox" data-batch-field="source-selection-all" ${header.checked ? 'checked' : ''} ${header.indeterminate ? 'data-indeterminate="true"' : ''} ${header.disabled ? 'disabled' : ''} aria-label="Select or unselect all finalised self-bill rows shown"></th>
+          <th class="invbatch-cell" scope="col">Week ending</th>
+          <th class="invbatch-cell" scope="col">Trust / client</th>
+          <th class="invbatch-cell" scope="col">Backing report</th>
+          <th class="invbatch-cell" scope="col">Workers / shifts</th>
+          <th class="invbatch-cell" scope="col">Status</th>
+          <th class="invbatch-cell invbatch-cell--money" scope="col">Net</th>
+          <th class="invbatch-cell invbatch-cell--money" scope="col">Gross</th>
+          <th class="invbatch-cell invbatch-cell--actions" scope="col">Actions</th>
+        </tr></thead>
+        <tbody>${rows.map(row => renderWeeklySourceInvoiceRow(row, state)).join('')}</tbody>
+      </table>
+    </section>`;
+  }
+
+  function displayModeLabel(state) {
+    const labels = state.mode === 'ISSUE'
+      ? { ALL: 'All invoices', BLOCKED: 'Blocked invoices', READY: 'Ready invoices' }
+      : { ALL: 'All generation candidates', BLOCKED: 'Blocked generation candidates', READY: 'Ready generation candidates' };
+    return labels[state.display_mode] || labels.ALL;
+  }
+
+  function renderInvoiceBatchToolbar(state) {
+    const groupLabels = {
+      WEEK: 'Week ending',
+      CLIENT: 'Client',
+      CANDIDATE: 'Candidate / worker',
+      STATUS: 'Status'
+    };
+    const groupOrder = normaliseGroupOrder(state.group_order, { persisted: true });
+    const groupOrderEditor = groupOrder.map(dimension => `
+      <li class="invbatch-group-order-item" draggable="true" data-group-dimension="${dimension}" tabindex="0">
+        <span class="invbatch-drag-handle" aria-hidden="true">⋮⋮</span>
+        <span>${escapeHtml(groupLabels[dimension])}</span>
+      </li>`).join('');
+    return `
+      <section class="invbatch-toolbar-card" aria-label="Batch controls">
+        <div class="invbatch-toolbar-row invbatch-toolbar-row--primary">
+          <button type="button" class="btn btn-sm btn-outline" data-batch-action="cycle-display">${escapeHtml(displayModeLabel(state))}</button>
+          <button type="button" class="btn btn-sm btn-outline" data-batch-action="open-filter" aria-expanded="${state.filter_drawer_open ? 'true' : 'false'}">Filter</button>
+          <label class="invbatch-toggle"><input type="checkbox" data-batch-field="allow-early" ${state.filter.allow_early ? 'checked' : ''}> Batch early</label>
+          <label class="invbatch-search"><span class="sr-only">Search</span><input type="search" data-batch-field="toolbar-search" value="${escapeHtml(state.filter.search || '')}" placeholder="Search"><button type="button" class="btn btn-sm btn-outline" data-batch-action="apply-search">Search</button></label>
+        </div>
+        <div class="invbatch-toolbar-row invbatch-toolbar-row--secondary">
+          <fieldset class="invbatch-group-order"><legend>Sort priority (drag only)</legend><ol>${groupOrderEditor}</ol></fieldset>
+          <div class="invbatch-sort-controls">
+            <label>Sort direction <select data-batch-field="sort-direction"><option value="DESC" ${state.sort.sort_direction === 'DESC' ? 'selected' : ''}>Descending</option><option value="ASC" ${state.sort.sort_direction === 'ASC' ? 'selected' : ''}>Ascending</option></select></label>
+            <button type="button" class="btn btn-sm btn-outline" data-batch-action="reset-selection">Reset selection</button>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  function facetOptions(state, kind) {
+    const map = new Map();
+    const facetValues = asArray(state.facets_by_kind?.[kind]?.items);
+    for (const item of facetValues) {
+      const row = asObject(item);
+      const id = clean(row.id || row.value || row.code || row[`${kind.slice(0, -1)}_id`]).toLowerCase();
+      const label = clean(row.name || row.label || row.display || row.value || row.code);
+      if (id && label) map.set(id, label);
+    }
+    if (state.mode === 'GENERATE' && kind === 'clients') {
+      for (const row of asArray(state.weekly_source_rows)) {
+        const id = clean(row.client_id).toLowerCase();
+        if (id) map.set(id, clean(row.client_name) || id);
+      }
+    }
+    if (state.mode === 'GENERATE' && kind === 'candidates') {
+      for (const row of asArray(state.weekly_source_rows)) {
+        const ids = asArray(row.candidate_ids);
+        const names = asArray(row.candidate_names);
+        ids.forEach((value, index) => {
+          const id = clean(value).toLowerCase();
+          if (id) map.set(id, clean(names[index]) || id);
+        });
+      }
+    }
+    const selected = kind === 'clients' ? state.filter.client_ids : state.filter.candidate_ids;
+    for (const id of asArray(selected)) {
+      if (!map.has(id)) map.set(id, id);
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }
+
+  function blockerOptions(state) {
+    return facetOptions(state, 'blockers').map(([value, label]) => [upper(value), label]);
+  }
+
+  function weekOptions(state) {
+    const map = new Map();
+    for (const item of asArray(state.facets_by_kind?.week_endings?.items)) {
+      const row = asObject(item);
+      const value = clean(row.value || row.week_ending_date || row.id);
+      if (value) map.set(value, clean(row.label || row.week_ending_display || value));
+    }
+    if (state.mode === 'GENERATE') {
+      for (const row of asArray(state.weekly_source_rows)) {
+        const value = clean(row.week_ending_date);
+        if (value) map.set(value, clean(row.week_ending_display || value));
+      }
+    }
+    for (const value of asArray(state.filter.week_endings)) if (!map.has(value)) map.set(value, value);
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }
+
+  function renderCheckOptions(entries, selected, field) {
+    const selectedSet = new Set(asArray(selected));
+    if (!entries.length) return '<span class="mini">No choices on this page.</span>';
+    return entries.map(([value, label]) => `<label><input type="checkbox" data-filter-list="${field}" value="${escapeHtml(value)}" ${selectedSet.has(value) ? 'checked' : ''}> ${escapeHtml(label)}</label>`).join('');
+  }
+
+  function renderInvoiceBatchFilterDrawer(state) {
+    if (!state.filter_drawer_open) return '';
+    const draft = normaliseFilter(state.filter_draft || state.filter, state.mode);
+    const clientOptions = facetOptions(state, 'clients');
+    const candidateOptions = facetOptions(state, 'candidates');
+    const weeks = weekOptions(state);
+    const blockers = blockerOptions(state);
+    const statuses = facetOptions(state, 'statuses').map(([code, label]) => [upper(code), label]);
+    const facetStatus = kind => {
+      const key = kind.toLowerCase();
+      const facet = asObject(state.facets_by_kind[key]);
+      return `<div class="invbatch-facet-controls">
+        <input type="search" data-facet-search="${key}" value="${escapeHtml(state.facet_search[key] || '')}" placeholder="Search ${escapeHtml(key.replaceAll('_', ' '))}">
+        <button type="button" class="btn btn-xs btn-outline" data-batch-action="facet-search" data-facet-kind="${kind}">Search</button>
+        ${facet.has_more ? `<button type="button" class="btn btn-xs btn-outline" data-batch-action="facet-more" data-facet-kind="${kind}">Load more</button>` : ''}
+        ${state.facet_loading[key] ? '<span class="mini">Loading…</span>' : ''}
+      </div>`;
+    };
+    return `
+      <aside class="invbatch-filter-drawer" data-batch-filter-drawer role="dialog" aria-modal="true" aria-label="Invoice batch filters">
+        <header><h3>Filter</h3><button type="button" class="btn btn-sm btn-outline invbatch-drawer-close" data-batch-action="close-filter" aria-label="Close filters" title="Close filters">×</button></header>
+        <label>Search<input type="search" data-filter-field="search" value="${escapeHtml(draft.search || '')}"></label>
+        <div class="invbatch-filter-dates"><label>Week ending from<input type="date" data-filter-field="week_ending_from" value="${escapeHtml(draft.week_ending_from || '')}"></label><label>Week ending to<input type="date" data-filter-field="week_ending_to" value="${escapeHtml(draft.week_ending_to || '')}"></label></div>
+        <fieldset><legend>Week ending</legend>${facetStatus('WEEK_ENDINGS')}<div class="invbatch-filter-options">${renderCheckOptions(weeks, draft.week_endings, 'week_endings')}</div></fieldset>
+        <fieldset><legend>Clients</legend>${facetStatus('CLIENTS')}<div class="invbatch-filter-options">${renderCheckOptions(clientOptions, draft.client_ids, 'client_ids')}</div></fieldset>
+        <fieldset><legend>Candidates</legend>${facetStatus('CANDIDATES')}<div class="invbatch-filter-options">${renderCheckOptions(candidateOptions, draft.candidate_ids, 'candidate_ids')}</div></fieldset>
+        <fieldset><legend>Status</legend>${facetStatus('STATUSES')}<div class="invbatch-filter-options">${renderCheckOptions(statuses, draft.status_codes, 'status_codes')}</div></fieldset>
+        <fieldset><legend>Blockers</legend>${facetStatus('BLOCKERS')}<div class="invbatch-filter-options">${renderCheckOptions(blockers, draft.blocker_codes, 'blocker_codes')}</div></fieldset>
+        <label class="invbatch-toggle"><input type="checkbox" data-filter-field="allow_early" ${draft.allow_early ? 'checked' : ''}> Batch early</label>
+        <footer><button type="button" class="btn btn-outline" data-batch-action="clear-filter">Clear filters</button><button type="button" class="btn btn-primary" data-batch-action="apply-filter">Apply</button></footer>
+      </aside>`;
+  }
+
+  function renderInvoiceBatchPager(state) {
+    const page = asObject(state.candidate_page?.page);
+    const total = Number(page.total_count ?? 0);
+    const returned = asArray(state.candidate_page?.rows).length;
+    if (!total && !returned) return '';
+    const start = returned ? Number(state.page_start_ordinal || 0) + 1 : 0;
+    const end = returned ? start + returned - 1 : 0;
+    const currentPage = Math.max(1, Number(state.page_history?.length || 0) + 1);
+    const totalPages = Math.max(1, Math.ceil(Math.max(total, end) / PAGE_SIZE));
+    return `
+      <div class="invbatch-pager">
+        <span>Showing ${start.toLocaleString('en-GB')}–${end.toLocaleString('en-GB')} of ${Math.max(total, end).toLocaleString('en-GB')}</span>
+        <span class="invbatch-page-controls"><button type="button" class="btn btn-sm btn-outline" data-batch-action="page-back" ${state.page_history.length ? '' : 'disabled'}>Previous</button><strong>Page ${currentPage.toLocaleString('en-GB')} of ${totalPages.toLocaleString('en-GB')}</strong><button type="button" class="btn btn-sm btn-outline" data-batch-action="page-next" ${page.has_more && state.page_cursor ? '' : 'disabled'}>Next</button></span>
+      </div>`;
+  }
+
+  function selectedSummary(state) {
+    const summary = asObject(state.selection_summary);
+    const exact = summary.exact === true
+      && !state.selection_summary_pending
+      && !state.selection_summary_error
+      && !state.list_stale;
+    const count = exact ? Math.max(0, Number(summary.selected_total || 0)) : 0;
+    return { exact, count, label: exact ? count.toLocaleString('en-GB') : 'Calculating…' };
+  }
+
+  function markInvoiceBatchSelectionSummaryPending(state) {
+    const root = state?.root_element;
+    if (!root || state.destroyed) return;
+    const primary = root.querySelector('[data-batch-action="confirm-open"]');
+    if (primary) primary.disabled = true;
+    const selectedCount = root.querySelector('[data-batch-selected-count]');
+    if (selectedCount) selectedCount.textContent = 'Calculating…';
+    if (!root.querySelector('.invbatch-summary-pending')) {
+      const pending = document.createElement('div');
+      pending.className = 'invbatch-summary-pending';
+      pending.setAttribute('aria-live', 'polite');
+      pending.textContent = 'Updating the exact selection summary…';
+      const list = root.querySelector('.invbatch-list');
+      if (list?.parentNode) list.parentNode.insertBefore(pending, list);
+    }
+  }
+
+  function renderInvoiceBatchFooter(state) {
+    const selected = selectedSummary(state);
+    const summary = asObject(state.selection_summary);
+    const ready = Math.max(0, Number(summary.eligible_total || 0));
+    const blocked = Math.max(0, Number(summary.blocked_total || 0));
+    const primary = state.mode === 'ISSUE' ? 'Issue selected invoices' : 'Generate selected';
+    return `
+      <footer class="invbatch-footer">
+        <div><span><strong>${ready.toLocaleString('en-GB')}</strong> eligible</span><span><strong data-batch-selected-count>${escapeHtml(selected.label)}</strong> selected</span><span><strong>${blocked.toLocaleString('en-GB')}</strong> blocked</span></div>
+        ${state.selection_summary_error ? `<div class="invbatch-error" role="alert">${escapeHtml(state.selection_summary_error)}</div>` : ''}
+        <div><button type="button" class="btn btn-outline" data-batch-action="close">Cancel</button><button type="button" class="btn btn-primary" data-batch-action="confirm-open" ${(selected.exact && (selected.count > 0 || (state.mode==='GENERATE' && window.CloudTmsAutomaticCreditNotes?.rows(state.healthroster_credit_notes).length>0)) && !state.submitting) ? '' : 'disabled'}>${escapeHtml(primary)}</button></div>
+      </footer>`;
+  }
+
+  function renderInvoiceBatchConfirmation(state) {
+    const selected = selectedSummary(state);
+    if (state.mode === 'ISSUE') {
+      const issueAndSend = state.issue_mode !== 'ISSUE_ONLY';
+      const selectedCount = Math.max(0, Number(selected.count || 0));
+      const selectedNoun = selectedCount === 1 ? 'invoice' : 'invoices';
+      const deliveryBlocked = Math.max(0, Number(
+        state.totals?.issued_send_blocked_total
+        || state.totals?.delivery_blocked_total
+        || state.totals?.blocked_for_sending
+        || 0
+      ));
+      const blocked = Math.max(0, Number(state.selection_summary?.blocked_total || 0));
+      const outcomeLines = [];
+      if (issueAndSend && deliveryBlocked === 0) {
+        outcomeLines.push(`<li><strong>${escapeHtml(selected.label)} ${selectedNoun}</strong> will be issued and emailed.</li>`);
+      } else if (issueAndSend) {
+        outcomeLines.push(`<li><strong>${escapeHtml(selected.label)} ${selectedNoun}</strong> will be issued. CloudTMS will email each one that has a valid recipient.</li>`);
+        outcomeLines.push(`<li><strong>${deliveryBlocked.toLocaleString('en-GB')} ${deliveryBlocked === 1 ? 'invoice' : 'invoices'}</strong> cannot be emailed and will be issued without email.</li>`);
+      } else {
+        outcomeLines.push(`<li><strong>${escapeHtml(selected.label)} ${selectedNoun}</strong> will be issued without emailing.</li>`);
+      }
+      if (blocked > 0) {
+        outcomeLines.push(`<li><strong>${blocked.toLocaleString('en-GB')} ${blocked === 1 ? 'invoice' : 'invoices'}</strong> ${blocked === 1 ? 'is' : 'are'} not ready and will be left unchanged.</li>`);
+      }
+      if (state.filter.allow_early === true) {
+        outcomeLines.push('<li>Eligible invoices before the normal batch date are included.</li>');
+      }
+      return `<section class="invbatch-confirmation" role="alertdialog" aria-modal="true" aria-label="Confirm invoice issue">
+        <h3>Issue ${escapeHtml(selected.label)} ${selectedNoun}?</h3>
+        <p>Choose whether CloudTMS should email ${selectedCount === 1 ? 'this invoice' : 'the invoices'} after issuing.</p>
+        <fieldset class="invbatch-issue-mode"><legend>Email option</legend>
+          <label><input type="radio" name="invoice-batch-issue-mode" data-batch-field="issue-mode" value="ISSUE_AND_SEND" ${issueAndSend ? 'checked' : ''}> <strong>Issue and email</strong> <span>Recommended. Email each invoice to its saved recipient when an email address is available.</span></label>
+          <label><input type="radio" name="invoice-batch-issue-mode" data-batch-field="issue-mode" value="ISSUE_ONLY" ${issueAndSend ? '' : 'checked'}> <strong>Issue without emailing</strong> <span>Issue each invoice but do not send an email.</span></label>
+        </fieldset>
+        <h4>What will happen</h4>
+        <ul>${outcomeLines.join('')}</ul>
+        <p class="invbatch-legal-warning">Issuing creates the official invoice. CloudTMS will issue only invoices that are fully generated and have passed all required checks.</p>
+        <div><button type="button" class="btn btn-outline" data-batch-action="confirm-cancel">Back</button><button type="button" class="btn btn-primary" data-batch-action="submit" ${state.submitting ? 'disabled' : ''}>Issue ${escapeHtml(selected.label)} ${selectedNoun}</button></div>
+      </section>`;
+    }
+    const early = state.filter.allow_early === true ? 'Batch early is included.' : 'Batch early is not included.';
+    return `<section class="invbatch-confirmation" role="dialog" aria-modal="true" aria-label="Confirm invoice generation">
+      <h3>Generate selected items?</h3>
+      ${state.healthroster_credit_notes?`<p>${window.CloudTmsAutomaticCreditNotes.rows(state.healthroster_credit_notes).length.toLocaleString('en-GB')} credit notes will also be prepared automatically. Any blocked credit remains visible in the invoice Outbox.</p>`:''}
+      <p><strong>${escapeHtml(selected.label)}</strong> items will be submitted.</p>
+      <p>${Number(state.totals?.not_generated_total || state.totals?.not_generated || 0).toLocaleString('en-GB')} not generated.</p>
+      <p>${Number(state.totals?.stale_total || state.totals?.stale || 0).toLocaleString('en-GB')} stale items will be regenerated.</p>
+      <p>${Number(state.selection_summary?.blocked_total || 0).toLocaleString('en-GB')} blocked items will be skipped.</p>
+      <p>${escapeHtml(early)}</p>
+      <div><button type="button" class="btn btn-outline" data-batch-action="confirm-cancel">Back</button><button type="button" class="btn btn-primary" data-batch-action="submit" ${state.submitting ? 'disabled' : ''}>Generate selected</button></div>
+    </section>`;
+  }
+
+  function progressLabel(state) {
+    const progress = asObject(state.progress);
+    const status = upper(progress.status || 'QUEUED');
+    const phase = upper(progress.phase || progress.current_phase || status);
+    const labels = {
+      SUBMITTED: 'Preparing selection', QUEUED: 'Preparing selection',
+      BUILD_MANIFEST: 'Preparing selection', MANIFEST_COMMITTED: 'Selection confirmed',
+      RELEASE_MANIFEST: 'Queueing selected items', RELEASE_COMPLETE: 'Queueing selected items',
+      BUSINESS_WORK: state.mode === 'ISSUE' ? 'Issuing' : 'Generating',
+      GENERATE: 'Generating', BUILD: 'Generating', RENDER: 'Preparing final documents',
+      SOURCE_RENDER: 'Preparing final documents', FREEZE: 'Preparing final documents',
+      MERGE: 'Preparing final documents', PDF_MERGE: 'Preparing final documents',
+      VERIFY: 'Preparing final documents', DOCUMENT_VERIFY: 'Preparing final documents',
+      FINALISE: state.mode === 'ISSUE' ? 'Issuing' : 'Generating',
+      DELIVERY: 'Preparing delivery', PREPARE_DELIVERY: 'Preparing delivery',
+      COMPLETE: 'Complete',
+      FAILED: 'Failed', DEAD_LETTER: 'Failed', BLOCKED: 'Needs attention'
+    };
+    return labels[phase] || labels[status] || clean(phase.replaceAll('_', ' ').toLowerCase()).replace(/^\w/, value => value.toUpperCase());
+  }
+
+  function renderInvoiceBatchProgress(state) {
+    const progress = asObject(state.progress);
+    const counts = asObject(progress.progress || progress.progress_summary || progress);
+    const candidateTotal = Number(counts.candidate_total || 0);
+    const invoiceTotal = Number(counts.invoice_total || 0);
+    const selectedTotal = Number(counts.selected_total || 0);
+    const releasedTotal = Number(counts.released_total || 0);
+    const businessComplete = state.mode === 'ISSUE'
+      ? Number(counts.issued_total || 0) + Number(counts.already_active_total || 0)
+      : Number(counts.generated_total || 0) + Number(counts.regenerated_total || 0) + Number(counts.already_active_total || 0);
+    return `<section class="invbatch-progress" aria-live="polite">
+      <div class="invbatch-spinner" aria-hidden="true"></div>
+      <h3>${escapeHtml(progressLabel(state))}</h3>
+      <div class="invbatch-progress-grid">
+        <span><strong>${candidateTotal || invoiceTotal}</strong> scanned / expected</span>
+        <span><strong>${releasedTotal}</strong> released / ${selectedTotal} selected</span>
+        <span><strong>${Number(counts.release_conflict_total || 0)}</strong> release conflicts</span>
+        <span><strong>${Number(counts.release_blocked_total || 0)}</strong> release blockers</span>
+        <span><strong>${businessComplete}</strong> business complete / ${releasedTotal} released</span>
+        <span><strong>${Number(counts.delivery_complete_total || 0)}</strong> delivery complete / ${Number(counts.delivery_pending_total || 0) + Number(counts.delivery_complete_total || 0) + Number(counts.delivery_blocked_total || 0)} requested</span>
+      </div>
+      ${counts.committed_at_utc ? `<p class="mini">Selection confirmed ${escapeHtml(new Date(counts.committed_at_utc).toLocaleString('en-GB', { hour12: false }))}</p>` : ''}
+      ${renderWeeklySourceSubmissionResults(state)}
+      ${state.error ? `<p class="error">${escapeHtml(state.error)}</p>` : ''}
+      <button type="button" class="btn btn-outline" data-batch-action="close">Close</button>
+    </section>`;
+  }
+
+  function renderWeeklySourceSubmissionResults(state, options = {}) {
+    const rows = asArray(state.weekly_source_submission_results);
+    if (!rows.length) return '';
+    return `<section class="invbatch-source-results" aria-label="Finalised self-bill results">
+      <h3>Finalised self-bill</h3>
+      ${rows.map(row => `<div class="invbatch-result-row">
+        <span><strong>Week ending ${escapeHtml(row.finalisation_week_ending || '—')}</strong><br><span class="mini">Backing report ${escapeHtml(row.report_number || '—')}</span></span>
+        <span class="invbatch-badge invbatch-badge--ready">${escapeHtml(row.idempotent === true ? 'Already generated' : 'Generated')}</span>
+        <span>${asArray(row.invoice_ids).length.toLocaleString('en-GB')} invoice</span>
+      </div>`).join('')}
+      ${options.close === true ? '<div><button type="button" class="btn btn-outline" data-batch-action="source-results-close">Return to batch list</button></div>' : ''}
+    </section>`;
+  }
+
+  function resultCounts(state) {
+    const operation = asObject(state.progress);
+    const progress = asObject(operation.progress || operation.result || operation.progress_summary);
+    return {
+      completed: Number(state.mode === 'ISSUE' ? progress.issued_total : progress.generated_total) || 0,
+      regenerated: Number(progress.regenerated_total || 0) || 0,
+      active: Number(progress.already_active_total || 0) || 0,
+      blocked: Number(progress.blocked_total || 0) || 0,
+      changed: Number(progress.changed_total || 0) || 0,
+      missing: Number(progress.missing_total || 0) || 0,
+      inProgress: Number(progress.in_progress_total || 0) || 0,
+      failed: Number(progress.failed_total || 0) || 0,
+      sendBlocked: Number(progress.issued_send_blocked_total || 0) || 0,
+      deliveryComplete: Number(progress.delivery_complete_total || 0) || 0,
+      deliveryBlocked: Number(progress.delivery_blocked_total || 0) || 0
+    };
+  }
+
+  function renderResultRows(state) {
+    const rows = asArray(state.result_page?.rows);
+    if (!rows.length) return '<div class="invbatch-empty">No results in this category.</div>';
+    return rows.map(row => `<div class="invbatch-result-row">
+      <span><strong>${escapeHtml(row.invoice_number || row.client_name || row.selection_key || 'Result')}</strong><br><span class="mini">${escapeHtml(row.candidate_display || '')} ${escapeHtml(row.week_ending_display || '')}</span></span>
+      <span>${renderInvoiceBatchBadges({ ...row, informational_codes: row.badge_codes || [] }, state.mode) || `<span class="invbatch-badge invbatch-badge--${upper(row.status) === 'COMPLETE' ? 'ready' : 'neutral'}">${escapeHtml(clean(row.status || row.phase || 'Complete'))}</span>`}</span>
+      <span>${row.document_version_id && row.can_view ? `<button type="button" class="btn btn-xs btn-outline" data-batch-action="view-document" data-document-version-id="${escapeHtml(row.document_version_id)}">View</button>` : ''}</span>
+    </div>`).join('');
+  }
+
+  function renderInvoiceBatchResultSummary(state) {
+    const counts = resultCounts(state);
+    const issue = state.mode === 'ISSUE';
+    const categories = RESULT_CATEGORIES[state.mode].map(category => `<button type="button" class="btn btn-sm ${state.result_filter === category ? 'btn-primary' : 'btn-outline'}" data-batch-action="result-filter" data-result-category="${category}">${escapeHtml(category.replaceAll('_', ' ').toLowerCase().replace(/^\w/, value => value.toUpperCase()))}</button>`).join('');
+    return `<section class="invbatch-results">
+      ${renderWeeklySourceSubmissionResults(state)}
+      <h3>${issue ? 'Batch Issue results' : 'Batch Generate results'}</h3>
+      <div class="invbatch-result-summary">
+        <span><strong>${counts.completed}</strong> ${issue ? 'Issued' : 'Generated'}</span>
+        ${issue ? `<span><strong>${counts.sendBlocked}</strong> Issued but delivery suppressed</span>` : `<span><strong>${counts.regenerated}</strong> Regenerated</span>`}
+        <span><strong>${counts.active}</strong> Already active</span>
+        <span><strong>${counts.blocked}</strong> Blocked</span>
+        <span><strong>${counts.changed}</strong> Changed/skipped</span>
+        <span><strong>${counts.missing}</strong> Missing</span>
+        <span><strong>${counts.inProgress}</strong> In progress</span>
+        <span><strong>${counts.failed}</strong> Failed</span>
+      </div>
+      <div class="invbatch-result-filters">${categories}</div>
+      <div class="invbatch-result-rows">${renderResultRows(state)}</div>
+      <div class="invbatch-pager"><span>${Number(state.result_page?.total_count || 0).toLocaleString('en-GB')} results</span><span><button type="button" class="btn btn-sm btn-outline" data-batch-action="result-back" ${state.result_history.length ? '' : 'disabled'}>Back</button><button type="button" class="btn btn-sm btn-outline" data-batch-action="result-next" ${state.result_page?.has_more && state.result_cursor ? '' : 'disabled'}>Next</button></span></div>
+      <button type="button" class="btn btn-outline" data-batch-action="close">Close</button>
+    </section>`;
+  }
+
+  function findRow(state, selectionKey) {
+    return [...asArray(state.candidate_page?.rows), ...asArray(state.weekly_source_rows)]
+      .find(row => clean(row.selection_key) === clean(selectionKey)) || null;
+  }
+
+  function renderRowDetails(state) {
+    const row = state.detail_row;
+    if (!row) return '';
+    const diagnostics = diagnosticsForRow(row, state.mode);
+    const issueDiagnostics = diagnostics.filter(diagnostic => diagnostic.family !== 'DELIVERY');
+    const deliveryDiagnostics = diagnostics.filter(diagnostic => diagnostic.family === 'DELIVERY');
+    const rawState = upper(row.row_status || row.generation_state || row.generated_state);
+    const isGenerate = state.mode === 'GENERATE';
+    const currentState = rawState === 'BLOCKED'
+      ? (isGenerate ? 'Cannot generate yet' : 'Cannot issue yet')
+      : clean(row.row_status || row.generation_state || row.generated_state || '—');
+    const blocked = rawState === 'BLOCKED';
+    const renderDiagnosticItems = items => items.map(diagnostic => `
+      <p><strong>${escapeHtml(diagnostic.detail_label)}:</strong><br>${escapeHtml(diagnostic.explanation)}</p>
+    `).join('');
+    return `<aside class="invbatch-detail-panel" role="dialog" aria-modal="true" aria-label="Invoice batch item details">
+      <header><h3>Item details</h3><button type="button" class="btn btn-sm btn-outline" data-batch-action="close-details">Close</button></header>
+      <dl>
+        ${state.mode === 'ISSUE' ? `<dt>Invoice</dt><dd>${escapeHtml(row.invoice_number || '—')}</dd>` : ''}
+        <dt>Client</dt><dd>${escapeHtml(row.client_name || '—')}</dd>
+        <dt>Candidate</dt><dd>${escapeHtml(candidateDisplay(row))}</dd>
+        <dt>Week ending</dt><dd>${escapeHtml(weekDisplay(row))}</dd>
+        ${row.source_kind === 'WEEKLY_FINAL_SOURCE' ? `<dt>Backing report</dt><dd>${escapeHtml(row.report_number || '—')}</dd><dt>Source shifts</dt><dd>${Number(row.movement_count || 0).toLocaleString('en-GB')}</dd>` : ''}
+        <dt>Current state</dt><dd>${escapeHtml(currentState)}</dd>
+      </dl>
+      <h4>${blocked ? (isGenerate ? 'This invoice cannot be generated yet' : 'This invoice cannot be issued yet') : 'What needs attention'}</h4>
+      ${issueDiagnostics.length ? `<section class="invbatch-detail-reasons" aria-label="What needs fixing"><h5>What needs fixing</h5>${renderDiagnosticItems(issueDiagnostics)}</section>` : ''}
+      ${deliveryDiagnostics.length ? `<section class="invbatch-detail-reasons" aria-label="Sending"><h5>Sending</h5>${renderDiagnosticItems(deliveryDiagnostics)}</section>` : ''}
+      ${diagnostics.length ? '' : '<p>No blockers were reported by CloudTMS.</p>'}
+      ${blocked
+        ? `<p>Fix the items above, then refresh the list. Nothing will be ${isGenerate ? 'generated' : 'issued'} until the required checks pass.</p>`
+        : (deliveryDiagnostics.length ? '<p>This invoice can still be issued, but it cannot be emailed until the sending problem is fixed.</p>' : '')}
+    </aside>`;
+  }
+
+  function openInvoiceBatchRowDetails(state, row) {
+    state.detail_row = row;
+    state.detail_focus_origin = document.activeElement;
+    renderInvoiceBatchModal(state);
+    const panel = state.root_element?.querySelector('.invbatch-detail-panel');
+    try { panel?.querySelector('button, [href], input, select, textarea')?.focus({ preventScroll: true }); } catch {}
+    return row;
+  }
+
+  function renderViewer(state) {
+    const viewer = asObject(state.viewer_request);
+    if (!viewer.open) return '';
+    return `<aside class="invbatch-viewer" role="dialog" aria-modal="true" aria-label="Invoice preview">
+      <header><h3>Invoice preview</h3><button type="button" class="btn btn-sm btn-outline" data-batch-action="close-viewer">Close</button></header>
+      <div class="invbatch-viewer-status" aria-live="polite">${escapeHtml(viewer.status_message || 'Preparing preview')}</div>
+      ${viewer.error ? `<div class="error">${escapeHtml(viewer.error)}</div>` : ''}
+      ${viewer.blob_url ? `<iframe src="${escapeHtml(viewer.blob_url)}" title="Invoice PDF preview"></iframe>` : '<div class="invbatch-viewer-placeholder"><div class="invbatch-spinner"></div><span>Preparing preview</span></div>'}
+    </aside>`;
+  }
+
+  function revokeInvoiceBatchViewerBlob(state) {
+    const viewer = asObject(state?.viewer_request);
+    if (viewer.blob_url) {
+      try { URL.revokeObjectURL(viewer.blob_url); } catch {}
+      viewer.blob_url = null;
+    }
+    if (state) state.viewer_request = Object.keys(viewer).length ? viewer : null;
+  }
+
+  function applyIndeterminateCheckboxes(root) {
+    for (const checkbox of root?.querySelectorAll?.('input[data-indeterminate="true"]') || []) checkbox.indeterminate = true;
+  }
+
+  function captureInvoiceBatchViewport(root) {
+    const list = root?.querySelector?.('.invbatch-list');
+    const scrollHost = root?.parentElement;
+    const active = document.activeElement;
+    let focusSelector = null;
+    if (active && root?.contains(active)) {
+      const field = active.closest?.('[data-batch-field]');
+      const action = active.closest?.('[data-batch-action]');
+      if (field?.dataset.selectionKey) {
+        focusSelector = `[data-batch-field="${CSS.escape(field.dataset.batchField)}"][data-selection-key="${CSS.escape(field.dataset.selectionKey)}"]`;
+      } else if (field?.dataset.selector) {
+        focusSelector = `[data-batch-field="${CSS.escape(field.dataset.batchField)}"][data-selector="${CSS.escape(field.dataset.selector)}"]`;
+      } else if (action?.dataset.groupDimension) {
+        focusSelector = `[data-batch-action="${CSS.escape(action.dataset.batchAction)}"][data-group-dimension="${CSS.escape(action.dataset.groupDimension)}"]`;
+      }
+    }
+    return {
+      root_scroll_top: Number(root?.scrollTop || 0),
+      host_scroll_top: Number(scrollHost?.scrollTop || 0),
+      list_scroll_top: Number(list?.scrollTop || 0),
+      focus_selector: focusSelector
+    };
+  }
+
+  function restoreInvoiceBatchViewport(root, viewport) {
+    if (!root || !viewport) return;
+    const restore = () => {
+      root.scrollTop = viewport.root_scroll_top;
+      if (root.parentElement) root.parentElement.scrollTop = viewport.host_scroll_top;
+      const list = root.querySelector('.invbatch-list');
+      if (list) list.scrollTop = viewport.list_scroll_top;
+    };
+    restore();
+    if (viewport.focus_selector) {
+      try { root.querySelector(viewport.focus_selector)?.focus({ preventScroll: true }); } catch {}
+    }
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(restore);
+  }
+
+  function renderInvoiceBatchModal(state) {
+    const root = state.root_element;
+    if (!root || state.destroyed) return '';
+    const viewport = captureInvoiceBatchViewport(root);
+    let body;
+    if (state.credit_note_results?.length && !state.root_operation_id && !state.weekly_source_submission_results?.length)
+      body=window.CloudTmsAutomaticCreditNotes.renderResults(state.credit_note_results,escapeHtml)+'<button type="button" class="btn btn-outline" data-batch-action="close">Close</button>';
+    else if (state.source_submission_complete && !state.root_operation_id) body = renderWeeklySourceSubmissionResults(state, { close: true });
+    else if (state.result_page && TERMINAL.has(upper(state.progress?.status))) body = renderInvoiceBatchResultSummary(state);
+    else if (state.root_operation_id) body = renderInvoiceBatchProgress(state);
+    else if (state.confirmation) body = renderInvoiceBatchConfirmation(state);
+    else body = `
+      <div class="invbatch-summary-strip">
+        <span><strong>${(Number(state.candidate_page?.page?.total_count || 0) + Number(state.weekly_source_page?.total_count || 0)).toLocaleString('en-GB')}</strong> in current filter</span>
+        <span><strong>${Number(state.selection_summary?.eligible_total || 0).toLocaleString('en-GB')}</strong> eligible</span>
+        <span><strong>${Number(state.selection_summary?.blocked_total || 0).toLocaleString('en-GB')}</strong> blocked</span>
+      </div>
+      ${renderInvoiceBatchToolbar(state)}
+      ${state.list_stale ? '<div class="invbatch-stale" role="alert">The candidate list changed. Your filters and unticks are preserved. <button type="button" class="btn btn-sm btn-outline" data-batch-action="refresh-stale">Refresh</button></div>' : ''}
+      ${state.selection_summary_pending ? '<div class="invbatch-summary-pending" aria-live="polite">Updating the exact selection summary…</div>' : ''}
+      ${state.error ? `<div class="invbatch-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
+      <div class="invbatch-list" aria-busy="${state.loading ? 'true' : 'false'}">
+        ${state.loading && !state.candidate_page ? '<div class="invbatch-empty"><div class="invbatch-spinner"></div> Loading candidates…</div>' : renderInvoiceBatchGroups(state)}
+      </div>
+      ${renderInvoiceBatchPager(state)}
+      ${renderInvoiceBatchFooter(state)}
+      ${renderInvoiceBatchFilterDrawer(state)}
+      ${renderRowDetails(state)}
+      ${renderViewer(state)}`;
+    root.innerHTML = body+(state.root_operation_id?window.CloudTmsAutomaticCreditNotes?.renderResults(state.credit_note_results,escapeHtml)||'':'');
+    applyIndeterminateCheckboxes(root);
+    restoreInvoiceBatchViewport(root, viewport);
+    if (state.filter_drawer_open) {
+      const drawer = root.querySelector('[data-batch-filter-drawer]');
+      const first = drawer?.querySelector('input,select,button');
+      try { first?.focus({ preventScroll: true }); } catch {}
+    }
+    return body;
+  }
+
+  function readFilterDrawer(state) {
+    const drawer = state.root_element?.querySelector('[data-batch-filter-drawer]');
+    if (!drawer) return normaliseFilter(state.filter, state.mode);
+    const values = field => [...drawer.querySelectorAll(`[data-filter-list="${field}"]:checked`)].map(input => input.value);
+    return normaliseFilter({
+      client_ids: values('client_ids'),
+      candidate_ids: values('candidate_ids'),
+      status_codes: values('status_codes'),
+      blocker_codes: values('blocker_codes'),
+      week_endings: values('week_endings'),
+      week_ending_from: drawer.querySelector('[data-filter-field="week_ending_from"]')?.value || null,
+      week_ending_to: drawer.querySelector('[data-filter-field="week_ending_to"]')?.value || null,
+      search: drawer.querySelector('[data-filter-field="search"]')?.value || null,
+      allow_early: drawer.querySelector('[data-filter-field="allow_early"]')?.checked === true,
+      display_mode: state.display_mode
+    }, state.mode);
+  }
+
+  function resetPaging(state) {
+    state.snapshot = null;
+    state.query_hash = null;
+    state.filter_hash = null;
+    state.selection_hash = null;
+    state.page_cursor = null;
+    state.page_history = [];
+    state.page_start_ordinal = 0;
+    state.candidate_page = null;
+    state.weekly_source_snapshot_hash = null;
+    state.weekly_source_rows = [];
+    state.healthroster_credit_notes=null;
+    state.credit_note_results=[];
+    state.weekly_source_page = null;
+    state.weekly_source_submission_results = [];
+    state.source_submission_complete = false;
+  }
+
+  async function reloadFirstPage(state) {
+    resetPaging(state);
+    const page = await loadInvoiceBatchCandidatePage(state);
+    if (page) {
+      state.list_stale = false;
+      await loadInvoiceBatchSelectionSummary(state);
+    }
+  }
+
+  async function submitInvoiceBatchOperation(state) {
+    if (state.submitting) return null;
+    state.submitting = true;
+    state.error = null;
+    state.command_token = state.command_token || crypto.randomUUID();
+    renderInvoiceBatchModal(state);
+    try {
+      const path = state.mode === 'GENERATE'
+        ? '/api/invoices/batch-generate/confirm'
+        : '/api/invoices/batch-issue/confirm';
+      const body = {
+        selection_contract: buildInvoiceBatchSelectionContract(state),
+        command_token: state.command_token
+      };
+      if (state.mode === 'GENERATE' && Number(state.weekly_source_page?.total_count || 0) > 0) {
+        if (!SHA256_RE.test(clean(state.weekly_source_snapshot_hash))) throw new Error('BATCH_SOURCE_CHANGED');
+        body.weekly_source_selection_contract = {
+          contract_version: WEEKLY_SOURCE_SELECTION_VERSION,
+          snapshot_hash: state.weekly_source_snapshot_hash
+        };
+      }
+      if (state.mode === 'ISSUE') {
+        body.deliver = state.issue_mode !== 'ISSUE_ONLY';
+        if (body.deliver) {
+          state.delivery_request_token = state.delivery_request_token || crypto.randomUUID();
+          if (state.delivery_request_token === state.command_token) state.delivery_request_token = crypto.randomUUID();
+          body.delivery_request_token = state.delivery_request_token;
+          body.delivery_intent = {
+            route_mode: 'SERVER_RESOLVED',
+            template_version: 'INVOICE_EMAIL_V2'
+          };
+        }
+      }
+      const response = await window.authFetch(invoiceApi(path), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': state.command_token },
+        body: JSON.stringify(body)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (![200, 202, 207].includes(response.status)) throw new Error(payload.error || payload.message || `Batch request failed (${response.status})`);
+      const registered = window.registerInvoiceOperationsFromResponse?.(payload, {
+        response_family: state.mode === 'GENERATE' ? 'BATCH_GENERATE' : 'BATCH_ISSUE',
+        operation_type: state.mode === 'GENERATE' ? 'BATCH_GENERATE' : 'BATCH_ISSUE',
+        purpose: state.mode === 'GENERATE'
+          ? 'BATCH_GENERATE'
+          : (state.issue_mode === 'ISSUE_ONLY' ? 'BATCH_ISSUE_ONLY' : 'BATCH_ISSUE_AND_SEND'),
+        command_token: state.command_token,
+        modal_identity: state.id,
+        explicit_operation_ids: true
+      }) || [];
+      state.root_operation_id = clean(payload.root_operation_id || registered[0]?.operation_id).toLowerCase() || null;
+      state.credit_note_results=asArray(payload.credit_note_results);
+      window.CloudTmsAutomaticCreditNotes?.register(state.credit_note_results,window.registerInvoiceOperationsFromResponse,{modal_identity:state.id});
+      state.weekly_source_submission_results = asArray(payload.weekly_source_per_row_results);
+      state.source_submission_complete = state.weekly_source_submission_results.length > 0 && !state.root_operation_id;
+      if (payload.partial === true && !state.root_operation_id) {
+        state.error = clean(payload.error || 'Standard invoices were not started. The self-bill results below are exact.');
+      }
+      state.progress = registered.find(row => row.operation_id === state.root_operation_id)
+        || asObject(payload.per_command_results?.[0])
+        || { operation_id: state.root_operation_id, status: response.status === 200 ? 'COMPLETE' : 'QUEUED', phase: 'QUEUED' };
+      state.confirmation = false;
+      state.result_page_revision = clean(
+        payload.result_page_revision
+        || state.progress?.result_page_revision
+      ) || null;
+      if (state.root_operation_id) {
+        rootOperationStates.set(state.root_operation_id, state);
+        registerInvoiceBatchOperation(state, payload);
+      }
+      if (response.status === 200 && state.root_operation_id) await loadInvoiceBatchResultPage(state, { category: 'ALL' });
+      return payload;
+    } catch (error) {
+      state.error = clean(error?.message || error);
+      state.root_operation_id = null;
+      state.progress = null;
+      return null;
+    } finally {
+      state.submitting = false;
+      renderInvoiceBatchModal(state);
+    }
+  }
+
+  function registerInvoiceBatchOperation(state, payload = {}) {
+    if (!state.root_operation_id) return null;
+    const record = {
+      operation_id: state.root_operation_id,
+      root_operation_id: state.root_operation_id,
+      operation_type: state.mode === 'GENERATE'
+        ? 'BATCH_GENERATE'
+        : (state.issue_mode === 'ISSUE_ONLY' ? 'BATCH_ISSUE_ONLY' : 'BATCH_ISSUE_AND_SEND'),
+      purpose: state.mode === 'GENERATE'
+        ? 'BATCH_GENERATE'
+        : (state.issue_mode === 'ISSUE_ONLY' ? 'BATCH_ISSUE_ONLY' : 'BATCH_ISSUE_AND_SEND'),
+      status: upper(payload.status || state.progress?.status || 'QUEUED'),
+      phase: upper(state.progress?.phase || 'QUEUED'),
+      effective_change_seq: Number(state.progress?.effective_change_seq || state.progress?.change_seq || 0) || 0,
+      modal_identity: state.id,
+      command_token: state.command_token,
+      issue_mode: state.issue_mode,
+      result_page_revision: state.result_page_revision,
+      filter_summary: {
+        display_mode: state.display_mode,
+        allow_early: state.filter.allow_early,
+        rule_count: state.selection.rules.length
+      },
+      created_at_utc: new Date().toISOString()
+    };
+    window.registerInvoiceOperationWatch?.(record);
+    return record;
+  }
+
+  async function loadInvoiceBatchResultPage(state, options = {}) {
+    if (!state.root_operation_id || state.destroyed) return null;
+    const category = upper(options.category || state.result_filter || 'ALL');
+    const revision = clean(options.result_page_revision || state.result_page_revision || state.progress?.result_page_revision);
+    if (!revision) return null;
+    const body = {
+      operation_ids: [state.root_operation_id],
+      mode: 'DETAIL',
+      action: state.mode,
+      result_category: category,
+      result_limit: PAGE_SIZE,
+      result_page_revision: revision
+    };
+    if (options.cursor) body.result_cursor = options.cursor;
+    const response = await window.authFetch(invoiceApi('/api/invoice-operations/get'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (payload.error === 'OPERATION_RESULT_CURSOR_STALE' && options.stale_retry !== false) {
+        state.result_history = [];
+        state.result_cursor = null;
+        state.result_page = null;
+        state.result_page_revision = clean(payload.result_page_revision || state.progress?.result_page_revision || revision);
+        return loadInvoiceBatchResultPage(state, {
+          category,
+          result_page_revision: state.result_page_revision,
+          stale_retry: false
+        });
+      }
+      state.error = payload.error || `Operation results unavailable (${response.status})`;
+      renderInvoiceBatchModal(state);
+      return null;
+    }
+    if (
+      payload.ok !== true
+      || !Array.isArray(payload.operations)
+      || payload.result_page?.contract_version !== RESULT_PAGE_VERSION
+      || clean(payload.result_page?.root_operation_id).toLowerCase() !== state.root_operation_id
+      || upper(payload.result_page?.category) !== category
+      || clean(payload.result_page?.result_page_revision) !== revision
+      || !Array.isArray(payload.result_page?.rows)
+      || typeof payload.result_page?.has_more !== 'boolean'
+    ) {
+      state.error = 'INVOICE_BATCH_RESULT_CONTRACT_MISMATCH';
+      renderInvoiceBatchModal(state);
+      return null;
+    }
+    const operation = asArray(payload.operations).find(row => clean(row.operation_id) === state.root_operation_id)
+      || asArray(payload.operations)[0];
+    if (operation) state.progress = { ...asObject(state.progress), ...operation };
+    state.result_page_revision = clean(
+      payload.result_page?.result_page_revision
+      || operation?.result_page_revision
+      || revision
+    );
+    state.result_filter = category;
+    state.result_page = asObject(payload.result_page);
+    state.result_cursor = clean(payload.result_page?.next_cursor) || null;
+    const viewerRow = asArray(state.result_page?.rows).find(row =>
+      clean(row.selection_key) === clean(state.viewer_request?.selection_key)
+    );
+    if (viewerRow && state.viewer_request?.open && !state.viewer_request?.blob_url) {
+      if (UUID_RE.test(clean(viewerRow.document_version_id))) {
+        await openExactVersionInViewer(viewerRow.document_version_id, state);
+      } else if (UUID_RE.test(clean(viewerRow.invoice_id))
+          && state.viewer_request?.preview_request_started !== true) {
+        await prepareGeneratedInvoiceForBatchViewer(viewerRow.invoice_id, state);
+      }
+    }
+    renderInvoiceBatchModal(state);
+    return payload;
+  }
+
+  async function applyInvoiceBatchOperationSignal(signalValue) {
+    const signal = asObject(signalValue);
+    const operationId = clean(signal.operation_id).toLowerCase();
+    const rootId = clean(signal.root_operation_id || operationId).toLowerCase();
+    const state = rootOperationStates.get(rootId) || rootOperationStates.get(operationId);
+    if (!state) return false;
+    const incomingSequence = Number(signal.effective_change_seq ?? signal.change_seq ?? 0) || 0;
+    const currentSequence = Number(state.progress?.effective_change_seq ?? state.progress?.change_seq ?? 0) || 0;
+    if (incomingSequence < currentSequence) return false;
+    if (
+      state.viewer_request?.operation_id === operationId
+      && UUID_RE.test(clean(signal.document_version_id))
+      && state.viewer_request?.open
+      && !state.viewer_request?.blob_url
+    ) {
+      await openExactVersionInViewer(signal.document_version_id, state);
+    }
+    if (operationId !== state.root_operation_id) return false;
+    state.progress = { ...asObject(state.progress), ...signal };
+    state.result_page_revision = clean(signal.result_page_revision || state.result_page_revision) || null;
+    if (TERMINAL.has(upper(signal.status))) {
+      const loadKey = `${signal.effective_change_seq || signal.change_seq || 0}:${signal.status}`;
+      if (state.last_result_load_key !== loadKey) {
+        state.last_result_load_key = loadKey;
+        await loadInvoiceBatchResultPage(state, { category: state.result_filter || 'ALL' });
+      }
+    } else {
+      renderInvoiceBatchModal(state);
+    }
+    return true;
+  }
+
+  async function openExactVersionInViewer(documentVersionId, state) {
+    const viewer = asObject(state.viewer_request);
+    const requestSerial = viewer.request_serial;
+    try {
+      const result = await window.openExactReadyDocument(documentVersionId, { returnBlobUrl: true });
+      if (!viewer.open || state.viewer_request?.request_serial !== requestSerial) {
+        if (result?.blob_url) try { URL.revokeObjectURL(result.blob_url); } catch {}
+        return null;
+      }
+      revokeInvoiceBatchViewerBlob(state);
+      viewer.blob_url = result?.blob_url || null;
+      viewer.status_message = 'Ready to view';
+      viewer.document_version_id = documentVersionId;
+      viewer.error = null;
+    } catch (error) {
+      viewer.error = clean(error?.message || error);
+      viewer.status_message = 'Preview failed';
+    }
+    state.viewer_request = viewer;
+    renderInvoiceBatchModal(state);
+  }
+
+  async function prepareGeneratedInvoiceForBatchViewer(invoiceIdValue, state) {
+    const invoiceId = clean(invoiceIdValue).toLowerCase();
+    const viewer = asObject(state.viewer_request);
+    if (!viewer.open || !UUID_RE.test(invoiceId) || viewer.preview_request_started === true) return null;
+    const requestSerial = viewer.request_serial;
+    const commandToken = viewer.preview_command_token || crypto.randomUUID();
+    viewer.preview_request_started = true;
+    viewer.preview_command_token = commandToken;
+    viewer.invoice_id = invoiceId;
+    viewer.status_message = 'Preparing preview';
+    state.viewer_request = viewer;
+    renderInvoiceBatchModal(state);
+    try {
+      const response = await window.authFetch(invoiceApi(`/api/invoices/${encodeURIComponent(invoiceId)}/render`), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': commandToken },
+        body: JSON.stringify({ command_token: commandToken, priority_reason: 'VIEW_NOW' })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!viewer.open || state.viewer_request?.request_serial !== requestSerial) return payload;
+      if (clean(payload.contract_version) !== 'INVOICE_VIEWER_V2') {
+        throw new Error('INVOICE_VIEWER_CONTRACT_MISMATCH');
+      }
+      const viewerState = upper(payload.viewer_state);
+      const purpose = upper(payload.purpose || 'DRAFT_PREVIEW');
+      if (purpose !== 'DRAFT_PREVIEW') throw new Error('INVOICE_VIEWER_PURPOSE_INVALID');
+      const versionId = clean(payload.document_version?.id || payload.document_version_id).toLowerCase();
+      if (response.status === 200 && viewerState === 'READY' && UUID_RE.test(versionId)) {
+        await openExactVersionInViewer(versionId, state);
+        return payload;
+      }
+      if (response.status === 202 && viewerState === 'PREPARING') {
+        const registered = window.registerInvoiceOperationsFromResponse?.(payload, {
+          response_family: 'VIEW',
+          operation_type: 'VIEW_INVOICE_DOCUMENT',
+          entity_type: 'INVOICE',
+          entity_id: invoiceId,
+          purpose: 'DRAFT_PREVIEW',
+          command_token: commandToken,
+          modal_identity: state.id,
+          explicit_operation_ids: true
+        }) || [];
+        const operationId = clean(payload.operation_id || registered[0]?.operation_id).toLowerCase();
+        if (!UUID_RE.test(operationId)) throw new Error('INVOICE_VIEWER_CONTRACT_MISMATCH');
+        viewer.operation_id = operationId;
+        viewer.status_message = payload.status_message || 'Preparing preview';
+        rootOperationStates.set(operationId, state);
+        return payload;
+      }
+      throw new Error(clean(payload.error_code || payload.error || payload.message || `INVOICE_DOCUMENT_HTTP_${response.status}`));
+    } catch (error) {
+      if (viewer.open && state.viewer_request?.request_serial === requestSerial) {
+        viewer.error = clean(error?.message || error);
+        viewer.status_message = 'Preview failed';
+      }
+      return null;
+    } finally {
+      if (viewer.open && state.viewer_request?.request_serial === requestSerial) {
+        state.viewer_request = viewer;
+        renderInvoiceBatchModal(state);
+      }
+    }
+  }
+
+  async function generateAndViewInvoiceCandidate(state, row) {
+    if (!row?.selectable || state.viewer_request?.submitting) return null;
+    state.viewer_request = {
+      open: true,
+      selection_key: row.selection_key,
+      status_message: 'Preparing preview',
+      submitting: true,
+      error: null,
+      blob_url: null,
+      request_serial: Number(state.viewer_request?.request_serial || 0) + 1
+    };
+    renderInvoiceBatchModal(state);
+    const token = crypto.randomUUID();
+    try {
+      const isWeeklySource = row.source_kind === 'WEEKLY_FINAL_SOURCE';
+      const query = buildInvoiceBatchCandidateRequest(state, 'EXPLICIT_KEYS', {
+        selection_keys: [row.selection_key],
+        expected_source_revisions: { [row.selection_key]: row.source_revision }
+      });
+      if (!isWeeklySource) {
+        const candidatePayload = await fetchInvoiceBatchCandidatePage(state, {
+          mode: 'EXPLICIT_KEYS',
+          selection_keys: [row.selection_key],
+          expected_source_revisions: { [row.selection_key]: row.source_revision }
+        });
+        if (asArray(candidatePayload.rows).length !== 1 || candidatePayload.rows[0]?.selectable !== true) {
+          throw new Error('BATCH_SOURCE_CHANGED');
+        }
+      }
+      const confirmBody = {
+        selection_contract: {
+          contract_version: SELECTION_ROOT_VERSION,
+          query,
+          selection: query.selection
+        },
+        command_token: token
+      };
+      if (isWeeklySource) {
+        if (!SHA256_RE.test(clean(state.weekly_source_snapshot_hash))) {
+          throw new Error('BATCH_SOURCE_CHANGED');
+        }
+        confirmBody.weekly_source_selection_contract = {
+          contract_version: WEEKLY_SOURCE_SELECTION_VERSION,
+          snapshot_hash: state.weekly_source_snapshot_hash
+        };
+      }
+      const response = await window.authFetch(invoiceApi('/api/invoices/batch-generate/confirm'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': token },
+        body: JSON.stringify(confirmBody)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (![200, 202, 207].includes(response.status)) throw new Error(payload.error || `Preview request failed (${response.status})`);
+      const registered = window.registerInvoiceOperationsFromResponse?.(payload, {
+        response_family: 'GENERATE_AND_VIEW',
+        operation_type: 'BATCH_GENERATE',
+        purpose: 'DRAFT_PREVIEW',
+        command_token: token,
+        modal_identity: state.id,
+        viewer_selection_key: row.selection_key,
+        explicit_operation_ids: true
+      }) || [];
+      const operationId = clean(payload.root_operation_id || registered[0]?.operation_id).toLowerCase();
+      state.viewer_request.operation_id = operationId;
+      if (operationId) {
+        state.root_operation_id = operationId;
+        state.progress = { ...asObject(state.progress), ...asObject(registered[0]), operation_id: operationId };
+        rootOperationStates.set(operationId, state);
+      }
+      const readyVersionId = clean(payload.document_version_id || payload.document_version?.id);
+      if (readyVersionId) await openExactVersionInViewer(readyVersionId, state);
+      if (isWeeklySource && UUID_RE.test(clean(payload.invoice_id))) {
+        state.weekly_source_submission_results = asArray(payload.weekly_source_per_row_results);
+        await prepareGeneratedInvoiceForBatchViewer(payload.invoice_id, state);
+      }
+      return payload;
+    } catch (error) {
+      state.viewer_request.error = clean(error?.message || error);
+      state.viewer_request.status_message = 'Preview failed';
+      return null;
+    } finally {
+      state.viewer_request.submitting = false;
+      renderInvoiceBatchModal(state);
+    }
+  }
+
+  function focusTrap(event, state) {
+    if (event.key === 'Escape') {
+      if (state.detail_row) state.detail_row = null;
+      else if (state.viewer_request?.open) {
+        revokeInvoiceBatchViewerBlob(state);
+        state.viewer_request.open = false;
+      }
+      else if (state.filter_drawer_open) state.filter_drawer_open = false;
+      else return;
+      event.preventDefault();
+      renderInvoiceBatchModal(state);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const panel = state.root_element?.querySelector('[aria-modal="true"]');
+    if (!panel) return;
+    const focusable = [...panel.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  function closeInvoiceBatchModal(state) {
+    state.destroyed = true;
+    try { state.candidate_abort_controller?.abort(); } catch {}
+    try { state.summary_abort_controller?.abort(); } catch {}
+    Object.values(state.facet_abort_controllers || {}).forEach(controller => {
+      try { controller?.abort(); } catch {}
+    });
+    clearTimeout(state.summary_timer);
+    revokeInvoiceBatchViewerBlob(state);
+    if (state.root_element && state.delegated_handler) {
+      state.root_element.removeEventListener('click', state.delegated_handler);
+      state.root_element.removeEventListener('change', state.delegated_handler);
+      state.root_element.removeEventListener('keydown', state.delegated_handler);
+      state.root_element.removeEventListener('dragstart', state.delegated_handler);
+      state.root_element.removeEventListener('dragover', state.delegated_handler);
+      state.root_element.removeEventListener('drop', state.delegated_handler);
+      state.root_element.removeEventListener('dragend', state.delegated_handler);
+    }
+    if (state.keydown_handler) document.removeEventListener('keydown', state.keydown_handler, true);
+    activeModalStates.delete(state.id);
+    if (state.root_operation_id && TERMINAL.has(upper(state.progress?.status))) {
+      rootOperationStates.delete(state.root_operation_id);
+    }
+    try {
+      const modal = document.getElementById('modal');
+      modal?.classList.remove('invbatch-modal', 'invbatch-generate-modal', 'invbatch-issue-modal');
+    } catch {}
+  }
+
+  function setInvoiceBatchGroupOrder(state, nextOrder) {
+    const saved = saveInvoiceBatchPreferences(state.mode, {
+      sort: state.sort,
+      group_order: normaliseGroupOrder(nextOrder)
+    });
+    state.sort = saved.sort;
+    state.group_order = saved.group_order;
+    renderInvoiceBatchModal(state);
+  }
+
+  function moveInvoiceBatchGroupDimension(state, dimensionValue, targetValue, direction = 0) {
+    const order = normaliseGroupOrder(state.group_order, { persisted: true });
+    const dimension = upper(dimensionValue);
+    const from = order.indexOf(dimension);
+    if (from < 0) return;
+    let to = targetValue ? order.indexOf(upper(targetValue)) : from + Number(direction || 0);
+    if (to < 0 || to >= order.length || to === from) return false;
+    order.splice(from, 1);
+    if (targetValue && from < to) to -= 1;
+    order.splice(to, 0, dimension);
+    setInvoiceBatchGroupOrder(state, order);
+    return true;
+  }
+
+  async function applyInvoiceBatchSortPriorityChange(state, dimensionValue, targetValue) {
+    const moved = moveInvoiceBatchGroupDimension(state, dimensionValue, targetValue);
+    if (!moved) return false;
+    await reloadFirstPage(state);
+    return true;
+  }
+
+  function attachInvoiceBatchModalDelegatedHandlers(state) {
+    const root = state.root_element;
+    if (!root || state.delegated_handler) return;
+    const handler = async event => {
+      const actionElement = event.target.closest?.('[data-batch-action]');
+      const field = event.target.closest?.('[data-batch-field]');
+      const groupItem = event.target.closest?.('[data-group-dimension]');
+      if (event.type === 'dragstart' && groupItem) {
+        state.dragged_group_dimension = upper(groupItem.dataset.groupDimension);
+        groupItem.classList.add('is-dragging');
+        try {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', state.dragged_group_dimension);
+        } catch {}
+        return;
+      }
+      if (event.type === 'dragover' && groupItem && state.dragged_group_dimension) {
+        event.preventDefault();
+        try { event.dataTransfer.dropEffect = 'move'; } catch {}
+        return;
+      }
+      if (event.type === 'drop' && groupItem && state.dragged_group_dimension) {
+        event.preventDefault();
+        const draggedDimension = state.dragged_group_dimension;
+        state.dragged_group_dimension = null;
+        await applyInvoiceBatchSortPriorityChange(
+          state,
+          draggedDimension,
+          groupItem.dataset.groupDimension
+        );
+        return;
+      }
+      if (event.type === 'dragend') {
+        state.dragged_group_dimension = null;
+        root.querySelectorAll('.invbatch-group-order-item.is-dragging')
+          .forEach(item => item.classList.remove('is-dragging'));
+        return;
+      }
+      if (event.type === 'keydown' && field?.dataset.batchField === 'toolbar-search' && event.key === 'Enter') {
+        event.preventDefault();
+        state.filter.search = clean(field.value) || null;
+        await reloadFirstPage(state);
+        return;
+      }
+      if (event.type === 'change' && field) {
+        const name = field.dataset.batchField;
+        if (name === 'row-selection') {
+          const row = findRow(state, field.dataset.selectionKey);
+          if (row?.selectable === true) applyInvoiceBatchSelectionRule(state.selection, field.checked ? 'INCLUDE' : 'EXCLUDE', rowSelector(row));
+          scheduleInvoiceBatchSelectionSummary(state);
+        } else if (name === 'source-selection-all' || name === 'ordinary-selection-all') {
+          const rows = name === 'source-selection-all'
+            ? asArray(state.weekly_source_rows)
+            : asArray(state.candidate_page?.rows);
+          for (const row of rows) {
+            if (row.selectable === true) {
+              applyInvoiceBatchSelectionRule(
+                state.selection,
+                field.checked ? 'INCLUDE' : 'EXCLUDE',
+                rowSelector(row)
+              );
+            }
+          }
+          scheduleInvoiceBatchSelectionSummary(state);
+        } else if (name === 'issue-mode') {
+          state.issue_mode = upper(field.value) === 'ISSUE_ONLY' ? 'ISSUE_ONLY' : 'ISSUE_AND_SEND';
+          if (state.issue_mode === 'ISSUE_ONLY') state.delivery_request_token = null;
+          renderInvoiceBatchModal(state);
+        } else if (name === 'allow-early') {
+          state.filter.allow_early = field.checked === true;
+          await reloadFirstPage(state);
+        } else if (name === 'sort-direction') {
+          state.sort.sort_direction = upper(field.value);
+          const saved = saveInvoiceBatchPreferences(state.mode, {
+            sort: state.sort,
+            group_order: state.group_order
+          });
+          state.sort = saved.sort;
+          state.group_order = saved.group_order;
+          await reloadFirstPage(state);
+        }
+        return;
+      }
+      if (event.type !== 'click' || !actionElement) return;
+      const action = actionElement.dataset.batchAction;
+      if (action === 'cycle-display') {
+        state.display_mode = DISPLAY_MODES[(DISPLAY_MODES.indexOf(state.display_mode) + 1) % DISPLAY_MODES.length];
+        state.filter.display_mode = state.display_mode;
+        await reloadFirstPage(state);
+      } else if (action === 'open-filter') {
+        state.filter_drawer_open = true;
+        state.filter_draft = { ...state.filter };
+        renderInvoiceBatchModal(state);
+        for (const kind of ['CLIENTS', 'CANDIDATES', 'WEEK_ENDINGS', 'STATUSES', 'BLOCKERS']) {
+          const key = kind.toLowerCase();
+          if (!state.facets_by_kind[key]) loadInvoiceBatchFacets(state, kind, { cursor: null }).catch(() => {});
+        }
+      } else if (action === 'close-filter') {
+        state.filter_drawer_open = false;
+        renderInvoiceBatchModal(state);
+      } else if (action === 'clear-filter') {
+        const keepEarly = state.filter.allow_early;
+        state.filter_draft = { ...emptyFilter(), allow_early: keepEarly, display_mode: state.display_mode };
+        state.filter = normaliseFilter(state.filter_draft, state.mode);
+        state.filter_drawer_open = false;
+        await reloadFirstPage(state);
+      } else if (action === 'apply-filter') {
+        state.filter = readFilterDrawer(state);
+        state.display_mode = state.filter.display_mode;
+        state.filter_drawer_open = false;
+        await reloadFirstPage(state);
+      } else if (action === 'apply-search') {
+        state.filter.search = clean(root.querySelector('[data-batch-field="toolbar-search"]')?.value) || null;
+        await reloadFirstPage(state);
+      } else if (action === 'reset-selection') {
+        resetInvoiceBatchSelection(state);
+        scheduleInvoiceBatchSelectionSummary(state);
+      } else if (action === 'page-next' && state.page_cursor) {
+        state.page_history.push({
+          page: state.candidate_page,
+          next_cursor: state.page_cursor,
+          page_start_ordinal: state.page_start_ordinal
+        });
+        state.page_start_ordinal += asArray(state.candidate_page?.rows).length;
+        const page = await loadInvoiceBatchCandidatePage(state, { cursor: state.page_cursor });
+        if (page) await loadInvoiceBatchSelectionSummary(state);
+      } else if (action === 'page-back' && state.page_history.length) {
+        const prior = state.page_history.pop();
+        state.candidate_page = prior.page;
+        state.page_start_ordinal = Number(prior.page_start_ordinal || 0);
+        state.group_selection = [];
+        state.page_group_selection_seed = asArray(state.candidate_page?.group_selection);
+        state.selection_summary_pending = true;
+        state.selection_summary_error = null;
+        state.page_cursor = clean(state.candidate_page?.page?.next_cursor) || null;
+        state.totals = asObject(state.candidate_page?.totals);
+        renderInvoiceBatchModal(state);
+        await loadInvoiceBatchSelectionSummary(state);
+      } else if (action === 'refresh-stale') {
+        await reloadFirstPage(state);
+      } else if (action === 'confirm-open') {
+        state.confirmation = true;
+        renderInvoiceBatchModal(state);
+      } else if (action === 'confirm-cancel') {
+        state.confirmation = false;
+        renderInvoiceBatchModal(state);
+      } else if (action === 'submit') {
+        await submitInvoiceBatchOperation(state);
+      } else if (action === 'row-details') {
+        openInvoiceBatchRowDetails(state, findRow(state, actionElement.dataset.selectionKey));
+      } else if (action === 'close-details') {
+        const origin = state.detail_focus_origin;
+        state.detail_row = null;
+        renderInvoiceBatchModal(state);
+        try { if (origin?.isConnected) origin.focus({ preventScroll: true }); } catch {}
+      } else if (action === 'generate-view') {
+        await generateAndViewInvoiceCandidate(state, findRow(state, actionElement.dataset.selectionKey));
+      } else if (action === 'close-viewer') {
+        revokeInvoiceBatchViewerBlob(state);
+        state.viewer_request = { ...asObject(state.viewer_request), open: false };
+        renderInvoiceBatchModal(state);
+      } else if (action === 'facet-search' || action === 'facet-more') {
+        const kind = upper(actionElement.dataset.facetKind);
+        const key = kind.toLowerCase();
+        if (action === 'facet-search') {
+          state.facet_search[key] = clean(root.querySelector(`[data-facet-search="${key}"]`)?.value);
+          state.facet_cursors[key] = null;
+          state.facet_history[key] = [];
+          await loadInvoiceBatchFacets(state, kind, { cursor: null, append: false });
+        } else {
+          await loadInvoiceBatchFacets(state, kind, {
+            cursor: state.facet_cursors[key],
+            append: true
+          });
+        }
+      } else if (action === 'view-document') {
+        await window.openExactReadyDocument?.(actionElement.dataset.documentVersionId);
+      } else if (action === 'result-filter') {
+        state.result_history = [];
+        state.result_cursor = null;
+        await loadInvoiceBatchResultPage(state, { category: actionElement.dataset.resultCategory });
+      } else if (action === 'result-next' && state.result_cursor) {
+        state.result_history.push({ page: state.result_page, next_cursor: state.result_cursor });
+        await loadInvoiceBatchResultPage(state, { category: state.result_filter, cursor: state.result_cursor });
+      } else if (action === 'result-back' && state.result_history.length) {
+        const prior = state.result_history.pop();
+        state.result_page = prior?.page || prior;
+        state.result_cursor = clean(prior?.next_cursor) || null;
+        renderInvoiceBatchModal(state);
+      } else if (action === 'source-results-close') {
+        state.source_submission_complete = false;
+        state.weekly_source_submission_results = [];
+        state.command_token = null;
+        await reloadFirstPage(state);
+      } else if (action === 'close') {
+        try { window.closeModal?.(); } catch {}
+      }
+    };
+    state.delegated_handler = handler;
+    root.addEventListener('click', handler);
+    root.addEventListener('change', handler);
+    root.addEventListener('keydown', handler);
+    root.addEventListener('dragstart', handler);
+    root.addEventListener('dragover', handler);
+    root.addEventListener('drop', handler);
+    root.addEventListener('dragend', handler);
+    state.keydown_handler = event => focusTrap(event, state);
+    document.addEventListener('keydown', state.keydown_handler, true);
+  }
+
+  async function resumeLatestBatchOperation(state) {
+    const watches = window.loadInvoiceOperationWatches?.() || [];
+    const purposes = state.mode === 'GENERATE'
+      ? ['BATCH_GENERATE']
+      : ['BATCH_ISSUE_AND_SEND', 'BATCH_ISSUE_ONLY'];
+    const latest = watches
+      .filter(row => purposes.includes(upper(row.purpose)) || purposes.includes(upper(row.operation_type)))
+      .filter(row => !TERMINAL.has(upper(row.status)) || !row.terminal_handled_at_utc)
+      .sort((a, b) => Date.parse(b.updated_at_utc || b.created_at_utc || 0) - Date.parse(a.updated_at_utc || a.created_at_utc || 0))[0];
+    if (!latest?.operation_id) return false;
+    state.root_operation_id = latest.operation_id;
+    state.progress = latest;
+    state.issue_mode = upper(latest.issue_mode || latest.purpose) === 'BATCH_ISSUE_ONLY'
+      ? 'ISSUE_ONLY'
+      : state.issue_mode;
+    state.result_page_revision = clean(latest.result_page_revision) || null;
+    rootOperationStates.set(latest.operation_id, state);
+    if (TERMINAL.has(upper(latest.status))) await loadInvoiceBatchResultPage(state, { category: 'ALL' });
+    return true;
+  }
+
+  async function openInvoiceBatchModal(mode) {
+    if (window.__invoiceAsyncCapability?.enabled_for_user !== true) {
+      const refreshed = typeof window.recoverInvoiceAsyncUiCapability === 'function'
+        ? await window.recoverInvoiceAsyncUiCapability().catch(() => null)
+        : (typeof window.initialiseInvoiceAsyncUi === 'function'
+            ? await window.initialiseInvoiceAsyncUi({ force: true }).catch(() => null)
+            : null);
+      if (refreshed?.enabled_for_user !== true) {
+        window.installInvoiceAsyncUnavailableActions?.();
+        window.InvoiceBatchModalV8?.install?.();
+        const message = 'Invoice tools could not reconnect automatically. The batch action was not started.';
+        try { window.__toast?.(message); } catch {}
+        try { console.warn('[INVOICE_ASYNC_RECOVERY]', message); } catch {}
+        return null;
+      }
+    }
+    const state = createInvoiceBatchModalState(mode);
+    activeModalStates.set(state.id, state);
+    window.modalCtx = {
+      entity: 'invoices',
+      openToken: state.id,
+      data: {},
+      invoiceBatchState: state
+    };
+    const title = state.mode === 'ISSUE' ? 'Batch Issue — Invoices' : 'Batch Generate — Invoices';
+    const label = state.mode === 'ISSUE' ? 'Batch Issue' : 'Batch Generate';
+    window.showModal(
+      title,
+      [{ key: 'main', label }],
+      () => `<div class="invbatch-root" data-invoice-batch-root="${escapeHtml(state.id)}"></div>`,
+      null,
+      false,
+      null,
+      {
+        kind: state.mode === 'ISSUE' ? 'invoice-batch-issue-v8' : 'invoice-batch-generate-v8',
+        noParentGate: true,
+        showSave: false,
+        showApply: false,
+        onDismiss: () => closeInvoiceBatchModal(state)
+      }
+    );
+    const modal = document.getElementById('modal');
+    modal?.classList.add('invbatch-modal', state.mode === 'ISSUE' ? 'invbatch-issue-modal' : 'invbatch-generate-modal');
+    state.root_element = document.querySelector(`[data-invoice-batch-root="${CSS.escape(state.id)}"]`);
+    attachInvoiceBatchModalDelegatedHandlers(state);
+    renderInvoiceBatchModal(state);
+    const resumed = await resumeLatestBatchOperation(state);
+    if (!resumed) {
+      const page = await loadInvoiceBatchCandidatePage(state);
+      if (page) await loadInvoiceBatchSelectionSummary(state);
+    }
+    else renderInvoiceBatchModal(state);
+    return state;
+  }
+
+  function installInvoiceBatchModalOverrides() {
+    if (
+      window.__invoiceBatchModalOverridesInstalled
+      && window.openInvoiceBatchGenerateModal?.__invoiceBatchModalV8 === true
+      && window.openInvoiceBatchIssueModal?.__invoiceBatchModalV8 === true
+    ) return true;
+    const openGenerate = () => openInvoiceBatchModal('GENERATE');
+    const openIssue = () => openInvoiceBatchModal('ISSUE');
+    openGenerate.__invoiceBatchModalV8 = true;
+    openIssue.__invoiceBatchModalV8 = true;
+    window.__invoiceBatchModalOverridesInstalled = true;
+    window.openInvoiceBatchGenerateModal = openGenerate;
+    window.openInvoiceBatchIssueModal = openIssue;
+    return true;
+  }
+
+  Object.assign(window, {
+    createInvoiceBatchModalState,
+    normaliseInvoiceBatchGroupOrder: normaliseGroupOrder,
+    moveInvoiceBatchGroupDimension,
+    applyInvoiceBatchSortPriorityChange,
+    loadInvoiceBatchPreferences,
+    saveInvoiceBatchPreferences,
+    createInvoiceBatchSelectionState,
+    applyInvoiceBatchSelectionRule,
+    isInvoiceBatchRowSelected,
+    deriveInvoiceBatchGroupSelectionState,
+    visibleInvoiceBatchGroupSelectors,
+    resetInvoiceBatchSelection,
+    buildInvoiceBatchSelectionContract,
+    buildInvoiceBatchCandidateRequest,
+    fetchInvoiceBatchCandidatePage,
+    loadInvoiceBatchCandidatePage,
+    loadInvoiceBatchSelectionSummary,
+    loadInvoiceBatchFacets,
+    renderInvoiceBatchModal,
+    renderInvoiceBatchToolbar,
+    renderInvoiceBatchFilterDrawer,
+    renderInvoiceBatchGroups,
+    renderInvoiceBatchRow,
+    renderInvoiceBatchBadges,
+    renderInvoiceBatchPager,
+    renderInvoiceBatchFooter,
+    renderInvoiceBatchConfirmation,
+    submitInvoiceBatchOperation,
+    registerInvoiceBatchOperation,
+    applyInvoiceBatchOperationSignal,
+    loadInvoiceBatchResultPage,
+    renderInvoiceBatchResultSummary,
+    openInvoiceBatchRowDetails,
+    generateAndViewInvoiceCandidate,
+    prepareGeneratedInvoiceForBatchViewer,
+    revokeInvoiceBatchViewerBlob,
+    closeInvoiceBatchModal,
+    attachInvoiceBatchModalDelegatedHandlers
+  });
+
+  window.InvoiceBatchModalV8 = Object.freeze({
+    install: installInvoiceBatchModalOverrides,
+    open: openInvoiceBatchModal,
+    createInvoiceBatchModalState,
+    normaliseInvoiceBatchGroupOrder: normaliseGroupOrder,
+    moveInvoiceBatchGroupDimension,
+    applyInvoiceBatchSortPriorityChange,
+    createInvoiceBatchSelectionState,
+    applyInvoiceBatchSelectionRule,
+    isInvoiceBatchRowSelected,
+    deriveInvoiceBatchGroupSelectionState,
+    visibleInvoiceBatchGroupSelectors,
+    resetInvoiceBatchSelection,
+    buildInvoiceBatchSelectionContract,
+    renderInvoiceBatchRow,
+    renderInvoiceBatchBadges,
+    applyInvoiceBatchOperationSignal,
+    activeModalStates,
+    rootOperationStates,
+    close: () => {
+      for (const state of activeModalStates.values()) closeInvoiceBatchModal(state);
+    }
+  });
+  installInvoiceBatchModalOverrides();
+})();

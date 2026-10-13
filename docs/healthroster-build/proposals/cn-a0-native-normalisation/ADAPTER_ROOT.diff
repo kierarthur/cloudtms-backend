@@ -1,0 +1,100 @@
+--- a/broker/src/timesheet-correction-orchestrator.mjs
++++ b/broker/src/timesheet-correction-orchestrator.mjs
+@@ -9,6 +9,7 @@
+  * @typedef {{assertActor:(context:unknown,action:string)=>Promise<CorrectionActor>,
+  * rpc:(name:string,args:object)=>Promise<object>,
+  * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,
++ * buildOriginalSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,
+  * readRequestAuthority?:(input:{requestId:string,actor:CorrectionActor})=>Promise<RequestAuthority>,
+  * resolveLifecycleItem?:(input:{item:object,timesheetId:string,selectedTimesheetIds:string[],action:string,actor:CorrectionActor})=>Promise<object|null>,
+  * runOrdinaryLifecycle?:(input:{items:object[],action:string,actor:CorrectionActor})=>Promise<object>,
+@@ -161,11 +162,11 @@ function reverseComponents(value, path = []) {
+   }
+   return value;
+ }
+-function snapshotIdentity(snapshot, expected, { original = false } = {}) {
++function snapshotIdentity(snapshot, expected, { original = false, canonicalInput = false } = {}) {
+   object(snapshot, 'CORRECTION_CANONICAL_SNAPSHOT_INVALID');
+   if (!sameUuid(snapshot.timesheet_id, expected.timesheetId) || snapshot.timesheet_version !== expected.version ||
+       !sameUuid(snapshot.candidate_id, expected.candidateId) || !sameUuid(snapshot.client_id, expected.clientId) ||
+-      snapshot.is_stale !== false || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||
++      (snapshot.is_stale !== false && !(canonicalInput && !OWN(snapshot, 'is_stale'))) || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||
+       typeof snapshot.pay_method !== 'string' || !snapshot.pay_method.trim() ||
+       !snapshot.invoice_breakdown_json || typeof snapshot.invoice_breakdown_json !== 'object' || Array.isArray(snapshot.invoice_breakdown_json)) {
+     fail('CORRECTION_CANONICAL_SNAPSHOT_INVALID');
+@@ -290,7 +291,8 @@ function appliedReceipt(value, payload, prepare = null) {
+   correctionIdentity(r.correction_id, r.request_id, prepare?.authority?.root_timesheet_id ?? null);
+   if (new Set([r.reversed_timesheet_id, r.reversal_timesheet_id, r.replacement_timesheet_id].map(x => x.toLowerCase())).size !== 3 ||
+       new Set([r.original_financial_id, r.reversal_financial_id, r.replacement_financial_id].map(x => x.toLowerCase())).size !== 3 ||
+-      typeof r.original_authorisation_required !== 'boolean') fail('CORRECTION_RECEIPT_INVALID');
++      typeof r.original_authorisation_required !== 'boolean' ||
++      (OWN(r, 'original_materialised_in_unit') && typeof r.original_materialised_in_unit !== 'boolean')) fail('CORRECTION_RECEIPT_INVALID');
+   for (const role of ['original', 'reversal', 'replacement']) {
+     hash(r[`${role}_financial_authority_hash`]); hash(r[`${role}_timesheet_authority_hash`]);
+   }
+@@ -302,8 +304,11 @@ function appliedReceipt(value, payload, prepare = null) {
+     if (!sameUuid(r.request_id, payload.request_id) || r.state_revision !== payload.expected_state_revision + 1 ||
+         r.prepare_fingerprint !== prepare.prepare_fingerprint || !sameUuid(r.reversed_timesheet_id, a.original_timesheet_id) ||
+         !sameUuid(r.reversal_timesheet_id, a.planned_reversal_timesheet_id) || !sameUuid(r.replacement_timesheet_id, a.replacement_timesheet_id) ||
+-        !sameUuid(r.original_financial_id, a.original_financial_id) || r.original_financial_authority_hash !== a.original_financial_authority_hash ||
+-        r.original_authorisation_required !== prepare.original_authorisation_required) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');
++        r.original_authorisation_required !== prepare.original_authorisation_required ||
++        r.original_materialised_in_unit !== prepare.original_materialisation_required ||
++        (!prepare.original_materialisation_required && (!sameUuid(r.original_financial_id, a.original_financial_id) ||
++          r.original_financial_authority_hash !== a.original_financial_authority_hash)) ||
++        (prepare.original_materialisation_required && r.original_authorisation_required !== true)) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');
+   } else terminalRevision(r, payload, true);
+   if (r.authorisation != null) {
+     const count = r.original_authorisation_required ? 3 : 2;
+@@ -351,6 +356,8 @@ function waitingPrepare(value, payload) {
+       candidateId: value.candidate_id, clientId: value.client_id
+     }, { original: true });
+   } else if (value.original_current_snapshot != null || a.original_financial_id != null ||
++             a.original_financial_authority_hash != null || frozen.financial_authority_hash != null ||
++             frozen.financial_snapshot != null || t0.authorised_at_server != null ||
+              value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');
+   return freezeJson(cloneJson(value));
+ }
+@@ -479,10 +486,14 @@ export function createTimesheetCorrectionOrchestrator(deps) {
+     const raw = await rawPrepare(p, a);
+     if (raw.state != null) return appliedReceipt(raw, p);
+     const prepare = waitingPrepare(raw, p);
++    let original;
+     if (prepare.original_materialisation_required) {
+-      // No claim that preview/calculator JSON equals the bounded writer's stored output.
+-      // Root must prove and add an exact native normalization contract before enabling A0 missing-finance.
+-      fail('CORRECTION_ORIGINAL_NORMALISATION_UNPROVED', 503);
++      if (typeof deps.buildOriginalSnapshot !== 'function') fail('CORRECTION_CANONICAL_ORIGINAL_PRODUCER_UNAVAILABLE', 503);
++      original = cloneJson(await deps.buildOriginalSnapshot({ prepare, actor: a }));
++      snapshotIdentity(original, {
++        timesheetId: prepare.authority.original_timesheet_id, version: prepare.authority.original_timesheet_version,
++        candidateId: prepare.candidate_id, clientId: prepare.client_id
++      }, { canonicalInput: true });
+     }
+     if (typeof deps.buildReplacementSnapshot !== 'function') fail('CORRECTION_CANONICAL_PRODUCER_UNAVAILABLE', 503);
+     const replacement = cloneJson(await deps.buildReplacementSnapshot({ prepare, actor: a }));
+@@ -490,12 +501,18 @@ export function createTimesheetCorrectionOrchestrator(deps) {
+     snapshotIdentity(replacement, {
+       timesheetId: authority.replacement_timesheet_id, version: authority.replacement_version,
+       candidateId: prepare.candidate_id, clientId: prepare.client_id
+-    });
+-    const reversal = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {
+-      timesheetId: authority.planned_reversal_timesheet_id, version: 1,
+-      candidateId: prepare.candidate_id, clientId: prepare.client_id
+-    });
+-    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement, reversal_snapshot: reversal };
++    }, { canonicalInput: true });
++    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement };
++    if (prepare.original_materialisation_required) {
++      prepared.original_snapshot = original;
++      // No A0 reversal is calculated from preview input. The existing atomic
++      // SQL writes/rereads actual original and signs that stored output.
++    } else {
++      prepared.reversal_snapshot = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {
++        timesheetId: authority.planned_reversal_timesheet_id, version: 1,
++        candidateId: prepare.candidate_id, clientId: prepare.client_id
++      });
++    }
+     const result = await deps.rpc('timesheet_correction_authorise_atomic_v1', {
+       p_request_id: p.request_id, p_expected_state_revision: p.expected_state_revision,
+       p_prepared: prepared, p_actor_user_id: a.actor_user_id

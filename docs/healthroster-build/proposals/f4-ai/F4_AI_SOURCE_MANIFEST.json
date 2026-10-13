@@ -1,0 +1,706 @@
+{
+  "contract": "HEALTHROSTER_F4_AI_SOURCE_PROPOSAL_V1",
+  "status": "SOURCE_ONLY_UNMOUNTED_NOT_INSTALLED_NOT_ACTIVATED",
+  "protected_handoff": {
+    "manifest_sha256": "2d0947db59f875da1fd4aeed4b49c6566174b19cc244c41785670248c3fd1070",
+    "files_checked": 52,
+    "unchanged": true
+  },
+  "inputs": [
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\candidate-correction-v1.js",
+      "sha256": "6fbec686f6fc775bda6fb35ea4c24a333c3427e5292b85c49ea971934899027c",
+      "bytes": 11814
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\index.js",
+      "sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86",
+      "bytes": 8947784
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-async-http.js",
+      "sha256": "db078d4aeaaaef8c1a256d48715a88a1445f6f33a739e76f77ed012a40a31e18",
+      "bytes": 211410
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-document-access.js",
+      "sha256": "477bf4cb4926717b7fdc3e7780f425d47ecb91b4213a992355f5ab9d38a7b2f3",
+      "bytes": 4665
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-document-templates.js",
+      "sha256": "3acf89db285a6eb1834cf773f3763ed9bd33abe0ce4e8eca26f3beb0e4026346",
+      "bytes": 26542
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-presentation-contract.js",
+      "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1",
+      "bytes": 41599
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-queue-runtime.js",
+      "sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d",
+      "bytes": 83082
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\invoice-queue-security.js",
+      "sha256": "d63aee0a2fc6f1e5651389c4fb77ac815f87faae1654436832601504d859505d",
+      "bytes": 4217
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\timesheet-correction-orchestrator.mjs",
+      "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118",
+      "bytes": 42703
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\timesheet-official-pdf.js",
+      "sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed",
+      "bytes": 52454
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\timesheet-qr-payload.js",
+      "sha256": "7440e0ddf768b1ae3e314a1495b9d3d4ef7eb7a05b56e5c62363a6918bf71f45",
+      "bytes": 10511
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\broker\\src\\weekly-source\\invoice-batch-integration.mjs",
+      "sha256": "822aaf45171b37b0fd02c4d4ea71e2380676414df4858321debf0f2539005397",
+      "bytes": 11513
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\docs\\healthroster-build\\CORRECTION_CONTRACT.md",
+      "sha256": "0a0f998de51720897c6c37b24043e348083776a6ae3bc2f3c96e9655e35f0679",
+      "bytes": 17525
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\invoice-document-processor\\src\\receipt-contract.js",
+      "sha256": "648bcc21539e1e72fffc9cd559ecf97e62f9f6ec803576ac9b677216ae303b61",
+      "bytes": 24843
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\package-lock.json",
+      "sha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+      "bytes": 84212
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\package.json",
+      "sha256": "10368cfa19ee3c886e7063fa55b659e003da61b06afa08f8d3194eabf5d8c7f9",
+      "bytes": 4861
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\shared\\invoice-processor-security.js",
+      "sha256": "629a68fcc1052777ea241dea67d4df73ef7eb01e8d677f37c1aa5e0bf513a9aa",
+      "bytes": 5832
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\migrations\\13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "bytes": 4481
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\migrations\\13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "bytes": 16112
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\migrations\\13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "bytes": 3770
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\migrations\\15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "bytes": 229113
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+      "sha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4",
+      "bytes": 856
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+      "sha256": "9d7028abe3c49d6fd7448600efcdff9bca2a36c6d9a8cc79bb781bb52d8aeb39",
+      "bytes": 30683
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1111_healthroster_credit_runtime\\13102026_1111_dispatcher.sqlinc",
+      "sha256": "89d45adedb7fe53405502df5d8a1c79f47af04c1bd6413b16ffd835f82992ddd",
+      "bytes": 7287
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_acl.sqlinc",
+      "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93",
+      "bytes": 13022
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_approval.sqlinc",
+      "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1",
+      "bytes": 34402
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3",
+      "bytes": 15408
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_chain.sqlinc",
+      "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62",
+      "bytes": 13531
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "bytes": 10590
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_delete_guard.sqlinc",
+      "sha256": "004b05626594e9c0d078020453cbe7a66ce69903f7d3e1183a959d3d43d5a744",
+      "bytes": 4119
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+      "bytes": 8829
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_expand.sqlinc",
+      "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5",
+      "bytes": 5822
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_finance_guard.sqlinc",
+      "sha256": "397a996c943d906105a35d6f1324c2e25f9f742d871fdde641a2235bdca445e1",
+      "bytes": 5553
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_invariants.sqlinc",
+      "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab",
+      "bytes": 4807
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_invoice_scope.sqlinc",
+      "sha256": "120ccfd2b77e85d2af9ee135e9fb40322c36c2d10b2dec0e2b31901c70db8a1e",
+      "bytes": 30742
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_invoice_whole.sqlinc",
+      "sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4",
+      "bytes": 12671
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_manager.sqlinc",
+      "sha256": "b866dec3ce248f2bfe0c34c07645c3765b7e583622b49710e0b011621990461f",
+      "bytes": 3783
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_overlap.sqlinc",
+      "sha256": "0485a8cc5fc63da8587194b313793b46214682a2aeaefbb57572ca335812d0af",
+      "bytes": 9795
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_pending_delete.sqlinc",
+      "sha256": "fe2af727bfcbed953c8087a62b30d113944cb24ff0fae08f440d67b586db2ac0",
+      "bytes": 14723
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_preview.sqlinc",
+      "sha256": "bdc5fa7d1f82582d3252f5e8d275b5cf7374102916a19124f44f1cf32c0b5b9c",
+      "bytes": 7954
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_request.sqlinc",
+      "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675",
+      "bytes": 22931
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_retire.sqlinc",
+      "sha256": "536095f99b49901c1e8a4be4aeaa2945145435cda07ec405ed025573ad954423",
+      "bytes": 11072
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_standard_delete_preview.sqlinc",
+      "sha256": "4334172f7cadf479e99816c34c162f96e6ecb6a719e13143ec80cb5531276043",
+      "bytes": 16332
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_transition.sqlinc",
+      "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e",
+      "bytes": 10882
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_weekly_delete_preview.sqlinc",
+      "sha256": "4df7467f617bb5c610b9612c19ff1ffa16a0d01eb05b9a9bc5c0446df081b50d",
+      "bytes": 11234
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1127_healthroster_correction_requests\\13102026_1127_whole.sqlinc",
+      "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f",
+      "bytes": 6955
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "bytes": 101268
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_acl.sqlinc",
+      "sha256": "5e0155cb0a6c1bc2411b838f62d332a33241b11241131bc1a1fcd71039d5ee98",
+      "bytes": 3532
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_advance.sqlinc",
+      "sha256": "e573b48cc58db6a107848e0548b201f28584308577c2f5ff8629cdc9a269bdf3",
+      "bytes": 11083
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_context.sqlinc",
+      "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9",
+      "bytes": 14958
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_generation.sqlinc",
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12",
+      "bytes": 117898
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_legacy.sqlinc",
+      "sha256": "1dae7e323edf51bc3e36eb811d3c6316f3cb297588b9bc719d8ab02ce8d2fc37",
+      "bytes": 13196
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_nullable_daily.sqlinc",
+      "sha256": "3ca710f6cf84d67f66fc2c7894ee2c35fd533e73c7d5bb97afe3922cdc714669",
+      "bytes": 4915
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_original_input.sqlinc",
+      "sha256": "524624e073b09621f5b6cb94574032feaa4584e46fbeb5dcea197ca6964f5733",
+      "bytes": 1843
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_planner.sqlinc",
+      "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e",
+      "bytes": 28972
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_resolver.sqlinc",
+      "sha256": "71a3f9e6caa47248894478bdf33fb4f07d172449de39554c80890a3e5b351cd8",
+      "bytes": 33769
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_snapshot.sqlinc",
+      "sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+      "bytes": 113465
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_start.sqlinc",
+      "sha256": "23f71a8b14940a9b94b10e99488e2857bf502ea162c0526235bc517d26c9d1e2",
+      "bytes": 59454
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1143_healthroster_scoped_credit\\13102026_1143_validator.sqlinc",
+      "sha256": "c11a3c72f09e862cb970798e4da8ceb29c4bf42a96a37cee4f7f51b3fc59ae78",
+      "bytes": 46758
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94",
+      "bytes": 1668
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+      "bytes": 19716
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\03_receipt_and_window_owners.sqlinc",
+      "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9",
+      "bytes": 38923
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\04_complete_fin.sqlinc",
+      "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "bytes": 102228
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\05_complete_admission.sqlinc",
+      "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "bytes": 40040
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\06_complete_allocation_issue.sqlinc",
+      "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a",
+      "bytes": 47513
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\07_complete_header_move.sqlinc",
+      "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d",
+      "bytes": 30544
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\08_complete_batch_detail.sqlinc",
+      "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "bytes": 37250
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "bytes": 161809
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\10_complete_source_readers_correction.sqlinc",
+      "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c",
+      "bytes": 154453
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\10b_complete_remaining_manifest_consumers.sqlinc",
+      "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8",
+      "bytes": 141761
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "bytes": 184614
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\10d_retained_report_and_date_boundaries.sqlinc",
+      "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+      "bytes": 38619
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\11_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "bytes": 113770
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\12_retained_final_issue_transport.sqlinc",
+      "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55",
+      "bytes": 118329
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\13_private_acl.sqlinc",
+      "sha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da",
+      "bytes": 3826
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\13102026_1700_weekly_source_invoice_window_receipt\\14_complete_legacy_render_manifest.sqlinc",
+      "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5",
+      "bytes": 24851
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "bytes": 88623
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\23072026_2207_invoice_queue_stage1_revision8\\23072026_2207_invoice_apply_edits.sql",
+      "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c",
+      "bytes": 147499
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\27072026_1042_invoice_async_v8\\27072026_1250_08a_private_invoice_batch_query_validate_v2.sql",
+      "sha256": "5cb5f1eaa2eb68502b06c439a769ae495508acf548104e9de2934b5d6be4c296",
+      "bytes": 26693
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\supabase\\repeatable\\27072026_1042_invoice_async_v8\\27072026_1806_private_invoice_batch_generate_classification_v2.sql",
+      "sha256": "3877472038dc6df25b79952587b08a9256c26642e1952cc7235ac748cb1424e0",
+      "bytes": 41842
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\tests\\invoice_async_backend.test.js",
+      "sha256": "a80e4fa6defb255015ea207f90e7fed0717257a9d474d9b8b0f1dc79d9845123",
+      "bytes": 139564
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-mytms-13102026\\scripts\\build-candidate-contract.mjs",
+      "sha256": "1716c68fff8d9d1d5be8e4cb6fecbdff841e2382d32e704f0466abc8bfd69887",
+      "bytes": 115003
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\js\\invoice-batch-modal.js",
+      "sha256": "dbcbe229ce2995c35b032db679b78547c9b447927c2e55987e05fc85669c5f7a",
+      "bytes": 128349
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\js\\main.js",
+      "sha256": "66ad20421e7c25352b9736ead08e1b87fff1b42b948d41fd5615e4e4c57ff268",
+      "bytes": 17748053
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\03_IMPLEMENTATION_PLAN.md",
+      "sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+      "bytes": 563296
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\05_ACCEPTANCE.md",
+      "sha256": "fc633ee26af33fe364d9fad1a8e300be98802938c3107cdb0b21b11b3739e8c0",
+      "bytes": 198236
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND1_20261011.md",
+      "sha256": "259eb46b5a63e215f5fa95e48b0381b23c4eca7aefc617121cc032895e70647a",
+      "bytes": 2936
+    },
+    {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\OWNER_ANSWERS_ROUND21_20261012.md",
+      "sha256": "08a2c6518c1add8584fb302b10a6819b04b0e3b1d888f1785eb91b0517095123",
+      "bytes": 5016
+    }
+  ],
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "59b0e842d719eb3e2f65acc7d999edb02f7c48e943c18c3d78c9945b682fd889",
+      "bytes": 442
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/agency-invoice-credit-consumer.mjs",
+      "sha256": "a6b7f7c7a76ee1802adae28de894d4c4ebe3121f206696a222436b5b7aa0ca88",
+      "bytes": 8082
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/agency-invoice-credit-ui.js",
+      "sha256": "bbfb4f3112800948a3ecf34ae645a1a797007ee3a1165d916aecce871254d4a3",
+      "bytes": 3355
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_NATIVE_HTTP_CASES.mjsfrag",
+      "sha256": "400772cd1092d9226859f50c68c83c3d7956be05892ed60c45f3253411a9526b",
+      "bytes": 5026
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_NATIVE_TEST_ROOT.diff",
+      "sha256": "c58d5e45137953fdaa30fbf41fc6ba528d1df7204befb74f6a5593b2959d01fc",
+      "bytes": 5371
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_OFFICE_ROOT.diff",
+      "sha256": "51884377134bf4db90c3d502bfc97c9a4ac90379e37c7f61dcc74a36fcfc762c",
+      "bytes": 260825
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_OFFICE_SOURCE_GUARD.json",
+      "sha256": "99438a39fce73d963cd9a691824545f94d2f0a067ec9ec64c8774bc46ac7109a",
+      "bytes": 4075
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_WORKER_ROOT.diff",
+      "sha256": "8548cda892d60e18c5e074c2a4fd92fba9e221af263b4c89f0e59a98cfd5bcf5",
+      "bytes": 5869
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/AI_WORKER_SOURCE_GUARD.json",
+      "sha256": "6e5548798a450263dd6905681b2e0c7c02fffd524dd159cf96bffb4011a8abc6",
+      "bytes": 5296
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/ai-credit-candidates.sqlinc",
+      "sha256": "88fabd68e05a929228d9293a531016eb1dcde32742bf390dabf050283fee90a2",
+      "bytes": 8075
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-ai-office-proposal.mjs",
+      "sha256": "0498199bc997b4d8dedc719d9086a06c77fe180d3b10482a211a9610adfbedc6",
+      "bytes": 4837
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-ai-worker-proposal.mjs",
+      "sha256": "7a3f1d7349eb9982268c898d110c0afddf01773efbec15ca12c86f2d2b352241",
+      "bytes": 6891
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-cn-wire-proposal.mjs",
+      "sha256": "6f07d140928d4bab2cf37a6957bf9a9f78a93ff54b6a44b365d4840601563685",
+      "bytes": 10675
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-f4-office-proposal.mjs",
+      "sha256": "55b54cbdd26fb6fc4f8498b88c7900b43fc31097b573aeaa96d0c4eba12f9274",
+      "bytes": 4746
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-f4-proposal.mjs",
+      "sha256": "2312f00bf8d6ae37f245fe8bfafb8e1d29ab7c12a4c67d0e51ebb122944d817f",
+      "bytes": 9931
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-native-regression.mjs",
+      "sha256": "7db6f646af9da053e9d5d9c45bf064d213c1ba1e0b3179c9f73d35bfd02d6358",
+      "bytes": 2871
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/build-source-manifest.mjs",
+      "sha256": "08fe5fd4b32f944f0643e77be53ddb8241ead078ea6ba4aca7e99e0244d00186",
+      "bytes": 6579
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/CN_WIRE_FIELD_AUDIT.md",
+      "sha256": "63902b248b05d5b4d3cf78c27da181e5507cfc069eecc27a90e582bf00a57d07",
+      "bytes": 8513
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/CN_WIRE_ROOT.diff",
+      "sha256": "8c4355f509915af306839be96ced3654b045189e21cfe74f24b2f68333b6eed7",
+      "bytes": 5451
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/CN_WIRE_SOURCE_GUARD.json",
+      "sha256": "b68c275c0669196a43ffb205981e096f708a978e4a8b1eb8de0beb56aad466d1",
+      "bytes": 3048
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/F4_AI_IMPLEMENTATION.md",
+      "sha256": "3c04d77ed0c8d476043d4dca7b85bba452c75467408ce6cbdca2bca623552530",
+      "bytes": 11801
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/F4_SOURCE_GUARD.json",
+      "sha256": "7f0eae9ced753606e42becf1e84638e5fcd9bf133707e1f838828fa9e07bb742",
+      "bytes": 4602
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/f4-adjustment-owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "bytes": 16376
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/invoice_async_backend.complete-proposed-tests.js",
+      "sha256": "f7025eba3d90c3e667a422189205d61a0d2a5ebf4e03832b7f19eb18c04e9401",
+      "bytes": 144590
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/invoice-async-http.complete-proposed.js",
+      "sha256": "77120b6ef29f010ebd9864e9fbe1507f64b0cdfd261ec02f3fa98a1c9bdcd9f3",
+      "bytes": 215051
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/invoice-batch-modal.complete-proposed.js",
+      "sha256": "395c4fe259e154fe69b827be026f16dee5f5cde8d8c4475dba7cb5afffd4bdda",
+      "bytes": 127444
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/NATIVE_JOURNEY_MANIFEST.json",
+      "sha256": "32f84dc73a199ed2656e004a2ac29b6b427483d08cff7eadf24b091d3e5a104c",
+      "bytes": 6849
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/NATIVE_REGRESSION_INPUT.json",
+      "sha256": "d550d4ca8d7d7df5957c3c4af7359fc81966ace3bec5d86b23dadaa1602dbb6e",
+      "bytes": 816
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/native-regression-runtime.mjs",
+      "sha256": "5a753a33b36e266c2c4ded6fc7b04e7a3e4e3b5faa0fb48f2cbf899721cbd045",
+      "bytes": 215735
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/OFFICE_COMPLETE_AFFECTED_FUNCTIONS.js",
+      "sha256": "73f5dfd1b5adc0ecf41e80fcf4b4dc59bef427a47fec8d8e430bec35220c7770",
+      "bytes": 104191
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/OFFICE_HUNKS.json",
+      "sha256": "0000c678c36d1121fd4e39362ac61c0f489b600b60a1b285b079ee96c55925ad",
+      "bytes": 3189
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/OFFICE_ROOT.diff",
+      "sha256": "8179d416491867e6dfc1709b63cb21dfd3cf27cef49699033acbcc5605752d33",
+      "bytes": 2598
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source-invoice-adjustments.js",
+      "sha256": "80c1a294d3c3754863cbdc10cdd0ce47d1d9a94118f74b6287e7d0d967cae62b",
+      "bytes": 7515
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "bytes": 16376
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/01_invoice_apply_edits.sqlinc",
+      "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "bytes": 148338
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "bytes": 9625
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/03_invoice_issue_validate.sqlinc",
+      "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+      "bytes": 38834
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+      "bytes": 27516
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/05_invoice_edit_context.sqlinc",
+      "sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "bytes": 10853
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/06_native_acl.sqlinc",
+      "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+      "bytes": 857
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/source/07_new_owner_acl.sqlinc",
+      "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+      "bytes": 1025
+    },
+    {
+      "path": "docs/healthroster-build/proposals/f4-ai/timesheet-correction-orchestrator.mjs",
+      "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118",
+      "bytes": 42703
+    },
+    {
+      "path": "tests/healthroster-f4-ai-correction-wire.test.mjs",
+      "sha256": "094fcead27788b3798de9a38e589b1506a9a7bf83b7e57fa0b57754bc7441c91",
+      "bytes": 43182
+    },
+    {
+      "path": "tests/healthroster-f4-ai-native-runtime-regression.test.mjs",
+      "sha256": "74688649f9d1ae2b444507da68817ad46728b7675bf4e40f409a6310906d1eaf",
+      "bytes": 147386
+    },
+    {
+      "path": "tests/healthroster-f4-ai-proposals.test.mjs",
+      "sha256": "ea2cfe67ba0fbf809f0b7ee155f8c7589468239264f380b750f8040ea946f410",
+      "bytes": 13534
+    }
+  ],
+  "checks": {
+    "node_syntax_files": 19,
+    "source_pure_mock_tests": 146,
+    "sql_compiled": false,
+    "native_database_journeys": false,
+    "office_browser_journeys": false,
+    "document_phone_pages": false
+  },
+  "new_sql_signatures": {
+    "private": [
+      "weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])",
+      "weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb)",
+      "weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)"
+    ],
+    "service": [
+      "timesheet_correction_credit_candidates_v1(jsonb)"
+    ]
+  },
+  "gates": [
+    "qualified existing activation/release capability",
+    "kept-as-paid linkage owner",
+    "missing-A0 native normalization",
+    "current central registry/NEW/UPGRADE compilation",
+    "native Source/correction/credit/document/security/NEXT journeys",
+    "joined lock/runtime acceptance",
+    "Office browser and signed phone/PDF proof"
+  ]
+}

@@ -1,0 +1,186 @@
+create or replace function public.weekly_source_invoice_edit_context_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_invoice_id uuid;
+  v_invoice public.invoices%rowtype;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_result jsonb;
+  v_adjustment_authority jsonb;
+  v_adjustments_allowed boolean:=false;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','invoice_id')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_CONTEXT_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_invoice_id:=(p_request->>'invoice_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_CONTEXT_INVALID' using errcode='22023';
+  end;
+  select * into v_invoice from public.invoices where id=v_invoice_id;
+  if not found or v_invoice.header_snapshot_json->>'schema_version'<>'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1' then
+    return pg_catalog.jsonb_build_object('is_weekly_source_invoice',false);
+  end if;
+  if not pg_catalog.pg_input_is_valid(
+    coalesce(v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}',''),'uuid'
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_CONTEXT_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_manifest from public.weekly_source_client_manifests
+  where id=(v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'VIEW_SOURCE_PROGRESS',v_manifest.source_group_id,
+    v_manifest.client_id,v_manifest.finalisation_week_ending
+  );
+
+  v_adjustment_authority:=private.weekly_source_invoice_adjustment_authority_v1(v_invoice.id,null);
+  v_adjustments_allowed:=coalesce(v_adjustment_authority->>'allowed'='true',false)
+    and v_invoice.status='DRAFT' and v_invoice.issued_at_utc is null and v_invoice.paid_at_utc is null
+    and v_invoice.active_document_operation_id is null and v_invoice.active_issue_operation_id is null
+    and pg_catalog.upper(coalesce(v_invoice.issue_state,'')) not in('VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
+    and exists(select 1 from public.tms_users u where u.id=v_actor and u.is_active and lower(btrim(u.role))='admin');
+
+  select pg_catalog.jsonb_build_object(
+    'is_weekly_source_invoice',true,
+    'adjustments',pg_catalog.jsonb_build_object('contract_version','WEEKLY_SOURCE_INVOICE_ADJUSTMENTS_V1',
+      'allowed',v_adjustments_allowed,'credits_shift_available',false,
+      'default_vat_rate_pct',case when v_adjustments_allowed then v_adjustment_authority->>'vat_rate_pct' else null end),
+    'invoice_id',v_invoice.id,'invoice_number',v_invoice.invoice_no,
+    'document_revision',v_invoice.document_revision,
+    'source_cycle_id',v_manifest.source_cycle_id,
+    'invoice_window_cycle_id',coalesce(v_manifest.invoice_window_cycle_id,v_manifest.source_cycle_id),
+    'finalisation_week_ending',v_manifest.finalisation_week_ending,
+    'report_number',v_manifest.backing_report_number,
+    'report_numbers',coalesce(
+      v_invoice.header_snapshot_json#>'{meta,backing_report_numbers}',
+      case when v_manifest.backing_report_number is null then '[]'::jsonb
+        else pg_catalog.jsonb_build_array(v_manifest.backing_report_number) end
+    ),
+    'editable',v_invoice.status='DRAFT'
+      and v_invoice.issued_at_utc is null and v_invoice.paid_at_utc is null
+      and v_invoice.active_document_operation_id is null
+      and v_invoice.active_issue_operation_id is null
+      and pg_catalog.upper(coalesce(v_invoice.issue_state,'')) not in (
+        'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE'
+      ),
+    -- Gate 7 item G7-2 (24 section 12; 25 section 8 Removed).
+    -- The unit of movement offered to the Office is ONE immutable source
+    -- presentation line, never a work event: "Moving by whole work-event ID is
+    -- prohibited because it can move more than the Office selected."  Each row
+    -- carries the presentation-line id and the expected presentation hash the
+    -- move owner demands, plus the facts the Office needs to understand what
+    -- will travel with it: an NHSP physical row is independently movable, a
+    -- non-NHSP net presentation is indivisible, and a source-fixed expense
+    -- follows its declared companion rather than being selected on its own.
+    'movable_lines',coalesce((
+      select pg_catalog.jsonb_agg(movable.row_json order by movable.work_date,
+        movable.start_at_local,movable.candidate_display,movable.presentation_line_id)
+      from (
+        select presentation.id presentation_line_id,presentation.work_date,
+          presentation.start_at_local,
+          presentation.candidate_display_snapshot candidate_display,
+          pg_catalog.jsonb_build_object(
+            'presentation_line_id',presentation.id,
+            'presentation_hash',pg_catalog.encode(presentation.presentation_hash,'hex'),
+            'invoice_line_id',pg_catalog.min(binding.invoice_line_id::text)::uuid,
+            'line_kind',presentation.line_kind,
+            'origin_kind',presentation.origin_kind,
+            'correction_role',presentation.correction_role,
+            'work_event_id',presentation.work_event_id,
+            'candidate',presentation.candidate_display_snapshot,
+            'work_date',presentation.work_date,
+            'start_at_local',presentation.start_at_local,
+            'end_at_local',presentation.end_at_local,
+            'break_minutes',presentation.break_minutes,
+            -- Display-only source facts. Never use reference, ward or band as
+            -- a movement identity or as an invoice amount authority.
+            'source_reference',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'reference_number')
+              else presentation.booking_reference_snapshot end,
+            'source_ward',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'ward') else null end,
+            'source_trust',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'trust') else null end,
+            'source_hospital',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'hospital') else null end,
+            'source_band',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.role_band_source) else null end,
+            'timesheet_id',case when pg_catalog.count(distinct movement.invoice_timesheet_id)=1
+              then pg_catalog.min(movement.invoice_timesheet_id::text)::uuid else null end,
+            'description',presentation.description_snapshot,
+            'bound_movement_count',pg_catalog.count(*)::integer,
+            -- A presentation that binds more than one movement is the narrowly
+            -- supported non-NHSP net presentation: it moves as one.
+            'indivisible_presentation',pg_catalog.count(*)>1,
+            'independently_movable',
+              presentation.companion_presentation_line_id is null,
+            'follows_companion_presentation_line_id',
+              presentation.companion_presentation_line_id,
+            'companion_presentation_line_ids',coalesce((
+              select pg_catalog.jsonb_agg(companion.id order by companion.id)
+              from public.weekly_source_invoice_presentation_lines companion
+              where companion.companion_presentation_line_id=presentation.id
+            ),'[]'::jsonb),
+            'released_after_dispute',exists(
+              select 1 from public.weekly_discrepancy_incidents incident
+              where incident.source_group_id=v_manifest.source_group_id
+                and incident.work_event_id=presentation.work_event_id
+            )
+          ) row_json
+        from public.weekly_source_invoice_line_bindings binding
+        join public.weekly_source_invoice_presentation_lines presentation
+          on presentation.id=binding.presentation_line_id
+        join public.weekly_source_billing_movements movement
+          on movement.id=binding.billing_movement_id
+        left join public.weekly_source_upload_rows source_row
+          on source_row.id=movement.nhsp_upload_row_id
+        where binding.invoice_id=v_invoice.id and binding.state='CURRENT'
+        group by presentation.id,presentation.presentation_hash,presentation.line_kind,
+          presentation.origin_kind,presentation.correction_role,presentation.work_event_id,
+          presentation.candidate_display_snapshot,presentation.work_date,
+          presentation.start_at_local,presentation.end_at_local,
+          presentation.break_minutes,presentation.description_snapshot,
+          presentation.companion_presentation_line_id
+      ) movable
+    ),'[]'::jsonb),
+    'compatible_destinations',coalesce((
+      select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'invoice_id',destination.id,'invoice_number',destination.invoice_no,
+        'document_revision',destination.document_revision,
+        'finalisation_week_ending',destination_manifest.finalisation_week_ending,
+        'report_numbers',coalesce(destination.header_snapshot_json#>'{meta,backing_report_numbers}','[]'::jsonb),
+        'total_inc_vat',destination.total_inc_vat
+      ) order by destination_manifest.finalisation_week_ending desc,destination.invoice_no,destination.id)
+      from public.invoices destination
+      join public.weekly_source_client_manifests destination_manifest
+        on destination_manifest.id=case
+          when pg_catalog.pg_input_is_valid(
+            coalesce(destination.header_snapshot_json#>>'{meta,client_manifest_id}',''),'uuid'
+          ) then (destination.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid
+          else null
+        end
+      where destination.id<>v_invoice.id
+        and destination.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+        and destination.client_id=v_invoice.client_id
+        and destination.status='DRAFT'
+        and destination.issued_at_utc is null and destination.paid_at_utc is null
+        and destination.active_document_operation_id is null
+        and destination.active_issue_operation_id is null
+        and pg_catalog.upper(coalesce(destination.issue_state,'')) not in (
+          'VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE'
+        )
+    ),'[]'::jsonb)
+  ) into v_result;
+  return v_result;
+end;
+$function$;

@@ -1,0 +1,554 @@
+{
+  "contract": "HEALTHROSTER_PROTECTION_SOURCE_HANDOFF_V1",
+  "status": "SOURCE_ONLY_NOT_INSTALLED_NOT_ACTIVATED",
+  "branch": "codex/healthroster-v2-protection-build-13102026",
+  "base_commit": "83547d19a4e8407d5a330849f0e82736c33e48de",
+  "files": [
+    {
+      "path": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "bytes": 1006,
+      "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "bytes": 2705,
+      "sha256": "226fcab97d68884aaa2a796c2a9105448ec708cbb820eb1e433e73a160bdb11d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/00_checking_client_scope.sqlinc",
+      "bytes": 1634,
+      "sha256": "ced9c786bbe26995ed7d415ab16d2f2a4d8252cea155571b8dbdcdbe8a63d790"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "bytes": 6543,
+      "sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "bytes": 12253,
+      "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "bytes": 9346,
+      "sha256": "d100a4eeb535bf96e1b9068c49c67e2c42f5885e7b2eb3d5887f2018a893d044"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "bytes": 5149,
+      "sha256": "3115fa08164d98e72ae8a1f6c4a0463aef1984c89c1650ad9a0794bb327f4631"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/05_unprotected_close.sqlinc",
+      "bytes": 5471,
+      "sha256": "4c6d3ca8cdaead1433a57bb93612b95877e901e874711bf989778f48cb4c280b"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "bytes": 7199,
+      "sha256": "f8b1202086c2aacf119dca7b827c606e01921f34ef5f5e9c0a1f31e6d80df25e"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+      "bytes": 37614,
+      "sha256": "89bca949dfe088c3f7485739f327224874f1f02e29cda8b4701e7670ad6b4855"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07a_current_source_rows.sqlinc",
+      "bytes": 2653,
+      "sha256": "1a19e89bd7439a15ceac39d3e15b1c94f1de64d695d4e0e379f95784bc277d84"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+      "bytes": 3388,
+      "sha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08a_expected_week_fingerprint.sqlinc",
+      "bytes": 2159,
+      "sha256": "559212099c2daf7d9b9d647ba2d8cb565d3e40b5f9c95c44c5f580a090347370"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc",
+      "bytes": 12511,
+      "sha256": "764d3b5513f92dc45001ca6cc1e7e6d2705e7b78b7762f4e51a5112f42e5e285"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc",
+      "bytes": 7854,
+      "sha256": "b44abd36f95844fddcbe38ea74daf3a16619383ec42b2d479248e1461cdbb27c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc",
+      "bytes": 1967,
+      "sha256": "0c2406657f06a848c2f6cdd55dc5cb35ae854a03375bfdcf82f497a139ca5c12"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+      "bytes": 2381,
+      "sha256": "ac1a66cdfb4eced48d133fae4ddaab641ac0d56a654419df00eff26e9032fb3d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+      "bytes": 2999,
+      "sha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "bytes": 18005,
+      "sha256": "60ff40db4f380cc0b0e1b89a4f6f9b6f39f7ec301060243c68dcc9e62c9d264a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+      "bytes": 8582,
+      "sha256": "32baef28f534cd60c40d1513db120ba9d8e595d69c4ca24a6851ea48ee97cba2"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+      "bytes": 6941,
+      "sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+      "bytes": 2764,
+      "sha256": "5ad639381f656aa27c13a7b87319db8603bbc1bcaa3751bd8fe8b7d239d3e61c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "bytes": 28880,
+      "sha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+      "bytes": 13515,
+      "sha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+      "bytes": 25065,
+      "sha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+      "bytes": 55231,
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+      "bytes": 5503,
+      "sha256": "a164fbca5a92f1bdefd19e1697cd2a0dfdaaf2fd4dbb948d8587b6b3cbc41745"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "bytes": 32080,
+      "sha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "bytes": 13027,
+      "sha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/24_due_scope_capture.sqlinc",
+      "bytes": 4593,
+      "sha256": "ab3931cbfb55226f17c44c12a6ec51bb7c3750a577f40ccf7118398aefcc1d77"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "bytes": 18312,
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+      "bytes": 15012,
+      "sha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "bytes": 23651,
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "path": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "bytes": 7509,
+      "sha256": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator-stage-only.mjs",
+      "bytes": 27369,
+      "sha256": "8c17ec5fdf32ba6222a3f85b950bfe3581912d1fa3e3c8c39b71135057a1c276"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-bulk-action.mjs",
+      "bytes": 6276,
+      "sha256": "73ea70488da81baccdb59418668712dfe9c4b6ea4054335100c9de9e20ee4c0d"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-automatic-reconcile.mjs",
+      "bytes": 3349,
+      "sha256": "b9dd8d77b8ddebf321fc58b6b07dff0aff68f073053ec626855056884307e4bb"
+    },
+    {
+      "path": "tests/fixtures/healthroster-protected-orchestrator-fixture.mjs",
+      "bytes": 11714,
+      "sha256": "e80a89ec7dec51f70dfd84d16a7c0b0af25e515edcb690b13ba75e1487fcfbc2"
+    },
+    {
+      "path": "tests/fixtures/healthroster-automatic-reconcile-produced-stage.json",
+      "bytes": 26015,
+      "sha256": "b3881eae8ba4b0dba1bec3ff88d37882fc28f84de125767a99c2717f53f727be"
+    },
+    {
+      "path": "tests/healthroster-protection-source.test.js",
+      "bytes": 20430,
+      "sha256": "cefe08870e291b900de7f17853b73f603ffc325ee8e6f49c3a55a88ff5fc7403"
+    },
+    {
+      "path": "tests/healthroster-protected-stage-only.test.js",
+      "bytes": 4230,
+      "sha256": "4ded3518cb3d476dda7858f23e87e7c18434493d7216d2d4c57b96981ac64aa6"
+    },
+    {
+      "path": "tests/healthroster-protected-bulk.test.js",
+      "bytes": 5112,
+      "sha256": "e1ff9651e9db47ca139489db7c9e5c5e99cb30ebbf5e68860782c03bdad9bf47"
+    },
+    {
+      "path": "tests/healthroster-protected-automatic-reconcile.test.js",
+      "bytes": 4628,
+      "sha256": "6c55b63091ba22f0199fad5f3a4657058d2b7b095ac333be6993e04738d0358d"
+    },
+    {
+      "path": "docs/healthroster-build/PROTECTED_WAIT_WITNESS_CONTRACT.md",
+      "bytes": 3462,
+      "sha256": "ccddc16fe95636206904911e30dd55041e378fb7e467acd3c0732926fd2c8c4e"
+    },
+    {
+      "path": "docs/healthroster-build/PROTECTION_INTEGRATION_HUNKS.md",
+      "bytes": 16889,
+      "sha256": "d98d38d06f0380844df26763968ccabe9e8860508e24d6ffb6163be3051a2773"
+    },
+    {
+      "path": "docs/healthroster-build/WP_PROTECTION_IMPLEMENTATION.md",
+      "bytes": 11165,
+      "sha256": "746cd7caafd4c883822ed00641f6205b64f3d6cc406862be6020909e7ce5348e"
+    },
+    {
+      "path": "docs/healthroster-build/AUTOMATIC_RECONCILE_COMPONENT_CENSUS.json",
+      "bytes": 10996,
+      "sha256": "f62b45c93c8a6d955506787bf91329f80a19a24fcf89fef42e052a3ec9b5e39d"
+    },
+    {
+      "path": "docs/healthroster-build/NATIVE_PROTECTION_LOCK_CENSUS.json",
+      "bytes": 11827,
+      "sha256": "ee49705fa8673f114d7258fb0a087d486aa9671e6c70567daca1298b6b0a858c"
+    },
+    {
+      "path": "docs/healthroster-build/PROTECTION_CALLER_BOUNDARY_CENSUS.json",
+      "bytes": 19073,
+      "sha256": "ec9db8faf91ea160241b7e39965200021b7792f8fa52f819d84c9f2a7bf03ab9"
+    },
+    {
+      "path": "scripts/healthroster-protection-source-manifest.mjs",
+      "bytes": 3959,
+      "sha256": "fa821ca897386427f34bf3353f220ae2c1271f1b51058af91419eafa2f113669"
+    },
+    {
+      "path": "scripts/healthroster-automatic-reconcile-fixture.mjs",
+      "bytes": 2388,
+      "sha256": "e58ae9968d63870902b1c7ba8e52db47cb6ae3eb37b645f41e595dc83db5bf88"
+    },
+    {
+      "path": "scripts/healthroster-protection-caller-census.mjs",
+      "bytes": 4797,
+      "sha256": "117e21f74c05d6b1c3ddc3855eefe9c0e88e636edfcb13ec864fc07e7b182ee4"
+    }
+  ],
+  "routines": [
+    {
+      "signature": "private.weekly_source_checking_client_scope_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/00_checking_client_scope.sqlinc",
+      "body_sha256_lf": "076e8c1577ab178c2aae76ba9ae6b7e66ebe90bb417f174d149f3de728ef941b",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protected_wait_receipt_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "body_sha256_lf": "15e722fc9de0d587e3fa032f2d739f7cc06cafc3a1b8e620a3067d933161bf9e",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "body_sha256_lf": "2bf6dedcdb4664da0079f63059c149c0ab844828409ec0d5124449aeeed14c2c",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_pay_query_facts_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "body_sha256_lf": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_covered_hours_incident_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "body_sha256_lf": "67c7cf4f74741606b0a91e4a5822f67fa42ab52b8229074b9fea1e1a30066a6b",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_incident_contact_retire_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "body_sha256_lf": "e61d0df36ac476e30ff8e5c3aea5051e95f6627b8443dcd91e54391056e043d3",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protected_contact_retire_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "body_sha256_lf": "b53e8054632caaef347d4ef142ef6a8d8e29355712647e428a9ed9c6c397cede",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/05_unprotected_close.sqlinc",
+      "body_sha256_lf": "b22f66377b27a8309b8a03ee694899675815f0fc3b08f1481a1e9de1533f3523",
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_global_settings_get_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "body_sha256_lf": "6425b342b50e6bb97f68668013dfa0e1961e3fc8b5ec3227698827e6ce7e8122",
+      "service_execute": true
+    },
+    {
+      "signature": "public.weekly_source_global_settings_save_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "body_sha256_lf": "583b18a3dfc12b4b82bab4174b1f110ff74b73a9930cd69a2986775dd7d990ff",
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+      "body_sha256_lf": "08683fdc5a0d4db93942a54563e9e6c1f84747410115c2f980fc9186435d2d72",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07a_current_source_rows.sqlinc",
+      "body_sha256_lf": "d414ee716b8ab12432b8ee76b2d6fc1d324f8c5ddd6934ea12c8d327c35be807",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+      "body_sha256_lf": "e06063ee6ed0770745d78caadf9902269de2a55cbfe6dc07391c332e8f510889",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08a_expected_week_fingerprint.sqlinc",
+      "body_sha256_lf": "fcaec98673b36d68abb35a3b061b2a0e92e046c8c93bace97a5b6779be3686e7",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_expected_week_unsigned_materialise_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc",
+      "body_sha256_lf": "bb720f9360cc7af93d36f73fbf9a498ac7d2e37e9699356d4b7a4f60bcd57f1f",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc",
+      "body_sha256_lf": "a0f50992c2c69e88729c4bd2f32248a5b7b16d98439b5b0f3a682d76194c6ba4",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_expected_week_question_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc",
+      "body_sha256_lf": "fbb9c08cf7c0a9d8b34e431b8c9266b20015e9373a8e4ca51f8b5733a928eb2d",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_manager_due_event_covers_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+      "body_sha256_lf": "bf6f3daa9e0890e731d37b2cf93cdb981571997c5cd139d9db65706e4a05b23d",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+      "body_sha256_lf": "164a1848739d9284e63b96f9dd4427cd8aa6280e090ecdff655309ad440e6597",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamptz,boolean)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "body_sha256_lf": "a7e3d384e7c93ad1158e5571cf0e06819d966fafa2f94db62d97c223a00aed4f",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_not_finalised_dispatch_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+      "body_sha256_lf": "890a808e7098b9db50a4200ed69129fb23967b7cfa108c8670771996073bd4b1",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_import_outreach_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+      "body_sha256_lf": "7d79aaf98a8477b410fa2c65c9e7d21c1eb585cbfa49e52a300644a59e65496b",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protected_family_lock_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+      "body_sha256_lf": "4a82d77c67f53dcb44b214dceb46e7ed8bb406564cd09402b766acaea3297c3f",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protected_group_lock_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+      "body_sha256_lf": "d741c210e405532d8a342ef50321e2b361e4d87070f3364ca9fdfa7dfe113a2f",
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "body_sha256_lf": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "service_execute": true
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+      "body_sha256_lf": "9b9f33b021aad455ec03aa2b082a27dcfc04fcfa90c548cef89c19904d13199f",
+      "service_execute": true
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+      "body_sha256_lf": "b41fb4fb43b4e9ff7f9d657b1f4257325d4817416fcdab2d8df011a8332d09d8",
+      "service_execute": true
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+      "body_sha256_lf": "3b3dde1568fa011c2a63643ce998de993f2abb7ee3499f34c6bdcf75c688a25a",
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_publication_signed_roots_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+      "body_sha256_lf": "569fd5dac096807413b04014596cb8f50541a11d57d572112895a5a4fa782a52",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+      "body_sha256_lf": "061a699bfcff2aaf2ee7c594a9ba0e1d5cecd1daf3bcb1c08422c65065857728",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "body_sha256_lf": "0aa4da3af00ad1232ef744f9a19d6d0b17db9d32bc9d1f94bed9e600e8635715",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_signed_claim_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "body_sha256_lf": "d933a9516a5537345ea2a1b40c3d5af7b048390db6251d4f0c3941391da9e342",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "body_sha256_lf": "b469cb3e759a301b00e983a1889e972dbeb4c453410f378610b8da29d5932fb4",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_not_finalised_due_scope_guard_v1()",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/24_due_scope_capture.sqlinc",
+      "body_sha256_lf": "7c6231f1747760eb03699a0c52d2e412385a8368b3b070e0a717c90bb9c66b84",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "body_sha256_lf": "717c488bae965a73bacacb04d34431e821d5043dae664378521c6b5ea2e4c60d",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "body_sha256_lf": "5cf1fc06df054d24e43ce63c0dc473f7f6ad19a6fe355f4cd2949691ef0f687d",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "body_sha256_lf": "bf0a348d394e62b9a40260fd6319227045daa8498907844a7631e38c7adf27aa",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "body_sha256_lf": "7e6407e00a1f011bc07cb140ef6a28ef9fd644a28ded60155d328f638eea38e5",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "body_sha256_lf": "66b9ff1a7fc7b876a7e00876bbb95ff4c554114dca6da0136d0943c33700d09c",
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+      "body_sha256_lf": "eccb2b1c1f700a3cdf3ebe827ace397778cf36ca64214c83fd6cd9a3569b626c",
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "c2b3d0f9e02c32eb47e0137ea93a3c75eba838d701d5f40de21c8614c524b5d0",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "ae9a1c9b14cdee4f997d04c27a5a3c06fddfab9f38d273553e6e39ed3286b8df",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "53c9efc4d762b79715aa4f39e55e5987aeb8de99a28ec1c0dba8050d104d1ed4",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "80d7a4a58d54ef5e241524d7cf1c446ba8eeba9b47da0bb61fd1843eceb40348",
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "e24cf1c119ad7243527f1e16d77bfdefa663663fc6948c8c741622c0c8e2b558",
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_automatic_reconcile_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "body_sha256_lf": "b1b0e953488598b9ad4df54b35c87077a2a5043ba2f9d628c28c023912971363",
+      "service_execute": true
+    }
+  ],
+  "root_owned_missing_boundaries": [
+    "private.weekly_source_bulk_producer_ready_v1(uuid)",
+    "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+    "private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+    "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)"
+  ],
+  "installation_authority": false
+}

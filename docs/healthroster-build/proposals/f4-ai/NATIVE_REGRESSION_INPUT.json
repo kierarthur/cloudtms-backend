@@ -1,0 +1,12 @@
+{
+  "status": "EXISTING_MOCK_SUITE_WITH_PROPOSED_COMPLETE_HTTP_OWNER",
+  "input": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026\\tests\\invoice_async_backend.test.js",
+    "sha256": "a80e4fa6defb255015ea207f90e7fed0717257a9d474d9b8b0f1dc79d9845123"
+  },
+  "output": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-protection-build-13102026\\tests\\healthroster-f4-ai-native-runtime-regression.test.mjs",
+    "sha256": "74688649f9d1ae2b444507da68817ad46728b7675bf4e40f409a6310906d1eaf"
+  },
+  "adaptation": "Only import/source-reference locations changed in the existing 86 cases. Four adjacent actual-handler cases added; all receipts/capabilities remain mocks."
+}

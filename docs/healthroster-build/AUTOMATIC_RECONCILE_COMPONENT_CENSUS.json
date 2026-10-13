@@ -1,0 +1,84 @@
+{
+  "contract": "HEALTHROSTER_AUTOMATIC_RECONCILE_NATIVE_COMPONENT_CENSUS_V1",
+  "status": "SOURCE_CENSUS_ONLY_NO_NATIVE_APPROVAL_OR_ZERO_CERTIFICATE",
+  "native_before_owner": {
+    "function": "private.weekly_source_effective_inventory_v1(uuid)",
+    "source": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "result_fields": ["ok", "code", "authority", "head_id", "components", "inventory_digest", "component_count", "approval_basis"],
+    "authority": ["HEAD", "TSFIN"],
+    "qualification": "The native owner selects one actual COMMITTED_CURRENT head, otherwise its own exact initial authorised TSFIN authority. The automatic consumer adds no fallback, current price or guessed history. approval_basis.coverage_complete must be true with the exact current root/family/candidate/client scope."
+  },
+  "native_approval_basis": {
+    "function": "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+    "source": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+    "fields": ["scope", "origin", "coverage_complete", "component_count", "inventory_digest", "entitlement_digest", "detail_digest", "approved_pay_ex_vat", "policy_fingerprint"],
+    "scope": ["root_timesheet_id", "family_booking_id", "target_family_id", "candidate_id", "client_id", "contract_id", "week_ending_date", "root_version", "family_bound_version"],
+    "HEAD_origin": ["kind=COMMITTED_SOURCE_HEAD_V1", "head_id", "head_revision", "decision_bundle_id", "bundle_revision", "root_authorisation_id", "authorisation_generation", "root_timesheet_id", "root_version", "source_generation_digest", "source_revision", "inventory_digest", "entitlement_digest"],
+    "TSFIN_origin": ["kind=INITIAL_AUTHORISED_TSFIN_V1", "root_authorisation_id", "financial_snapshot_id", "authorisation_generation", "root_timesheet_id", "root_version", "authorised_row_signature", "financial_snapshot_digest", "inventory_digest", "entitlement_digest"],
+    "HEAD_saved_work_detail": "Actual private.bpay_next_source_chosen_detail row keyed by exact head/component/decision_bundle/bundle_revision; component_sha256 and detail_sha256 verified. detail_json pins work_date, start/end/overnight/break_minutes and five rates. No Banking worktree was read.",
+    "TSFIN_saved_detail": "Exact approved invoice_breakdown_json.segments, additional_units_json, actual_schedule_json and rate_source_refs_json; policy_snapshot_json pinned under WEEKLY_SOURCE_APPROVED_POLICY_V2. Authorised current root/version and one current root authorisation are required.",
+    "hash_domains": ["WEEKLY_SOURCE_APPROVED_POLICY_V2", "WEEKLY_SOURCE_APPROVED_FINANCIAL_SNAPSHOT_V2", "WEEKLY_SOURCE_APPROVED_DETAIL_V2"]
+  },
+  "native_canonical_component": {
+    "canonicaliser": "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+    "content_owner": "private.weekly_source_publication_component_content_v1(jsonb)",
+    "source": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+    "fields": ["component_ordinal", "component_id", "component_kind", "economic_key_type", "economic_key_value", "component_member_identity", "segment_id", "segment_key", "segment_stable_key", "work_date", "reference_number", "hours_day", "hours_night", "hours_sat", "hours_sun", "hours_bh", "additional_code_raw", "unit_count", "unit_pay_rate", "unit_charge_rate", "expense_code", "pay_ex_vat", "charge_ex_vat", "exclude_from_pay", "origin", "movement_id", "movement_group_id"],
+    "inventory_added_field": "component_sha256",
+    "native_content_exclusions": ["component_ordinal", "movement_id", "movement_group_id"],
+    "decimal_scale": {"hours_and_units_and_rates": 6, "pay_and_charge_ex_vat": 2},
+    "required_comparison": "Compare every canonical component identity/membership and finance field using this native composer/content owner. Trace exclusions are only the three native exclusions; never drop policy, rate, additional, expense or work identity drift. Preserve native duplicate/cardinality checks."
+  },
+  "actual_stage_owner": {
+    "function": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+    "successor": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+    "vector_schema": "WEEKLY_PROTECTED_TARGET_VECTOR_V1",
+    "complete_hash_domain": "WEEKLY_PROTECTED_COMPLETE_VECTOR_V1",
+    "fields": ["schema_version", "target_snapshot", "components", "component_count", "is_zero_entitlement", "entitlement_sha256", "approved_pay_ex_vat", "protected_component_identity_basis"],
+    "authorised_root_only_field": "prior_effective_inventory",
+    "new_automatic_only_field": "automatic_reconcile_proof",
+    "target_snapshot": ["schema_version=WEEKLY_PROTECTED_TARGET_SNAPSHOT_V1", "actual_schedule_json", "tsfin_snapshot_json"],
+    "native_identity_manifest": ["schema_version=WEEKLY_PROTECTED_COMPONENT_MANIFEST_V1", "family_id", "root_timesheet_id", "contract_id", "candidate_id", "accepted_schedule_sha256", "calculated_segments_sha256", "approved_components_sha256"],
+    "binding": "Approval approved_target_pay_components_json equals exact sealed target_snapshot. Generation complete_next_vector_hash covers the full object including automatic selection. Request native financial_row_id/request_sha256 and actual source/approval/run/event provenance are checked."
+  },
+  "target_component_composition": {
+    "critical_distinction": "Stage vector.components contains C1 transport components with request-specific IDs/kinds. It must NOT be compared directly to I-1 stable canonical entitlement components.",
+    "native_LOCAL_owner": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+    "actual_composer": "private.weekly_source_entitlement_components_v1(sealed TSFIN invoice_breakdown_json.segments, exact saved/proved Source expense observations)",
+    "additional_composer": "private.weekly_source_initial_additional_components_v2(components,sealed additional_units_json,sealed additional_pay_ex_vat,sealed additional_charge_ex_vat,exact root.booking_id)",
+    "identity_producer": "broker/src/weekly-source/protected-component-identity.mjs",
+    "identity": "Calculated output ordinal maps to the same accepted schedule event; segment_id=weekly-source-event:<event UUID>, weekly_protected_component_identity.work_event_id=<same UUID>. Native identity manifest pins accepted schedule, calculator segments and exact prior approved components. No clock/date historical join.",
+    "expense_gate": "Every Source expense observation, generation/revision, event and document hash must equal the saved native Source evidence and sealed C1 record. Missing/unreadable/changed evidence refuses; no expense_code parsing or live-expense substitute is a new authority.",
+    "additional_gate": "Exact saved code/unit/rate/pay/charge evidence is validated by the native mapper; stable member identity is additional:<physical booking family>:<code>. Total-only equality never qualifies.",
+    "manual_route": "Existing individual manual native reconciliation remains unchanged."
+  },
+  "native_own_stage_bound_normalisation": {
+    "source": "supabase/repeatable/05102026_0212_weekly_source_local_publication_context_v2.sql",
+    "function": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+    "actual_checks": "Native STAGE_C1_REQUEST step pins allowlisted owner/signature, COMPLETE outcome/clock, request/run/generation/family identity, before/after/response hashes and bounded response. Only the proven stage K-to-K+1 family bound increment is normalised before comparing complete fresh and sealed inventories. No unrelated growth or rotation is normalised.",
+    "phase_restriction": "This helper requires a genuine native LOCAL PREPARING/PENDING_FREEZE receipt. It is unavailable before complete_local allocates that receipt. Root's earlier stage/delta assertion must purpose-reuse the exact native step checks without fabricating a PREPARING receipt or invoking this helper out of phase."
+  },
+  "root_owned_assertion": {
+    "signature": "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid) returns jsonb",
+    "arguments": ["p_publication_request_id", "p_actor_user_id"],
+    "closed_fields": ["schema_version=WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_V1", "publication_request_id", "actor_user_id", "prior_inventory_digest", "complete_next_vector_sha256", "delta_pay_ex_vat=0.00 decimal text", "qualification_sha256"],
+    "root_owned_capability": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid) returns boolean",
+    "capability_authority": "Existing controlled activation/feature receipt and exact latest VERIFIED release plus qualified actual assertion, not function presence, a new readiness table or a hardcoded true value.",
+    "assertion_requirements": [
+      "Exact configured active protected-pay actor; actual RECONCILE run and request/approval/financial row identity.",
+      "Exact native frozen before inventory, original component membership/identity/signature and current approved root/authorisation/head/bundle witness.",
+      "Whole sealed generation/request/vector hash and actual target snapshot, component manifest and native canonical target composition.",
+      "Fresh exact Source publication/scope/rules/binding/export/snapshot/receipt CAS equals the sealed server selection; native owner/policy/rate/expense/additional drift refuses.",
+      "Full canonical component equality and exact saved policy/rate evidence; delta_pay_ex_vat alone is insufficient.",
+      "Missing, stale, growing, contradictory or changed evidence raises WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE before automatic native completion."
+    ],
+    "stage_rollback": "Assertion runs after actual immutable stage rows/vector are written but before that same stage transaction returns. Refusal rolls the entire stage RPC back. Preflight refuses before prepare if qualified capability/assertion is absent. A later race may leave an existing native preparation run, so ordinary recovery must be truthful and proved.",
+    "completion": "Fresh assertion is repeated under Candidate gate -> complete native I-1 -> group UPDATE -> cycle UPDATE, before unchanged complete_local. Only actual PUBLISHED yields cleared/audit; SAVED_PENDING_FREEZE refuses and rolls back this completion."
+  },
+  "immutable_fixture": {
+    "path": "tests/fixtures/healthroster-automatic-reconcile-produced-stage.json",
+    "generator": "scripts/healthroster-automatic-reconcile-fixture.mjs --write",
+    "scope": "Actual JS transport and identity producer, with explicitly synthetic calculator/RPC inputs. It pins target/transport shape, never SQL admission, approved inventory or a zero certificate.",
+    "native_fixture_required": "Root must produce exact authorised HEAD and initial authorised TSFIN vectors plus real sealed stage/generation/approval/expense evidence in the protected TEST rehearsal; source mocks do not satisfy this gate."
+  }
+}

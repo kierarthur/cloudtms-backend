@@ -1,0 +1,62 @@
+--- a/tests/invoice_async_backend.test.js
++++ b/tests/invoice_async_backend.test.js
+@@ -3748,3 +3748,59 @@ test('HealthRoster invoice support obeys effective attachment policy and renders
+     /from linked l join public\.invoice_hr_source_rows r[\s\S]*'HEALTHROSTER_SUPPORT'/i,
+   );
+ });
++
++// Purpose projection and start receipts below use the actual native wire
++// types. The capability/RPCs remain mocks; this is source regression proof.
++const aiId=n=>`fc000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
++function aiCreditRow(n){return {request_id:aiId(n),root_timesheet_id:aiId(100),correction_id:`awc:${aiId(100)}:${aiId(n)}`,
++  state_revision:'2',source_revision:'a'.repeat(64),original_invoice_id:aiId(200),reversal_timesheet_id:aiId(300+n),
++  reversed_timesheet_id:aiId(400+n),replacement_timesheet_id:aiId(500+n),client_id:aiId(600),candidate_id:aiId(700+n),
++  week_ending_date:'2026-10-11',candidate_name:`Worker ${n}`,invoice_number:'INV-TEST',blocker_code:null,
++  selection_key:`healthroster-credit:${aiId(200)}:${aiId(300+n)}`,selectable:false,automatic:true};}
++async function aiHttpHarness({ordinaryError=false,creditError=0,invalidProjection=false}={}){
++  const calls=[],background=[];let credits=0;
++  const response=await handleInvoiceAsyncHttpRequest(new Request('https://example.test/api/invoices/batch-generate/confirm',{
++    method:'POST',headers:{'content-type':'application/json','idempotency-key':'ai-native-http'},
++    body:JSON.stringify({selection_contract:{contract_version:'INVOICE_BATCH_SELECTION_ROOT_V2',query:v8Query('GENERATE'),selection:v8Selection()}})
++  }),v8Environment(),{waitUntil:promise=>background.push(promise)},{requireUser:async()=>v8Actor(),
++    healthRosterCorrectionConsumersReady:async()=>true,
++    rpc:v8Rpc(async(name,args)=>{
++      if(name==='timesheet_correction_credit_candidates_v1')return {contract_version:invalidProjection?'UNKNOWN':'TIMESHEET_CORRECTION_CREDIT_CANDIDATES_V1',
++        rows:[aiCreditRow(1),aiCreditRow(2)],snapshot_hash:'a'.repeat(64),page:{returned_count:2,has_more:false,next_request_id:null}};
++      if(name==='invoice_work_claim_batch')return [];
++      if(name==='invoice_operation_start_batch'){
++        calls.push(args.p_commands);assert.equal(args.p_commands.length,1);const command=args.p_commands[0];
++        if(command.command_type==='GENERATE_SELECTED'){
++          if(ordinaryError)throw Object.assign(new Error('private diagnostic'),{code:'ORDINARY_START_UNAVAILABLE'});
++          return [{command_no:1,command_type:'GENERATE_SELECTED',accepted:true,created:true,status:'QUEUED',phase:'SUBMITTED',
++            operation_id:aiId(900),selection_contract_version:'INVOICE_BATCH_SELECTION_V2',selection_expansion_pending:true}];
++        }
++        assert.equal(command.command_type,'GENERATE_CREDIT_NOTE');assert.equal(Object.hasOwn(command,'selection_contract'),false);
++        if(++credits===creditError)throw Object.assign(new Error('private credit diagnostic'),{code:'CREDIT_NATIVE_UNAVAILABLE'});
++        return [{command_no:1,command_type:'GENERATE_CREDIT_NOTE',accepted:true,created:true,status:'QUEUED',phase:'SUBMITTED',
++          operation_id:aiId(900+credits),operation_type:'GENERATE_CREDIT_NOTE',source_revision:'a'.repeat(64),change_seq:1,
++          reused_active:false,reused_ready:false,blocked:false,terminal_error:null}];
++      }
++      throw new Error(`Unexpected RPC ${name}`);
++    })});
++  await Promise.all(background);return {response,result:await response.json(),calls};
++}
++test('AI complete HTTP owner keeps ordinary root exact while each credit starts in its own native call',async()=>{
++  const h=await aiHttpHarness();assert.equal(h.response.status,202);assert.equal(h.calls.length,3);
++  assert.equal(h.result.root_operation_id,aiId(900));assert.deepEqual(h.result.operation_ids,[aiId(900)]);
++  assert.deepEqual(h.result.credit_note_operation_ids,[aiId(901),aiId(902)]);assert.equal(h.result.credit_note_results.length,2);
++});
++test('AI complete HTTP owner reports per-credit failure and preserves ordinary root/other native credit',async()=>{
++  const h=await aiHttpHarness({creditError:1});assert.equal(h.response.status,207);assert.equal(h.calls.length,3);
++  assert.equal(h.result.root_operation_id,aiId(900));assert.equal(h.result.credit_note_results[0].code,'CREDIT_NATIVE_UNAVAILABLE');
++  assert.equal(h.result.credit_note_results[1].accepted,true);assert.doesNotMatch(JSON.stringify(h.result),/private credit diagnostic/);
++});
++test('AI complete HTTP owner can retain lawful credits after ordinary start failure without inventing an ordinary root',async()=>{
++  const h=await aiHttpHarness({ordinaryError:true});assert.equal(h.response.status,207);assert.equal(h.calls.length,3);
++  assert.equal(h.result.root_operation_id,null);assert.deepEqual(h.result.operation_ids,[]);assert.equal(h.result.credit_note_results.length,2);
++  assert.equal(h.result.partial,true);assert.equal(h.result.error,'ORDINARY_START_UNAVAILABLE');assert.doesNotMatch(JSON.stringify(h.result),/private diagnostic/);
++});
++test('AI complete HTTP owner rejects an unqualified projection before ordinary or credit mutation',async()=>{
++  const h=await aiHttpHarness({invalidProjection:true});assert.equal(h.response.status,500);assert.equal(h.calls.length,0);
++  assert.equal(h.result.error,'CORRECTION_CREDIT_PROJECTION_INVALID');
++});

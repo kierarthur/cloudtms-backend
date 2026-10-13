@@ -1,0 +1,38 @@
+{
+  "input": {
+    "path": "broker/src/invoice-async-http.js",
+    "sha256": "db078d4aeaaaef8c1a256d48715a88a1445f6f33a739e76f77ed012a40a31e18"
+  },
+  "output": {
+    "path": "invoice-async-http.complete-proposed.js",
+    "sha256": "77120b6ef29f010ebd9864e9fbe1507f64b0cdfd261ec02f3fa98a1c9bdcd9f3"
+  },
+  "ordinary_confirm_after_name_restoration_is_identical": true,
+  "mount": "UNMOUNTED_QUALIFIED_CAPABILITY_ABSENT",
+  "hunks": [
+    {
+      "anchor": "import {\n  buildInvoiceDocumentDownloadUrl,",
+      "replacement": "import {loadAutomaticCorrectionCredits,startAutomaticCorrectionCredits} from './weekly-source/agency-invoice-credit-consumer.mjs';\nimport {\n  buildInvoiceDocumentDownloadUrl,"
+    },
+    {
+      "anchor": "async function handleCandidates(env, req, deps, rpcName, options = {}) {",
+      "replacement": "async function handleCandidates(env, req, deps, rpcName, options = {}, correctionActor = null) {"
+    },
+    {
+      "anchor": "  return jsonResponse(responseEnvelope);\n}\n\nasync function handleNhspCandidates",
+      "replacement": "  if (action==='GENERATE' && correctionActor && query.mode==='PAGE' && !options.forcedInvoiceStreams) {\n    const credits=await loadAutomaticCorrectionCredits(deps,correctionActor.id,query);\n    if (credits && credits.rows.length) responseEnvelope={...responseEnvelope,healthroster_credit_notes:credits};\n  }\n  return jsonResponse(responseEnvelope);\n}\n\nasync function handleNhspCandidates"
+    },
+    {
+      "anchor": "async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {",
+      "replacement": "async function handleBatchGenerateConfirmNative(env, req, ctx, user, deps) {"
+    },
+    {
+      "anchor": "async function handleBatchIssueConfirm(env, req, ctx, user, deps) {",
+      "replacement": "// Root mounts this wrapper only with the qualified release/feature capability.\n// The complete ordinary handler above is preserved byte-for-byte apart from\n// its name. Every credit remains a separate call, outside its selection root.\nasync function handleBatchGenerateConfirm(env,req,ctx,user,deps) {\n  if(typeof deps.healthRosterCorrectionConsumersReady!=='function'\n    ||await deps.healthRosterCorrectionConsumersReady()!==true) return handleBatchGenerateConfirmNative(env,req,ctx,user,deps);\n  const body=await readInvoiceBatchJsonBody(req.clone(),{\n    maximumBytes:Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES)||INVOICE_BATCH_REQUEST_MAX_BYTES});\n  if(Object.keys(body).some(key=>!['selection_contract','weekly_source_selection_contract','command_token'].includes(key))) throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');\n  commandToken(req,body,{requiredCode:'GENERATE_COMMAND_TOKEN_REQUIRED',invalidCode:'GENERATE_COMMAND_TOKEN_INVALID'});\n  const selectionRoot=normaliseInvoiceBatchSelectionRoot(body.selection_contract,'GENERATE');\n  if(!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');\n  if(selectionRoot.query.mode==='EXPLICIT_KEYS') return handleBatchGenerateConfirmNative(env,req,ctx,user,deps);\n  if(!['PAGE','SUMMARY'].includes(selectionRoot.query.mode)) throw invoiceBatchContractError('INVOICE_BATCH_QUERY_MODE_INVALID');\n  const query={contract_version:INVOICE_BATCH_QUERY_CONTRACT,action:'GENERATE',mode:'PAGE',snapshot:selectionRoot.query.snapshot,\n    page_size:100,cursor:null,filters:selectionRoot.query.filters,sort:selectionRoot.query.sort,selection:selectionRoot.selection};\n  const credits=await loadAutomaticCorrectionCredits(deps,user.id,query);\n  if(!credits?.rows.length) return handleBatchGenerateConfirmNative(env,req,ctx,user,deps);\n  let response;let ordinaryFailure;\n  try {response=await handleBatchGenerateConfirmNative(env,req,ctx,user,deps);} catch(error) {ordinaryFailure=error;}\n  const credit_note_results=await startAutomaticCorrectionCredits(credits,command=>\n    startCommands(env,req,ctx,user,[command],deps,['DATABASE'],{priorityClass:'INTERACTIVE'}));\n  const creditOk=credit_note_results.some(row=>(row.accepted&&!row.blocked)||row.already_credited);\n  const creditFailed=credit_note_results.some(row=>row.blocked||(!row.accepted&&!row.already_credited));\n  const ordinary=response?await response.json():{ok:false,accepted:false,operation_ids:[],per_command_results:[],root_operation_id:null};\n  const ordinaryOk=ordinary.ok===true;\n  // Keep the ordinary root and operation array exact. Credit-only commands are\n  // registered separately by the Office and use native Outbox recovery.\n  return jsonResponse({...ordinary,ok:ordinaryOk||creditOk,partial:ordinaryFailure?true:ordinary.partial||(!ordinaryOk&&creditOk)||creditFailed,\n    ...(ordinaryFailure?{error:String(ordinaryFailure?.code||'ORDINARY_INVOICE_BATCH_START_FAILED').slice(0,160)}:{}),\n    credit_note_results,credit_note_operation_ids:credit_note_results.map(row=>row.operation_id).filter(Boolean)},\n    (ordinaryFailure||creditFailed||(!ordinaryOk&&creditOk))?207:(response?.status||202));\n}\n\nasync function handleBatchIssueConfirm(env, req, ctx, user, deps) {"
+    },
+    {
+      "anchor": "return await handleCandidates(env, req, deps, 'invoice_batch_generate_candidates');",
+      "replacement": "return await handleCandidates(env, req, deps, 'invoice_batch_generate_candidates',{},user);"
+    }
+  ]
+}

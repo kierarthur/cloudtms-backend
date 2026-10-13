@@ -1,0 +1,135 @@
+-- Complete current global owners; absent optional key preserves configured actor.
+create or replace function public.weekly_source_global_settings_get_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_agency uuid;
+  v_settings public.weekly_source_global_settings%rowtype;
+begin
+  perform private._weekly_source_settings_assert_request_v1(
+    p_request,array['actor_user_id','agency_id','environment'],
+    'WEEKLY_SOURCE_GLOBAL_SETTINGS_GET_REQUEST_INVALID'
+  );
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_agency:=(p_request->>'agency_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_GET_REQUEST_INVALID' using errcode='22023';
+  end;
+  perform private._weekly_source_settings_require_admin_v1(v_actor);
+  perform private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  select * into strict v_settings from public.weekly_source_global_settings where singleton;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'settings_version',v_settings.version,
+    'settings',pg_catalog.jsonb_build_object(
+      'candidate_reminder_minutes',extract(epoch from v_settings.candidate_reminder_after)::bigint/60,
+      'candidate_response_deadline_minutes',extract(epoch from v_settings.candidate_response_deadline_after)::bigint/60,
+      'manager_digest_minutes',extract(epoch from v_settings.manager_partial_digest_after)::bigint/60,
+      'manager_manual_resend_cooldown_minutes',extract(epoch from v_settings.manager_manual_send_cooldown)::bigint/60,
+      'candidate_manual_reminder_cooldown_minutes',extract(epoch from v_settings.candidate_manual_reminder_cooldown)::bigint/60,
+      'manager_secure_link_days',extract(epoch from v_settings.manager_secure_link_lifetime)::bigint/86400,
+      'automatic_reconcile_actor_user_id',v_settings.automatic_reconcile_actor_user_id
+    )
+  );
+end;
+$function$;
+
+create or replace function public.weekly_source_global_settings_save_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_agency uuid;
+  v_expected bigint;
+  v_settings_json jsonb;
+  v_settings public.weekly_source_global_settings%rowtype;
+  v_candidate_reminder integer;
+  v_candidate_deadline integer;
+  v_manager_digest integer;
+  v_manager_cooldown integer;
+  v_candidate_cooldown integer;
+  v_link_days integer;
+  v_automatic_actor uuid;
+begin
+  perform private._weekly_source_settings_assert_request_v1(
+    p_request,array['actor_user_id','agency_id','environment','expected_settings_version','settings'],
+    'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID'
+  );
+  v_settings_json:=p_request->'settings';
+  perform private._weekly_source_settings_assert_request_v1(
+    v_settings_json,array[
+      'candidate_reminder_minutes','candidate_response_deadline_minutes',
+      'manager_digest_minutes','manager_manual_resend_cooldown_minutes',
+      'candidate_manual_reminder_cooldown_minutes','manager_secure_link_days','automatic_reconcile_actor_user_id'
+    ],'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID'
+  );
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_agency:=(p_request->>'agency_id')::uuid;
+    v_expected:=(p_request->>'expected_settings_version')::bigint;
+    v_candidate_reminder:=(v_settings_json->>'candidate_reminder_minutes')::integer;
+    v_candidate_deadline:=(v_settings_json->>'candidate_response_deadline_minutes')::integer;
+    v_manager_digest:=(v_settings_json->>'manager_digest_minutes')::integer;
+    v_manager_cooldown:=(v_settings_json->>'manager_manual_resend_cooldown_minutes')::integer;
+    v_candidate_cooldown:=(v_settings_json->>'candidate_manual_reminder_cooldown_minutes')::integer;
+    v_link_days:=(v_settings_json->>'manager_secure_link_days')::integer;
+    if v_settings_json ? 'automatic_reconcile_actor_user_id' then
+      if jsonb_typeof(v_settings_json->'automatic_reconcile_actor_user_id') not in ('string','null') then
+        raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023'; end if;
+      v_automatic_actor:=nullif(v_settings_json->>'automatic_reconcile_actor_user_id','')::uuid;
+      if v_automatic_actor is not null and not exists(select 1 from public.tms_users where id=v_automatic_actor) then
+        raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023'; end if;
+    end if;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID' using errcode='22023';
+  end;
+  perform private._weekly_source_settings_require_admin_v1(v_actor);
+  perform private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  if v_candidate_reminder<1 or v_candidate_reminder>=720
+     or v_candidate_deadline<=v_candidate_reminder or v_candidate_deadline>10080
+     or v_manager_digest<1 or v_manager_digest>10080
+     or v_manager_cooldown<5 or v_manager_cooldown>1440
+     or v_candidate_cooldown<60 or v_candidate_cooldown>10080
+     or v_link_days<1 or v_link_days>30 then
+    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_settings
+  from public.weekly_source_global_settings where singleton for update;
+  if v_settings.version<>v_expected then
+    raise exception 'WEEKLY_SOURCE_SETTINGS_STALE' using errcode='40001';
+  end if;
+  update public.weekly_source_global_settings
+  set candidate_reminder_after=pg_catalog.make_interval(mins=>v_candidate_reminder),
+      candidate_response_deadline_after=pg_catalog.make_interval(mins=>v_candidate_deadline),
+      manager_partial_digest_after=pg_catalog.make_interval(mins=>v_manager_digest),
+      manager_manual_send_cooldown=pg_catalog.make_interval(mins=>v_manager_cooldown),
+      candidate_manual_reminder_cooldown=pg_catalog.make_interval(mins=>v_candidate_cooldown),
+      manager_secure_link_lifetime=pg_catalog.make_interval(days=>v_link_days),
+      automatic_reconcile_actor_user_id=case when v_settings_json ? 'automatic_reconcile_actor_user_id'
+        then v_automatic_actor else automatic_reconcile_actor_user_id end,
+      version=version+1,updated_by_user_id=v_actor,
+      updated_at_utc=pg_catalog.transaction_timestamp()
+  where singleton;
+  return public.weekly_source_global_settings_get_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment',p_request->>'environment'
+  ));
+end;
+$function$;
+
+alter function public.weekly_source_global_settings_get_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_global_settings_get_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_global_settings_get_v1(jsonb) to service_role;
+alter function public.weekly_source_global_settings_save_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_global_settings_save_atomic_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_global_settings_save_atomic_v1(jsonb) to service_role;

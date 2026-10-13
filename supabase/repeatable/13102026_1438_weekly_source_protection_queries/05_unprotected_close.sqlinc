@@ -1,0 +1,79 @@
+-- Called only by the real finalisation owners after their exact selection is
+-- established. Four-fact producer and report arm must precede this consumer.
+create or replace function private.weekly_source_unprotected_not_finalised_close_v1(
+  p_cycle_id uuid,p_report_scope_id uuid
+) returns integer language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_cycle public.weekly_source_cycles%rowtype; v_report public.weekly_source_report_scopes%rowtype; v_row record;
+  v_selection jsonb; v_wait jsonb; v_count integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  if p_report_scope_id is not null then
+    select * into strict v_report from public.weekly_source_report_scopes
+      where id=p_report_scope_id and source_cycle_id=v_cycle.id and self_bill_report_id is not null;
+    if v_report.source_group_id is distinct from v_cycle.source_group_id
+      or v_report.client_id is null
+      or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_report.client_id) then
+      raise exception 'WEEKLY_SOURCE_UNPROTECTED_CLOSE_SCOPE_INVALID' using errcode='55000'; end if;
+    perform private.weekly_source_current_publication_guard_v1(v_cycle.id,'SELF_BILL_REPORT_SCOPE',
+      v_report.id,v_report.current_complete_upload_id,v_report.current_projection_publication_id,v_report.version);
+    perform private.weekly_source_self_bill_report_rules_assert_v1(v_report.client_id,v_cycle.id);
+  end if;
+  for v_row in
+    select incident.*,comparison.contract_id,comparison.material_comparison_fingerprint,
+      work.work_date,work.first_source_group_id,work.candidate_id as event_candidate_id,
+      work.client_id as event_client_id
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id
+    where incident.source_cycle_id=v_cycle.id and incident.state='OPEN'
+      and comparison.issue_family='HEALTHROSTER_NOT_FINALISED'
+      and (p_report_scope_id is null or incident.client_id=v_report.client_id)
+    order by incident.id for update of incident
+  loop
+    if v_row.source_group_id is distinct from v_cycle.source_group_id
+      or v_row.first_source_group_id is distinct from v_cycle.source_group_id
+      or v_row.event_candidate_id is distinct from v_row.candidate_id
+      or v_row.event_client_id is distinct from v_row.client_id
+      or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_row.client_id)
+      or v_row.contract_id is null then
+      raise exception 'WEEKLY_SOURCE_UNPROTECTED_CLOSE_SCOPE_INVALID' using errcode='55000'; end if;
+    -- Mode A, non-authoritative roster and NHSP retain their existing owners.
+    if not private.weekly_source_is_import_authoritative_v1(v_row.client_id,v_row.contract_id,v_row.work_date) then continue; end if;
+    v_wait:=private.weekly_source_protected_wait_witness_v1(v_row.work_event_id,v_cycle.id);
+    if v_wait is not null then continue; end if;
+    v_selection:=private.weekly_source_shift_on_self_bill_v1(v_row.work_event_id,coalesce(p_report_scope_id,v_cycle.id));
+    if jsonb_typeof(v_selection) is distinct from 'object'
+      or (select count(*) from jsonb_object_keys(v_selection))<>4
+      or jsonb_typeof(v_selection->'on_accepted_report') is distinct from 'boolean'
+      or jsonb_typeof(v_selection->'bound_to_finalised_export') is distinct from 'boolean'
+      or jsonb_typeof(v_selection->'invoice_ready') is distinct from 'boolean'
+      or jsonb_typeof(v_selection->'s25_pay_selected') is distinct from 'boolean' then
+      raise exception 'WEEKLY_SOURCE_UNPROTECTED_CLOSE_SELECTION_UNAVAILABLE' using errcode='55000'; end if;
+    if (v_selection->>'s25_pay_selected')::boolean or (v_selection->>'on_accepted_report')::boolean then continue; end if;
+    update public.weekly_discrepancy_incidents
+      set state='CANCELLED',resolved_at_utc=null,resolution_kind=null,
+        candidate_action_state='NOT_REQUIRED',manager_potential_state='NOT_REQUIRED',manager_action_state='NOT_REQUIRED'
+      where id=v_row.id and state='OPEN';
+    if not found then continue; end if;
+    perform private.weekly_source_incident_contact_retire_v1(v_row.id);
+    insert into public.weekly_discrepancy_events(incident_id,issue_episode,projection_publication_id,
+      expected_comparison_fingerprint,event_kind,actor_kind,bounded_payload_json,idempotency_key)
+    values(v_row.id,v_row.episode_number,v_cycle.current_projection_publication_id,
+      v_row.material_comparison_fingerprint,'SOURCE_RECHECKED','SYSTEM',
+      jsonb_build_object('state','CANCELLED','reason','UNPROTECTED_NOT_ON_FINAL_SELF_BILL',
+        'source_cycle_id',v_cycle.id,'report_scope_id',p_report_scope_id),
+      'UNPROTECTED_NOT_FINALISED_CANCELLED:'||v_row.id::text||':'||v_row.episode_number::text)
+    on conflict(event_kind,idempotency_key) do nothing;
+    v_count:=v_count+1;
+  end loop;
+  return v_count;
+end;
+$function$;
+alter function private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid)
+  from public,anon,authenticated,service_role;
