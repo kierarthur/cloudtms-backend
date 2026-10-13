@@ -1,0 +1,81 @@
+{
+  "schema_version": "REPORT_PREPARED_ARRAY_FORWARD_MANIFEST_V1",
+  "status": "REVIEWED_SOURCE_ONLY_NATIVE_ARRAY_AND_FINANCIAL_PROOF_HELD",
+  "frozenPreparedCommit": "54e06721ab030e5060272ec6a0a58bf47a17587d",
+  "frozenPreparedManifestSha256": "80a2577cbf5016f1a76e323717809c5553070e47b0b9a80e11b1ef3a0af34c70",
+  "criticSha256": "180167ebb3f3979b97056668ef5de46ee96447bc61edd85a4158f23899ef4284",
+  "artifactCount": 10,
+  "artifacts": [
+    {
+      "path": "02_complete_codec_array_forward.sqlinc",
+      "bytes": 34388,
+      "sha256": "eea1f99feef1117dad7913139636b28178dbc191cb41a0622f0518a259288769"
+    },
+    {
+      "path": "05_complete_retained_amount_array_forward.sqlinc",
+      "bytes": 30805,
+      "sha256": "84512f7af655c6d84a704f55c873e00e3890965c44b5469dc4e149ce594b678f"
+    },
+    {
+      "path": "FORWARD_RECEIPT.json",
+      "bytes": 2481,
+      "sha256": "833e023e8c9622a98a28d685c50f559c01832d8c0a29a6038067b6b3963b6420"
+    },
+    {
+      "path": "NATIVE_ARRAY_DATA_CASES.sqlinc",
+      "bytes": 1810,
+      "sha256": "53848d9a8c2068edd37fbf3c6b046c7156e754dd7ac9f31d5f966ee3b8b94ba7"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 4198,
+      "sha256": "4287ae1893442bb5f10ab4d8ff95b69ac00338cec15d81f6bfa82914641c1e73"
+    },
+    {
+      "path": "SOURCE_CRITIC.md",
+      "bytes": 19976,
+      "sha256": "180167ebb3f3979b97056668ef5de46ee96447bc61edd85a4158f23899ef4284"
+    },
+    {
+      "path": "array-forward.test.mjs",
+      "bytes": 6791,
+      "sha256": "67012bcecbeb17ef1a9354cd1e68be83c5fde085bf172f4c5feceb77f2b91a8c"
+    },
+    {
+      "path": "build-forward.mjs",
+      "bytes": 9783,
+      "sha256": "9f69719bebf67801fdc22660c35314ecaf52458739510522eb31178bb471cc9c"
+    },
+    {
+      "path": "build-proposal.complete-array-forward.mjs",
+      "bytes": 49932,
+      "sha256": "923c9938d303cdecc774be82fe3f58b1d0a33fe6145d0d075da54473b734ec13"
+    },
+    {
+      "path": "freeze-source.mjs",
+      "bytes": 1545,
+      "sha256": "6b376a7267291b30ebf7ee69a4ff018ed6a9f603aec33026a9a5f157bb47e1da"
+    }
+  ],
+  "packageSha256": "5b6c51947afe84d5eeb9b28973ef167bbc6fab369d05fee25067feeaba9c1100",
+  "checks": {
+    "sourceTests": 18,
+    "pass": 18,
+    "fail": 0,
+    "skip": 0,
+    "nodeSyntax": true,
+    "officialSQLStatementPackaging": true,
+    "semanticSQLCompilation": false,
+    "nativeArrayRoundtrip": false,
+    "nativeFinancialAcceptance": false,
+    "frozenSourcesChanged": false,
+    "rootWrites": false,
+    "databaseCalls": false,
+    "bankingSourceReads": false
+  },
+  "remainingGates": [
+    "Independent critic review of exact complete forward and fixed array parser configuration.",
+    "Root native 2D/non-1 lower bound/quoted NULL/backslash/SQL NULL actual codec cases under SEND_7.",
+    "Original capture/receipt/financial/transport/contract/combined ACL/date/API gates remain unchanged and held."
+  ]
+}
