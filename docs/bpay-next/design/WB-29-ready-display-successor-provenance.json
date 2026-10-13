@@ -1,0 +1,124 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "previousQuoteEstimateCommit": "8935125b15e998849b805a568fbe7ced95295a45",
+  "builderDecisions": [
+    "BD168"
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/13102026_0113_banking_pay_next_chosen_display_date_support.sql",
+      "sha256": "27fa42f6c21758235e1970dc1aa684570636c82822b1a8bdcbb2c249ba232f8d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "sha256": "9cf9e4054bfd6c7c06babc1cfd8fdc0fe3280bf291e0ac059c009906c458ddec"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql",
+      "sha256": "e924cb0c55d2af7c85f9c37c0b6164dec2ea8532f319ead1f49b38f0c7e2ee5b"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0118_banking_pay_next_chosen_display_date_repair_v1.sql",
+      "sha256": "03525d56662aab43919a29dbc45afae4e0d36e85d4d5a3d0b82bca4c8c821bac"
+    }
+  ],
+  "successors": [
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+        "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
+        "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
+        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0230_banking_pay_next_origin_wait_navigation_v1.sql",
+        "supabase/repeatable/12102026_0234_banking_pay_next_origin_wait_parent_navigation_v1.sql",
+        "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
+        "supabase/repeatable/13102026_0055_banking_pay_next_selected_treatment_estimate_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "currentPhysical": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql"
+      ]
+    },
+    {
+      "signature": "public.bpay_next_workbench_week_rollover_page_v1(jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0118_banking_pay_next_chosen_display_date_repair_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text)",
+      "currentPhysical": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text,boolean)",
+      "currentPhysical": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "predecessors": []
+    }
+  ],
+  "designs": [
+    "WB-29-ready-chosen-amount-design.md",
+    "WB-29-ready-chosen-amount-sorting-design.md",
+    "WB-29-ready-chosen-amount-edit-map.md",
+    "WB-29-ready-implementation-boundary.md",
+    "WB-29-ready-rollover-implementation-note.md"
+  ],
+  "reviews": [
+    {
+      "path": "WB-29-ready-implementation-design-review.md",
+      "sha256": "0262c9db3d114e2171d422241b881b8833a3d06f43eed0d790714377ec27fbdf"
+    },
+    {
+      "path": "WB-29-ready-display-source-review.md",
+      "sha256": "cde5174609b14e93565be1f1ba83c9a3e8fbf5a33b3a03c7cbf6e1d704a29a7d"
+    },
+    {
+      "path": "WB-29-ready-barrier-source-review.md",
+      "sha256": "120225ce39b2a5187767a7057be66e21067def244587915ec55bc4e5254fd636"
+    },
+    {
+      "path": "WB-29-ready-rollover-source-review.md",
+      "sha256": "918e457bd40f969284b63a4c62ef56cf71d3b7b8b1eb57d00e9e3340263ec16b"
+    },
+    {
+      "path": "WB-29-ready-registry-contract-review.md",
+      "sha256": "2c8fcc1311ebeb4dd30a59267e4bda3ae5fbff7142b45f8f81857c6fe7e5a35f"
+    }
+  ],
+  "checks": {
+    "dbCheck": "384 migrations/996 repeatables PASS",
+    "sourceGates": "1556 SQL/31 RPC roots/171 routine-work signatures/37 typed transports PASS",
+    "localPG17": "1 migration/6 closures; schema compilation only PASS",
+    "catalogue": "5 exact routine bodies/config/owner/ACL/volatility;4metadata columns/defaults/2CHECK/partialindex PASS",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf;bothDO PASS;publicmembershipdelta0",
+    "nodeCheck": "changedexisting sourcegate PASS;noWorker/Office productJS yet",
+    "contractSealAndCoupling": "492f2b85abcb9cf06ab2fce2fe54b945a41b48d3098177c6c01d292cd79006c0 PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE;kind/closedDTO/Office chosen child amounts and labels remain"
+}

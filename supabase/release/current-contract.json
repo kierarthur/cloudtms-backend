@@ -13820,7 +13820,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "03e642f11e9bbf512311ea699efecf49672fa7f1f36c22c67209ec44a30ff557"
+      "definition_sha256": "e64bfb76ed9a4e7e6ef3923d95b67fd346d59a0f6a17fe25ccf3bcaf0ff44ea9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_current_component_resolution_quote_v1(p_work_id uuid, p_revision_id uuid, p_approved_line_id uuid, p_pay_date date, p_selected_leaf_keys text[], p_through_segment_key text, p_projection_refresh boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "4418deeb304f9d985f30bac65049c226624a606beab8690f1eeabaaf9be8bba6"
     },
     {
       "acl": [
@@ -19656,7 +19675,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "755a4c56b9efbda03d41f07543712da090bf0a943669d33d9726792f90b4ec62"
+      "definition_sha256": "92f83a545845dec82f54531d706465b815ffef4d6bfeb5b88e3e791523ca1579"
     },
     {
       "acl": [
@@ -35385,7 +35404,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c025a28adecd0391387ca4fd05f610892005bdbae05e5ca9ab55f066118f8a8d"
+      "definition_sha256": "a4cda69379253e04bbb0821d5bfba23c9d59d2da112bb32ac7deadebdee1b1e5"
     },
     {
       "acl": [
@@ -35434,7 +35453,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5e1905e173685cc89884527a7c494542785f39daebcb34dda185be49587f9dc6"
+      "definition_sha256": "2743720c17f21365e50ad327066197c890e8c1732b7d86bb4683fd627621757f"
     },
     {
       "acl": [
@@ -132934,6 +132953,22 @@
           "generated": ""
         },
         {
+          "name": "chosen_display_date_sensitive",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "chosen_display_pay_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "client_id",
           "type": "uuid",
           "default": null,
@@ -133116,6 +133151,10 @@
           "definition": "CREATE INDEX bpay_next_wb10_group_week_idx ON private.bpay_next_workbench_group USING btree (candidate_id, ((week_ending_date IS NULL)), COALESCE(week_ending_date, '0001-01-01'::date), group_kind COLLATE \"C\", COALESCE(work_id, case_id))"
         },
         {
+          "name": "bpay_next_wb_chosen_display_due_idx",
+          "definition": "CREATE INDEX bpay_next_wb_chosen_display_due_idx ON private.bpay_next_workbench_group USING btree (chosen_display_pay_date NULLS FIRST, work_id) WHERE ((group_kind = 'WORK'::text) AND chosen_display_date_sensitive AND complete AND (NOT dirty) AND (progress_state = 'CURRENT'::text) AND ((ready_count > 0) OR (action_count > 0)))"
+        },
+        {
           "name": "bpay_next_workbench_group_candidate_idx",
           "definition": "CREATE INDEX bpay_next_workbench_group_candidate_idx ON private.bpay_next_workbench_group USING btree (candidate_id, group_key)"
         },
@@ -133143,6 +133182,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_next_wb_chosen_display_date_finite",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (chosen_display_pay_date IS NULL OR isfinite(chosen_display_pay_date))"
+        },
         {
           "name": "bpay_next_workbench_group_action_count_check",
           "type": "c",
@@ -135144,6 +135191,22 @@
           "generated": ""
         },
         {
+          "name": "chosen_rollover_seek_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "chosen_rollover_seek_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "dirty_candidate_count",
           "type": "bigint",
           "default": "0",
@@ -135240,6 +135303,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK ((snooze_due_seek_date IS NULL) = (snooze_due_seek_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_wb_chosen_rollover_seek",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((chosen_rollover_seek_work_id IS NOT NULL OR chosen_rollover_seek_date IS NULL) AND (chosen_rollover_seek_date IS NULL OR isfinite(chosen_rollover_seek_date)))"
         },
         {
           "name": "bpay_next_week_rollover_seek_pair",

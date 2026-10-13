@@ -1,0 +1,36 @@
+# WB-29 Ready chosen-date rollover — independent source review
+
+13 October 2026. **SOURCE PASS for this rollover successor.** No essential defect found in the reviewed bytes. This is a source review of one routine and its native support, not whole WB-29 completion or business acceptance. Reviewer performed no SQL/RPC, database, test, fixture, hosted or product operation. Compile, query plans, timing and joined acceptance are **NOT_RUN** by this reviewer.
+
+## Reviewed scope and identities
+
+New source: `supabase/repeatable/13102026_0118_banking_pay_next_chosen_display_date_repair_v1.sql`, SHA256 `03525D56662AAB43919A29DBC45AFAE4E0D36E85D4D5A3D0B82BCA4C8C821BAC`. It defines only `public.bpay_next_workbench_week_rollover_page_v1(jsonb)`, replacing the exact owner at `11102026_0255_banking_pay_next_due_recovery_pages_v1.sql:122–215` (SHA256 `A59E6FDC063CA67181DA82625A3059BFEB1D4085E07ED22AD75042FC0607C4BB`). The saved final-definer registry points to 0118 for that signature.
+
+Support read: `13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql` (SHA256 `9CF9E4054BFD6C7C06BABC1CFD8FDC0FE3280BF291E0AC059C009906C458DDEC`), its chosen-date migration, the approved rollover implementation note, actual **10102026_1429** scheduler/queue owners, 1438 refresh wrapper, current registry and the existing Worker due-result contract. This receipt reviews the rollover integration; it does not substitute for the separate complete 0113 quotation review.
+
+## Selector, quota and cursor findings
+
+| Area | Source evidence and conclusion |
+|---|---|
+| Original FUTURE scope | 0118:54–65 retains the inclusive London `FUTURE_WEEK` date/ID predicate and order from 0255:146–154. The donor tail advances from the last returned native FUTURE key, never from a synthetic envelope. |
+| Chosen first prefix | 0118:71–92 has three disjoint, independently limited native ranges: NULL stamp, stamp below official date, stamp above official date. Their finite merge orders NULL first then real date/Work ID and applies the same quota. NULL-date/non-NULL-ID continuation includes later NULL IDs and every subsequent non-NULL date; a non-NULL seek excludes the earlier NULL range. Excluding the official date in both dated branches is equivalent to the required stale-date test. The migration's partial index at 15–18 matches the scope and ordering. |
+| Donation for limit ≥2 | 0118:42–50 first gives FUTURE `(limit+1)/2`, then chosen `limit−visited`; a chosen underfill donates the remaining capacity to FUTURE only while its first prefix was full. No phase can append beyond its remaining quota. If the overall page underfills, both probed suffixes have been exhausted. Exact fills deliberately leave exhaustion unproven. |
+| Agreed limit1 | 0118:19/43–50 captures UTC-minute parity once. Even minutes try FUTURE then chosen if empty; odd minutes try chosen then FUTURE if empty. A zero-quota phase leaves its lane unprobed. This is minute-priority alternation, not deterministic same-instant fairness; no new persisted turn flag/counter is present. The normal Worker requests 100. |
+| Counters and complete | 0118:62/97 increments visited only for records appended to the two emitted buffers; 102 derives exactly `visited < limit`. Future and chosen success accounting at 149–170 cannot exceed those buffers. Return 186–187 retains four fields with decimal count strings and changed+deferred=visited, satisfying unchanged `broker/src/bpay-next-runtime-rpc.js:291–296`. |
+| Independent CAS/wrap | 0118:174–184 updates only a probed lane, compares only that lane's original tuple with `IS NOT DISTINCT FROM`, and clears its tuple only when its positive-quota read underfilled. FUTURE tail last-key handling is 62–65. Chosen NULL-date/non-NULL-ID state is explicitly permitted by migration 12–14. An unprobed lane stays untouched; an overlapping loser cannot overwrite another page's advanced tuple. No context/financial revision is added merely to move a seek. |
+
+Physical cost is stated narrowly: each chosen range can materialize up to its quota before the bounded three-range merge, so this is up to three quotas of intermediate chosen records, while the returned/visited page remains at most `limit`. The source does not prove a universal IndexScan, constant physical scan cost or a timing target. This does not weaken the native row scope or truncate the returned first prefix.
+
+## Locks, mutation and inherited behavior
+
+0118:103–134 discovers the complete donated buffers first, then takes the union Candidate controls, Work and Case preholds in native UUID order with the parent's NOWAIT/defer handling. No FUTURE refresh or chosen task scheduling occurs before those preholds finish. The related FUTURE Work Case discovery at 126–127 is **DISTINCT before LIMIT100**, exactly matching 1438:339–341. It closes the predecessor's raw-row-prefix discrepancy at 0255:178–179: repeated collection rows can no longer hide a Case that the refresh wrapper will subsequently lock. The wrapper's 100-Case branch still queues its existing ORIGIN task rather than claiming that prefix is complete membership.
+
+The original FUTURE revalidation and per-scope mutation block 0118:135–150 preserves 0255:187–202: native selected item IDs, Candidate/group identity, inclusive due predicate, unchanged Work/Case refresh callees and the original per-scope exception treatment. Date-only scopes do not call Case refresh; they use the existing queue owner at 159. Future-related Cases are already held before that queue reaches task/metadata/global revision. Thus no new Case lock is introduced after queue mutation through the retained FUTURE wrapper.
+
+Chosen 155–160 rechecks the current native group scope and stale date under its Candidate/Work preholds before queuing. Queue/scheduler **10102026_1429:268–279/88–146** retains its actual Work/current/applied/approval/financial-view/WAIT snapshot and exact matching unfinished-task reuse. No captured Run selection, accepted financial amount or eligibility guard is replaced by the chosen-date selector. The narrow same-call branch 161–166 counts an overlapping chosen visit only when a successful FUTURE refresh has positively produced a complete/current, now-correct or no-longer-sensitive group. It does not claim that a queued repair is already readable. Remaining visits are deferred; the strict public chosen-date barrier and native ORIGIN STEP ownership remain intact.
+
+The prior allocator, Source/Case money owners, refresh/queue/STEP routines, ID-only queue protocol and Worker adapter are not redefined by 0118. Function settings at 5–7 retain PL/pgSQL SECURITY DEFINER, `search_path=pg_catalog,private` and 5s statement timeout; input 25–31 retains the exact `{limit}` shape and 1–200 bound. Owner/revoke/service grant at 191–193 match the parent, with no browser execute grant. The file ends at the complete function/ACL, schema reload notification and COMMIT (188–195); no adjacent parent routine was accidentally extracted or truncated.
+
+## Boundary
+
+No open source finding remains for 0118 at the hash above. Parent compile/catalogue/gate receipts, when obtained, must be attributed separately to Root. Date-sensitive display quotation, downstream list transport/pixels and whole WB-29 acceptance remain their own scopes; this source review does not claim them complete.
