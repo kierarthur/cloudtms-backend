@@ -1,0 +1,237 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_NATIVE_INTERFACES_WIP_CHECKPOINT_V1",
+  "status": "REVIEWED_UNMOUNTED_WIP_NOT_FROZEN_NOT_INTEGRATION_READY",
+  "source_tests_pass": 7,
+  "source_tests_fail": 0,
+  "javascript_syntax_pass": 13,
+  "preserved_frozen_predecessors": [
+    {
+      "folder": "protected-source-qualification-operational-gate",
+      "files": 44,
+      "sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206",
+      "files": 5,
+      "sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206-trial2",
+      "files": 5,
+      "sha256": "4784752bda1a9c5df7edad45d99715fa114efd25b85c7810e9cdc7c01dd1e272"
+    },
+    {
+      "folder": "strict-qualification-first-use-inventory-forward",
+      "files": 11,
+      "sha256": "e05b9ec2574dcf83c7773171adb50e116f3181d28812ac6e8571dd79fab5c427"
+    },
+    {
+      "folder": "strict-qualification-git-path-parser-forward",
+      "files": 9,
+      "sha256": "06645fbf3c215137bf306405d03ce6817a78e5b8ce08948ad834e9e66a26d3d3"
+    }
+  ],
+  "runtime_source_pin": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "latest_root_metadata_not_an_equivalence_claim": "14fc8a524c5568de38112dd784b198495361fb22",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/01_operational_rule_projection.sqlinc",
+      "bytes": 1367,
+      "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/02_effective_rule_owner.sqlinc",
+      "bytes": 1820,
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/03_cas_operational_projection.sqlinc",
+      "bytes": 20116,
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/04_final_revision_rule_guard.sqlinc",
+      "bytes": 1530,
+      "sha256": "e2349dc619a7b30c74328d62a8f1aace2435a361d30309b9c43e3ff543fef3a3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/05_coverage_floor_owner.sqlinc",
+      "bytes": 6533,
+      "sha256": "6f34e8d9ab9bf08a7bb0fc240fea49a35edc420ff7b7d1f98210a697476f34f3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/06_existing_controlled_setup.sqlinc",
+      "bytes": 22649,
+      "sha256": "8dcd979a10cdb0b27e1e1f1c76c42488df525a54625ce2feb6b697fadda539e5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/07_automatic_capability_admission.sqlinc",
+      "bytes": 1029,
+      "sha256": "b08e604e3df9b13eaeb1b0e7ab635e85a0a80d94785ecb76327d35b14a866ac4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/08_cas_admission_owner.sqlinc",
+      "bytes": 2312,
+      "sha256": "c5e3217b5ad271d66614ad3df0ad80870f57817fb18e042b9dcb43339a69e285"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_ASSERT_REVERSE.json",
+      "bytes": 3274,
+      "sha256": "d025d18dccda848259f232284617ee98730d7d6391e3c875c945e5b239e8f232"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+      "bytes": 17277,
+      "sha256": "f205f7105008cba3545161f44328eb58690175e82e2b75886c2f40a797a319d1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_SCOPE.sqlinc",
+      "bytes": 14223,
+      "sha256": "b98178139deecb0ee076a2e6df1c47e585229504fc94183294985c81176ed66f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/CURRENT_SOURCE_OWNER_INPUTS.sqlinc",
+      "bytes": 2086036,
+      "sha256": "527190b07b9517583d21b01922d00cf03294b7a3b66168209ec467c622a8fa71"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/INTERFACE_ENGINEERING.md",
+      "bytes": 9704,
+      "sha256": "0a2cb1c90eb349bca065e0f499b1f82e4587023360d7ed0322ede3b0783d8f3b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/NATIVE_CONSUMER_AND_EXECUTOR_CENSUS.json",
+      "bytes": 814204,
+      "sha256": "afe7ff167fe99d6f90a8fa1ceee71dcb1c3c5d447ede3dfbd77b18fb30e8a54f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_AUTHORITY.sqlinc",
+      "bytes": 18581,
+      "sha256": "a679e28f915a5769381abde637d5b06a015dade2aeb13811b1a292a7fe90b277"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_COMMAND.sqlinc",
+      "bytes": 14760,
+      "sha256": "062888dcf25562cb36d1c2198afb57473ffa03c593c280e1f7ced77e1de204a0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_STATUS.sqlinc",
+      "bytes": 2578,
+      "sha256": "8eb29b29ffe55dc406dfadc4c84ff389ca493b62d0b331a15981e01fc3e0f97b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OWNER_SOURCE_REVERSE_PROOFS.json",
+      "bytes": 6234,
+      "sha256": "887f440ab7def407b872fa7c96512454e87f71bef9a7ca6035af55e8d8d21975"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "bytes": 12676,
+      "sha256": "34e193204b96325f8599be3f325f254227f1d75d0074565442a638a02e309cf0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+      "bytes": 4196,
+      "sha256": "9eb4bff291bccd7127df1cf878854ffe896dacd24f0c68264690496188398724"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "bytes": 6889,
+      "sha256": "fd5440cc836513e7c09c83f5a79a02fc81a43a1bf12b35ecd25952069cd14bf4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/REPORT_FIXTURE_REFERENCE.sqlinc",
+      "bytes": 7539,
+      "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/SAME_INSTALLED_CERTIFICATE_REVERSE.json",
+      "bytes": 1722,
+      "sha256": "cdea061536414c8bd76605e8f69858090ddd0100fa63baf6d241b1911a67afb0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/SAME_INSTALLED_OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18341,
+      "sha256": "b5b4b4084822c14c1bbbe50b1921f84358d4b4794ade08cd35a11056263a94ba"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/activation-probe-evidence.mjs",
+      "bytes": 9402,
+      "sha256": "c886cea77f15fa563da6e9fb1288dcf5dd214d89f26fc9ccf9b85ddd3805190e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/census-native-interfaces.mjs",
+      "bytes": 11292,
+      "sha256": "8dd64a5c5486f1ca3f4a51b3ee84373c50a595e3a51daea248acc16674054389"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/checkpoint-wip.mjs",
+      "bytes": 3160,
+      "sha256": "b11429e315564d509b3e0f1ed5e740fb83c74ed25626cdf9e41e2fcbb2898925"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/generate-interface-owners.mjs",
+      "bytes": 13537,
+      "sha256": "a0eaf1bf755e5bd753294d404cb2cb38dce488b6730c00c9ad0d057e2e308d3b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/generate-probe-evidence.mjs",
+      "bytes": 3393,
+      "sha256": "a112998ccf4696e9ec4860fc3bd31b65bde8b6aff72f216b8a98a3df0113c988"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/generate-probe-owner.mjs",
+      "bytes": 7456,
+      "sha256": "d9ad97eaf72a246c912b95ccde2207f32f2830b238243f2506ed4615dee64424"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/generate-same-installed-certificate.mjs",
+      "bytes": 2442,
+      "sha256": "3d13a68c5dd1c602f1ab68248beec81f7ac230886844e8f22ab81473239fbc55"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/measured-partial-evidence.mjs",
+      "bytes": 1699,
+      "sha256": "260640f4b590dec37e0945af761ac0aad279f962f71109cc349c919138869ef2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/native-interface.test.mjs",
+      "bytes": 11068,
+      "sha256": "54034aaecf6ad7d105996423d46fd7854780d44d2849d841b0ec8d9f7ff4f7fa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-native-proxy.mjs",
+      "bytes": 3638,
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-setup-evidence.mjs",
+      "bytes": 6886,
+      "sha256": "fe4322ae7239adbb1145e38070164a454726081ae6c53ef41f6c6b72c55260f5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/probe-native-evidence.mjs",
+      "bytes": 5741,
+      "sha256": "6ee033290c757b6f6fb15f2bed9bdb3731abbca4f1dcfccd2dd77dc14087941c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/same-installed-operational-evidence.mjs",
+      "bytes": 17750,
+      "sha256": "76d4e65450ed45cb82600e51fd45461d34839f36d84452a5a226ce04878d9096"
+    }
+  ],
+  "required_remaining_source": [
+    "Explicit historical fixture/future activation certificate binding",
+    "OFF closure and complete original-census probe bridge",
+    "Protected recorder Git/raw-artifact remeasurement controller",
+    "Complete literal ACL/effect closure and current-root metadata forward",
+    "Remaining native journey recipes/negative vectors and independent source review"
+  ],
+  "actual_database_call": false,
+  "actual_runtime_qualification": false,
+  "actual_financial_acceptance": false,
+  "actual_http_ui_phone_acceptance": false,
+  "actual_next_acceptance": false,
+  "operational_assignment_changed": false,
+  "banking_action": false
+}

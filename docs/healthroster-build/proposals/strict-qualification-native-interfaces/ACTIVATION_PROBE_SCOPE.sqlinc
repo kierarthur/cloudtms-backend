@@ -1,0 +1,142 @@
+create or replace function private.weekly_source_protected_activation_probe_begin_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; auth jsonb; scope jsonb; assignment public.weekly_source_group_rule_assignments%rowtype;
+  actor uuid; n integer; clients uuid[]; old_auth jsonb;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['scope_id','actor_user_id','probe_authorization_sha256','turn_backend_pid'])
+    or coalesce(p_request->>'probe_authorization_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(p_request->>'turn_backend_pid','') !~ '^[1-9][0-9]*$' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_REQUEST_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid;
+  perform private._weekly_source_settings_require_admin_v1(actor);
+  if not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted and lock_row.mode='ExclusiveLock'
+    and lock_row.database=(select oid from pg_database where datname=current_database())
+    and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2
+    and lock_row.pid=(p_request->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid()) then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_OWNED_TURN_REQUIRED' using errcode='55000'; end if;
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  select count(*),jsonb_agg(value)->0 into n,auth from jsonb_array_elements(r.evidence_json->'weekly_source_protected_activation_probe_authorizations') value
+    where value->>'probe_authorization_sha256'=p_request->>'probe_authorization_sha256';
+  if n<>1 then raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
+  perform private.weekly_source_protected_activation_probe_authorization_assert_v1(auth,(auth->>'source_group_id')::uuid,
+    (auth->>'effective_from_week_ending')::date,(auth->>'effective_to_week_ending')::date,auth->>'probe_authorization_sha256');
+  select * into strict assignment from public.weekly_source_group_rule_assignments where id=(auth#>>'{assignment_scope,assignment_id}')::uuid;
+  if assignment.feature_enabled or assignment.rule_set_version_id is not null or assignment.source_group_id::text is distinct from auth->>'source_group_id'
+    or assignment.effective_from_week_ending::text is distinct from auth->>'effective_from_week_ending'
+    or assignment.effective_to_week_ending::text is distinct from auth->>'effective_to_week_ending'
+    or assignment.version::text is distinct from auth#>>'{assignment_scope,expected_assignment_version}'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(assignment)),'hex')
+      is distinct from auth#>>'{assignment_scope,expected_assignment_sha256}'
+    or actor::text is distinct from auth#>>'{assignment_scope,setup_actor_user_id}' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ASSIGNMENT_CHANGED' using errcode='40001'; end if;
+  -- Recover the exact original, CLOSED Client/root census from its genuine
+  -- installed authorization; never recollect only remaining OPEN incidents.
+  select value into strict old_auth from private.cloudtms_database_releases historical,
+    lateral jsonb_array_elements(historical.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where historical.release_id=auth#>>'{test_setup_closure,execution_release_id}'
+      and value->>'scope_id'=auth#>>'{test_setup_closure,scope_id}'
+      and value->>'authorization_sha256'=auth#>>'{test_setup_closure,setup_authorization_sha256}';
+  if old_auth#>>'{original_census,census_sha256}' is distinct from auth#>>'{assignment_scope,original_census_sha256}' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(old_auth#>'{original_census,original_client_ids}') value;
+  if private.weekly_source_bulk_source_cas_v1((old_auth->>'source_cycle_id')::uuid,clients) is distinct from old_auth#>'{original_census,source_cas}' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_SOURCE_CHANGED' using errcode='40001'; end if;
+  if exists(select 1 from public.audit_events audit where audit.object_type='weekly_source_activation_probe'
+    and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED' and audit.event_sequence_is_authoritative
+    and audit.after_json->>'transaction_id'=pg_current_xact_id()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text) then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ALREADY_ADMITTED' using errcode='23505'; end if;
+  scope:=jsonb_build_object('schema_version','WEEKLY_SOURCE_ACTIVATION_PROBE_SCOPE_V1','scope_id',(p_request->>'scope_id')::uuid,
+    'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,'turn_backend_pid',p_request->>'turn_backend_pid',
+    'current_local_date',(clock_timestamp() at time zone 'Europe/London')::date,'execution',private.weekly_source_protected_qualification_release_v1(),
+    'actor_user_id',actor,'assignment_id',assignment.id,'assignment_version',assignment.version,'authorization',auth,
+    'original_census',old_auth->'original_census','original_source_facts',private.weekly_source_bulk_source_facts_v1((old_auth->>'source_cycle_id')::uuid,clients),
+    'phase','ACTIVATION_PROBE_ONLY','operational_ready',false);
+  scope:=scope||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_ACTIVATION_PROBE_SCOPE_V1',scope),'hex'));
+  perform public._audit_insert('weekly_source_activation_probe',scope->>'scope_id','WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED',null,scope,
+    'Owner transaction-bound activation probe; all other real pre-switch gates retained',actor);
+  return scope;
+end;
+$function$;
+
+create or replace function private.weekly_source_protected_activation_probe_assert_v1(p_scope_id uuid,p_actor uuid,p_group uuid,p_from date,p_to date,p_assignment uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare scope jsonb; n integer; stack text; auth jsonb; clients uuid[]; completed jsonb; actual_facts jsonb; target public.weekly_source_group_rule_assignments%rowtype;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  get diagnostics stack=pg_context;
+  if stack !~ 'PL/pgSQL function (private\.)?weekly_source_protected_activation_probe_execute_v1\(uuid,jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_CALLER_REQUIRED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into n,scope from public.audit_events audit where audit.object_type='weekly_source_activation_probe'
+    and audit.object_id_text=p_scope_id::text and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED' and audit.event_sequence_is_authoritative
+    and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+  auth:=scope->'authorization';
+  if n<>1 or scope->>'phase' is distinct from 'ACTIVATION_PROBE_ONLY' or scope->'operational_ready' is distinct from 'false'::jsonb
+    or scope->>'actor_user_id' is distinct from p_actor::text or scope->>'assignment_id' is distinct from p_assignment::text
+    or auth->>'source_group_id' is distinct from p_group::text or auth->>'effective_from_week_ending' is distinct from p_from::text
+    or auth->>'effective_to_week_ending' is distinct from p_to::text
+    or scope->>'current_local_date' is distinct from ((clock_timestamp() at time zone 'Europe/London')::date)::text
+    or scope->'execution' is distinct from private.weekly_source_protected_qualification_release_v1()
+    or scope->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_ACTIVATION_PROBE_SCOPE_V1',scope-'scope_sha256'),'hex')
+    or not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted and lock_row.mode='ExclusiveLock'
+      and lock_row.database=(select oid from pg_database where datname=current_database())
+      and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2
+      and lock_row.pid=(scope->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid()) then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  perform private._weekly_source_settings_require_admin_v1(p_actor);
+  perform private.weekly_source_protected_activation_probe_authorization_assert_v1(auth,p_group,p_from,p_to,auth->>'probe_authorization_sha256');
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(scope#>'{original_census,original_client_ids}') value;
+  if private.weekly_source_bulk_source_cas_v1((scope#>>'{original_census,source_cycle_id}')::uuid,clients) is distinct from scope#>'{original_census,source_cas}' then
+    -- Exact native own-probe replay only: reverse the one actual configuration
+    -- row in memory, then compare the ENTIRE original Source facts. No Client,
+    -- root/nullable identity, binding, receipt or other category is omitted.
+    select audit.after_json into strict completed from public.audit_events audit where audit.object_type='weekly_source_activation_probe'
+      and audit.object_id_text=p_scope_id::text and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_COMPLETED' and audit.event_sequence_is_authoritative
+      and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+    select * into strict target from public.weekly_source_group_rule_assignments where id=p_assignment;
+    if completed->>'scope_sha256' is distinct from scope->>'scope_sha256' or completed->'native_result' is distinct from target.feature_receipt_json
+      or completed->>'assignment_after_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(target)),'hex') then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_SOURCE_CHANGED' using errcode='40001'; end if;
+    actual_facts:=private.weekly_source_bulk_source_facts_v1((scope#>>'{original_census,source_cycle_id}')::uuid,clients);
+    actual_facts:=jsonb_set(actual_facts,'{assignments}',(select jsonb_agg(case when row_value->>'id'=p_assignment::text then
+      (select original from jsonb_array_elements(scope#>'{original_source_facts,assignments}') original where original->>'id'=p_assignment::text)
+      else row_value end order by ordinal) from jsonb_array_elements(actual_facts->'assignments') with ordinality rows(row_value,ordinal)));
+    if actual_facts is distinct from scope->'original_source_facts' then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_ORIGINAL_SOURCE_CHANGED' using errcode='40001'; end if;
+  end if;
+  return auth;
+end;
+$function$;
+
+create or replace function private.weekly_source_protected_activation_probe_execute_v1(p_scope_id uuid,p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare result jsonb; cycle_id uuid; scope jsonb; target public.weekly_source_group_rule_assignments%rowtype;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if p_request->'feature_enabled' is distinct from 'true'::jsonb or p_request->>'feature_purpose' is distinct from 'PROTECTED_SOURCE'
+    or p_request->'rule_set_version_id' is distinct from 'null'::jsonb or p_request ? 'activation_probe_scope_id'
+    or p_request ? 'protected_capability_qualification_sha256' then
+    raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_NATIVE_REQUEST_INVALID' using errcode='22023'; end if;
+  result:=public.weekly_source_group_rule_feature_set_atomic_v1(p_request||jsonb_build_object('activation_probe_scope_id',p_scope_id));
+  for cycle_id in select id from public.weekly_source_cycles where source_group_id=(p_request->>'source_group_id')::uuid loop
+    if private.weekly_source_bulk_producer_ready_v1(cycle_id) or private.weekly_source_automatic_reconcile_producer_ready_v1(cycle_id) then
+      raise exception 'WEEKLY_SOURCE_ACTIVATION_PROBE_OPERATIONAL_LEAK' using errcode='55000'; end if;
+  end loop;
+  select audit.after_json into strict scope from public.audit_events audit where audit.object_type='weekly_source_activation_probe'
+    and audit.object_id_text=p_scope_id::text and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_ADMITTED' and audit.event_sequence_is_authoritative
+    and audit.after_json->>'transaction_id'=pg_current_xact_id()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+  select * into strict target from public.weekly_source_group_rule_assignments where id=(p_request->>'assignment_id')::uuid;
+  if not exists(select 1 from public.audit_events audit where audit.object_type='weekly_source_activation_probe' and audit.object_id_text=p_scope_id::text
+    and audit.action='WEEKLY_SOURCE_ACTIVATION_PROBE_COMPLETED' and audit.event_sequence_is_authoritative) then
+    perform public._audit_insert('weekly_source_activation_probe',p_scope_id::text,'WEEKLY_SOURCE_ACTIVATION_PROBE_COMPLETED',null,
+      jsonb_build_object('scope_sha256',scope->>'scope_sha256','transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,
+        'native_result',result,'assignment_after_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(target)),'hex')),
+      'Actual native probe receipt; rollback required', (p_request->>'actor_user_id')::uuid);
+  end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_ACTIVATION_PROBE_RESULT_V1','phase','PROBE_COMPLETED_ROLLBACK_REQUIRED',
+    'scope_id',p_scope_id,'native_result',result,'operational_ready',false);
+end;
+$function$;

@@ -1,0 +1,28 @@
+create or replace function private.weekly_source_final_rule_version_guard_v1()
+returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_version uuid;
+begin
+  if tg_op='UPDATE' then
+    if new.rule_set_version_id is distinct from old.rule_set_version_id then
+      raise exception 'WEEKLY_SOURCE_FINAL_RULE_VERSION_IMMUTABLE' using errcode='55000';
+    end if;
+    return new;
+  end if;
+  select a.rule_set_version_id into v_version from public.weekly_source_cycles c
+    join public.weekly_source_groups g on g.id=c.source_group_id and g.active and g.source_family='ROSTER'
+    join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id and a.feature_enabled and a.feature_purpose='RULE_SET'
+      and c.finalisation_week_ending between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+    where c.id=new.source_cycle_id;
+  if v_version is null then
+    -- One exact per-command actual F1 reference; the normal disabled path is
+    -- unchanged. UPDATE immutability above and the locked native FIN remain.
+    v_version:=nullif(private.weekly_source_rule_qualification_context_v1(null,new.source_cycle_id)->>'rule_set_version_id','')::uuid;
+  end if;
+  if new.rule_set_version_id is not null and new.rule_set_version_id is distinct from v_version then
+    raise exception 'WEEKLY_SOURCE_FINAL_RULE_VERSION_STALE' using errcode='40001';
+  end if;
+  new.rule_set_version_id:=v_version;
+  return new;
+end;
+$function$;

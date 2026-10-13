@@ -1,0 +1,41 @@
+{
+  "source_only": true,
+  "no_release_identity_relabelled": true,
+  "no_prerequisite_or_partial_schema_accepted": true,
+  "no_remote_gate_removed": true,
+  "no_actual_acceptance": true,
+  "proofs": [
+    {
+      "file": "SAME_INSTALLED_OPERATIONAL_CERTIFICATE.sqlinc",
+      "input_sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "output_sha256": "b5b4b4084822c14c1bbbe50b1921f84358d4b4794ade08cd35a11056263a94ba",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "changes": [
+        {
+          "before_sha256": "349b0ecca840b521d34e8ac69606d2050bf1d4709944f5f2e0360c664babe789",
+          "after_sha256": "ade707402c5fb9ac924ebfb3669b946bc5f94fad1d16830a091dcde1a2cece2a"
+        }
+      ]
+    },
+    {
+      "file": "same-installed-operational-evidence.mjs",
+      "input_sha256": "28bd7952f0a6f2866578de4949c2215698a5e9c72b85f2456b01fd7626ec115c",
+      "output_sha256": "76d4e65450ed45cb82600e51fd45461d34839f36d84452a5a226ce04878d9096",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "changes": [
+        {
+          "before_sha256": "4597e93601d85e8dee5b673efd2b242a157428a452e8930bf7701f6a9a0e50cb",
+          "after_sha256": "ab4806e671811955fec03d5c9fb74b2e731d4d646cc19b780aeb8e9d63d70527"
+        },
+        {
+          "before_sha256": "259bd99d42d9466c46e3143fab6f4fe6c5f8457ee8fc3c24a8f0f0785edf2ec8",
+          "after_sha256": "0e5c35fc999f2680514f37196d167d2943e244e04a8924734b80038c2d367963"
+        },
+        {
+          "before_sha256": "ee3b15d32d68ac026e7dabde74e50fc8bbb935414e0fa34181b6eb54a4ffea43",
+          "after_sha256": "e091d083195d124dbec3d4b9f5541849738af3af4ef50618a16f796d5ccdc067"
+        }
+      ]
+    }
+  ]
+}

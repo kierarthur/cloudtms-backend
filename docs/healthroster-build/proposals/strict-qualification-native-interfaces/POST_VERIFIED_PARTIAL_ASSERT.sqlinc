@@ -1,0 +1,38 @@
+create or replace function private.weekly_source_post_verified_partial_artifact_assert_v1(p_artifact jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare needed text[]:=array['CLIENT_API','DOCUMENT','LEGACY_PAY','NATIVE_PROTECTION','NEXT_PAY','OWN_STAGE_CAS','SECURITY','SOURCE_CAS_NATIVE','SOURCE_ROUTING'];
+  expected jsonb; item jsonb;
+begin
+  if p_artifact->'capabilities'='["AUTOMATIC_RECONCILE","BULK_SIGNED"]'::jsonb then needed:=array_prepend('AUTOMATIC_COMPONENT_DELTA',needed); end if;
+  if not private.weekly_source_qualification_closed_object_v1(p_artifact,array['schema_version','phase','operational_ready','release_id','git_commit','contract_sha256',
+    'agency_id','environment','source_group_id','effective_from_week_ending','effective_to_week_ending','capabilities','required_gate_census','gate_receipts','held_gates','partial_evidence_sha256'])
+    or p_artifact->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_NATIVE_PARTIAL_EVIDENCE_V1'
+    or p_artifact->>'phase' is distinct from 'MEASURED_PARTIAL_NON_OPERATIONAL' or p_artifact->'operational_ready' is distinct from 'false'::jsonb
+    or p_artifact->>'release_id' is distinct from p_execution->>'release_id' or p_artifact->>'git_commit' is distinct from p_execution->>'source_commit'
+    or p_artifact->>'contract_sha256' is distinct from p_execution->>'contract_sha256' or p_artifact->>'environment' is distinct from 'TEST'
+    or p_artifact->'capabilities' not in ('["BULK_SIGNED"]'::jsonb,'["AUTOMATIC_RECONCILE","BULK_SIGNED"]'::jsonb)
+    or p_artifact->'required_gate_census' is distinct from to_jsonb(needed)
+    or jsonb_typeof(p_artifact->'gate_receipts') is distinct from 'array' or jsonb_array_length(p_artifact->'gate_receipts') not between 1 and cardinality(needed)
+    or p_artifact->>'partial_evidence_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PROTECTED_NATIVE_PARTIAL_EVIDENCE_V1',p_artifact-'partial_evidence_sha256'),'hex')
+    or not exists(select 1 from public.weekly_source_groups g where g.id=(p_artifact->>'source_group_id')::uuid
+      and g.agency_id=(p_artifact->>'agency_id')::uuid and g.active and g.environment='TEST' and g.source_family='ROSTER') then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PARTIAL_INVALID' using errcode='22023'; end if;
+  if (select count(distinct value->>'gate') from jsonb_array_elements(p_artifact->'gate_receipts') value)<>jsonb_array_length(p_artifact->'gate_receipts') then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PARTIAL_INVALID' using errcode='22023'; end if;
+  for item in select value from jsonb_array_elements(p_artifact->'gate_receipts') value loop
+    if not private.weekly_source_qualification_closed_object_v1(item,array['gate','status','execution','database','receipt_id','receipt_sha256','source_commit',
+      'contract_sha256','source_group_id','agency_id','environment']) or not(coalesce(item->>'gate','')=any(needed)) or item->>'status' is distinct from 'PASS'
+      or item->>'execution' is distinct from 'AGENCY_TEST_NATIVE' or item->>'database' is distinct from current_database()
+      or item->>'source_commit' is distinct from p_execution->>'source_commit' or item->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+      or item->>'source_group_id' is distinct from p_artifact->>'source_group_id' or item->>'agency_id' is distinct from p_artifact->>'agency_id'
+      or item->>'environment' is distinct from 'TEST' or coalesce(item->>'receipt_id','') !~ '^[A-Za-z0-9_./:@-]{1,256}$'
+      or coalesce(item->>'receipt_sha256','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PARTIAL_INVALID' using errcode='22023'; end if;
+  end loop;
+  select coalesce(jsonb_agg(gate order by gate),'[]'::jsonb) into expected from unnest(needed) gate
+    where not exists(select 1 from jsonb_array_elements(p_artifact->'gate_receipts') value where value->>'gate'=gate);
+  if p_artifact->'held_gates' is distinct from expected then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PARTIAL_INVALID' using errcode='22023'; end if;
+end;
+$function$;

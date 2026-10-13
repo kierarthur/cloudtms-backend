@@ -1,0 +1,192 @@
+-- Adjacent SOURCE PROPOSAL. No new relation, GUC, setting, public RPC or grant.
+-- Only the existing controlled feature owner enters the command dispatcher.
+-- The managed writer remeasures the committed input and validates the complete
+-- authorization DTO. Merely supplying this JSON is never admission authority.
+create or replace function private.weekly_source_rule_qualification_authorization_v1(p_cycle_id uuid,p_actor_id uuid,p_purpose text)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; auth jsonb; n integer; recorded_at timestamptz;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if current_database()<>'cloudtms_test_clone' or r.status<>'VERIFIED' or r.completed_at_utc is null
+    or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or jsonb_typeof(r.evidence_json->'weekly_source_protected_test_setup_authorizations') is distinct from 'array'
+    or p_purpose not in ('SOURCE_FIXTURE_SETUP','AUTOMATIC_JOURNEY') then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
+  select count(*),jsonb_agg(value)->0 into n,auth
+    from jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where value->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1'
+      and value->>'source_cycle_id'=p_cycle_id::text and value->>'journey_actor_user_id'=p_actor_id::text
+      and value->>'purpose'=p_purpose;
+  select coalesce(max((audit.after_json->>'recorded_at_utc')::timestamptz),r.completed_at_utc) into recorded_at
+    from public.audit_events audit where audit.object_type='weekly_source_post_verified_evidence'
+      and audit.object_id_text=r.release_id and audit.action='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'artifact_slot'='weekly_source_protected_test_setup_authorizations'
+      and exists(select 1 from jsonb_array_elements(audit.after_json->'artifacts') item
+        where item->>'authorization_sha256'=auth->>'authorization_sha256');
+  if n<>1 or not private.weekly_source_qualification_closed_object_v1(auth,array['schema_version','authorization_id','scope_id',
+    'release_id','source_commit','contract_sha256','agency_id','source_group_id','source_cycle_id','setup_actor_user_id',
+    'journey_actor_user_id','purpose','week_ending','expires_at_utc','fixture_namespace','fixture_manifest','assignment_id',
+    'assignment_version','assignment_sha256','rule_set_version_id','rule_values_sha256','original_source_cas',
+    'allowed_operations','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256','authorization_sha256'])
+    or auth->>'release_id' is distinct from r.release_id or auth->>'source_commit' is distinct from r.git_commit
+    or auth->>'contract_sha256' is distinct from r.installed_contract_sha256
+    or auth->>'fixture_namespace' is distinct from 'WSQ_TEST_'
+    or auth->>'authorization_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1',auth-'authorization_sha256'),'hex')
+    or exists(select 1 from unnest(array['authorization_id','scope_id','agency_id','source_group_id','source_cycle_id',
+      'setup_actor_user_id','journey_actor_user_id','assignment_id','rule_set_version_id']) key
+      where coalesce(auth->>key,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['contract_sha256','assignment_sha256','rule_values_sha256',
+      'banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256']) key
+      where coalesce(auth->>key,'') !~ '^[0-9a-f]{64}$')
+    or coalesce(auth->>'assignment_version','') !~ '^[1-9][0-9]*$'
+    or coalesce(auth->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or extract(dow from (auth->>'week_ending')::date)<>0
+    or (auth->>'expires_at_utc')::timestamptz<=clock_timestamp()
+    or (auth->>'expires_at_utc')::timestamptz>recorded_at+
+      case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end
+    or private.weekly_source_protected_qualification_release_v1()->>'release_id' is distinct from r.release_id then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
+  -- These actual evidence bindings are measured by the protected writer, never
+  -- a function-presence test or an arbitrary caller hash. No operational PASS.
+  if r.evidence_json#>>'{weekly_source_off_rule_test_controls,banking_install_receipt_sha256}' is distinct from auth->>'banking_install_receipt_sha256'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,security_receipt_sha256}' is distinct from auth->>'security_receipt_sha256'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,source_effects_review_sha256}' is distinct from auth->>'source_effects_review_sha256' then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_CONTROLS_REQUIRED' using errcode='55000'; end if;
+  if not private.weekly_source_qualification_closed_object_v1(r.evidence_json->'weekly_source_off_rule_test_controls',array[
+    'schema_version','release_id','source_commit','contract_sha256','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256',
+    'banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls'])
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,schema_version}' is distinct from 'WEEKLY_SOURCE_OFF_RULE_TEST_CONTROLS_V1'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,release_id}' is distinct from r.release_id
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,source_commit}' is distinct from r.git_commit
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,contract_sha256}' is distinct from r.installed_contract_sha256
+    or exists(select 1 from unnest(array['banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls']) key
+      where r.evidence_json#>array['weekly_source_off_rule_test_controls',key] is distinct from 'true'::jsonb) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_CONTROLS_REQUIRED' using errcode='55000'; end if;
+  return auth;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_source_rule_qualification_scope_assert_v1(p_auth jsonb,p_actor_id uuid,p_initial_open boolean default false)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare auth jsonb; c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  a public.weekly_source_group_rule_assignments%rowtype; v public.weekly_source_rule_set_versions%rowtype;
+  manifest jsonb; item jsonb; clients uuid[]; actual jsonb; lease jsonb; n integer; today date;
+begin
+  auth:=private.weekly_source_rule_qualification_authorization_v1((p_auth->>'source_cycle_id')::uuid,p_actor_id,p_auth->>'purpose');
+  if auth is distinct from p_auth then raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_CHANGED' using errcode='40001'; end if;
+  perform private._weekly_source_settings_require_admin_v1((auth->>'setup_actor_user_id')::uuid);
+  select * into strict c from public.weekly_source_cycles where id=(auth->>'source_cycle_id')::uuid;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER' and environment='TEST';
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  perform private.weekly_source_office_authority_v1(p_actor_id,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  if not private.weekly_source_pay_actor_allowed_v1(p_actor_id) then raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_ACTOR_REFUSED' using errcode='42501'; end if;
+  select * into strict a from public.weekly_source_group_rule_assignments where id=(auth->>'assignment_id')::uuid
+    and source_group_id=g.id and not feature_enabled and rule_set_version_id=(auth->>'rule_set_version_id')::uuid
+    and c.finalisation_week_ending between effective_from_week_ending and coalesce(effective_to_week_ending,'infinity'::date);
+  select version.* into strict v from public.weekly_source_rule_set_versions version
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id and rules.agency_id=g.agency_id and rules.environment=g.environment
+    where version.id=a.rule_set_version_id;
+  today:=(clock_timestamp() at time zone 'Europe/London')::date;
+  if (g.id::text,g.agency_id::text,c.finalisation_week_ending::text,a.version::text) is distinct from
+    (auth->>'source_group_id',auth->>'agency_id',auth->>'week_ending',auth->>'assignment_version')
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(a)),'hex') is distinct from auth->>'assignment_sha256'
+    or v.values_sha256 is distinct from auth->>'rule_values_sha256'
+    or v.values_json->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or (auth->>'purpose'='AUTOMATIC_JOURNEY' and (v.values_json->>'equal_protected_hours' is distinct from 'CLEAR_AUTOMATICALLY'
+      or (select automatic_reconcile_actor_user_id from public.weekly_source_global_settings where singleton) is distinct from p_actor_id))
+    or exists(select 1 from public.weekly_source_group_rule_assignments enabled where enabled.source_group_id=g.id and enabled.feature_enabled)
+    or private.weekly_source_bulk_producer_ready_v1(c.id) or private.weekly_source_automatic_reconcile_producer_ready_v1(c.id) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_SCOPE_CHANGED' using errcode='40001'; end if;
+  manifest:=auth->'fixture_manifest';
+  if not private.weekly_source_qualification_closed_object_v1(manifest,array['group_code','client_ids','contract_ids','candidate_ids','client_refs','candidate_refs'])
+    or g.code is distinct from manifest->>'group_code' or g.code !~ '^WSQ_TEST_[A-Z0-9_]+$'
+    or jsonb_typeof(manifest->'client_ids') is distinct from 'array' or jsonb_array_length(manifest->'client_ids') not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(manifest->'client_ids') value;
+  if to_jsonb(clients) is distinct from manifest->'client_ids'
+    or cardinality(clients)<>(select count(distinct value) from unnest(clients) value)
+    or exists(select 1 from unnest(clients) client where not exists(select 1 from public.weekly_source_group_clients member
+      where member.source_group_id=g.id and member.client_id=client and c.finalisation_week_ending between member.valid_from and coalesce(member.valid_to,'infinity'::date))) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
+  for item in select value from jsonb_array_elements(manifest->'client_refs') value loop
+    if not private.weekly_source_qualification_closed_object_v1(item,array['client_id','cli_ref']) or item->>'cli_ref' !~ '^CLI-913013[0-9]{2}$'
+      or not exists(select 1 from public.clients client where client.id=(item->>'client_id')::uuid and client.id=any(clients) and client.cli_ref=item->>'cli_ref') then
+      raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
+  end loop;
+  for item in select value from jsonb_array_elements(manifest->'candidate_refs') value loop
+    if not private.weekly_source_qualification_closed_object_v1(item,array['candidate_id','tms_ref']) or item->>'tms_ref' !~ '^CCR-913013[0-9]{2}$'
+      or not exists(select 1 from public.candidates candidate where candidate.id=(item->>'candidate_id')::uuid and candidate.tms_ref=item->>'tms_ref') then
+      raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
+  end loop;
+  select coalesce(jsonb_agg(contract.id order by contract.id),'[]'::jsonb) into actual from public.contracts contract
+    where contract.client_id=any(clients) and daterange(contract.start_date,contract.end_date,'[]')
+      && daterange(c.finalisation_week_ending-6,c.finalisation_week_ending,'[]');
+  if actual is distinct from manifest->'contract_ids' or (select coalesce(jsonb_agg(distinct contract.candidate_id order by contract.candidate_id),'[]'::jsonb)
+    from public.contracts contract where contract.id in(select value::uuid from jsonb_array_elements_text(manifest->'contract_ids') value)) is distinct from manifest->'candidate_ids'
+    or jsonb_array_length(manifest->'client_refs')<>cardinality(clients)
+    or (select coalesce(jsonb_agg(value->'client_id' order by value->'client_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'client_refs') value) is distinct from manifest->'client_ids'
+    or (select coalesce(jsonb_agg(value->'candidate_id' order by value->'candidate_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'candidate_refs') value) is distinct from manifest->'candidate_ids' then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FIXTURE_REFUSED' using errcode='42501'; end if;
+  perform private._weekly_source_rule_group_context_v1(g.id,a.effective_from_week_ending,a.effective_to_week_ending,v.values_json,true);
+  if p_initial_open then
+    if auth->>'purpose'='SOURCE_FIXTURE_SETUP' and (a.effective_from_week_ending<today or c.finalisation_week_ending<>a.effective_from_week_ending
+      or c.current_final_revision_id is not null or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
+      or exists(select 1 from public.weekly_source_final_revisions final where final.source_cycle_id=c.id)
+      or auth->'original_source_cas' is distinct from 'null'::jsonb) then
+      raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FUTURE_UNFINALISED_REQUIRED' using errcode='55000'; end if;
+  else
+    select count(*),jsonb_agg(audit.after_json)->0 into n,lease from public.audit_events audit
+      where audit.object_type='weekly_source_off_rule_test_journey' and audit.object_id_text=auth->>'scope_id'
+        and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED' and audit.event_sequence_is_authoritative
+        and not exists(select 1 from public.audit_events terminal where terminal.object_type=audit.object_type and terminal.object_id_text=audit.object_id_text
+          and terminal.event_sequence_is_authoritative and terminal.action in ('WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED','WEEKLY_SOURCE_OFF_RULE_TEST_REVOKED'));
+    if n<>1 or lease->>'authorization_sha256' is distinct from auth->>'authorization_sha256'
+      or lease->>'scope_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_TEST_SCOPE_V1',lease-'scope_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  end if;
+  if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+    if cardinality(clients)<>1 or auth->'original_source_cas' is null or auth->'original_source_cas'='null'::jsonb
+      or private.weekly_source_bulk_source_cas_v1(c.id,clients) is distinct from auth->'original_source_cas'
+      or not exists(select 1 from public.weekly_source_final_revisions final where final.id=c.current_final_revision_id
+        and final.source_cycle_id=c.id and final.state='CURRENT' and final.rule_set_version_id=v.id) then
+      raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_ORIGINAL_SOURCE_CHANGED' using errcode='40001'; end if;
+  end if;
+  return auth;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+
+-- Normal reads remain NULL while OFF. Only nested calls of the existing
+-- controlled owner can see this owner-authored XID/PID command context.
+create or replace function private.weekly_source_rule_qualification_context_v1(p_client_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare frame jsonb; auth jsonb; n integer; stack text;
+begin
+  select count(*),jsonb_agg(audit.after_json)->0 into n,frame from public.audit_events audit
+    where audit.object_type='weekly_source_off_rule_command' and audit.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+      and not exists(select 1 from public.audit_events closed where closed.object_type=audit.object_type and closed.object_id_text=audit.object_id_text
+        and closed.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED' and closed.event_sequence_is_authoritative);
+  if n=0 then return null; end if;
+  get diagnostics stack=pg_context;
+  if n<>1 or stack !~ 'PL/pgSQL function (private\.)?weekly_source_rule_qualification_execute_v1\(jsonb\)'
+    or frame->>'source_cycle_id' is distinct from p_cycle_id::text or frame->'operational_ready' is distinct from 'false'::jsonb
+    or frame->>'command_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_COMMAND_V1',frame-'command_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_COMMAND_UNAVAILABLE' using errcode='55000'; end if;
+  auth:=private.weekly_source_rule_qualification_scope_assert_v1(frame->'authorization',(frame->>'actor_user_id')::uuid,false);
+  if p_client_id is not null and not(auth#>'{fixture_manifest,client_ids}' @> jsonb_build_array(p_client_id)) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FOREIGN_CLIENT' using errcode='42501'; end if;
+  return auth;
+end;
+$function$;
