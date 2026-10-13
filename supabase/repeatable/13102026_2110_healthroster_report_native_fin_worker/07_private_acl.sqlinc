@@ -1,0 +1,22 @@
+-- No public/API surface. Preserve the controlling three-argument FIN ACL.
+alter function private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts) owner to postgres;
+revoke all on function private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts) from public,anon,authenticated,service_role;
+alter function private.weekly_source_self_bill_report_pay_authority_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_self_bill_report_pay_authority_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_self_bill_report_pay_witness_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_self_bill_report_pay_witness_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text) owner to postgres;
+revoke all on function private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_self_bill_report_finalise_v1(jsonb,text) owner to postgres;
+revoke all on function private.weekly_source_self_bill_report_finalise_v1(jsonb,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_report_shift_facts_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_report_shift_facts_v1(uuid,uuid) from public,anon,authenticated,service_role;
+-- Exact existing public service-only ACL, with no new service surface.
+alter function public.weekly_source_upload_context_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_upload_context_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_upload_context_v1(jsonb) to postgres,service_role;
+alter function public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb) to postgres,service_role;

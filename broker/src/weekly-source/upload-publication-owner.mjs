@@ -1,3 +1,6 @@
+import { REPORT_PROFILE, assertReportUploadRequest, assertReportRuleContext, reportScopeRequest,
+  assertReportScopeReceipt, assertReportPublicationContext, assertReportStageRowsReceipt,
+  assertReportProjectionRowsReceipt } from './report-upload-provenance.mjs';
 import { assertMagnitContractPricing, assertMagnitWholeShiftResult } from './magnit-contract-price-admission.js';
 import { createHash } from 'node:crypto';
 import { adaptWeeklySourceParserOutput } from './upload-staging-adapter.mjs';
@@ -161,6 +164,12 @@ async function discoverUploadScope(dependencies, body, actorUserId) {
 }
 
 function parserOptions(body, context) {
+  if (text(body.profile_id || body.parser_options?.profileId) === REPORT_PROFILE) {
+    assertReportUploadRequest(body); const values = assertReportRuleContext(context);
+    return { profileId: REPORT_PROFILE, expectedClient: context.client_name,
+      effectiveRuleSet: context.effective_rule_set, ruleValues: values };
+  }
+
   const requested = body.parser_options && typeof body.parser_options === 'object'
     ? body.parser_options : {};
   const profileId = text(body.profile_id || requested.profileId);
@@ -177,6 +186,24 @@ function parserOptions(body, context) {
     ...(!NHSP.has(profileId) && context.effective_rule_set != null
       ? { effectiveRuleSet: context.effective_rule_set } : {}),
   };
+}
+
+async function prepareReportScope(dependencies, body, parsed, context, actorUserId) {
+  if (parsed?.ok !== true || parsed.profileId !== REPORT_PROFILE) return { body, context };
+  assertReportUploadRequest(body); assertReportRuleContext(context);
+  const resolved = assertReportScopeReceipt(await rpc(dependencies,
+    'weekly_source_self_bill_report_scope_resolve_atomic_v1', reportScopeRequest(parsed, context, actorUserId)), context);
+  const nextBody = { ...body, report_scope_id: resolved.report_scope_id, import_use: 'PREPARE_FINALISATION' };
+  const next = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', scopeRequest(nextBody, actorUserId)));
+  assertReportRuleContext(next);
+  if (next.authority_scope_kind !== 'SELF_BILL_REPORT_SCOPE' || next.self_bill_report_id !== resolved.self_bill_report_id
+    || next.report_scope_id !== resolved.report_scope_id || next.source_cycle_id !== context.source_cycle_id
+    || next.source_group_id !== context.source_group_id || next.client_id !== context.client_id
+    || Number(next.authority_scope_version) !== Number(resolved.authority_scope_version)
+    || JSON.stringify(stable(next.effective_rule_set)) !== JSON.stringify(stable(context.effective_rule_set))) {
+    fail('WEEKLY_SOURCE_REPORT_SCOPE_CHANGED', 'The report scope changed before staging.', 409);
+  }
+  return { body: nextBody, context: next };
 }
 
 function nhspFinalTrust(parsed) {
@@ -559,6 +586,11 @@ function projectionRow(source, body) {
 }
 
 export function buildWeeklySourceProjectionRows(context, body = {}) {
+  if (context?.profile_id === REPORT_PROFILE || context?.authority_scope_kind === 'SELF_BILL_REPORT_SCOPE') {
+    assertReportPublicationContext(context, { ...context, upload_id: context.upload_id });
+    return []; // Native Report owner binds existing export authority; no price/contract calculator.
+  }
+
   if (!context || !Array.isArray(context.rows)) {
     fail('WEEKLY_SOURCE_PROJECTION_CONTEXT_INVALID', 'The source comparison context is invalid.', 502);
   }
@@ -581,11 +613,12 @@ async function publishProjection(dependencies, actorUserId, uploadId, version, b
     ...scopeRequest(body, actorUserId, 'BUILD_PROJECTION', uploadId),
   }));
   const rows = buildWeeklySourceProjectionRows(context, body);
-  await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
+  const projectionRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
     p_actor_user_id: actorUserId,
     p_publication_id: begun.publication_id,
     p_rows: rows,
   }, { request: false });
+  if (context.profile_id === REPORT_PROFILE) assertReportProjectionRowsReceipt(projectionRowsReceipt, begun.publication_id);
   const published = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
     actor_user_id: actorUserId,
     publication_id: begun.publication_id,
@@ -684,7 +717,7 @@ async function stageParsed(dependencies, body, parsed, context, actorUserId) {
     const money = chunks(adapted.moneyEvidence, 8_000);
     const expenses = chunks(adapted.expenseEvidence, 2_000);
     for (let index = 0; index < batchCount; index += 1) {
-      await rpc(dependencies, 'weekly_source_upload_stage_rows_atomic_v1', {
+      const stageRowsReceipt = await rpc(dependencies, 'weekly_source_upload_stage_rows_atomic_v1', {
         actor_user_id: actorUserId,
         upload_id: uploadId,
         physical_rows: physical[index] ?? [],
@@ -692,6 +725,7 @@ async function stageParsed(dependencies, body, parsed, context, actorUserId) {
         money_evidence: money[index] ?? [],
         expense_evidence: expenses[index] ?? [],
       });
+      if (parsed.profileId === REPORT_PROFILE) assertReportStageRowsReceipt(stageRowsReceipt, uploadId);
     }
   }
   const sealed = started.status === 'DUPLICATE' ? started : await rpc(
@@ -707,11 +741,22 @@ async function stageParsed(dependencies, body, parsed, context, actorUserId) {
     fail('WEEKLY_SOURCE_SCOPE_VERSION_INVALID', 'The source version is invalid.', 502);
   }
   const published = await publishProjection(dependencies, actorUserId, uploadId, version, body);
-  const publishedContext = body.purpose === 'FINAL_SOURCE_CORRECTION'
+  const publishedContext = (body.purpose === 'FINAL_SOURCE_CORRECTION' || parsed.profileId === REPORT_PROFILE)
     ? validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
       ...scopeRequest(body, actorUserId, 'BUILD_PROJECTION', uploadId),
     }))
     : null;
+
+  if (parsed.profileId === REPORT_PROFILE) {
+    assertReportPublicationContext(publishedContext, { ...context, upload_id: uploadId });
+    if (published.status !== 'CURRENT' || publishedContext.projection_state !== 'CURRENT'
+      || publishedContext.projection_publication_id !== published.publication_id
+      || publishedContext.row_manifest_hash !== (sealed.row_manifest_hash ?? started.row_manifest_hash)) {
+      fail('WEEKLY_SOURCE_REPORT_PUBLICATION_STALE', 'The accepted report publication could not be proved.', 409);
+    }
+    requiredSha256(publishedContext.comparison_manifest_hash, 'Report comparison proof');
+    requiredSha256(publishedContext.issue_set_hash, 'Report issue proof');
+  }
   return { adapted, started, sealed, published, publishedContext, uploadId, version };
 }
 
@@ -743,6 +788,8 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         ));
         parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
       }
+
+      ({ body, context } = await prepareReportScope(dependencies, body, parsed, context, actorUserId));
       const duplicate = parsed?.ok === true ? duplicateSourceKey(parsed) : null;
       if (duplicate) parsed = {
         ...parsed, ok: false,
@@ -821,7 +868,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
 
     async acceptUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {
       const actorUserId = requiredUuid(actor?.id, 'Office user');
-      const context = validateContext(await rpc(
+      let context = validateContext(await rpc(
         dependencies,
         'weekly_source_upload_context_v1',
         scopeRequest(body, actorUserId),
@@ -831,6 +878,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);
       }
       const parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
+      ({ body, context } = await prepareReportScope(dependencies, body, parsed, context, actorUserId));
       const result = await stageParsed(dependencies, body, parsed, context, actorUserId);
       return {
         ok: true,
@@ -840,6 +888,13 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         publication_id: result.published.publication_id,
         idempotent: result.started.status === 'DUPLICATE' || result.published.idempotent === true,
         source_profile: parsed.profileId,
+        ...(parsed.profileId === REPORT_PROFILE ? {
+          authority_scope_kind: 'SELF_BILL_REPORT_SCOPE', report_scope_id: context.report_scope_id,
+          self_bill_report_id: context.self_bill_report_id, invoice_only: true,
+          row_manifest_hash: result.publishedContext.row_manifest_hash,
+          comparison_manifest_hash: result.publishedContext.comparison_manifest_hash,
+          issue_set_hash: result.publishedContext.issue_set_hash,
+        } : {}),
       };
     },
 
@@ -923,11 +978,12 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         const context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
           ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
         }));
-        await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
+        const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
           p_actor_user_id: request.actor_user_id,
           p_publication_id: begun.publication_id,
           p_rows: buildWeeklySourceProjectionRows(context),
         }, { request: false });
+        if (context.profile_id === REPORT_PROFILE) assertReportProjectionRowsReceipt(reportRecheckRowsReceipt, begun.publication_id);
         const result = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
           actor_user_id: request.actor_user_id, publication_id: begun.publication_id,
         });

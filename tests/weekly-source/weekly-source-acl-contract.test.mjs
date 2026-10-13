@@ -144,7 +144,7 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // owner-only entries, not new service or browser RPCs.
   // The qualified pay facts, exact covered-incident predicate and contact
   // retirement helper add three owner-only entries, never browser RPCs.
-  assert.equal(actual.length, 218);
+  assert.equal(actual.length, 221);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a
