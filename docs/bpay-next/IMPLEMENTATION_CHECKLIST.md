@@ -4311,7 +4311,7 @@ Clear/cancel exact bucket/amount owner closure, including explicitly opted linke
 
 ## WB-28 — Reset selection and Clear all decisions
 
-Seq 145; Workbench · WB-S; reviewer R2; current requested-feature status MISSING.
+Seq 145; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Frozen disclosed permissible clear scope, versioned pages, future treatment only; exact actor memory reset.
 
@@ -4319,7 +4319,7 @@ Dependencies: WB-19, WB-22, WB-33, F-16; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-28-D05 | SCREEN: Reset selection/Clear all decisions controls in js/bpay-next-workbench.js | MISSING | Disclosed frozen future owner closure and precise actor persisted/local reset, retain partial receipts and frozen first offer. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-28-D05 | SCREEN: Reset selection/Clear all decisions controls in js/bpay-next-workbench.js | BUILT_REVIEWED | Disclosed frozen future owner closure and precise actor persisted/local reset, retain partial receipts and frozen first offer. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4335,6 +4335,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 
 - Reset selection after unticking 5 rows asks "Reset selection for PAYE only · Client X?", then re-ticks them with no network request (RQ-007, RQ-242, LUI-045, J2d).
   - Clear scope discloses exact future owner versions/count/consequences for every Office user, applies one frozen bounded closure with partial receipts, resets this actor's relevant persisted/local memory and leaves snoozes/frozen Create offers/other actors' memory unchanged.
+
+13 October final completion: WB28 ITEM+D05 BUILT_REVIEWED. BE 596c556c51e762c390fc84ffd6a3644fa0854b0c; FE e4fa16a2cb5d71e06b6be612e678f8a1e0a1ea38. All six independent DESIGN/SOURCE/card reviews and three full42 A4 approvals/30 actual local native PNGs; all findings closed, every visible supplied-design difference justified. Exact context rows remain reference only. Installed/joined acceptance AUTHORED_NOT_RUN. Next WB34seq146; whole115/288 BUILT/REVIEWED.
 
 ## WB-34 — Resolution save behaviour: stale refusal, kept input, targeted refresh, survives reopen
 
