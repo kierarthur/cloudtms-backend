@@ -1,0 +1,1384 @@
+{
+  "scope": "109 recorded source-era release attempts, including FAILED attempts; Git source/control-flow review plus separately attributed integrator binding",
+  "releaseCount": 109,
+  "versions": [
+    {
+      "sourceCommit": "dd0a9ce17261e583a754730f2b3553fe27d369f5",
+      "sourceSha256": "425eefef32d4cf284238590fde432d7dc1c7d333eb360f9f026db20deb99af39",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "snapshotInsertBeforeGuard": true,
+      "everyTransitionGuardedBeforeMovement": true,
+      "earlyReplayCreatesNoSnapshot": true,
+      "prepareReturnAfterTransitionLoop": true,
+      "guardedFailureRaisesAndRollsBackFunction": true
+    },
+    {
+      "sourceCommit": "08c5b923e0f651ae2ddbfaaa9613bd1632628e45",
+      "sourceSha256": "b5e90ecd7c2f18dc5c34c9eec9a379871e1383f14f06eb97f6e3cc91c1e23170",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "snapshotInsertBeforeGuard": true,
+      "everyTransitionGuardedBeforeMovement": true,
+      "earlyReplayCreatesNoSnapshot": true,
+      "prepareReturnAfterTransitionLoop": true,
+      "guardedFailureRaisesAndRollsBackFunction": true
+    },
+    {
+      "sourceCommit": "1162454c55fa4c166d21d9b8c736a30059d4def4",
+      "sourceSha256": "358998974c9363095a9ca700735cc8fde40fdf0fd8ad68205d3c08737198b602",
+      "engineSha256": "02bbe0da283e4ab18bc4416fe5d629a9eb8a2a98b199fe78da916347abd2c60c",
+      "snapshotInsertBeforeGuard": true,
+      "everyTransitionGuardedBeforeMovement": true,
+      "earlyReplayCreatesNoSnapshot": true,
+      "prepareReturnAfterTransitionLoop": true,
+      "guardedFailureRaisesAndRollsBackFunction": true
+    },
+    {
+      "sourceCommit": "90faa74e9352c2d2c87ccee0c38006f2a4ec6b02",
+      "sourceSha256": "6a0080e16189d028b1db01fce16e775dc4cbb5d2411e8381d87b86a2a3596e2f",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "snapshotInsertBeforeGuard": true,
+      "everyTransitionGuardedBeforeMovement": true,
+      "earlyReplayCreatesNoSnapshot": true,
+      "prepareReturnAfterTransitionLoop": true,
+      "guardedFailureRaisesAndRollsBackFunction": true
+    },
+    {
+      "sourceCommit": "420513c6a56a972f7c701f3f9e053803e64f221f",
+      "sourceSha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "snapshotInsertBeforeGuard": true,
+      "everyTransitionGuardedBeforeMovement": true,
+      "earlyReplayCreatesNoSnapshot": true,
+      "prepareReturnAfterTransitionLoop": true,
+      "guardedFailureRaisesAndRollsBackFunction": true
+    }
+  ],
+  "rows": [
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-dd0a9ce17261",
+      "git_commit": "dd0a9ce17261e583a754730f2b3553fe27d369f5",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-8a50914a26cf",
+      "git_commit": "8a50914a26cf2eb03a40277f5ea331d1b4a057a4",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-14e60092c0b4",
+      "git_commit": "14e60092c0b4c51a30291624c4f5927208ff890e",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-b2ee70e43927",
+      "git_commit": "b2ee70e4392722764d271bf5ef8bd7a3c02c59f3",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-6e11d73bcb9b",
+      "git_commit": "6e11d73bcb9b50514ced5613b9faa242dec2272d",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-26acdb157520",
+      "git_commit": "26acdb1575200c671d904e86ae5c3f8037565c58",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-4bfa14c6ae3b",
+      "git_commit": "4bfa14c6ae3bbea01724954db003a6fe7859f890",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-70dc1e75d7ff",
+      "git_commit": "70dc1e75d7ffcd8c35f1291906607d7238381a94",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-2551bc7171fb",
+      "git_commit": "2551bc7171fb26e3903ec9ab652ea80f9f1ff78f",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-c5672e7ec4b9",
+      "git_commit": "c5672e7ec4b9f27531b9d260941f8a048363222f",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-6c517d7f6bd6",
+      "git_commit": "6c517d7f6bd63ef6b2c5a13c8c14e96dcf666212",
+      "status": "FAILED",
+      "engineSha256": "23af80196d5b33bf0970535acedfe2ee3049a85ffea86ff014e00e2176abf324",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-08c5b923e0f6",
+      "git_commit": "08c5b923e0f651ae2ddbfaaa9613bd1632628e45",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-141a30ec7d2f",
+      "git_commit": "141a30ec7d2fd761f493167f66028bbfa5f80dfb",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-74130a228aa7",
+      "git_commit": "74130a228aa7c539089b04310df0c553b3a9f145",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-33d08a337a15",
+      "git_commit": "33d08a337a15b3c4a0c506e574817663b5392582",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-bb50ac3b6be4",
+      "git_commit": "bb50ac3b6be4fecc668574a6a68e1f34a5ad899f",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-80bcccc05aa3",
+      "git_commit": "80bcccc05aa3fbbdf23b34e2c051eb486ba5d3b4",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-8d8613651785",
+      "git_commit": "8d8613651785440945995abc29984b59e58db194",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-29eafb8b8515",
+      "git_commit": "29eafb8b85158c34a1dcfc2926bbaac6d7909037",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-0f85ebf696ee",
+      "git_commit": "0f85ebf696ee5374f26416006bb8d378848bc39c",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-02bd69520030",
+      "git_commit": "02bd6952003019d2f4c113648634f17b6a13acfd",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-d5d6c1d374ec",
+      "git_commit": "d5d6c1d374ecd88dc66d8b60fb1ab73552b1243b",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-15d361992700",
+      "git_commit": "15d361992700a7ebdcf31c45e6b816bbf935382f",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-cda8ff8dfa4a",
+      "git_commit": "cda8ff8dfa4a7681e030049394a6a23df17ec544",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-9f96e241631d",
+      "git_commit": "9f96e241631d0427433af5b7152ae700b186533d",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-4028a3281eff",
+      "git_commit": "4028a3281eff59fa26e6b991c66e90ba77f3af11",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-9fb5b22d88e6",
+      "git_commit": "9fb5b22d88e6e4aba4ddf6f08ecbf225ad7b1729",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-a15f8a8f86f8",
+      "git_commit": "a15f8a8f86f871af9c4b83a2d4a5185526ac773e",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-fe4ac31a3cb7",
+      "git_commit": "fe4ac31a3cb7fddaeac1c1aefbe395c41e2e222a",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-f71c58650192",
+      "git_commit": "f71c58650192035a58493906a4093d153fe0f6b3",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-d2f60817857d",
+      "git_commit": "d2f60817857df6099535c167c940538e6b7d8731",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-cbc6c20a9761",
+      "git_commit": "cbc6c20a97616fa353bbb5e19cd1de50c192a95c",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-d670435ebf66",
+      "git_commit": "d670435ebf66aaa2aff9f3653ab1365850ebab92",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-19b6db12261a",
+      "git_commit": "19b6db12261a6d543509ee4f6a0637e57e43ccc3",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-6a3e45a9cd62",
+      "git_commit": "6a3e45a9cd62be22d05b6222f94a933940350460",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-aa2f39343cb3",
+      "git_commit": "aa2f39343cb37b6e2736a44319742687fcfaaff7",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-282c27669cd0",
+      "git_commit": "282c27669cd0fc380f7f8b940e699d41bf0162d1",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-e2a355b6efb3",
+      "git_commit": "e2a355b6efb3859529555985b94c9a3b450f4788",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-2909ad829249",
+      "git_commit": "2909ad82924985acd80a8a49bacc9999733f01e0",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-f74802b6155a",
+      "git_commit": "f74802b6155a694035f059b8242aaaec3b716925",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260920-weekly-source-plan62-upgrade-e339efc032c1",
+      "git_commit": "e339efc032c1b357a27dfc96051b053f02d6dafa",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-20260924-14ffee1ecb52",
+      "git_commit": "14ffee1ecb5273aadb3d5b77f06be9f4bb39b074",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-20260924-6945660d6850",
+      "git_commit": "6945660d68505b5832e8a6051811ed3c7ad5606d",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-20260924-055861b0fd95",
+      "git_commit": "055861b0fd95ecd035c394c90684cb87b5cbfd09",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-20260924-c5938c551981",
+      "git_commit": "c5938c551981068c45d0de7f1cf970781ede5333",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-lookup-20260924-0982851fdaa5",
+      "git_commit": "0982851fdaa535c17c36fd27b25788e775f36ed3",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "weekly-source-invoice-evidence-lookup-20260924-repair-9f6433807dd8",
+      "git_commit": "9f6433807dd83b0c66e739c9e59f8bab9c11fbd7",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "candidate-expense-carrier-repair-20260924-b37b454e7dcd",
+      "git_commit": "b37b454e7dcd0d12070816dffe3ffdf256130379",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "candidate-source-self-hours-20260926-e092cefb9c04",
+      "git_commit": "e092cefb9c04b03c5d23b32076642d0e22763df2",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "candidate-source-bootstrap-guard-20260926-b0e6a846a33c",
+      "git_commit": "b0e6a846a33c4aa7ec6cf5ff5e7428b8cb9344fc",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-d2997f09accc",
+      "git_commit": "d2997f09accc5eeadb4b5fb2c38aeb2025c5d5e0",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-89dd704c6ee2",
+      "git_commit": "89dd704c6ee295e1b10c44fb39cddac4ac2cf05d",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-3439a3abd32a",
+      "git_commit": "3439a3abd32ad2b1418bcb6b82be017b2ac7da14",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-bd1137664074",
+      "git_commit": "bd1137664074e517876abc6c48e410fe2bc5351b",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-8c8de4eded4d",
+      "git_commit": "8c8de4eded4d900fe86591e3ac369dbd733a763f",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-09590a399025",
+      "git_commit": "09590a399025a3c06cce2d939ae0125788e8e3f8",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-c4dd83f3a7a9",
+      "git_commit": "c4dd83f3a7a9100e0a14dae68762224bbd4f8111",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-73209d6752f4",
+      "git_commit": "73209d6752f43ce683b83175e17646b4ab5f60f6",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-7cdf88b3967e",
+      "git_commit": "7cdf88b3967e3ab78e36a45e2ab4fbf79ca0c4a5",
+      "status": "FAILED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-fb58d0442d0f",
+      "git_commit": "fb58d0442d0f806dc67c05f4eb75aa24c4940e76",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-2841abbfc5e7",
+      "git_commit": "2841abbfc5e799e72787d6e09acfa0e2c2de7d9d",
+      "status": "VERIFIED",
+      "engineSha256": "db4c5a1c4c3394760bbc0110d1ade15b734b168c1006b09e2b33b41a704a2a7f",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-1162454c55fa",
+      "git_commit": "1162454c55fa4c166d21d9b8c736a30059d4def4",
+      "status": "FAILED",
+      "engineSha256": "02bbe0da283e4ab18bc4416fe5d629a9eb8a2a98b199fe78da916347abd2c60c",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-eb57b115a11c",
+      "git_commit": "eb57b115a11cbdb38ac2adb821379965e97c2b5f",
+      "status": "FAILED",
+      "engineSha256": "02bbe0da283e4ab18bc4416fe5d629a9eb8a2a98b199fe78da916347abd2c60c",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-083bb9d6a117",
+      "git_commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+      "status": "VERIFIED",
+      "engineSha256": "02bbe0da283e4ab18bc4416fe5d629a9eb8a2a98b199fe78da916347abd2c60c",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-90faa74e9352",
+      "git_commit": "90faa74e9352c2d2c87ccee0c38006f2a4ec6b02",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-040f4469c86b",
+      "git_commit": "040f4469c86b856a08bf7008e3b72ce5fdfd5b8e",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-5acb69905d4a",
+      "git_commit": "5acb69905d4abc7eff054ff6b24eca96eff005b5",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-32008d78710b",
+      "git_commit": "32008d78710b3364bea12497e92531ddf9fa281f",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-c9a8e82e78f7",
+      "git_commit": "c9a8e82e78f7ae8608eda20a0b312fc859b61602",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-8ae2d902e42a",
+      "git_commit": "8ae2d902e42af7e29276691acd657303bae80377",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-19e1ec6e4f08",
+      "git_commit": "19e1ec6e4f081020987f72fae3f3d99f35868de1",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-6d0908df59ba",
+      "git_commit": "6d0908df59bafcfafb3f71f805dbf57d97c5ada1",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-9ff8bd8629f6",
+      "git_commit": "9ff8bd8629f661f1e70dc5f87663d379796f9218",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-a96ba8cb7697",
+      "git_commit": "a96ba8cb76974531dc98f88ea122b012c3013a47",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-b57d1ec53634",
+      "git_commit": "b57d1ec536343874afb7486c4549b1461be3d851",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-7cace65734fd",
+      "git_commit": "7cace65734fd08ddd3ebdc62e976a2c7bae7bd9f",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-74f56655de4d",
+      "git_commit": "74f56655de4df172e798b4805e028d54b7755591",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-74c32ee36337",
+      "git_commit": "74c32ee363370572687e6fce4df134e6c35a88a8",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-bf80f7e5e20f",
+      "git_commit": "bf80f7e5e20fffdaac38a244282989b7278c7d8b",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-fc7628f917f5",
+      "git_commit": "fc7628f917f5f744c14741015e3bc223fefc0703",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-ee2020916928",
+      "git_commit": "ee2020916928a11fac6b5161adcd4d8ddee47af8",
+      "status": "FAILED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-44aa2056e32d",
+      "git_commit": "44aa2056e32da3a7e7d11a13b0c5ca5bda6d85f3",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-0c708026a7a5",
+      "git_commit": "0c708026a7a5d22938a8873e78c64f12d0a9cfbb",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-3b4bfeb03e40",
+      "git_commit": "3b4bfeb03e40dfe10470c1f6c8a71141e421cab3",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20260926-banking-pay-stage2-h8-upgrade-23aa32eef75e",
+      "git_commit": "23aa32eef75ea219afffbbb9b2fe2faa7fba38c8",
+      "status": "VERIFIED",
+      "engineSha256": "7cf00f3e160c7c171bd895d7dd46ec4ba26a4955f2d1fafe544e1009ab086196",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-420513c6a56a",
+      "git_commit": "420513c6a56a972f7c701f3f9e053803e64f221f",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-fc30771fa3f6",
+      "git_commit": "fc30771fa3f6d2189e86fde2218e70e719dac682",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-586345c2cd22",
+      "git_commit": "586345c2cd22765c680c44930aa9f917a498bfbb",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-e92cc4997e2a",
+      "git_commit": "e92cc4997e2a9edc179efa58160a790b58c77fcb",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-9d4eb39632cd",
+      "git_commit": "9d4eb39632cd14362f81dea5ecaf50b351741ccd",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-b651b28446e1",
+      "git_commit": "b651b28446e16698e4860170b6925a1aeb302737",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-b066d63cabf7",
+      "git_commit": "b066d63cabf7424552d22ab745bebefb5c20fc8a",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-37504fb1a8bc",
+      "git_commit": "37504fb1a8bcfbe90d1bade5c90749900ae8244b",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-323cce5ba4f1",
+      "git_commit": "323cce5ba4f1594f256c5c2490b1c57407004596",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-27f2a96fe30f",
+      "git_commit": "27f2a96fe30f28dd096204d5da19f76550dc417f",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261006-source-banking-compatible-package-v3-upgrade-76e10e544a38",
+      "git_commit": "76e10e544a38edb48a1fd235569df0c0122976a9",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-014c09905df7",
+      "git_commit": "014c09905df7933a9cd48a3b6aa76a2a6d1a4ce2",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-2c28ded3db40",
+      "git_commit": "2c28ded3db4088f57f456af6c04d7aa1897188cc",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-1860952f620a",
+      "git_commit": "1860952f620aa503440e179bc15e67de9f908899",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-8d95005106fd",
+      "git_commit": "8d95005106fd3792492023a343674795320ac591",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-b29f6c6825e2",
+      "git_commit": "b29f6c6825e268ffbb2a698dd63f16a27421613e",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-ecac00a6a323",
+      "git_commit": "ecac00a6a3230c6fb2825ba6978b64bd5b18caff",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-895b54a8d4ea",
+      "git_commit": "895b54a8d4ea25695e7e3081d00e421086fdbd88",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-5ca84f3dba81",
+      "git_commit": "5ca84f3dba8155c7746ae26cb35c7b01c6aed9a5",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-2c907ece6596",
+      "git_commit": "2c907ece65963fcd6af2806b958c51829c26bc08",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-18d0e62cfea7",
+      "git_commit": "18d0e62cfea7e836bdbdaad64b1dd6fceef79109",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-8d6f9f591456",
+      "git_commit": "8d6f9f5914562ec75ffa7a14da689e4c2b510d04",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-bea9021895e2",
+      "git_commit": "bea9021895e252e60ec51892e92b5a43a8abe035",
+      "status": "FAILED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    },
+    {
+      "release_id": "20261007-candidate-emergency-complete-roster-v1-upgrade-e0a02bb5f86b",
+      "git_commit": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92",
+      "status": "VERIFIED",
+      "engineSha256": "b8f625660b1fd8894bdd496cdd4c390b04f2a5f4f9936129413737acc877a9b3",
+      "engineDeclarationCount": 1,
+      "snapshotWriterCount": 1,
+      "sourceReferencePaths": [
+        "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql"
+      ]
+    }
+  ],
+  "approvedControlledHistoryGate": {
+    "approval": "Integrator froze the exact gate on 13 October 2026 after independent source/control-flow census and fresh TEST receipts.",
+    "installedEngineBodyMd5": "7821cf16ae3c98aaa212325228e147a2",
+    "originalFinClosureSha256": "240e2460baf9bff3164cc4ed389b6acb5774f8f88ab0deefc70d6f085fae00f1",
+    "schemaContentSha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+    "f2MigrationPath": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+    "f2MigrationContentSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+    "f2Cutover": "The exact F2 migration ledger applied_at_utc; only earlier canonical snapshot/revision origins derive.",
+    "parentReceipts": [
+      "HEALTHROSTER_BUILD_13102026/F2_INSTALLED_FINALISER_BINDING.json",
+      "HEALTHROSTER_BUILD_13102026/F2_SNAPSHOT_IMMUTABILITY_RECEIPT.json"
+    ],
+    "snapshotWrites": "anon/authenticated/service_role denied INSERT/UPDATE/DELETE/TRUNCATE; immutable UPDATE/DELETE/TRUNCATE triggers enabled in parent receipt.",
+    "proofClass": "Controlled recorded-source construction; does not assert theoretical absence of an unrecorded administrator write."
+  },
+  "limitations": [
+    "This lane made no database call or installation. A changed original FIN closure requires fresh source/binding review before changing the allowlist. Installed HC-2 and joined business acceptance remain integrator gates."
+  ]
+}
