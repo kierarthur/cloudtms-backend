@@ -1,0 +1,114 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "builderDecisions": [
+    "BD167"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql",
+      "sha256": "6488c85f18850119d0a64812e3420c7aac765a4801924af737e08d9bea39960b"
+    },
+    {
+      "path": "supabase/repeatable/13102026_0055_banking_pay_next_selected_treatment_estimate_v1.sql",
+      "sha256": "373fc87826c62b88524504b9f3c673a79e75cac1c55d4746bc6ce3d3b39c4d6a"
+    }
+  ],
+  "successors": [
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0055_banking_pay_next_selected_treatment_estimate_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+        "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
+        "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
+        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0230_banking_pay_next_origin_wait_navigation_v1.sql",
+        "supabase/repeatable/12102026_0234_banking_pay_next_origin_wait_parent_navigation_v1.sql",
+        "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)",
+      "currentPhysical": "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/12102026_2357_banking_pay_next_captured_resolution_composition_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text,jsonb)",
+      "currentPhysical": "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text)",
+      "currentPhysical": "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql",
+      "predecessors": []
+    }
+  ],
+  "designs": [
+    "WB-29-current-selected-composer-interface.md",
+    "WB-29-estimate-current-parent-census.md",
+    "WB-29-estimate-native-selected-join.md"
+  ],
+  "reviews": [
+    {
+      "path": "WB-29-current-selected-composer-design-review.md",
+      "sha256": "dbb07389038f00b147369c871a66a045a16f497210f1ce4fbf961eb0dcdd7b3e"
+    },
+    {
+      "path": "WB-29-estimate-native-selected-design-review.md",
+      "sha256": "19dd956de8f35cb19041afa7ec5fe75e5596dfb2b597d6505efd9119c1a34ef7"
+    },
+    {
+      "path": "WB-29-current-selected-facade-source-review.md",
+      "sha256": "9314845526b49170b036bd7ab95a75fa1fd52dd656767cff876aa66b59cb4b2c"
+    },
+    {
+      "path": "WB-29-current-selected-composer-source-review.md",
+      "sha256": "8785a96bcfe28f589ab35e402870b213f106e508e31fd6873e191938adb1e52a"
+    },
+    {
+      "path": "WB-29-current-selected-registry-gate-review.md",
+      "sha256": "4df607316286abb6814dd27170635931742461330963b1d2f9175b8c3a613048"
+    },
+    {
+      "path": "WB-29-selected-estimate-source-review.md",
+      "sha256": "121ac79e2535b8eafa1d7f57d61d78d360a4fdd32f315ffcfecdceefc6a2f0ec"
+    },
+    {
+      "path": "WB-29-selected-estimate-native-source-review.md",
+      "sha256": "60a491541db059854c107e2d3e6dd55ed9ad09e0f9b40c6de200bdc32bd52157"
+    },
+    {
+      "path": "WB-29-selected-estimate-reimbursement-stage-review.md",
+      "sha256": "5d8506b02deb8b0a72f8cb34cdf4ffcd39b30b24672c9c39a6f68e33bc197339"
+    }
+  ],
+  "checks": {
+    "dbCheck": "383 migrations/993 repeatables PASS",
+    "sourceGates": "1552 SQL/30 RPC roots/170 routine-work signatures/37 typed transports PASS",
+    "localPG17": "0 migrations/5 closures; schema compilation only PASS",
+    "catalogue": "4 exact routine bodies/config/owner/ACL/volatility PASS",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both DO PASS; public membership delta0",
+    "nodeCheck": "existing changed source gate PASS; no Worker/Office product JS changed",
+    "contractSealAndCoupling": "c807f602830c3b48f253cc7e11a6edf308d5f566daac7cd944ec5015c8fc6d39 PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; Ready chosen display/whole-list sorting remains"
+}

@@ -60,6 +60,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   // WB29: one qualified incoming/saved quote; unchanged1157 arithmetic.
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)',
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)',
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text,jsonb)',
+  'private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text)',
   'private.bpay_next_captured_resolution_operands_v1(uuid)',
   'private.bpay_next_captured_component_resolution_quote_v1(uuid,text)',
   'private.bpay_next_choice_leaf_eligible_v1(uuid,uuid,uuid,uuid,uuid)',
@@ -1480,11 +1482,27 @@ const DR11_ROUTINE_WORK_CALLEES=Object.freeze({
 
 // WB29: exact captured/native eligibility edges; no latest need/history reader.
 const WB29_CAPTURED_WORK_CALLEES=Object.freeze({
+  'public.bpay_next_workbench_page_v1(jsonb)': [
+    'private.bpay_next_treatment_approval_revision_v1','private.bpay_next_current_component_resolution_quote_v1',
+    'public._pay_umbrella_vat_calc','upper','array_cat'
+  ],
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)': ['private.bpay_next_component_resolution_input_quote_v1'],
   'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text)': [
+    'private.bpay_next_component_resolution_input_quote_v1',
     'private.bpay_next_captured_resolution_operands_v1','private.bpay_next_component_resolution_basis_v1',
     'private.pay_finance_selected_quote_v1','array_append','array_position','array_agg','bool_or','filter','sum',
     'isfinite','jsonb_agg','jsonb_each','jsonb_each_text','jsonb_object_keys','jsonb_populate_record','to_jsonb','trunc','unnest','octet_length'
+  ],
+  'private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric,uuid,text,jsonb)': [
+    'private.bpay_next_captured_resolution_operands_v1','private.bpay_next_component_resolution_basis_v1',
+    'private.pay_finance_selected_quote_v1','public.pay_banking_official_date_context_v1',
+    'array_append','array_position','array_agg','bool_or','filter','sum','upper','isfinite',
+    'jsonb_agg','jsonb_each','jsonb_each_text','jsonb_object_keys','jsonb_populate_record','to_jsonb','trunc','unnest','octet_length'
+  ],
+  'private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text)': [
+    'private.bpay_next_component_resolution_input_quote_v1','private.bpay_next_component_resolution_active_v1',
+    'private.bpay_next_component_resolution_need_v1','public.pay_banking_official_date_context_v1',
+    'array_append','array_ndims','bool_or','cardinality','isfinite','octet_length','sum','to_jsonb','unnest','upper'
   ],
   'private.bpay_next_captured_resolution_operands_v1(uuid)': ['private.bpay_next_choice_leaf_eligible_v1','bool_or','jsonb_agg','sum','filter','to_jsonb','octet_length'],
   'private.bpay_next_captured_component_resolution_quote_v1(uuid,text)': ['private.bpay_next_component_resolution_input_quote_v1','bool_or','sum','filter'],
