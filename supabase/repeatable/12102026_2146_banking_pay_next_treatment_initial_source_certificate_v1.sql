@@ -1,0 +1,109 @@
+-- WB-29 / BD155: exact native Source approval qualification only.
+-- Actual current/applied/selected/Position/job identities and all money remain native.
+\set ON_ERROR_STOP on
+begin;
+
+create or replace function private.bpay_next_initial_tsfin_certificate_v1(p_root_authorisation_id uuid)
+returns jsonb language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  a public.weekly_source_root_authorisations%rowtype;
+  t public.timesheets%rowtype;f public.timesheets_financials%rowtype;
+  w private.bpay_next_work%rowtype;r private.bpay_next_work_revision%rowtype;
+  p private.bpay_next_publication%rowtype;c public.contracts%rowtype;
+  inventory jsonb;basis jsonb;origin jsonb;details jsonb;n integer;epoch bigint;
+begin
+  if p_root_authorisation_id is null then
+    raise exception 'BPAY_NEXT_INITIAL_AUTH_ID_REQUIRED' using errcode='22023';end if;
+  select m.owner_epoch into epoch from private.bpay_next_module_control m
+    where m.id=1 and m.active_owner='NEXT' for share;
+  if epoch is null then raise exception 'BPAY_NEXT_BINDING_NEXT_REQUIRED' using errcode='55000';end if;
+  select x.* into strict a from public.weekly_source_root_authorisations x where x.id=p_root_authorisation_id;
+  select x.* into strict t from public.timesheets x where x.timesheet_id=a.root_timesheet_id;
+  select x.* into strict c from public.contracts x where x.id=t.contract_id;
+  select x.* into strict r from private.bpay_next_work_revision x where x.source_event_id=a.id;
+  select x.* into strict w from private.bpay_next_work x where x.id=r.work_id;
+  select x.* into strict f from public.timesheets_financials x where x.id=r.financial_snapshot_id;
+  select x.* into strict p from private.bpay_next_publication x
+    where x.command_id=private.bpay_next_source_command_id_v1(a.id);
+  if a.withdrawn_at_utc is not null or a.current_entitlement_head_id is not null
+     or exists(select 1 from public.weekly_source_entitlement_heads h where btrim(h.root_family_booking_id)=btrim(t.booking_id))
+     or t.is_current is distinct from true or t.authorised_at_server is null
+     or t.revoked_at is not null or t.archived_at_utc is not null
+     or (a.family_booking_id,a.timesheet_version) is distinct from (t.booking_id,t.version)
+     or (w.work_kind,w.candidate_id,w.contract_id,w.original_timesheet_id,w.booking_id,w.week_ending_date,(case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end))
+       is distinct from ('SOURCE'::text,c.candidate_id,c.id,t.timesheet_id,t.booking_id,t.week_ending_date,r.id)
+     or w.approval_state is distinct from 'APPROVED'
+     or (r.source_kind,r.source_head_id,r.source_event_id,r.physical_timesheet_id,r.physical_timesheet_version,r.week_ending_date)
+       is distinct from ('SOURCE'::text,null::uuid,a.id,t.timesheet_id,t.version,t.week_ending_date)
+     or r.approved_at_utc is null or r.sealed_at_utc is null
+     or f.is_current is distinct from true or f.is_stale is distinct from false or f.authorised_at_utc is null
+     or (f.timesheet_id,f.timesheet_version,f.candidate_id,f.client_id)
+       is distinct from (t.timesheet_id,t.version,w.candidate_id,c.client_id)
+     or (p.work_id,p.revision_id,p.candidate_id,p.revision_no)
+       is distinct from (w.id,r.id,w.candidate_id,r.revision_no)
+     or not exists(select 1 from private.bpay_next_command command
+       join private.bpay_next_command_member member on member.command_id=command.id and member.candidate_id=w.candidate_id
+       where command.id=p.command_id and command.command_kind='POSITION_APPLY'
+         and command.module_epoch=epoch and command.status in ('SEALED','COMPLETE')
+         and command.sealed_at_utc is not null and command.expected_member_count=1 and member.member_no=1
+         -- INITIAL_METADATA_PHASE_V2_BEGIN: no fabricated enrollment/job.
+         and ((command.status='SEALED' and command.enrolled_member_count=0
+           and p.status='QUEUED' and p.phase='NEW' and p.applied_at_utc is null
+           and not exists(select 1 from private.bpay_next_job job where job.command_id=command.id))
+          or (command.status='COMPLETE' and command.enrolled_member_count=1
+           and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+           and (select count(*) from private.bpay_next_job job where job.command_id=command.id)=1
+           and exists(select 1 from private.bpay_next_job job
+             join private.bpay_next_worker_control ctl on ctl.candidate_id=job.candidate_id
+             where job.command_id=command.id and job.candidate_id=w.candidate_id
+               and job.job_kind='POSITION_APPLY' and job.command_sequence=command.agency_sequence
+               and job.module_epoch=command.module_epoch and job.status='DONE' and job.phase='DONE'
+               and job.owner_epoch>0 and job.owner_epoch<=ctl.active_owner_epoch
+               and job.lease_nonce is null and job.lease_until_utc is null)))
+         -- INITIAL_METADATA_PHASE_V2_END
+       )
+  then raise exception 'BPAY_NEXT_INITIAL_AUTH_NOT_CURRENT' using errcode='55000';end if;
+  inventory:=private.weekly_source_effective_inventory_v1(t.timesheet_id);
+  basis:=inventory->'approval_basis';origin:=basis->'origin';
+  details:=jsonb_build_object('segments',f.invoice_breakdown_json->'segments','additional_units',f.additional_units_json,
+    'actual_schedule',f.actual_schedule_json,'rate_source_refs',f.rate_source_refs_json);
+  if inventory->>'ok' is distinct from 'true' or inventory->>'authority' is distinct from 'TSFIN'
+     or inventory->>'head_id' is not null or jsonb_typeof(inventory->'components') is distinct from 'array'
+     or jsonb_typeof(basis) is distinct from 'object' or basis->'coverage_complete' is distinct from 'true'::jsonb
+     or basis is distinct from private.weekly_source_inventory_approval_basis_v2(t.timesheet_id,inventory)
+     or origin is distinct from jsonb_build_object('kind','INITIAL_AUTHORISED_TSFIN_V1',
+       'root_authorisation_id',a.id,'financial_snapshot_id',f.id,'authorisation_generation',a.authorisation_generation,
+       'root_timesheet_id',t.timesheet_id,'root_version',t.version::text,'authorised_row_signature',a.authorised_row_signature,
+       'financial_snapshot_digest',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_FINANCIAL_SNAPSHOT_V2',
+         jsonb_build_object('policy',f.policy_snapshot_json,'details',details,'components',inventory->'components')),'hex'),
+       'inventory_digest',basis->>'inventory_digest','entitlement_digest',basis->>'entitlement_digest')
+     or basis->>'detail_digest' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_DETAIL_V2',details),'hex')
+     or basis->>'policy_fingerprint' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_POLICY_V2',f.policy_snapshot_json),'hex')
+     or r.source_inventory_digest is distinct from decode(basis->>'inventory_digest','hex')
+     or r.approved_source_ex_vat is distinct from (basis->>'approved_pay_ex_vat')::numeric
+     or r.expected_line_count is distinct from jsonb_array_length(inventory->'components')
+  then raise exception 'BPAY_NEXT_INITIAL_I1_CERTIFICATE_REQUIRED' using errcode='55000';end if;
+  select count(*) into n from private.bpay_next_approved_line l where l.revision_id=r.id;
+  if n<>r.expected_line_count or exists(select 1 from jsonb_array_elements(inventory->'components') component
+      left join private.bpay_next_approved_line l on l.revision_id=r.id
+        and l.source_component_id=(component.value->>'component_id')::uuid
+        and l.component_key='SOURCE:'||(component.value->>'component_id')
+      where l.id is null or l.line_no is distinct from (component.value->>'component_ordinal')::integer
+        or l.evidence_ref is distinct from 'source-component:'||(component.value->>'component_id')||'#'||(component.value->>'component_sha256')
+        or l.source_pay_ex_vat is distinct from case when (component.value->>'exclude_from_pay')::boolean then 0 else (component.value->>'pay_ex_vat')::numeric end
+        or l.component_kind is distinct from case component.value->>'component_kind' when 'WORKED_TIME' then 'WORK' when 'ADDITIONAL_UNIT' then 'ADDITIONAL' else 'EXPENSE' end
+        or l.tax_treatment is distinct from case when component.value->>'component_kind' in ('WORKED_TIME','ADDITIONAL_UNIT') then 'TAXABLE'::text
+          when component.value->>'component_kind' in ('EXPENSE','SOURCE_FIXED_EXPENSE') then 'NON_TAXABLE'::text else null::text end)
+  then raise exception 'BPAY_NEXT_INITIAL_SEALED_COMPONENTS_MISMATCH' using errcode='23514';end if;
+  return jsonb_build_object('candidate_id',w.candidate_id,'work_id',w.id,'revision_id',r.id,'command_id',p.command_id,
+    'source_channel',r.source_pay_channel,'origin',origin,'basis',basis,'components',inventory->'components',
+    'certificate_digest',encode(private.weekly_source_sha256_jsonb_v1('BPAY_NEXT_INITIAL_TSFIN_CERTIFICATE_V1',basis),'hex'));
+end
+$function$;
+
+
+alter function private.bpay_next_initial_tsfin_certificate_v1(uuid) owner to postgres;
+revoke all on function private.bpay_next_initial_tsfin_certificate_v1(uuid) from public,anon,authenticated,service_role;
+commit;

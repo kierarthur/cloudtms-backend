@@ -2119,6 +2119,9 @@ begin
   -- this impossible"; with the index gone the read must still fail closed rather
   -- than return an arbitrary row, and this answer decides a pay outcome.
   begin
+    -- SEND6: defer only this receipt check for the deliberate invalid heads.
+    -- The existing sentinel rolls this constraint mode and both heads back.
+    set constraints public.weekly_source_entitlement_head_receipt_assert deferred;
     drop index public.weekly_source_entitlement_heads_committed_current_uq;
     drop index public.weekly_source_entitlement_heads_committed_root_uq;
     insert into public.weekly_source_entitlement_heads(

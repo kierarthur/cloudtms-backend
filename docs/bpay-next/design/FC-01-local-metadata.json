@@ -1,0 +1,167 @@
+{
+  "source": "Sole local PG17 metadata and existing isolation DO verifiers only; no business data/RPC.",
+  "indexes": [
+    {
+      "name": "bpay_next_case_list_candidate_asc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_candidate_asc_idx ON private.bpay_next_case_list_key USING btree (\"left\"(candidate_sort_name, 512), ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_candidate_desc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_candidate_desc_idx ON private.bpay_next_case_list_key USING btree (\"left\"(candidate_sort_name, 512) DESC, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_candidate_scope_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_candidate_scope_idx ON private.bpay_next_case_list_key USING btree (candidate_id, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_client_scope_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_client_scope_idx ON private.bpay_next_case_list_key USING btree (client_id, case_id) WHERE (client_id IS NOT NULL)"
+    },
+    {
+      "name": "bpay_next_case_list_created_asc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_created_asc_idx ON private.bpay_next_case_list_key USING btree (((created_at_utc IS NULL)), created_at_utc, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_created_desc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_created_desc_idx ON private.bpay_next_case_list_key USING btree (((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_key_pkey",
+      "definition": "CREATE UNIQUE INDEX bpay_next_case_list_key_pkey ON private.bpay_next_case_list_key USING btree (case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_subtype_scope_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_subtype_scope_idx ON private.bpay_next_case_list_key USING btree (case_subtype, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_type_asc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_type_asc_idx ON private.bpay_next_case_list_key USING btree (case_type_label, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+    },
+    {
+      "name": "bpay_next_case_list_type_desc_idx",
+      "definition": "CREATE INDEX bpay_next_case_list_type_desc_idx ON private.bpay_next_case_list_key USING btree (case_type_label DESC, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+    }
+  ],
+  "guards": [
+    {
+      "table": "private.bpay_next_case_component",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_component DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_case_period",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_period DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_case_rule",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_rule DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_finance_case",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_finance_case DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_snooze",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_workbench_candidate_metadata",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_workbench_candidate_metadata DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "table": "private.bpay_next_work_collection",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_work_collection DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()",
+      "deferrable": true,
+      "initiallyDeferred": true
+    }
+  ],
+  "table": {
+    "owner": "cloudtms_bpay_local_owner",
+    "rls": true,
+    "forceRls": true,
+    "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+    "browserAccess": false,
+    "serviceAccess": false
+  },
+  "constraints": [
+    {
+      "name": "bpay_next_case_list_key_candidate_display_name_check",
+      "definition": "CHECK ((octet_length(candidate_display_name) <= 8192))"
+    },
+    {
+      "name": "bpay_next_case_list_key_candidate_id_fkey",
+      "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_case_list_key_candidate_reference_check",
+      "definition": "CHECK ((octet_length(candidate_reference) <= 8192))"
+    },
+    {
+      "name": "bpay_next_case_list_key_candidate_sort_name_check",
+      "definition": "CHECK ((octet_length(candidate_sort_name) <= 8192))"
+    },
+    {
+      "name": "bpay_next_case_list_key_case_id_candidate_id_fkey",
+      "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_case_list_key_case_id_fkey",
+      "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_case_list_key_case_subtype_check",
+      "definition": "CHECK ((octet_length(case_subtype) <= 64))"
+    },
+    {
+      "name": "bpay_next_case_list_key_case_type_label_check",
+      "definition": "CHECK ((octet_length(case_type_label) <= 64))"
+    },
+    {
+      "name": "bpay_next_case_list_key_check",
+      "definition": "CHECK (((client_association = 'FROZEN'::text) = (client_id IS NOT NULL)))"
+    },
+    {
+      "name": "bpay_next_case_list_key_client_association_check",
+      "definition": "CHECK ((client_association = ANY (ARRAY['FROZEN'::text, 'UNASSOCIATED'::text, 'UNKNOWN'::text])))"
+    },
+    {
+      "name": "bpay_next_case_list_key_client_display_name_check",
+      "definition": "CHECK ((octet_length(client_display_name) <= 8192))"
+    },
+    {
+      "name": "bpay_next_case_list_key_client_id_fkey",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "bpay_next_case_list_key_created_at_utc_check",
+      "definition": "CHECK (((created_at_utc IS NULL) OR isfinite(created_at_utc)))"
+    },
+    {
+      "name": "bpay_next_case_list_key_pkey",
+      "definition": "PRIMARY KEY (case_id)"
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

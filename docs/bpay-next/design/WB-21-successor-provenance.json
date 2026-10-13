@@ -1,0 +1,180 @@
+{
+  "item": "WB-21",
+  "sequence": 62,
+  "state": "PARTLY_BUILT; whole ITEM remains open",
+  "frontendCommit": "c4fab4c871a056124cbf3d152cd1eb0e26435cde",
+  "migration": "supabase/migrations/10102026_1832_banking_pay_next_accepted_choice_membership_v1.sql",
+  "repeatable": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+  "hashes": {
+    "migration": "e21c27ec2d19e912330c652e6096036eacdc6396a476fd363826ad0c72ad6747",
+    "repeatable": "b629fcc003b76ae61ec58c0d35ad2256a4cf9f736e307f5dc80e0a8fb0e20438"
+  },
+  "successors": [
+    {
+      "signature": "private.bpay_next_accepted_choice_guard_v1()",
+      "predecessors": [],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+      "predecessors": [],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid)",
+      "predecessors": [],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_materialise_choice_segments_v1(uuid,uuid)",
+      "predecessors": [],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_ack_choice_work_page_v1(uuid,bigint,jsonb,boolean)",
+      "predecessors": [],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_append_selection_page_v1(uuid,bigint,jsonb)",
+      "predecessors": [
+        "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+        "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_append_work_choices_v1(uuid,bigint,jsonb)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
+        "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+      "predecessors": [
+        "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_append_component_selection_page_v1(uuid,uuid,uuid,bigint,uuid[])",
+      "predecessors": [
+        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_seal_component_selection_v1(uuid,uuid,uuid,bigint,bigint)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_append_case_selection_page_v1(uuid,uuid,bigint,bigint,uuid,uuid[],boolean[])",
+      "predecessors": [
+        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_seal_case_selection_v1(uuid,uuid,bigint,bigint,bigint)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_enqueue_preparation_v1(uuid,uuid)",
+      "predecessors": [
+        "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "predecessors": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_accept_preparation_expiry_v1(uuid,uuid,uuid,timestamp with time zone,timestamp with time zone)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_preparation_expiry_guard_v1()",
+      "predecessors": [
+        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_preparation_args_v1(jsonb,text[])",
+      "predecessors": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    },
+    {
+      "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+      "predecessors": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+    }
+  ],
+  "builderDecision": "BD070",
+  "checks": {
+    "dbCheck": "327 migrations /851 repeatables PASS",
+    "localPg17": "1 migration /4 final closures PASS; compile only",
+    "sourceGates": "9/9 PASS",
+    "syntaxAndDiff": "PASS",
+    "contractSeal": "fd2487c2b99e1fd22673e3e51c161c729104c65e215f0b614df3ab399fb19a21",
+    "coupling": "PASS"
+  },
+  "reviews": [
+    "WB-21-choice-sql-review.md",
+    "WB-21-choice-store-review.md",
+    "WB-21-close-store-review.md",
+    "WB-21-submit-transport-review.md",
+    "WB-21-submit-journal-review.md"
+  ],
+  "screen": {
+    "id": "SCR-17",
+    "screenshots": 3,
+    "review": "28 PASS /0 FAIL /14 N/A; unchanged images recaptured against final FE source"
+  },
+  "open": [
+    "WB23-D06 exclusion/matching pages and transports",
+    "WB26-D15 retained Case page enumeration",
+    "WB25 subset UI",
+    "DR02/DR06 real progress opener",
+    "Whole seven-step sender and SCR160",
+    "Owner E1 legacy non-descriptor COMPONENT_PAGE per-Timesheet skips; mandatory, not waived"
+  ],
+  "publicCatalogue": "No public signature added/removed or ACL changed; constants unchanged; no fresh catalogue execution claimed",
+  "joinedAppAcceptance": "NOT_RUN; whole item not claimed",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "COMMITTED_NOT_INSTALLED"
+}

@@ -1,0 +1,16 @@
+# DY-10 completion — genuine Daily evidence and bounded processing
+
+Sequence97,11October2026. BD109 design independently checked before implementation. Exact D01 publication family, D02 original TSFIN Worker, D03 native Office state/caller and D05 future checklist; D04 historical context retained.
+
+D01 reuses current certified-zero1001/evidence1129, typed OLD withdrawal0939, applied position1346, financial-excess reconciliation0814, retained-route1107 and original pin0559. Five fresh installed publication/evidence/withdrawal/position/reconciliation bodies, signatures and owner-only ACLs match saved sources. Genuine approved zero uses real native hours and authorisation provenance. Missing/failed/unapproved/withdrawn evidence does not become zero. Existing RuleB/E2 capture guard holds changed work back and system releases it, never reprices. Actual realised money alone owns a single paid-excess recovery; pending holds never substitute for actual paid principal.
+
+D02 strictly validates native no-op counts and financial write receipts, conservation and unique exact input failure identities. Only positively acknowledged completed primaries clear duplicate outbox rows. Daily context/calculation/no-op failures stay failed and leased retry/backoff remain existing owners. Targeted wrapper bounds native options, and unknown pending totals stay NULL. The original details reader adds only one bounded current-Daily outbox read, returning exact physical/version plus NONE/PENDING/FAILED/UNAVAILABLE, without raw errors or financial values.
+
+D03 renders actual native Daily identity, approval, processing, rate/channel and withdrawal facts in the existing Timesheet window. A first unpublished failure cannot be fabricated as a Workbench row. Genuine approved0hours differs from positive-hours/zero-money. Unknown values display a dash. Existing targeted Retry never authorises; explicit full Refresh alone clears unknown after exact actor/token/physical/version/current DTO validation. Failed reads retain the same identity and Refresh-only state. Recovery removes stale failure copy. Existing native seven tabs and permitted actions remain; supplied design differences and every control purpose are recorded in screen-differences.
+
+54 minimal real native captures cover18 states in dark desktop, device-light and phone. Existing danger/info/success status badges, error live roles, secondary actions,44px phone controls and genuinely empty footer suppression satisfy the supplied style without added money controls. Source/A4 receipts are separate from future joined acceptance.
+
+The native reader has no genuine booking-cancellation flag. Revocation/archival/QR cancellation/unbooked cells are never inferred as booking cancellation or approved zero. Existing native withdrawal/removal handles its genuine evidence; future joined checklist records the authority limit. No producer or cancellation protocol was added.
+
+Normal345/903 db:check,12 source gates, Worker/Office/main/moderniser syntax, five fresh local metadata matches and unchanged export/seal/coupling3a024451 PASS. No SQL delta or public definer membership change. No database business rows, hosted app/queue, payment/provider/email, rollback or timing programme. D05 authored/NOT_RUN.
+

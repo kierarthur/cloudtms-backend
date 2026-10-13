@@ -1,0 +1,5 @@
+# Selected NET revision successor V5
+
+SOURCE ONLY. One exact assertion replaces V4's positive-only check with the current request contract: canonical decimal string from zero to 9223372036854775806. The preceding assignment from the actual STATUS header is byte-identical; the request value is neither substituted nor coerced. All other callback text, financial amounts, Case/origin/payroll/replay assertions, matrix and settlement fragment remain byte-identical. The finite scope remains twelve CURRENT_ONLY vectors; no held or future-tail coverage is added.
+
+`build.mjs` reads fixed parent pins and returns material without writing or importing runtime code. `test.mjs` performs three pure source/validation tests, including absent/invalid inputs and the revision bound. It creates no financial results. `SOURCE_SUCCESSOR_CONTROLS.json` contains the complete before/after span and immediate whole-file inverses. This packet is held for independent review and root dispatch; native execution was not run.

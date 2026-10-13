@@ -1,0 +1,200 @@
+[
+  {
+    "file": "FC03-first-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPreview first.\n\nPreview\nApply",
+    "requests": []
+  },
+  {
+    "file": "FC03-preview-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPREVIEW\n£50.00 a week for 6 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 16/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\n\nThis Candidate already has repayments.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-changed-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-preview-error-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-pending-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not confirm the result; try again.\n\nPreview\nTry again",
+    "requests": []
+  },
+  {
+    "file": "FC03-accepted-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nThis Case is being added.\n\nPreview\nRefresh",
+    "requests": []
+  },
+  {
+    "file": "FC03-refresh-error-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not refresh this Case; try again.\n\nPreview\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-first-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPreview first.\n\nPreview\nApply",
+    "requests": []
+  },
+  {
+    "file": "FC03-preview-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPREVIEW\n£50.00 a week for 6 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 16/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\n\nThis Candidate already has repayments.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-changed-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-preview-error-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-pending-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not confirm the result; try again.\n\nPreview\nTry again",
+    "requests": []
+  },
+  {
+    "file": "FC03-accepted-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nThis Case is being added.\n\nPreview\nRefresh",
+    "requests": []
+  },
+  {
+    "file": "FC03-refresh-error-device-light.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not refresh this Case; try again.\n\nPreview\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-first-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPreview first.\n\nPreview\nApply",
+    "requests": []
+  },
+  {
+    "file": "FC03-preview-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nPREVIEW\n£50.00 a week for 6 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 16/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\n\nThis Candidate already has repayments.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-changed-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-preview-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ]
+  },
+  {
+    "file": "FC03-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not confirm the result; try again.\n\nPreview\nTry again",
+    "requests": []
+  },
+  {
+    "file": "FC03-accepted-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nThis Case is being added.\n\nPreview\nRefresh",
+    "requests": []
+  },
+  {
+    "file": "FC03-refresh-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Payment Advance\nClose\n\nBethany Clarke · £300.00 · 6 weeks\n\nCould not refresh this Case; try again.\n\nPreview\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ]
+  }
+]

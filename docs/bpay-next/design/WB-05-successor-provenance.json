@@ -1,0 +1,8 @@
+[
+  {
+    "signature": "private.bpay_next_publish_source_staged_pair_v1(uuid[],uuid[],uuid[])",
+    "predecessor": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+    "final": "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql",
+    "delta": "Exact selected Contract FOR SHARE and selected Client FOR KEY SHARE before first command clock; complete replay unchanged."
+  }
+]

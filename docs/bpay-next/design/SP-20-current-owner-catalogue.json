@@ -1,0 +1,77 @@
+{
+  "source": "Fresh sole local PG17 catalogue and existing isolation DO only; no business calls or rows.",
+  "rows": [
+    {
+      "signature": "private.bpay_next_stage_source_current_v1(uuid,uuid,uuid)",
+      "sourceMd5": "78ad9eb628735913d0119a67e527901c",
+      "installed": {
+        "bodyMd5": "78ad9eb628735913d0119a67e527901c",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "sourceMd5": "06318bc77dc57f0cee76c7290d1cb024",
+      "installed": {
+        "bodyMd5": "06318bc77dc57f0cee76c7290d1cb024",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "sourceMd5": "c9ad26525aaf94471ccca9f02f98dd0c",
+      "installed": {
+        "bodyMd5": "c9ad26525aaf94471ccca9f02f98dd0c",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "sourceMd5": "da0a5343ce3a4b7e22b8cc2d0b64b9d1",
+      "installed": {
+        "bodyMd5": "da0a5343ce3a4b7e22b8cc2d0b64b9d1",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

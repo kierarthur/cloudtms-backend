@@ -1,0 +1,284 @@
+[
+  {
+    "id": "SCR-114",
+    "file": "FC02-normal-dark.png",
+    "errors": [],
+    "copy": "Candidate Cases\nClose\n\nBethany Clarke · 10502\n\nCASE\tCREATED ▼\tSTATUS\tAPPROVED\tPAID OUT\tRECOVERED\tWRITTEN OFF\tOUTSTANDING\tACTIONS\n\n▾\nPayment Advance\nNot taxable\n\t\n10/10/2026\n\t\nOpen\n\t\n£900.00\n\t\n£900.00\n\t\n£300.00\n\t\n£0.00\n\t\n£600.00\n\t\nAudit\nMore\n\n\n£150.00\nWeekly due\n\n6 weeks from 31/08/2026\n\nPayment Advance payout\nNot taxable · Added to take-home pay\n£900.00\nApproved\n£0.00\nOutstanding\n£0.00\nDue\nPayment Advance repayment\nNot taxable · Taken from take-home pay\n£900.00\nApproved\n£600.00\nOutstanding\n£150.00\nDue\n\n\nManual Debt\nNot taxable · Ref INV-2291\n\t\n08/10/2026\n\t\nOpen\nSnoozed until 25/10/2026\n\t\n£60.00\n\t\n£0.00\n\t\n£0.00\n\t\n£0.00\n\t\n£60.00\n\t\nAudit\nMore\n\nSorted by Created, descending\n\nCandidate Finance Report\nNew Payment Advance",
+    "geometry": {
+      "width": 1318,
+      "scrollWidth": 1318,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Case",
+          "width": 26.625,
+          "height": 32
+        },
+        {
+          "text": "Created ▼",
+          "width": 59.859375,
+          "height": 32
+        },
+        {
+          "text": "Status",
+          "width": 39.453125,
+          "height": 32
+        },
+        {
+          "text": "Approved",
+          "width": 58.015625,
+          "height": 32
+        },
+        {
+          "text": "Paid out",
+          "width": 51.25,
+          "height": 32
+        },
+        {
+          "text": "Recovered",
+          "width": 62.015625,
+          "height": 32
+        },
+        {
+          "text": "Written off",
+          "width": 72.265625,
+          "height": 32
+        },
+        {
+          "text": "Outstanding",
+          "width": 78.921875,
+          "height": 32
+        },
+        {
+          "text": "▾",
+          "width": 28,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 38
+        },
+        {
+          "text": "Candidate Finance Report",
+          "width": 184.859375,
+          "height": 38
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 168.609375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-114",
+    "file": "FC02-normal-device-light.png",
+    "errors": [],
+    "copy": "Candidate Cases\nClose\n\nBethany Clarke · 10502\n\nCASE\tCREATED ▼\tSTATUS\tAPPROVED\tPAID OUT\tRECOVERED\tWRITTEN OFF\tOUTSTANDING\tACTIONS\n\n▾\nPayment Advance\nNot taxable\n\t\n10/10/2026\n\t\nOpen\n\t\n£900.00\n\t\n£900.00\n\t\n£300.00\n\t\n£0.00\n\t\n£600.00\n\t\nAudit\nMore\n\n\n£150.00\nWeekly due\n\n6 weeks from 31/08/2026\n\nPayment Advance payout\nNot taxable · Added to take-home pay\n£900.00\nApproved\n£0.00\nOutstanding\n£0.00\nDue\nPayment Advance repayment\nNot taxable · Taken from take-home pay\n£900.00\nApproved\n£600.00\nOutstanding\n£150.00\nDue\n\n\nManual Debt\nNot taxable · Ref INV-2291\n\t\n08/10/2026\n\t\nOpen\nSnoozed until 25/10/2026\n\t\n£60.00\n\t\n£0.00\n\t\n£0.00\n\t\n£0.00\n\t\n£60.00\n\t\nAudit\nMore\n\nSorted by Created, descending\n\nCandidate Finance Report\nNew Payment Advance",
+    "geometry": {
+      "width": 1318,
+      "scrollWidth": 1318,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Case",
+          "width": 26.625,
+          "height": 32
+        },
+        {
+          "text": "Created ▼",
+          "width": 59.859375,
+          "height": 32
+        },
+        {
+          "text": "Status",
+          "width": 39.453125,
+          "height": 32
+        },
+        {
+          "text": "Approved",
+          "width": 58.015625,
+          "height": 32
+        },
+        {
+          "text": "Paid out",
+          "width": 51.25,
+          "height": 32
+        },
+        {
+          "text": "Recovered",
+          "width": 62.015625,
+          "height": 32
+        },
+        {
+          "text": "Written off",
+          "width": 72.265625,
+          "height": 32
+        },
+        {
+          "text": "Outstanding",
+          "width": 78.921875,
+          "height": 32
+        },
+        {
+          "text": "▾",
+          "width": 28,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 38
+        },
+        {
+          "text": "Candidate Finance Report",
+          "width": 184.859375,
+          "height": 38
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 168.609375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-114",
+    "file": "FC02-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Cases\nClose\n\nBethany Clarke · 10502\n\nSort by\nCase · ascending\nCase · descending\nCreated · ascending\nCreated · descending\nStatus · ascending\nStatus · descending\nApproved · ascending\nApproved · descending\nPaid out · ascending\nPaid out · descending\nRecovered · ascending\nRecovered · descending\nWritten off · ascending\nWritten off · descending\nOutstanding · ascending\nOutstanding · descending\n▾\nPayment Advance\nNot taxable\n10/10/2026\nOpen\n£900.00\n£900.00\n£300.00\n£0.00\n£600.00\nAudit\nMore\nOpen\n£150.00\nWeekly due\n\n6 weeks from 31/08/2026\n\nPayment Advance payout\nNot taxable · Added to take-home pay\n£900.00\nApproved\n£0.00\nOutstanding\n£0.00\nDue\nPayment Advance repayment\nNot taxable · Taken from take-home pay\n£900.00\nApproved\n£600.00\nOutstanding\n£150.00\nDue\nManual Debt\nNot taxable · Ref INV-2291\n08/10/2026\nOpen\nSnoozed until 25/10/2026\n£60.00\n£0.00\n£0.00\n£0.00\n£60.00\nAudit\nMore\nOpen\n\nSorted by Created, descending\n\nCandidate Finance Report\nNew Payment Advance",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Case · ascendingCase · descendingCreated · ascendingCreated · descendingStatus · ascendingStatus · descendingApproved · ascendingApproved · descendingPaid out · ascendingPaid out · descendingRecovered · ascendingRecovered · descendingWritten off · ascendingWritten off · descendingOutstanding · ascendingOutstanding · descending",
+          "width": 299.328125,
+          "height": 44
+        },
+        {
+          "text": "▾",
+          "width": 44,
+          "height": 44
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Candidate Finance Report",
+          "width": 178.859375,
+          "height": 44
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 162.609375,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-114",
+    "file": "FC02-scrolled-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Cases\nClose\n\nBethany Clarke · 10502\n\nSort by\nCase · ascending\nCase · descending\nCreated · ascending\nCreated · descending\nStatus · ascending\nStatus · descending\nApproved · ascending\nApproved · descending\nPaid out · ascending\nPaid out · descending\nRecovered · ascending\nRecovered · descending\nWritten off · ascending\nWritten off · descending\nOutstanding · ascending\nOutstanding · descending\n▾\nPayment Advance\nNot taxable\n10/10/2026\nOpen\n£900.00\n£900.00\n£300.00\n£0.00\n£600.00\nAudit\nMore\nOpen\n£150.00\nWeekly due\n\n6 weeks from 31/08/2026\n\nPayment Advance payout\nNot taxable · Added to take-home pay\n£900.00\nApproved\n£0.00\nOutstanding\n£0.00\nDue\nPayment Advance repayment\nNot taxable · Taken from take-home pay\n£900.00\nApproved\n£600.00\nOutstanding\n£150.00\nDue\nManual Debt\nNot taxable · Ref INV-2291\n08/10/2026\nOpen\nSnoozed until 25/10/2026\n£60.00\n£0.00\n£0.00\n£0.00\n£60.00\nAudit\nMore\nOpen\n\nSorted by Created, descending\n\nCandidate Finance Report\nNew Payment Advance",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Case · ascendingCase · descendingCreated · ascendingCreated · descendingStatus · ascendingStatus · descendingApproved · ascendingApproved · descendingPaid out · ascendingPaid out · descendingRecovered · ascendingRecovered · descendingWritten off · ascendingWritten off · descendingOutstanding · ascendingOutstanding · descending",
+          "width": 299.328125,
+          "height": 44
+        },
+        {
+          "text": "▾",
+          "width": 44,
+          "height": 44
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Audit",
+          "width": 53.8125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Candidate Finance Report",
+          "width": 178.859375,
+          "height": 44
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 162.609375,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

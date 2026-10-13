@@ -1,0 +1,57 @@
+# FC-13 native screen source review
+
+SOURCE PASS — S01–S09 closed in the implemented native screen slice. Final actual A4 receipt is saved in SCR-30/review.md (73 PNGs; 36 PASS/0 FAIL/6 N/A). CM-13a/full ITEM remain BLOCKED.
+
+Reviewed saved `js/bpay-next-case-channel.js`, FC-13 card and BD148, native `bpay-next-ui.js` adapter, current finite Case transport contract, full screen policy and manual `tools/policy.json` wording lists, and supplied B2 SCR-30/30b/30c/30d specifications and all four PNGs. Actual product captures have not been supplied for this review. Product remains root-authored and evolving. Initial module SHA-256 was `4496472433F83BBB10BED9F01A05A35C58197D4E263CC1D8CDEC7F11EF99F329`; repaired source checked here is `B73DA2D0FDC615AE2FCD29038823FF7A9E95F5FD54E754687D00FD978ED2CDBA`.
+
+## Essential findings
+
+| ID | Finding and minimum correction |
+|---|---|
+| FC13-S01 | A failed current-state `read()` retains the previous Preview/token (lines 57–61). `paint()` and `confirm()` do not reject `failed`, so Restructure remains available after a failed Refresh. Invalidate actionable Preview on failed currentness; reject confirmation/submission until a successful exact-current Preview. A failed breakdown continuation also retains the token (line 63); retain facts for display but prevent applying an incomplete/failed comparison. |
+| FC13-S02 | Confirmation closes its child before calling `submit()` (line 65), while parent `onMount` unconditionally starts `read()` (line 72). The standard adapter queues `onMount` on every restored mount (`bpay-next-ui.js:62`). This can start a read or reset the token before `submit()` reaches its busy/token guards. Preserve the confirmed exact input/token and establish the journal before the parent restoration read; keep original same-byte recovery. |
+| FC13-S03 | Breakdown continuation sets `busy` without painting any loading/disabled reason, and failure discards the continuation cursor (line 63). Show an existing live `Loading more…` status while retaining rows; retain a safe explicit recovery path and block actionable Preview after the failed continuation. No new reader is required. |
+| FC13-S04 | Both parent and child title currently say “Restructure for new pay method” (lines 65/72). Policy SDP-71 and the FC-13 override explicitly require “Restructure for new pay channel”, matching supplied SCR-30. Change the screen label only. |
+| FC13-S05 | The confirmation's initially empty hidden `issue` paragraph lacks `data-next-live-copy` (repaired module line 66); native empty-copy cleanup can remove it before refusal. Both confirmation buttons also become disabled while busy without any message visible in that child. Preserve this existing paragraph and populate a live checking status while busy; use an alert for the known refusal. |
+| FC13-S06 | The generic validation error tells staff to check the number of weeks even for CREDIT, where that field is hidden (line 63). Identify the actual invalid field, with one plain inline sentence and `aria-invalid`/`aria-describedby`, particularly missing Reason, invalid Start week, and invalid selected amount/repayment choice. Keep unchosen fields omitted from validation and request operands. |
+| FC13-S07 | A successful terminal receipt adds a primary footer Close (line 51), duplicating the native header Close against SDP-24. Hide the empty owned terminal footer; retain the native header Close. |
+| FC13-S08 | Shared `.bpay-next-restructure-form`, fieldset and field-wrapper rules explicitly set `display:flex` (`bpay-next-office.css:1142–1146`). The existing `[hidden]` override at line 1155 is confined to the FC-12 `.bpay-next-case-restructure` class. New FC-13 therefore lacks the author-level hidden override for unchosen repayment fields, CREDIT repayment controls, and the terminal form. Extend only the named modern FC-13/confirmation scope; inspect native header-detail placement separately in actual captures. |
+
+S01–S04 are CLOSED in the repaired source: read and continuation failure invalidate the token, failed state guards confirmation/submission; submission establishes the original journal while the child remains open; parent only starts its first mount read; continuation now paints `Loading more…` and retains its cursor; titles use pay channel. These closures are source evidence, not a performed native action. Whole-case channel labels use native `source_pay_channels`, Candidate balances distinguish native subtype/instruction/channel/tax, and Preview displays literal actual payment count and last payment week in addition to nominal arrangement weeks.
+
+Further fresh-source closure: module `E908F12D415430366A02CF134E675C71AE89BE408938D83F8A4F2329FE7E650B` and CSS `E1540D186D11F4AE85C67918A768939F9FEFD3DC89506C7A86AAB04312697DAB` close S05 (retained child message, Checking status, refusal alert), S07 (successful footer hidden), and S08 (specific modern-scoped hidden override). S06 now identifies/focuses the actual bad field and exposes `aria-invalid`/`aria-describedby`; however its text still lives only in the top-of-body notice. On a long phone form focusing a lower field can hide that message. Place that selected validation error next to the offending field per SDP-57, keeping general read errors before the facts.
+
+Final S06 source closure: current module `7AE59DC8263164DCE0013F0ED26EC8981DECBEAB41E6DC7DA0A6C71BE6A8578A` moves the existing single live notice into the invalid field wrapper and links the selected field to it; input changes clear the error and reinsert the notice before the facts. No new error framework is introduced. All eight source findings are closed. Other source hashes above remain unchanged at this closure checkpoint. No source-only PASS is represented as screenshot approval or joined financial acceptance.
+
+Current source integration is the original `openBankingNextCaseRestructure` entry (`main.js:16968`), with the closed `TAXABLE_CHANNEL_RESTRUCTURE` variant choosing this module before legacy reads. Existing actor, modal prefix/parent context, NEXT epoch and admin qualification remain; no new page or command route is introduced. The owned exact journal stores CASE_CHANNEL_RESOLVE bytes before send, retains them on unknown outcome and verifies point receipt command/Case/Candidate/revision/sequence before terminal display. Native integration/dispatch was inspected in source only and NOT RUN as a business journey.
+
+Other current source SHA-256: Case validator `90A38C4CB3C204248F3FE974934E94ED4D8A3A485A1742AA7341E3C1CE3956D1`; Office `855E05ACA32B3D8F0E439BE6EC53DF69EBAD74B09724C42AE6B910E361C4B426`; main `24F25538A0E7AA195D58F9D7ECE5E244A1D975B1E1B4FEB817813ED88E22FBD8`; index `4C123505A23B9CF3BE55EA9EFB8A1F246AA9E6B8A1CFD815871FEC1BD5C60C98`. These identify this source checkpoint, not a final A4 capture seal.
+
+## Boundaries and next evidence
+
+All money/conversion/schedule figures must remain literal server fields; no browser valuation or aggregation. Candidate balances must remain separated by native instruction/channel/tax classification. Unknown values need their native reason and never £0.00. CM-13a downstream cross-channel consumption remains BLOCKED; this source review cannot approve that dependency or the full item.
+
+Required actual local capture states: initial suggestion; chosen manual total; weekly-amount Preview and final smaller instalment; edited input with Preview invalidated; confirmation and Go back preserving fields; stale/refused confirmation; missing/unknown balances with reason; loading and failed Refresh; retained breakdown continuation/loading/failure; original pending/unknown same-key recovery; accepted terminal outcome; payout/credit without repayment fields. Cover dark, device-light, 390px phone and necessary upper/lower phone scroll frames. Inspect actual confirmation Apply → retained journal/readback as a native local flow, without claiming a joined business action.
+
+Full A4 will compare each actual PNG beside the supplied PNGs and record every visible difference/control purpose plus all 42 policy rows. Item 16 uses manual `tools/policy.json` wording lists; item 25 and the spec `readerAdditions` part of 26 are owner-scoped N/A. Items 23/24 require actual phone/device-light pixels. No product edits, tests, database actions, hosted requests, capture generation or pack changes were performed by this reviewer.
+
+Current polishing follow-up remains PENDING: S09, the Reason field router checks only non-empty text while the original finite validator additionally rejects more than 2,048 UTF-8 bytes and NUL. Such text currently falls to the generic amounts/date message. Reuse `Cases.channelValue(reason,'reason')`, placing the plain shorter-reason message on the Reason field. The prior S01–S08 closure is retained as a source checkpoint; final source PASS requires this narrow follow-up and refreshed hashes. The question icon's new hard-coded colours also need native/policy tokens (A4 item11). Actual current captures are being replaced by root; final A4 remains pending.
+
+## Final closure — 12 October 2026
+
+SOURCE PASS. The historical pending paragraph above is superseded: S09 now uses the existing `Cases.channelValue(value.reason,'reason')`, including nonblank/2,048 UTF-8/NUL semantics, selects the actual field, links one inline notice with aria-invalid/describedby, focuses it and scrolls that notice into immediate phone view. Blank/long Reason current captures show the correct plain remedy. Question/refusal icon colours use existing native tokens. `lineCount` retains its existing live-copy marker and uses whole native component_count, not rows.length. Missing/current-read failures and terminal BLOCKED offer primary Refresh; field-linked errors retain Preview. Child Go back restores parent-appropriate Refresh copy. Terminal success hides its owned footer and retains header Close only.
+
+Fresh read also verifies S01–08 remain closed: failed reads/continuation invalidate actionable token; exact request journal is saved while child confirmation is still mounted; original request/receipt identity is checked; parent first-mount read does not reset a restored confirmed input; continuation retains its cursor, compares full context/token and exposes live Loading more…; input change clears actionability and field errors; unknown retains identical request bytes and known initial refusal stays in the child. No browser valuation, new financial command/route or downstream CM-13a implementation.
+
+Final source SHA-256:
+
+| Saved FE path | SHA-256 |
+|---|---|
+| js/bpay-next-case-channel.js | 11FCEB766FFEE934464728A031684BD6BBF3FEADE7DC9C23B442BBD9E8F8DC8B |
+| js/bpay-next-case-preview.js | 90A38C4CB3C204248F3FE974934E94ED4D8A3A485A1742AA7341E3C1CE3956D1 |
+| js/bpay-next-office.js | 855E05ACA32B3D8F0E439BE6EC53DF69EBAD74B09724C42AE6B910E361C4B426 |
+| js/main.js | 24F25538A0E7AA195D58F9D7ECE5E244A1D975B1E1B4FEB817813ED88E22FBD8 |
+| css/bpay-next-office.css | 4F8C1BA626322EA88B374FFBC6A01216A9B1696C72E6707D418D2DCEC0220C9D |
+| index.html | 4C123505A23B9CF3BE55EA9EFB8A1F246AA9E6B8A1CFD815871FEC1BD5C60C98 |
+
+These are authoritative saved product bytes reviewed read-only, including current uncommitted changes; HEAD alone is not asserted as their capture commit. Native hosted/business/financial acceptance and large-list runtime remain NOT RUN. Reviewer ran no tests/captures/data/actions and changed review notes only. A4/source PASS here cannot close CM-13a or full ITEM.

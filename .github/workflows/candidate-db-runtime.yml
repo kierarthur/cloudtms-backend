@@ -97,6 +97,12 @@ on:
       - 'supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'
       - 'scripts/extract-candidate-weekly-adjustment-delete-apply.mjs'
       - 'scripts/extract-candidate-r2-cleanup-record.mjs'
+      - 'supabase/repeatable/*_weekly_source_pay_query_entry_admission_v1.sql'
+      - 'supabase/repeatable/*_weekly_source_pay_query_identity_admission_v1.sql'
+      - 'supabase/repeatable/*_weekly_source_pay_query_outer_entry_admission_v1.sql'
+      - 'supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql'
+      - 'docs/bpay-next/final-definer-closures.json'
+      - 'scripts/bpay-next-source-gates.mjs'
       - '.github/workflows/candidate-db-runtime.yml'
 
 permissions:
@@ -130,6 +136,8 @@ jobs:
       PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -166,6 +174,13 @@ jobs:
 
       - name: Verify the locked dependency authority
         run: npm run security:dependencies
+
+      # SP-12: real managed Source/NEXT order is checked by existing source gates.
+      # The historical Candidate fixture subset below is intentionally unchanged.
+      - name: Verify managed Source and Candidate successor source order
+        run: |
+          npm run db:check
+          node --test tests/bpay-next-source-gates.test.js
 
       - name: Install Candidate authority and run all runtime suites
         shell: bash

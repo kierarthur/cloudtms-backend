@@ -1,0 +1,174 @@
+{
+  "item": "WB-44",
+  "sequence": 54,
+  "decision": "BD062",
+  "scope": "R2 section5 early closure; no F19 dependency; later financial transitions remain named owners",
+  "accepted": "Rule B expected_revision_id + captured Candidate columns + run_work_query_snapshot + existing PINv2; no parked resolver",
+  "early": [
+    {
+      "event": "Ordinary/Source/protected publication",
+      "signature": "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "sha256": "8934065d152ab69bbe2ec8ee298bd03b66f4c20a82fbbcdced78567db37bb69f",
+      "scope": "Candidate + exact Work/current revision; chosen Contract/Client pair preheld at1403",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "mark_processing before native command clock; enroller/real POSITION_APPLY queue; same final applied-pointer + FV refresh",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Final native position apply",
+      "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "sha256": "8934065d152ab69bbe2ec8ee298bd03b66f4c20a82fbbcdced78567db37bb69f",
+      "scope": "Exact Work + linked actual Cases under Candidate control",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "small same-TX replacement; large ORIGIN pending/current-version pages + final core",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Ordinary approval/reauthorisation/withdrawal",
+      "signature": "private.bpay_next_ordinary_authorisation_trigger_v1()",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "sha256": "9212749c48615fac296a1af071ad1b7bb187bfc19c92bcba5021bf4fdc602391",
+      "scope": "Exact native Timesheet/Work/revision/Candidate",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "same common publication barrier or actual withdrawal refresh",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Source withdrawal",
+      "signature": "private.bpay_next_source_withdrawal_guard_v1()",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "sha256": "9212749c48615fac296a1af071ad1b7bb187bfc19c92bcba5021bf4fdc602391",
+      "scope": "Exact existing Source Work + current physical root/revision/Candidate",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "original refusal/result + native withdrawal/FV then exact bounded refresh",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Source disposition/book seed",
+      "signature": "private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/10102026_1309_banking_pay_next_workbench_source_seed_refresh_v1.sql",
+      "sha256": "e1330272dfaa2978e537c49e074669bb9273410620f016bdcd1d4f05bf567241",
+      "scope": "Exact existing Source/protected Work + retained binding",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "real changed binding then exact refresh; unchanged replay preserved",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Actual current hold reservation",
+      "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "finalPhysical": "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
+      "sha256": "0dc24d3eeab2606ea5ee1988874e5c351f9a048b8056979a944d97b5fcc2890c",
+      "scope": "Actual visited native page Work IDs <=100 under Candidate control",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "original native H/FV mutation followed by sole refresh_many; original money/Rule-B body preserved",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Candidate display/control/bank metadata",
+      "signature": "private.bpay_next_workbench_candidate_name_trigger_v1()",
+      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd",
+      "scope": "Exact Candidate + actual name/ref/effective bank/channel/Umbrella tuple",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "no-op equality; pending generation before indexed group/summary fanout; no financial valuation",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Umbrella display/control/bank metadata",
+      "signature": "private.bpay_next_workbench_umbrella_metadata_trigger_v1()",
+      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd",
+      "scope": "Exact Umbrella then indexed cached currently mapped Candidates",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "global pending first; bounded actual Candidate metadata tasks; moved membership owns independent callback",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Saved snooze and expiry receipt",
+      "signature": "private.bpay_next_workbench_snooze_due_trigger_v1()",
+      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd",
+      "scope": "Exact real native Snooze/version + exclusive Work/Case",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "native preheld Candidate; same-TX Work ORIGIN/Processing or Case refresh; separate private date/version receipt;1100 guard/events unchanged",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    },
+    {
+      "event": "Seed/due/lease/minute recovery",
+      "signature": "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)",
+      "finalPhysical": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+      "sha256": "dc539089fae0cd1a8baf4765a89cea9ff1d1e8039200ecda5d80371dda2335dd",
+      "scope": "Indexed current Work/OPEN-PAUSED Case/group/cache/active Snooze; future eligible prepared rows; exact task IDs",
+      "W3": "Existing native owner/module/role/typed exact-scope admission retained; service wrapper additionally independently requires JWT service_role/NEXT. No UI authority.",
+      "completion": "fixed fences/cursors/lease/generation; sorted whole-page scopes; same-TX delta/progress; locked CURRENT counters; failed/lost delivery retains pending",
+      "source": "BUILT_REVIEWED_LOCAL_COMPILED",
+      "hosted": "NOT_INSTALLED",
+      "acceptance": "NOT_RUN"
+    }
+  ],
+  "later": [
+    {
+      "scope": "Pay Query current refresh",
+      "owner": "SP-15",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Complete Case WAIT/allocation/writes/pause/rules/due/transitions",
+      "owner": "WB-41 / actual FC owners",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Settlement/return/cancel/expiry/reissue realised effects",
+      "owner": "actual EX/DR owners",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Channel/rate/window financial resolution",
+      "owner": "EX-08 / WB-29 / FC-13",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Source corrections/accepted later changes/protected HEAD/two-root/book adoption hooks",
+      "owner": "actual SP/CM owners",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Move/Contract metadata and financial transitions",
+      "owner": "actual CM owners",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Read/Create truthful adoption/pending/error renderer",
+      "owner": "WB-09 / DR-02 / actual S1 owner",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    },
+    {
+      "scope": "Owner/adoption/cutover/enrollment error combined acceptance",
+      "owner": "F-17/F-18/F-19 / actual owner cards; final F-23 combined census",
+      "status": "LATER_NAMED_OWNER_UNTICKED"
+    }
+  ],
+  "queue": "Existing index factory/owner-gated queue/minute -> runtime fixed service -> exact IDs/lease/page controls. Sends awaited before ACK; no new financial kind/0280/enroller/HTTP route.",
+  "seed": "Stable indexed current scopes and cached metadata only; finite progress; all real early concurrent changes enter same barrier; no history/first500/UI rebuild.",
+  "checks": "Sole localPG17 compilation, source gates, syntax, catalogue/contract only; no fixtures/runtime/in-app/timing."
+}

@@ -1,0 +1,1025 @@
+[
+  {
+    "file": "EX08-preview-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-empty-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\nNEEDS A DECISION\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\nNOT CHANGED\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-loading-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nLoading payments…\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-failed-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\n\nThe list has changed; refresh and try again.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nRefresh\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Refresh",
+          "height": 38,
+          "width": 73.875,
+          "primary": false,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-pending-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\nThe earlier change needs its result confirmed.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Try again",
+          "height": 38,
+          "width": 83.9375,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-accepted-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\n\nPay channel changed.\n\nOnly future work changes. Drafts and payments already made stay as they are.",
+    "requests": [],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-paye-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to PAYE\n\nClose\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-company-change-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-scrolled-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      },
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": "{\"context\":{\"agency_id\":\"11111111-1111-4111-8111-111111111111\",\"actor_user_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"owner_epoch\":\"1\",\"candidate_id\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"source_method\":\"PAYE\",\"source_umbrella_id\":null,\"target_method\":\"UMBRELLA\",\"target_umbrella_id\":\"cccccccc-cccc-4ccc-8ccc-cccccccccccc\",\"target_vat_chargeable\":false,\"target_umbrella_enabled\":true,\"financial_view_revision\":\"0\",\"metadata_version\":\"0\",\"workbench_revision\":\"1\",\"adoption_revision\":\"1\",\"last_command_sequence\":\"0\",\"valuation_policy_id\":\"dddddddd-dddd-4ddd-8ddd-dddddddddddd\",\"official_pay_date\":\"2026-10-16\"},\"last_key\":\"2\"}"
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-preview-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-empty-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\nNEEDS A DECISION\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\nNOT CHANGED\n0 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nNo payments.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-loading-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nLoading payments…\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-failed-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\n\nThe list has changed; refresh and try again.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nRefresh\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Refresh",
+          "height": 38,
+          "width": 73.875,
+          "primary": false,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-pending-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\nThe earlier change needs its result confirmed.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Try again",
+          "height": 38,
+          "width": 83.9375,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-accepted-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\n\nPay channel changed.\n\nOnly future work changes. Drafts and payments already made stay as they are.",
+    "requests": [],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-paye-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to PAYE\n\nClose\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-company-change-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-scrolled-device-light.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n\t£672.00\tPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n\t£25.00\tStays £25.00\nNEEDS A DECISION\n1 item\nWORK\tAMOUNT\tAFTER THE CHANGE\nTimesheet w/e 25/10/2026\nRiverside Care Home\n\t£296.45\nPAYE, as authorised\n\tPay channel decision needed\nNOT CHANGED\n2 items\nWORK\tAMOUNT\tAFTER THE CHANGE\nPAYE Draft\t—\tStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n\t£150.00\tStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      },
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": "{\"context\":{\"agency_id\":\"11111111-1111-4111-8111-111111111111\",\"actor_user_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"owner_epoch\":\"1\",\"candidate_id\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"source_method\":\"PAYE\",\"source_umbrella_id\":null,\"target_method\":\"UMBRELLA\",\"target_umbrella_id\":\"cccccccc-cccc-4ccc-8ccc-cccccccccccc\",\"target_vat_chargeable\":false,\"target_umbrella_enabled\":true,\"financial_view_revision\":\"0\",\"metadata_version\":\"0\",\"workbench_revision\":\"1\",\"adoption_revision\":\"1\",\"last_command_sequence\":\"0\",\"valuation_policy_id\":\"dddddddd-dddd-4ddd-8ddd-dddddddddddd\",\"official_pay_date\":\"2026-10-16\"},\"last_key\":\"2\"}"
+      }
+    ],
+    "geometry": {
+      "width": 980,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 38,
+          "width": 60.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 40,
+          "width": 927,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 38,
+          "width": 111.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n£672.00\nPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n£25.00\nStays £25.00\nNEEDS A DECISION\n1 item\nTimesheet w/e 25/10/2026\nRiverside Care Home\n£296.45\nPAYE, as authorised\nPay channel decision needed\nNOT CHANGED\n2 items\nPAYE Draft\n—\nStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n£150.00\nStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-empty-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n0 items\nNo payments.\nNEEDS A DECISION\n0 items\nNo payments.\nNOT CHANGED\n0 items\nNo payments.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-loading-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nLoading payments…\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-failed-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\n\nThe list has changed; refresh and try again.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nRefresh\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Refresh",
+          "height": 44,
+          "width": 67.875,
+          "primary": false,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\nThe earlier change needs its result confirmed.\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Try again",
+          "height": 44,
+          "width": 77.9375,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-accepted-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella · Brightpay Umbrella Ltd\n\nClose\n\nPay channel changed.\n\nOnly future work changes. Drafts and payments already made stay as they are.",
+    "requests": [],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-paye-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to PAYE\n\nClose\nSTAYS PAYABLE\n2 items\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n£672.00\nPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n£25.00\nStays £25.00\nNEEDS A DECISION\n1 item\nTimesheet w/e 25/10/2026\nRiverside Care Home\n£296.45\nPAYE, as authorised\nPay channel decision needed\nNOT CHANGED\n2 items\nPAYE Draft\n—\nStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n£150.00\nStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-company-change-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · Umbrella to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n£672.00\nPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n£25.00\nStays £25.00\nNEEDS A DECISION\n1 item\nTimesheet w/e 25/10/2026\nRiverside Care Home\n£296.45\nPAYE, as authorised\nPay channel decision needed\nNOT CHANGED\n2 items\nPAYE Draft\n—\nStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n£150.00\nStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  },
+  {
+    "file": "EX08-scrolled-phone-dark.png",
+    "errors": [],
+    "copy": "Change pay channel\n\nBethany Clarke · TMS 10502 · PAYE to Umbrella\n\nClose\nUmbrella company\nChoose a company\nBrightpay Umbrella Ltd\nNorthgate Umbrella\nSTAYS PAYABLE\n2 items\nTimesheet w/e 18/10/2026\nSt Anne's Hospital\n£672.00\nPay channel changed – converted value\nMileage w/e 18/10/2026\nSt Anne's Hospital\n£25.00\nStays £25.00\nNEEDS A DECISION\n1 item\nTimesheet w/e 25/10/2026\nRiverside Care Home\n£296.45\nPAYE, as authorised\nPay channel decision needed\nNOT CHANGED\n2 items\nPAYE Draft\n—\nStays PAYE\nPayment Advance repayment\nIn PAYE Draft\n£150.00\nStays as agreed\n\nOnly future work changes. Drafts and payments already made stay as they are.\n\nApply change",
+    "requests": [
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": null
+      },
+      {
+        "path": "/api/candidates/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pay-method-change-preview",
+        "method": "GET",
+        "after": "{\"context\":{\"agency_id\":\"11111111-1111-4111-8111-111111111111\",\"actor_user_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"owner_epoch\":\"1\",\"candidate_id\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"source_method\":\"PAYE\",\"source_umbrella_id\":null,\"target_method\":\"UMBRELLA\",\"target_umbrella_id\":\"cccccccc-cccc-4ccc-8ccc-cccccccccccc\",\"target_vat_chargeable\":false,\"target_umbrella_enabled\":true,\"financial_view_revision\":\"0\",\"metadata_version\":\"0\",\"workbench_revision\":\"1\",\"adoption_revision\":\"1\",\"last_command_sequence\":\"0\",\"valuation_policy_id\":\"dddddddd-dddd-4ddd-8ddd-dddddddddddd\",\"official_pay_date\":\"2026-10-16\"},\"last_key\":\"2\"}"
+      }
+    ],
+    "geometry": {
+      "width": 366,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "controls": [
+        {
+          "text": "Close",
+          "height": 44,
+          "width": 54.515625,
+          "primary": false,
+          "parent": "modal-h"
+        },
+        {
+          "text": "Choose a companyBrightpay Umbrella LtdNorthgate Umbrella",
+          "height": 44,
+          "width": 338,
+          "primary": false,
+          "parent": "bpay-next-channel-company"
+        },
+        {
+          "text": "Apply change",
+          "height": 44,
+          "width": 105.5625,
+          "primary": true,
+          "parent": "bpay-next-window-actions bpay-next-channel-actions"
+        }
+      ]
+    }
+  }
+]

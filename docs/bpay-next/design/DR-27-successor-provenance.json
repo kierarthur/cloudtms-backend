@@ -1,0 +1,79 @@
+{
+  "card": "DR-27",
+  "sequence": 128,
+  "decision": "BD142",
+  "implementationCommit": "654094dd9cb2a10bb8131fa20220fa4f41eb2954",
+  "frontendCommit": "432b72d2c9d237b4b4fe4ffbf948a7c5cf5e2194",
+  "completedDeliverables": [
+    "DR-27-D02",
+    "DR-27-D03",
+    "DR-27-D04",
+    "DR-27-D05",
+    "DR-27-D07"
+  ],
+  "openDeliverables": [
+    "DR-27-D08 actual DR28 screen",
+    "DR-27 ITEM and named future native writer integrations"
+  ],
+  "files": [
+    {
+      "file": "supabase/migrations/12102026_1125_banking_pay_next_channel_draft_list.sql",
+      "sha256": "c2e9cf37b32c5d87f699ad5db645aa2eb0978caed85996fc268d0cdc911266f4"
+    },
+    {
+      "file": "supabase/migrations/12102026_1136_banking_pay_next_channel_draft_timing_guard.sql",
+      "sha256": "507ce322e99dcdd8426ba63c480146020a9d55b44a6f8d97dc30561e102fba2d"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+      "sha256": "8e92c091539f1516af4ca0cc8ec1d37c81d9b60b7caa48a3ea92b3548adde60a"
+    },
+    {
+      "file": "broker/src/bpay-next-preparation.js",
+      "sha256": "5566476528f95af3a0f28634d9ab1c7a4c19d73e6fcc4f464ddbd363d79fb22b"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "0b70dba25f43ede3b2dc1e0a92670cefae1d91817508523d6d04257baa1dbf9a"
+    }
+  ],
+  "parents": {
+    "confirm": "0645",
+    "preparation": "12102026_1019",
+    "totalsTrigger": "12102026_0442"
+  },
+  "localSchema": {
+    "migrations": 371,
+    "repeatables": 950,
+    "exactOwners": 6,
+    "publicDefinerDelta": 0,
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "seal": "ae49b3788004ad12211f4e3e2c7a5d0f7473f9406a3f937fff1c0c47ed6ad603",
+    "coupling": "PASS"
+  },
+  "checks": {
+    "source": "12/12 PASS",
+    "syntax": "Worker/Office PASS",
+    "review": "Independent design/SQL/transport SOURCEPASS",
+    "business": "AUTHORED_NOT_RUN"
+  },
+  "reviewReceipts": [
+    {
+      "file": "docs/bpay-next/reviews/DR-27-design-review.md",
+      "sha256": "504067d8fe7a3fd3ddc7690aff2eb1d5d69d18964b3f307ccb33930cf7c893ed"
+    },
+    {
+      "file": "docs/bpay-next/reviews/DR-27-sql-review.md",
+      "sha256": "31e99b64c510b29ee3038d945841abc03d328d829576f98be74086180824c428"
+    },
+    {
+      "file": "docs/bpay-next/reviews/DR-27-transport-review.md",
+      "sha256": "fe3ed606fc01d454c077386d246abb8700b0634dbd1848b8d00117f90b16629e"
+    }
+  ],
+  "wholeItems": {
+    "built": 104,
+    "reviewed": 104,
+    "total": 288
+  }
+}

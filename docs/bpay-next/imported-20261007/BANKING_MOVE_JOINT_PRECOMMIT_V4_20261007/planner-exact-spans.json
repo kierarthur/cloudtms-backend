@@ -1,0 +1,17 @@
+{
+  "spans": [
+    {
+      "label": "reuse only point-proved existing WORK credit; overall Case REVIEW stays separate",
+      "before": "    if v_current is null or v_current='null'::jsonb or v_current->>'qualification_state' is distinct from 'READY'\n      or v_current->'basis' is distinct from p_context->'policy' then",
+      "after": "    if v_current is null or v_current='null'::jsonb\n      or (v_current->>'qualification_state' is distinct from 'READY' and (\n        v_current->>'qualification_state' is distinct from 'REVIEW'\n        or v_current->>'review_issue_code' is distinct from 'CASE_WRITEOFF_COMPARISON_REVIEW_REQUIRED'\n        or v_current->>'credit_qualification_state' is distinct from 'READY'\n        or (v_current->>'comparable_paid_ex_vat')::numeric is null\n        or (v_current->>'comparable_held_ex_vat')::numeric is null\n        or (v_current->>'comparable_held_ex_vat')::numeric<0))\n      or v_current->'basis' is distinct from p_context->'policy' then"
+    },
+    {
+      "label": "obtain actual current writeoff-review credit snapshot by exact pointer/book only",
+      "before": "        'comparable_paid_ex_vat',v_old.comparable_paid_ex_vat,'comparable_held_ex_vat',v_old.comparable_held_ex_vat);\n    end if;\n    v_partition:='null'::jsonb;",
+      "after": "        'comparable_paid_ex_vat',v_old.comparable_paid_ex_vat,'comparable_held_ex_vat',v_old.comparable_held_ex_vat);\n      if v_old.qualification_state='REVIEW'\n        and v_old.review_issue_code='CASE_WRITEOFF_COMPARISON_REVIEW_REQUIRED' then\n        v_old_json:=private.bpay_next_source_comparison_review_credit_snapshot_v2(v_old.id,v_book.source_book_revision);\n        if v_old_json is null or v_old_json='null'::jsonb\n          or v_old_json->>'id' is distinct from v_old.id::text\n          or v_old_json->>'qualification_state' is distinct from 'REVIEW'\n          or v_old_json->>'review_issue_code' is distinct from 'CASE_WRITEOFF_COMPARISON_REVIEW_REQUIRED'\n          or v_old_json->>'credit_qualification_state' is distinct from 'READY' then\n          raise exception 'BPAY_NEXT_COMPARISON_REVIEW_WORK_CREDIT_UNPROVED' using errcode='55000';\n        end if;\n      end if;\n    end if;\n    v_partition:='null'::jsonb;"
+    }
+  ],
+  "preimageSha256": "EEC43D12AF7D8EA44BC0F488C8C2D4F4145F94BA80B0AE23FBE645508E822F6D",
+  "candidateSha256": "D70B5E3DAE52CDF7DC59855E1DA116A8DBD974F5FDCC203DE319DEFEAC6AB1C0",
+  "inverseExact": true
+}

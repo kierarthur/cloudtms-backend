@@ -1,0 +1,62 @@
+{
+  "authority": "Minimal fixed local presentation responses; no DB rows, financial/auth/hosted action or reusable test tool.",
+  "actor": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "candidate": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "command": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "input": {
+    "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "case_kind": "ADVANCE",
+    "case_subtype": "PAYMENT_ADVANCE",
+    "tax_treatment": "NOT_APPLICABLE",
+    "principal": "300.00",
+    "due_date": null,
+    "start_monday": "2026-10-12",
+    "weekly_due": null,
+    "week_count": "6",
+    "minimum_earnings_threshold": null,
+    "take_home_floor_override": null,
+    "reason": "Create Payment Advance",
+    "note": null,
+    "original_liability_reference": null
+  },
+  "value": {
+    "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "weekly_due": "50.00",
+    "week_count": "6",
+    "first_due_monday": "2026-10-12",
+    "last_due_monday": "2026-11-16",
+    "total": "300.00",
+    "minimum_earnings_threshold": null,
+    "take_home_floor_override": null,
+    "effective_take_home_floor": "100.00",
+    "warnings": [
+      "EXISTING_REPAYMENTS"
+    ],
+    "preview_token": {
+      "input": {
+        "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "case_kind": "ADVANCE",
+        "case_subtype": "PAYMENT_ADVANCE",
+        "tax_treatment": "NOT_APPLICABLE",
+        "principal": "300.00",
+        "due_date": null,
+        "start_monday": "2026-10-12",
+        "weekly_due": null,
+        "week_count": "6",
+        "minimum_earnings_threshold": null,
+        "take_home_floor_override": null,
+        "reason": "Create Payment Advance",
+        "note": null,
+        "original_liability_reference": null
+      },
+      "context": {
+        "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "owner_epoch": "1",
+        "financial_view_revision": "0",
+        "pay_channel": "PAYE",
+        "candidate_default_floor": "100.00",
+        "valuation_policy_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+      }
+    }
+  }
+}

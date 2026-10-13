@@ -1,0 +1,44 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "One input quote helper and exact current quote delegation; full W2/context/accepted joins pending",
+  "builderDecisions": [
+    "BD156",
+    "BD157"
+  ],
+  "signatures": [
+    "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)",
+    "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+      "sha256": "37d3df35bc6297c1b6695b765476965b5ad024bd28af469e7beb49bb469a5c2a"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+      "sha256": "1f161c8a632ded5985bac8cd37db7cca9de189c7275b9e2309fe423e98f67a89"
+    }
+  ],
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sha256": "54a3b81cf74d1f86f7547b8948bca3d24a48493b23ed47e9cb949f9142b2f556"
+    }
+  ],
+  "designReview": "docs/bpay-next/reviews/WB-29-input-quote-design-review.md: DESIGN PASS",
+  "sourceReview": "docs/bpay-next/reviews/WB-29-input-quote-source-review.md: SOURCE PASS, Q01 corrected2218",
+  "checks": {
+    "dbCheck": "PASS:381 migrations/980 repeatables",
+    "sourceGates": "PASS:1537 SQL /30 public roots /156 work signatures /37 typed transport",
+    "nodeCheck": "PASS:changed source gate",
+    "localPG17": "PASS:2 exact quote body/config/owner/ACL/volatility matches; receipt7checks/actiondefault/jobnullability/twoimmutableguards/RLS/owner",
+    "isolation": "PASS:839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both existing DO verifiers",
+    "contract": "630366ec19dff84fbb158ced272857ea30ac8c9328f4415f0adc0314d92ddcc8",
+    "seal": "PASS",
+    "coupling": "PASS"
+  },
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "9691850829cfeb22d64e5210696ca337e3797f01"
+}

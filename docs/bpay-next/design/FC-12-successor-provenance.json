@@ -1,0 +1,373 @@
+{
+  "status": "BUILT_REVIEWED",
+  "parents": [
+    {
+      "signature": "private.bpay_next_claim_case_pause_job_v1(uuid,integer)",
+      "path": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb"
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "path": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb"
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+      "sha256": "8e92c091539f1516af4ca0cc8ec1d37c81d9b60b7caa48a3ea92b3548adde60a"
+    },
+    {
+      "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "path": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "path": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "sha256": "7b723a61096ac50853dbc609acbba6437b403f11aa796a6f77e39a78b8308f66"
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "path": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "sha256": "278096454907768263320ba6d53eaa28bce367c79b30fac08597e86bc2845698"
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "path": "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql",
+      "sha256": "278096454907768263320ba6d53eaa28bce367c79b30fac08597e86bc2845698"
+    },
+    {
+      "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+      "path": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "sha256": "cdfd284bf1026875c30b8b472719dc31650e5a4f783e50ce9e241024407c84a8"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_state_v1(uuid,uuid)",
+      "path": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "sha256": "7b723a61096ac50853dbc609acbba6437b403f11aa796a6f77e39a78b8308f66",
+      "reason": "Preserve genuine edit UUID / NULL when canonical schedule input comes from a qualified restructure."
+    }
+  ],
+  "newSignatures": [
+    "private.bpay_next_case_restructure_origin_v1(uuid)",
+    "private.bpay_next_case_restructure_preview_v1(uuid,jsonb)",
+    "private.bpay_next_accept_case_restructure_v1(uuid,jsonb)",
+    "private.bpay_next_case_restructure_receipt_v1(uuid,uuid,uuid)",
+    "private.bpay_next_apply_case_restructure_v1(uuid,uuid,bigint)",
+    "private.bpay_next_case_restructure_period_free_v1(uuid,date,uuid,uuid)",
+    "private.bpay_next_apply_case_restructure_period_v1(uuid,jsonb,jsonb,uuid)",
+    "private.bpay_next_claim_case_restructure_job_v1(uuid,integer)"
+  ],
+  "signatures": [
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_enroll_one_v1()",
+    "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+    "private.bpay_next_case_edit_origin_v1(uuid)",
+    "private.bpay_next_case_allocation_plan_v1(jsonb)",
+    "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+    "private.bpay_next_case_edit_state_v1(uuid,uuid)"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/12102026_1536_banking_pay_next_case_restructure_request.sql",
+      "sha256": "a10848d1beb6a910f397ce2e223fe95677da33099b1d06558a2f1cb0b0880d8a"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "repository": "BE",
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "26d2eac747397f5c94a9ba7d98f7daeb2e66639e1dce8078be2a56e811075e41"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-case-contract.js",
+      "sha256": "01b0cceb0790505c05d1fecff6ebc9f5036d0d8e968214d1878067ae876d1ef2"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "cd60d1de208b26e3769d3874dfac2cbbd6caef7e09dd0b7403478589f90cb463"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "8715ddba120198f9fc6326e46c4d3cc8e0c0124b294bd58fc3dd79d76be14db3"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "99241e7f25aac9cfddd2772b795ed5e068527a8b2afaae3a5a25d602577eae3b"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "42634dc189ba2f137451e8c52d7146fd39cbc9ad39ccc06230d765ab006ddf6d"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "sha256": "a13ab48ba4dacd136be34f9a5e7589ad8407f6fda63ac12d63378bf6708b4998"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "96cb0801ac4907f8c5fdf23986084a0ef071ff6a25663e031b041fe2560d64d0"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "d96e2479ea432641c5a2054040feb076b5882268e00775d40f14340345ded7f3"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-case-audit-contract.js",
+      "sha256": "7bf3adeae214d26f435cb93cbbaf5c842f493214369e1ce30e9db949b92fd399"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-restructure.js",
+      "sha256": "dd84bd9fbffe4dae93e0c77a6832741e1e154ae2f8ce48a9262f83484069e559"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-preview.js",
+      "sha256": "ff56bd7d262d2cebb79dc10d93f3b7f31e432abbd249abd57bdebe883bc464d1"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-audit-contract.js",
+      "sha256": "3f4e6b5fdc3331eeee9be7e719d912e58ec1f75a59457ff9d7cddb3dcd079ee2"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "456a48e11e6efd161fdeb3adf4cb356356dd42b1d3e95949a7da270577d11c91"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-list.js",
+      "sha256": "55d450b1782c2b3c9511388b0ea0f923fc850db997d8a9f105bb30e6e2d76d2f"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "934e06de52b4e2f536a983036490c7e24f9e625e6ec0a0dfe208ef619570efe0"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "e05d4b75fad945d57ab4a51e17818e65612f6ca621d22eba7dc913528cdc4724"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "fcc181806258dcd8cf4c65812243a7b5581c0fee85acd65e30ed06a3db51f799"
+    }
+  ],
+  "owners": [
+    {
+      "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
+      ]
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ]
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+        "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql"
+      ]
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+        "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+        "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+        "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+        "supabase/repeatable/12102026_0414_banking_pay_next_preparation_wait_capacity_reader_v1.sql",
+        "supabase/repeatable/12102026_0442_banking_pay_next_run_review_totals_v1.sql",
+        "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+        "supabase/repeatable/12102026_1019_banking_pay_next_paye_worksheet_v1.sql",
+        "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0408_banking_pay_next_other_draft_preparation_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_case_edit_state_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_origin_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_preview_v1(uuid,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_accept_case_restructure_v1(uuid,jsonb)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_receipt_v1(uuid,uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_apply_case_restructure_v1(uuid,uuid,bigint)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_period_free_v1(uuid,date,uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_apply_case_restructure_period_v1(uuid,jsonb,jsonb,uuid)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    },
+    {
+      "signature": "private.bpay_next_claim_case_restructure_job_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "predecessors": []
+    }
+  ],
+  "checks": {
+    "dbCheck": "374 migrations,954 repeatables",
+    "sourceGates": "1504 SQLsources; frozen7/18/45; rpc28; typed37 PASS",
+    "javascript": "Changed Worker and Office JS node --check PASS",
+    "local": "18 exact PG17 bodyMD5/config/ACL/owner matches; three private immutable emptytables; both browserisolation DO PASS; General839/76/0/hash338226c4e9b878c5aa92fc8e319dd7bf; publicSECDEF membership delta0",
+    "contract": "a59e7fc45cafa9f90d6256d6b68f64450ce22b5c1b0f48a00c1bc630064b7aad export/seal/coupling PASS",
+    "a4": "Independent full42policy PASS / APPROVED on40actual local nativePNG (30dark/device-light/phone states+10phonebottom), supplieddesign side-by-side/everydifference/controlpurpose documented; no financialdispatch",
+    "business": "AUTHORED_NOT_RUN; compile/catalogue/source/A4 only; no business SQL/RPC/queue/hosted/payment/timing/auth/email"
+  },
+  "implementationCommit": "b8a296e9a54c00f2dfcbc7b6140fd883234d3168",
+  "frontendCommit": "2c81400267d7375ac1a4a1322b316ea4d79a9151"
+}

@@ -1,0 +1,67 @@
+{
+  "scope": "WB29 final Ready chosen-rate presentation only",
+  "local": "actual saved Office and native adapter, fixed GET replies; all nonlocal networking aborted; no SQL/data/mutation",
+  "sourceResponses": "../WB29-fixed-read-responses.json",
+  "files": [
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-04/WB29/WB29-main-dark.png",
+      "sha256": "d73f1bf57ecaee650b20375be019badaca0797f8d1943a317a1172fbef6723af"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-04/WB29/WB29-main-device-light.png",
+      "sha256": "af1fa86241908f2d76ea5284633554f4c33536cc00a5cd4bec515e44f018ee3c"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-04/WB29/WB29-main-phone-dark.png",
+      "sha256": "e8d55b245984d93f3a9a259cb9ebb9261c019f5b4902288f0b73c64530ad68f5"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-02/WB29/WB29-filters-dark.png",
+      "sha256": "533566577f2cdc200e4d6a1bf2afe1021e6e4ab9914360edf524404c83aa8936"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-02/WB29/WB29-filters-device-light.png",
+      "sha256": "533566577f2cdc200e4d6a1bf2afe1021e6e4ab9914360edf524404c83aa8936"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-02/WB29/WB29-filters-phone-dark.png",
+      "sha256": "ac1a1681580259b8a622a26c5ca6005308cd0e541f9ecf93b13d14acebe59bca"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-09/WB29/WB29-candidate-dark.png",
+      "sha256": "8745edf01d57a3f9bade45163040d11538c20ad1fade10840c26a89cda85fce5"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-09/WB29/WB29-candidate-device-light.png",
+      "sha256": "8745edf01d57a3f9bade45163040d11538c20ad1fade10840c26a89cda85fce5"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-09/WB29/WB29-candidate-phone-dark.png",
+      "sha256": "67ae456434cb7c4d98a7edd60c8fa3e19abd952644bd7c279d69af073899d367"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-bottom-phone-dark.png",
+      "sha256": "52fc172e69315c33de11ccbeca39a3ab577b5ccf75c9f5b8096644e39465ca45"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-dark.png",
+      "sha256": "be05cfb8258ea02d66b598609500d9723157f1df414ea880f5d738f05f8cb9be"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-device-light.png",
+      "sha256": "be05cfb8258ea02d66b598609500d9723157f1df414ea880f5d738f05f8cb9be"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-expense-bottom-phone-dark.png",
+      "sha256": "8d0b80886d90a705bb19332531d51995f6feb8dc9c5fd29826a312bc24105a4c"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-phone-dark.png",
+      "sha256": "be7a356cfc2b48894c88d348a7951a352a076aa5c30294647dc9ddf8e223f385"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-10/WB29/WB29-expanded-shift-bottom-phone-dark.png",
+      "sha256": "91952cba9d1b15e4dbd19641774d70d8672df3a164c85c3fe6c109755e6b2269"
+    }
+  ]
+}

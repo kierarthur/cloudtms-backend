@@ -1,0 +1,287 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "body": "{\"action\":\"REVIEW\",\"run_id\":\"60000000-0000-4000-8000-000000000002\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PREPARE_ISSUES",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "REVIEW_TOTALS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "body": "{\"action\":\"CONFIRM\",\"run_id\":\"60000000-0000-4000-8000-000000000002\",\"review_revision\":\"1\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "CHANNEL_WORKERS",
+      "body": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "needs_attention": false,
+          "run_id": "60000000-0000-4000-8000-000000000002",
+          "status": "REVIEW",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-12T06:20:14.000Z",
+          "expires_at_utc": "2026-10-15T06:20:14.000Z",
+          "selected_candidates": "2",
+          "ready": "2",
+          "review": "0",
+          "pending": "0",
+          "preparing": "0",
+          "removed": "0",
+          "enrolled_candidates": "2",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0",
+          "waiting_on_other_run": false
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "action": "REVIEW",
+      "result": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "phase": "REVIEW",
+        "reason": null,
+        "review_revision": "1",
+        "all_ready": true,
+        "replay": true
+      }
+    },
+    {
+      "ok": true,
+      "kind": "PREPARE_ISSUES",
+      "context": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "actor_user_id": "60000000-0000-4000-8000-000000000001",
+        "owner_epoch": "1",
+        "review_revision": "1",
+        "run_status": "REVIEW",
+        "selection_state": "SEALED",
+        "selection_pages": "1",
+        "selected_candidates": "2",
+        "preparing": "0",
+        "ready": "2",
+        "review": "0",
+        "removed": "0",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "view": "CANDIDATES",
+        "sort": "STATE_ASC",
+        "row_key": null,
+        "waiting_only": false,
+        "paye_totals_revision": "7",
+        "umbrella_totals_revision": "3"
+      },
+      "rows": [
+        {
+          "row_key": "CANDIDATE:33333333-3333-4333-8333-000000000003",
+          "origin": "CANDIDATE",
+          "candidate_id": "33333333-3333-4333-8333-000000000003",
+          "run_worker_id": "33333333-3333-4333-8333-000000000103",
+          "worker_status": "READY",
+          "issue_code": null,
+          "work_id": "60000000-0000-4000-8000-000000000120",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000220",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000320",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Bethany Clarke",
+          "candidate_reference": "TMS 10423",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105120",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": "169.10",
+          "preparation_revision": "1",
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "bethany clarke",
+            "CANDIDATE:33333333-3333-4333-8333-000000000003"
+          ],
+          "waiting_on_other_run": false,
+          "waiting_run_id": null,
+          "waiting_actor_display_name": null,
+          "capacity_reduced_by_other_run": false,
+          "pay_channel": "PAYE",
+          "deduction_total": "0.00",
+          "frozen_offer_complete": true,
+          "case_count": "0"
+        },
+        {
+          "row_key": "CANDIDATE:33333333-3333-4333-8333-000000000004",
+          "origin": "CANDIDATE",
+          "candidate_id": "33333333-3333-4333-8333-000000000004",
+          "run_worker_id": "33333333-3333-4333-8333-000000000104",
+          "worker_status": "READY",
+          "issue_code": null,
+          "work_id": "60000000-0000-4000-8000-000000000121",
+          "expected_revision_id": "60000000-0000-4000-8000-000000000221",
+          "physical_timesheet_id": "60000000-0000-4000-8000-000000000321",
+          "physical_timesheet_version": "1",
+          "candidate_display_name": "Priya Shah",
+          "candidate_reference": "TMS 10424",
+          "label_origin": "CAPTURED_WORK",
+          "timesheet_reference": "105121",
+          "week_ending_date": "2026-10-11",
+          "frozen_ex_vat": "235.00",
+          "preparation_revision": "1",
+          "discard_outcome": null,
+          "discard_blocked_code": null,
+          "sort_key": [
+            false,
+            "priya shah",
+            "CANDIDATE:33333333-3333-4333-8333-000000000004"
+          ],
+          "waiting_on_other_run": false,
+          "waiting_run_id": null,
+          "waiting_actor_display_name": null,
+          "capacity_reduced_by_other_run": false,
+          "pay_channel": "UMBRELLA",
+          "deduction_total": "0.00",
+          "frozen_offer_complete": true,
+          "case_count": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null,
+      "counts": {
+        "skipped_timesheets": "0",
+        "removed_candidates": "0",
+        "scope_count": "2"
+      }
+    },
+    {
+      "ok": true,
+      "kind": "REVIEW_TOTALS",
+      "context": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "actor_user_id": "60000000-0000-4000-8000-000000000001",
+        "owner_epoch": "1",
+        "review_revision": "1",
+        "run_status": "REVIEW",
+        "selection_state": "SEALED",
+        "paye_totals_revision": "7",
+        "umbrella_totals_revision": "3",
+        "run_worker_id": null,
+        "candidate_id": null,
+        "worker_status": null,
+        "preparation_revision": null,
+        "captured_preparation_revision": null,
+        "case_selection_revision": null,
+        "net_request_revision": null,
+        "net_projection_revision": null,
+        "sort": null
+      },
+      "whole": {
+        "candidate_count": "2",
+        "ready_count": "2",
+        "gross_ex_vat": "404.10",
+        "gross_vat": "47.00",
+        "gross_inc_vat": "451.10",
+        "gross_stage_deductions": "0.00",
+        "net_recovery_reserved": "0.00",
+        "cash_known": "282.00",
+        "net_missing_count": "1",
+        "applicable_net_missing_count": "1",
+        "net_replacement_pending_count": "0",
+        "net_refused_code": null
+      },
+      "channels": [
+        {
+          "pay_channel": "PAYE",
+          "candidate_count": "1",
+          "ready_count": "1",
+          "gross_ex_vat": "169.10",
+          "gross_vat": "0.00",
+          "gross_inc_vat": "169.10",
+          "gross_stage_deductions": "0.00",
+          "net_recovery_reserved": "0.00",
+          "cash_known": "0.00",
+          "net_missing_count": "1",
+          "applicable_net_missing_count": "1",
+          "net_replacement_pending_count": "0",
+          "net_refused_code": null,
+          "totals_revision": "7",
+          "updated_at_utc": "2026-10-12T06:35:00+00:00"
+        },
+        {
+          "pay_channel": "UMBRELLA",
+          "candidate_count": "1",
+          "ready_count": "1",
+          "gross_ex_vat": "235.00",
+          "gross_vat": "47.00",
+          "gross_inc_vat": "282.00",
+          "gross_stage_deductions": "0.00",
+          "net_recovery_reserved": "0.00",
+          "cash_known": "282.00",
+          "net_missing_count": "0",
+          "applicable_net_missing_count": "0",
+          "net_replacement_pending_count": "0",
+          "net_refused_code": null,
+          "totals_revision": "3",
+          "updated_at_utc": "2026-10-12T06:35:00+00:00"
+        }
+      ],
+      "captured_at_utc": "2026-10-12T06:20:14.000Z",
+      "observed_at_utc": "2026-10-12T06:35:00+00:00"
+    },
+    {
+      "ok": true,
+      "action": "CONFIRM",
+      "result": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "phase": "DRAFT",
+        "review_revision": "1",
+        "replay": false,
+        "drafts": [
+          {
+            "run_id": "60000000-0000-4000-8000-000000000002",
+            "pay_channel": "PAYE"
+          },
+          {
+            "run_id": "60000000-0000-4000-8000-000000000002",
+            "pay_channel": "UMBRELLA"
+          }
+        ]
+      }
+    },
+    {
+      "ok": false,
+      "error_code": "BPAY_NEXT_PREPARATION_DEPENDENCY_UNAVAILABLE",
+      "retryable": true,
+      "outcome_unknown": false
+    }
+  ]
+}

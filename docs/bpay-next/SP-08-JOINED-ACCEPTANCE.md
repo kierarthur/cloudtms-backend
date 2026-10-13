@@ -1,0 +1,3 @@
+# SP-08 joined acceptance — NOT_RUN
+
+Full first-authorisation no-Final WORK→position→first-paid SOURCE-book journey; actual protected8→7→6→7 amendments and bounded origin payload/editor closure; negative extra/mixed/unknown origin, altered full digest, stale original authority, retained replay and same-transaction double-consumption/early SET CONSTRAINTS ALL business journeys remain NOT_RUN. Source implementation and local compilation are recorded separately, not claimed as actual business outcomes. No fixtures, rehearsal, hosted agency/queue/payment/provider action. Local0355 ledger count1 is actual read-only local evidence only. No old origin backfill or standing once-only cutover restriction.

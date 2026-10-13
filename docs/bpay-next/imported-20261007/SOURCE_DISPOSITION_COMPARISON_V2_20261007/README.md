@@ -1,0 +1,56 @@
+# Source disposition comparison V2 — E-only candidate
+
+This packet replaces the unadopted zero-only V1 schema; it must not be installed after V1. It is frozen for joined review, not adopted, deployed, executed or awarded. W is unchanged. No database, provider, payment, hosted service or original cash/NET/VAT/history was changed.
+
+## Fixed shape and authority
+
+`0156` defines one immutable full comparison snapshot family and one current ID/revision on the existing canonical position. Its before/after tuple contains signed native realised PAYE/UMBRELLA, nonnegative native held PAYE/UMBRELLA, locked book/comparison revisions, comparable paid/held, complete planned/current entitlement, target basis/policy/window/date/VAT/selection, real approval/binding/digests, and exact real operation references. Previous IDs are audit links, not a runtime chain. The two immutable per-hold mapping tables certify accepted frozen WORK/Case quantities, not new balances or financial ledgers.
+
+Receipt kinds are REVIEW, PENDING_REVIEW, RESERVE, SETTLE, RELEASE, CASE_RECOVERY, CASE_RECONCILE, CASE_RESERVE and CASE_RELEASE. READY permits preparation; PENDING/REVIEW do not. Money posting advances the native book once; economic review or actual Case-only capacity/principal changes advance the comparison revision without inventing a native money change. Mixed native counters are retained. Ordinary, unqualified legacy scalar-to-native bridging remains intact.
+
+The existing WORK effect-to-run-line FK is unchanged. CASE_RECOVERY has a separate closed typed Case event/instruction/allocation result branch and actual target native channel/negative target debit. Retained old immutable instructions use an exact accepted Case-hold certificate instead of retrofitting them or fabricating a WORK line. Effects reference the existing INPUT comparison; the immutable OUTPUT snapshot references the real effect/hold/event, avoiding a future circular insert dependency.
+
+`0157` owns immutable guards, registration, exact operation proof/carry, currentness, Case proof/remainder, and display. `0158` changes only the actual 1246 book guard and seed-scalar reader predicate, and adds genuinely lock-free STABLE projections generated from the same pinned authority code. It also adds a comparison-qualified expiry proof projected from actual 0510: the existing complete lease/run/deadline/DRAFT/cursor/allocation/no-NET/no-transfer gates remain, while only the current certified canonical comparison/immutable Case-source/typed input-policy lane replaces its PAYE-only subset. The ordinary 0510 proof is unchanged. It does not label the existing locking getter STABLE. Initial-TSFIN and publication qualification gates remain in both runtime and read-only paths.
+
+## Consumer API
+
+All functions below are private; no public/service-role RPC grants are added.
+
+| Owner | Input | Output / rule |
+| --- | --- | --- |
+| `register_pending_core_v2` | witness UUID, one captured context JSON, one server-verified plan JSON | Comparison UUID. Uses the CURRENT real binding/approval, before I4; no future HEAD/approval fabrication. |
+| `register_core_v2` | resulting real binding UUID, SAME witness UUID, context JSON, plan JSON | Comparison UUID. Exact accepted financial digest/book/native/current pointer; promotion consumes one carried current PENDING snapshot, not a history re-quote. |
+| `operation_v2` | leased job UUID, RESERVE/SETTLE/RELEASE/CASE_RECOVERY, one real operation UUID | Typed canonical/local/native/hold/effect/Case tuple and scalar-ownership flag; no caller amounts. |
+| `carry_v2` | job UUID, expected book revision, expected current comparison UUID, kind, real hold/effect UUID | JSON `comparison_id`, `comparison_revision`, `book_revision`, `qualification_state`, `replay`. Owns legitimate local scalar and canonical native updates exactly once; callers skip their old scalar update. |
+| `case_capacity_carry_v2` | job UUID, expected book revision, expected current comparison UUID, ONE real Case hold UUID, CASE_RESERVE/CASE_RELEASE | Same JSON. Call after physical ACTIVE insertion or RELEASED transition and Case/capacity-use mutation. SOURCE J and frozen comparable Case q change; WORK R/H/native cash/book do not. |
+| `case_reconcile_v2` | job UUID, expected book revision, expected current comparison UUID, actual collection UUID | Same JSON after genuine 1519 principal/result update. Supports None-to-real-Case and exact same-family principal correction; replay identity includes the input comparison for multiple operations in one job. |
+| `current_v2` | real binding UUID, expected book revision, optional expected comparison UUID | Full typed READY receipt only, through genuine current publication/book/Case checks. Runtime VOLATILE locking owner. |
+| `case_basis_snapshot_v2` | canonical WORK UUID, exact component key | STABLE actual flat Case P/K/W/J, immutable source channel/rule, row and reconciliation revisions. `case_basis_v2(...,true)` is its locking sibling, not STABLE. |
+| `collection_origin_v2` | current READY comparison UUID, candidate UUID | Real existing canonical collection with original effect→line/revision→REALISED hold→original transfer/member proof and canonical observed scalar tuple. Does not require a paid seed effect: a genuine zero-seeded first settlement stays zero-seeded. |
+| `component_display_v2` | candidate UUID, actual WORK UUID, revision UUID, approved-line UUID | STABLE `(realised_source_ex_vat,held_source_ex_vat,residual_source_ex_vat,position_ready)`. Certified comparison gives R*/H*/rho; recognized pending/review/stale gives NULL financials/false, never destination-local-zero fallback. No comparison retains exact existing local behavior. |
+
+Registration consumes the existing Source `weekly_source_destination_reprice_witness_v1`, its domain-qualified accepted request digest, and the independently verified financial plan snapshot. It rejects generic caller money and caller qualification flags. The external Source/0140 planner and actual joined wrapper are separate packets; their final hashes must be pinned in the parent joined manifest, not presumed from earlier intermediate versions.
+
+## Financial equations and known-operation carry
+
+For accepted complete entitlement N, selected comparable paid R* and held H*, `rho = N - R* - H*`. New reservation is exactly positive rho in the actual target native channel, with source consumed = target ex-VAT = rho. Settlement moves that accepted q from H* to R*. An old hold settles `(R*+q,H*-q)` or releases `(R*,H*-q)` using its frozen accepted mapping exactly once, never today's settings or units inferred from money.
+
+Example: original native UMBRELLA paid 20 remains 20 and original cash remains unchanged; accepted PAYE comparable credit is 17. A real PAYE residual 3 reserves/settles as native PAYE +3 and comparable credit +3, giving R*=20. A real PAYE Case recovery 2 posts native PAYE −2 and R*=15 from an input credit 17. It does not invent inverse UMBRELLA cash or rewrite the seed scalar. Same-channel operations are also certified, so a genuine later seed-channel posting is not mistaken for the old scalar bridge.
+
+Case counters retain their immutable SOURCE basis: `P = K + W + max(S,Jnative)`. Chosen target outstanding is `O* = max(R* - N - W*, J*, 0)`. The existing shared selected-quote owner must forward-quote S to exactly O*. Recovery changes real SOURCE K/J by the actual allocation/event and chosen R*/J* by frozen target q. Capacity release does not masquerade as cash recovery. Inexact rounded remainder/missing mapping records REVIEW rather than guessing an inverse, accepting stale Case JSON, or blocking a truthful released hold. A real principal correction can subsequently certify CASE_RECONCILE when the exact saved basis remains valid.
+
+## Exact preimages and verification
+
+`source-pins.json` pins the whole current W1246, W0018 and W0510 files and each changed/projected function. `source-book.patch` has an exact current preimage; `source-book.inverse.patch` restores precisely those two function preimages in a virtual round trip. `0158` also creates new private read-only/expiry siblings, so inverse adoption must separately remove only those introduced definitions under an explicitly reviewed rollback; no destructive database down migration is offered. For this unadopted packet, no W/DB rollback is needed. The schema asserts the exact existing residual, collection-origin and managed-shape constraint preimages before replacing only their closed comparison branches.
+
+Run `node build-candidate.mjs` only to regenerate the mechanical E artifacts from matching reviewed W inputs; it never writes W. Run `node verify-source.mjs` for source/preimage/closed-shape/replay/provenance and integer-penny model checks. At freeze, 32/32 checks passed; `source-verification.json` records results and SQL hashes. Lexical quote/parenthesis checks are not PostgreSQL parsing or compilation. `git apply --check source-book.patch` also passed as a non-mutating preimage check. No native SQL, catalog assertion, trigger execution, concurrency/latency, real transfer, or financial scenario has been proved by these checks. `manifest.json` and its SHA sidecar pin every task-owned artifact; external joined packets are deliberately not claimed frozen here.
+
+## Joined readiness — still required
+
+The parent must join genuine precommit/I4/1301 registration, 1430 activation, 1610/1620 capture/reserve, actual WORK settle/release owners, actual Case allocation/recovery/cancel/expiry owners, 1519 collection reconciliation and the 0575 display call. In particular Case capacity carry must be called with each known actual hold immediately after its physical mutation; aggregate completion/counts are not substitute operation evidence. Readers must not use the READY getter to block already-real external money or old-hold release.
+
+Actual Case W-only writeoff changes are detected by exact current Case tuple/revisions and deny stale preparation/promotion, but this packet does not yet provide an accepted writeoff event carry. The joined implementation must either certify that existing real writeoff owner in this same family or surface explicit REVIEW; it must not silently rebase W, preserve stale READY, or manufacture a new Case. The same requirement applies to later new basis review with unqualified old held mappings/rounded remainders.
+
+Whole-destination repricing of its own already-paid/held components is separate from the moved canonical component: the joined PLAN currently covers moved components. A changed own-destination native basis/channel/pricing policy must be covered by its genuine accepted comparison or refused, not claimed solved by local scalar carry. Additional/expense/initial-TSFIN/bucket-policy coverage and genuine partial/mixed/recovered manual replacement-rate quantity provenance remain required; the latter is explicitly refused rather than deriving units from money.
+
+No full MOV17, all-components/all-channel end-to-end, readiness award, native test, adoption, SQL compilation, production or TEST release is claimed. Remaining reviewed locks may block broadly or deadlock; actual joined lock order/writer interactions and latency qualification stay open for the subsequent single joined rehearsal.

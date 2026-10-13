@@ -1,0 +1,112 @@
+diff --git a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql
+index 7d0f4d3..bcb9d62 100644
+--- a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql
++++ b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql
+@@ -266,7 +266,9 @@ begin
+        v_value.target_ex_vat,v_value.target_vat,v_value.target_inc_vat,
+        v_row.source_binding_version_id,v_row.canonical_source_work_id,v_row.canonical_source_component_key,
+        v_row.source_book_revision,case when v_row.source_binding_version_id is null then null
+-         else (v_row.work_id,v_row.component_key)=(v_row.canonical_source_work_id,v_row.canonical_source_component_key) end,
++         else (v_row.work_id,v_row.component_key)=(v_row.canonical_source_work_id,v_row.canonical_source_component_key)
++           and (v_row.source_comparison_receipt_id is null
++             or v_row.source_basis_channel is not distinct from v_row.source_pay_channel) end,
+        v_row.source_comparison_receipt_id)
+       returning id into v_run_line_id;
+     -- An authorised zero still has immutable shift/rate advice detail. It
+diff --git a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql
+index 3a8f923..546b15d 100644
+--- a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql
++++ b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql
+@@ -343,6 +343,7 @@ declare j private.bpay_next_job%rowtype;l private.bpay_next_run_line%rowtype;h p
+   b private.bpay_next_source_component_binding%rowtype;
+   cr private.bpay_next_source_comparison_receipt%rowtype;cm private.bpay_next_source_comparison_case_hold_mapping%rowtype;
+   collection private.bpay_next_work_collection%rowtype;
++  captured private.bpay_next_run_position%rowtype;scalar_eligible boolean;
+ begin
+   select * into strict j from private.bpay_next_job where id=p_job_id;
+   if p_kind not in ('RESERVE','SETTLE','RELEASE','CASE_RECOVERY') or p_operation_id is null
+@@ -452,11 +453,62 @@ begin
+       canonical_work_id:=b.canonical_work_id;canonical_component_key:=b.canonical_component_key;
+     end if;
+     local_work_id:=l.work_id;local_component_key:=l.component_key;native_channel:=l.source_pay_channel;
+-    native_amount:=h.source_reserved_ex_vat;target_ex:=l.frozen_ex_vat;target_vat:=l.frozen_vat;target_inc:=l.frozen_inc_vat;hold_id:=h.id;updates_local_scalar:=true;
++    native_amount:=h.source_reserved_ex_vat;target_ex:=l.frozen_ex_vat;target_vat:=l.frozen_vat;target_inc:=l.frozen_inc_vat;hold_id:=h.id;
++    if l.source_comparison_receipt_id is not null then
++      select rp.* into strict captured from private.bpay_next_run_position rp
++        where rp.run_work_id=l.run_work_id and rp.component_key=l.component_key;
++      if (captured.run_worker_id,captured.work_id,captured.captured_revision_id,
++          captured.approved_line_id,captured.source_pay_channel,
++          captured.source_binding_version_id,captured.canonical_source_work_id,
++          captured.canonical_source_component_key,captured.source_book_revision,
++          captured.source_comparison_receipt_id,captured.residual_source_ex_vat,
++          captured.selected_residual_ex_vat)
++        is distinct from (l.run_worker_id,l.work_id,l.captured_revision_id,
++          l.approved_line_id,l.source_pay_channel,
++          l.source_binding_version_id,l.canonical_source_work_id,
++          l.canonical_source_component_key,l.source_book_revision,
++          l.source_comparison_receipt_id,l.source_consumed_ex_vat,l.source_consumed_ex_vat)
++        or captured.needs_financial_resolution is distinct from false or captured.work_collection_id is not null then
++        raise exception using errcode='23514',message='BPAY_NEXT_COMPARISON_LOCAL_SCALAR_CAPTURE_INVALID';
++      end if;
++      scalar_eligible:=captured.source_basis_channel is not distinct from l.source_pay_channel;
++      if l.updates_original_source_scalar is distinct from
++        (((local_work_id,local_component_key)=(canonical_work_id,canonical_component_key)) and scalar_eligible) then
++        raise exception using errcode='23514',message='BPAY_NEXT_COMPARISON_LOCAL_SCALAR_FLAG_INVALID';
++      end if;
++      updates_local_scalar:=case when (local_work_id,local_component_key)=(canonical_work_id,canonical_component_key)
++        then l.updates_original_source_scalar else scalar_eligible end;
++    else
++      -- Retained pre-comparison children keep their original scalar posting.
++      updates_local_scalar:=true;
++    end if;
+   end if;
+   candidate_id:=j.candidate_id;return next;
+ end $function$;
+ 
++-- Frozen comparison line eligibility cannot be changed after allocation.
++-- Ordinary and retained pre-comparison row lifecycles remain unchanged.
++create or replace function private.bpay_next_source_comparison_run_line_frozen_guard_v2()
++returns trigger language plpgsql security invoker set search_path=pg_catalog,private as $function$
++begin
++  if tg_op='TRUNCATE' then
++    raise exception using errcode='23514',message='BPAY_NEXT_COMPARISON_RUN_LINE_IMMUTABLE';
++  end if;
++  if old.source_comparison_receipt_id is not null
++    or (tg_op='UPDATE' and new.source_comparison_receipt_id is not null) then
++    raise exception using errcode='23514',message='BPAY_NEXT_COMPARISON_RUN_LINE_IMMUTABLE';
++  end if;
++  if tg_op='DELETE' then return old;end if;
++  return new;
++end $function$;
++
++drop trigger if exists bpay_next_source_comparison_run_line_frozen_v2 on private.bpay_next_run_line;
++create trigger bpay_next_source_comparison_run_line_frozen_v2 before update or delete
++on private.bpay_next_run_line for each row execute function private.bpay_next_source_comparison_run_line_frozen_guard_v2();
++drop trigger if exists bpay_next_source_comparison_run_line_no_truncate_v2 on private.bpay_next_run_line;
++create trigger bpay_next_source_comparison_run_line_no_truncate_v2 before truncate
++on private.bpay_next_run_line for each statement execute function private.bpay_next_source_comparison_run_line_frozen_guard_v2();
++
+ create or replace function private.bpay_next_source_comparison_book_certified_v2(p private.bpay_next_position)
+ returns boolean language sql stable security invoker set search_path=pg_catalog,private as $function$
+   select exists(select 1 from private.bpay_next_source_comparison_receipt r where r.id=p.source_comparison_receipt_id
+@@ -1230,6 +1282,7 @@ do $private_helpers$ declare f regprocedure;begin
+   for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+     where n.nspname='private' and p.proname in ('bpay_next_source_comparison_scalar_v2','bpay_next_source_comparison_scalar_delta_v2',
+       'bpay_next_source_comparison_operation_v2','bpay_next_source_comparison_book_certified_v2','bpay_next_source_comparison_guard_v2',
++      'bpay_next_source_comparison_run_line_frozen_guard_v2',
+       'bpay_next_source_comparison_case_basis_v2',
+       'bpay_next_source_comparison_case_basis_snapshot_v2','bpay_next_source_comparison_case_reconcile_proof_v2',
+       'bpay_next_source_comparison_case_reconcile_v2','bpay_next_source_comparison_collection_origin_v2',
+diff --git a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql
+index 97cf5a1..9fd470c 100644
+--- a/SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs/supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql
++++ b/SOURCE_RESERVATION_BASIS_CORRECTION_V1_20261007/candidate/supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql
+@@ -333,6 +333,8 @@ begin
+       p.native_held_umbrella+case when op.native_channel='UMBRELLA' then dh else 0 end) then
+     raise exception using errcode='23514',message='BPAY_NEXT_COMPARISON_NATIVE_DELTA_INVALID';end if;
+   select * into strict localp from private.bpay_next_position where work_id=op.local_work_id and component_key=op.local_component_key;
++  if op.updates_local_scalar and localp.source_basis_channel is distinct from op.native_channel then
++    raise exception 'BPAY_NEXT_COMPARISON_LOCAL_NATIVE_BASIS_UNQUALIFIED';end if;
+   if new.local_scalar_before is distinct from private.bpay_next_source_comparison_scalar_v2(localp)
+     or new.local_scalar_after is distinct from (case when not op.updates_local_scalar then new.local_scalar_before
+       else private.bpay_next_source_comparison_scalar_delta_v2(

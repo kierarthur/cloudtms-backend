@@ -1,0 +1,104 @@
+[
+  {
+    "signature": "private.bpay_next_workbench_ensure_metadata_v1(uuid)",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_candidate_name_trigger_v1()",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_umbrella_metadata_trigger_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_set_bank_warning_v1(uuid,text)",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_task_result_v1(private.bpay_next_workbench_task,boolean,integer,boolean,boolean)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_finish_task_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_queue_origin_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_claim_task_v1(uuid,integer)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_step_task_v1(uuid,uuid,bigint,bigint,bigint,text,text,integer)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
+    "predecessor": "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql",
+    "final": "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
+    "predecessor": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+    "final": "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+    "scope": "Finite prepared projection support; Rule-B unchanged"
+  },
+  {
+    "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+    "predecessor": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "final": "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
+    "scope": "1236 full-body + exact native page refresh only; SP20/DR38/WB29/CM economic chain unchanged"
+  },
+  {
+    "signature": "private.bpay_next_workbench_snooze_due_trigger_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql",
+    "scope": "Private metadata-only actual saved Snooze + due receipt; native1100 guard/event snapshots unchanged; exact Work task/Case projection in same transaction"
+  }
+]

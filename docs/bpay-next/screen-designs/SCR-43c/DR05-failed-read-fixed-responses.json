@@ -1,0 +1,34 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "bytes": "{\"action\":\"REVIEW\",\"run_id\":\"22222222-2222-4222-8222-222222222222\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "WORKERS",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "action": "REVIEW",
+      "result": {
+        "run_id": "22222222-2222-4222-8222-222222222222",
+        "phase": "REVIEW",
+        "reason": null,
+        "review_revision": "1",
+        "all_ready": false,
+        "replay": true
+      }
+    },
+    {
+      "ok": false,
+      "error_code": "BPAY_NEXT_PREPARATION_UNAVAILABLE",
+      "retryable": true,
+      "outcome_unknown": false
+    }
+  ]
+}

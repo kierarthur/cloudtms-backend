@@ -1,0 +1,1048 @@
+{
+  "source": "Fresh sole local PG17 metadata and existing isolation DO checks only; no business invocation/rows.",
+  "rows": [
+    {
+      "signature": "private.bpay_next_retry_execution_v1(uuid,uuid,bigint)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "4d9f3d4c231e1a1eb07b65a10bfbf6a0",
+      "installed": {
+        "bodyMd5": "4d9f3d4c231e1a1eb07b65a10bfbf6a0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_attention_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "1342c644ec8b1ace6eb87166edf197df",
+      "installed": {
+        "bodyMd5": "1342c644ec8b1ace6eb87166edf197df",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_retry_handoff_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "0131f6a0416b1619e3a663effa01bee7",
+      "installed": {
+        "bodyMd5": "0131f6a0416b1619e3a663effa01bee7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_retry_admit_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "fdf84aefebcb7a8e7908cb9aa30d1d8d",
+      "installed": {
+        "bodyMd5": "fdf84aefebcb7a8e7908cb9aa30d1d8d",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_failure_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "639c4f80efbfe4014efa41d4181e94bf",
+      "installed": {
+        "bodyMd5": "639c4f80efbfe4014efa41d4181e94bf",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "2e3e98f258841135869381840f751775",
+      "installed": {
+        "bodyMd5": "2e3e98f258841135869381840f751775",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "7c7ec3425839698512b6420f7592e4e7",
+      "installed": {
+        "bodyMd5": "7c7ec3425839698512b6420f7592e4e7",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_job_active_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "7422b3be4a53a07cf5bd2522e3860e20",
+      "installed": {
+        "bodyMd5": "7422b3be4a53a07cf5bd2522e3860e20",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_worker_execution_guard_v1()",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "dd7080cff64e7deaa90b5eadde735d19",
+      "installed": {
+        "bodyMd5": "dd7080cff64e7deaa90b5eadde735d19",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "ee79512fdda6d43cb85ba3583c7a4cac",
+      "installed": {
+        "bodyMd5": "ee79512fdda6d43cb85ba3583c7a4cac",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_claim_prepare_job_v1(uuid,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "75cf5b28262716d722f2f9e4b81a4128",
+      "installed": {
+        "bodyMd5": "75cf5b28262716d722f2f9e4b81a4128",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_job_wake_page_v1(text,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "3ec1dbc9d8672b7269a6df0c8f1aaf5b",
+      "installed": {
+        "bodyMd5": "3ec1dbc9d8672b7269a6df0c8f1aaf5b",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "12223bc32fbe8a4b56010fae8d1e71b7",
+      "installed": {
+        "bodyMd5": "12223bc32fbe8a4b56010fae8d1e71b7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_preparation_progress_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "a97b945bfb6ad43371af8d0a053d4848",
+      "installed": {
+        "bodyMd5": "a97b945bfb6ad43371af8d0a053d4848",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "e48fda29a77c31643a2786a846bc3e80",
+      "installed": {
+        "bodyMd5": "e48fda29a77c31643a2786a846bc3e80",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_review_simple_run_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "85a3898a553a03690b8cfdcd6d3262b4",
+      "installed": {
+        "bodyMd5": "85a3898a553a03690b8cfdcd6d3262b4",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "eaf38fb6fd73d03944300055d95e79af",
+      "installed": {
+        "bodyMd5": "eaf38fb6fd73d03944300055d95e79af",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "60646c95cb4ce2fdfd740dbe9108b3de",
+      "installed": {
+        "bodyMd5": "60646c95cb4ce2fdfd740dbe9108b3de",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_enroll_preparation_discard_one_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "391ba250915e21584b0b2a728e61d038",
+      "installed": {
+        "bodyMd5": "391ba250915e21584b0b2a728e61d038",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_expired_prepare_receipt_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "7c42dfdf13bd764e796da1a36ce8b5bf",
+      "installed": {
+        "bodyMd5": "7c42dfdf13bd764e796da1a36ce8b5bf",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_discarded_prepare_receipt_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "45089ceb3eaa31396c3ee2911d0e0da2",
+      "installed": {
+        "bodyMd5": "45089ceb3eaa31396c3ee2911d0e0da2",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "3fee8775de2674989cfc952e1115a808",
+      "installed": {
+        "bodyMd5": "3fee8775de2674989cfc952e1115a808",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "59a2f76ae344de5712fb352191413c9c",
+      "installed": {
+        "bodyMd5": "59a2f76ae344de5712fb352191413c9c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "c90954a06a012a2983af96af12cecd90",
+      "installed": {
+        "bodyMd5": "c90954a06a012a2983af96af12cecd90",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)",
+      "path": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sourceMd5": "8fc477b35c6dd76ad3e146aa45000316",
+      "installed": {
+        "bodyMd5": "8fc477b35c6dd76ad3e146aa45000316",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "metadata": {
+    "columns": [
+      {
+        "table": "bpay_next_job",
+        "column": "id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "command_id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "command_sequence",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "module_epoch",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "candidate_id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "job_kind",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "status",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "phase",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "cursor_key",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "applied_line_count",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "position_work_cursor",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "position_component_cursor",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "owner_epoch",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "lease_nonce",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "lease_until_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "available_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "attempt_count",
+        "type": "integer",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "last_error_code",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "queue_wake_after_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "created_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "started_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "finished_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "first_recorded_error_code",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "first_recorded_error_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "last_error_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "failed_lease_nonce",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retained_prepare_phase",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retained_prepare_cursor",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retained_prepare_work_cursor",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retained_prepare_component_cursor",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_count",
+        "type": "integer",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "next_retry_at_utc",
+        "type": "timestamp with time zone",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "needs_attention",
+        "type": "boolean",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "last_retry_owner_epoch",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_run_id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_prior_issue_code",
+        "type": "text",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_prior_issue_work_id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_execution_revision",
+        "type": "bigint",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_job",
+        "column": "retry_request_id",
+        "type": "uuid",
+        "rls": false,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "request_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "actor_user_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "candidate_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "work_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "job_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "module_epoch",
+        "type": "bigint",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "request_body",
+        "type": "jsonb",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "result",
+        "type": "jsonb",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "captured_at_utc",
+        "type": "timestamp with time zone",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "retry_run_worker_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "retry_input_job_id",
+        "type": "uuid",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "retry_captured_revision",
+        "type": "bigint",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "retry_expected_revision",
+        "type": "bigint",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      },
+      {
+        "table": "bpay_next_workbench_command_receipt",
+        "column": "retry_target_revision",
+        "type": "bigint",
+        "rls": true,
+        "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+      }
+    ],
+    "checks": [
+      {
+        "name": "bpay_next_internal_job_phase_ck",
+        "definition": "CHECK (((job_kind <> 'INTERNAL_SETTLEMENT'::text) OR (((status = 'DONE'::text) AND (phase = 'COMPLETE'::text)) OR ((status <> 'DONE'::text) AND (phase = 'MEMBERS'::text)))))"
+      },
+      {
+        "name": "bpay_next_job_applied_line_count_check",
+        "definition": "CHECK ((applied_line_count >= 0))"
+      },
+      {
+        "name": "bpay_next_job_attempt_count_check",
+        "definition": "CHECK ((attempt_count >= 0))"
+      },
+      {
+        "name": "bpay_next_job_check",
+        "definition": "CHECK (((status = 'LEASED'::text) = ((lease_nonce IS NOT NULL) AND (lease_until_utc IS NOT NULL))))"
+      },
+      {
+        "name": "bpay_next_job_command_sequence_check",
+        "definition": "CHECK ((command_sequence > 0))"
+      },
+      {
+        "name": "bpay_next_job_first_recorded_error_code_check",
+        "definition": "CHECK ((octet_length(first_recorded_error_code) <= 256))"
+      },
+      {
+        "name": "bpay_next_job_last_retry_owner_epoch_check",
+        "definition": "CHECK ((last_retry_owner_epoch > 0))"
+      },
+      {
+        "name": "bpay_next_job_module_epoch_check",
+        "definition": "CHECK ((module_epoch > 0))"
+      },
+      {
+        "name": "bpay_next_job_owner_epoch_check",
+        "definition": "CHECK ((owner_epoch > 0))"
+      },
+      {
+        "name": "bpay_next_job_queue_wake_finite",
+        "definition": "CHECK (isfinite(queue_wake_after_utc))"
+      },
+      {
+        "name": "bpay_next_job_retained_prepare_phase_check",
+        "definition": "CHECK ((retained_prepare_phase = ANY (ARRAY['NEW'::text, 'PINNING'::text, 'RESERVE'::text, 'ALLOCATE'::text, 'FINANCE_ALLOCATE'::text])))"
+      },
+      {
+        "name": "bpay_next_job_retry_attention_ck",
+        "definition": "CHECK (((NOT needs_attention) OR ((job_kind = 'PREPARE'::text) AND (retry_count = 5) AND (status = 'READY'::text) AND (lease_nonce IS NULL) AND (lease_until_utc IS NULL))))"
+      },
+      {
+        "name": "bpay_next_job_retry_count_check",
+        "definition": "CHECK (((retry_count >= 0) AND (retry_count <= 5)))"
+      },
+      {
+        "name": "bpay_next_job_retry_execution_ck",
+        "definition": "CHECK (((retry_execution_revision IS NULL) = (retry_request_id IS NULL)))"
+      },
+      {
+        "name": "bpay_next_job_retry_execution_revision_check",
+        "definition": "CHECK ((retry_execution_revision > 1))"
+      },
+      {
+        "name": "bpay_next_job_retry_prior_issue_code_check",
+        "definition": "CHECK ((octet_length(retry_prior_issue_code) <= 256))"
+      },
+      {
+        "name": "bpay_next_job_status_check",
+        "definition": "CHECK ((status = ANY (ARRAY['READY'::text, 'LEASED'::text, 'BLOCKED'::text, 'DONE'::text, 'FAILED'::text])))"
+      },
+      {
+        "name": "bpay_next_retained_prepare_cursor_pair",
+        "definition": "CHECK (((retained_prepare_work_cursor IS NULL) = (retained_prepare_component_cursor IS NULL)))"
+      },
+      {
+        "name": "bpay_next_run_worker_active_case_hold_count_check",
+        "definition": "CHECK ((active_case_hold_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_captured_line_count_check",
+        "definition": "CHECK ((captured_line_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_captured_managed_position_count_check",
+        "definition": "CHECK ((captured_managed_position_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_captured_position_count_check",
+        "definition": "CHECK ((captured_position_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_case_allocated_count_check",
+        "definition": "CHECK ((case_allocated_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_case_instruction_count_check",
+        "definition": "CHECK ((case_instruction_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_case_pending_binding_count_check",
+        "definition": "CHECK ((case_pending_binding_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_case_selection_revision_check",
+        "definition": "CHECK ((case_selection_revision >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_check",
+        "definition": "CHECK (((captured_selected_component_count >= 0) AND (captured_selected_component_count <= expected_selected_component_count)))"
+      },
+      {
+        "name": "bpay_next_run_worker_check1",
+        "definition": "CHECK (((review_issue_code IS NULL) OR (status = 'REVIEW'::text)))"
+      },
+      {
+        "name": "bpay_next_run_worker_check2",
+        "definition": "CHECK ((gross_inc_vat = (gross_ex_vat + gross_vat)))"
+      },
+      {
+        "name": "bpay_next_run_worker_check3",
+        "definition": "CHECK (((captured_preparation_revision > 0) AND (captured_preparation_revision <= preparation_revision)))"
+      },
+      {
+        "name": "bpay_next_run_worker_expected_managed_position_count_check",
+        "definition": "CHECK ((expected_managed_position_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_expected_selected_component_count_check",
+        "definition": "CHECK ((expected_selected_component_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_financial_resolution_count_check",
+        "definition": "CHECK ((financial_resolution_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_net_projection_revision_check",
+        "definition": "CHECK ((net_projection_revision >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_net_request_revision_check",
+        "definition": "CHECK ((net_request_revision >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_preparation_revision_check",
+        "definition": "CHECK ((preparation_revision > 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_realised_effect_count_check",
+        "definition": "CHECK ((realised_effect_count >= 0))"
+      },
+      {
+        "name": "bpay_next_run_worker_review_issue_code_check",
+        "definition": "CHECK (((review_issue_code IS NULL) OR (octet_length(review_issue_code) <= 256)))"
+      },
+      {
+        "name": "bpay_next_run_worker_status_check",
+        "definition": "CHECK ((status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text, 'READY'::text, 'DRAFT'::text, 'CANCELLING'::text, 'CANCELLED'::text, 'ISSUED'::text, 'COMPLETE'::text])))"
+      },
+      {
+        "name": "bpay_next_run_worker_target_pay_channel_check",
+        "definition": "CHECK ((target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+      },
+      {
+        "name": "bpay_next_workbench_command_receipt_module_epoch_check",
+        "definition": "CHECK ((module_epoch > 0))"
+      },
+      {
+        "name": "bpay_next_workbench_command_receipt_request_body_check",
+        "definition": "CHECK (((jsonb_typeof(request_body) = 'object'::text) AND (octet_length((request_body)::text) <= 4096)))"
+      },
+      {
+        "name": "bpay_next_workbench_command_receipt_result_check",
+        "definition": "CHECK (((jsonb_typeof(result) = 'object'::text) AND (octet_length((result)::text) <= 8192)))"
+      },
+      {
+        "name": "bpay_next_workbench_retry_execution_ck",
+        "definition": "CHECK ((((retry_run_worker_id IS NULL) AND (retry_input_job_id IS NULL) AND (retry_captured_revision IS NULL) AND (retry_expected_revision IS NULL) AND (retry_target_revision IS NULL)) OR ((num_nonnulls(retry_run_worker_id, retry_input_job_id, retry_captured_revision, retry_expected_revision, retry_target_revision) = 5) AND (retry_captured_revision > 0) AND (retry_expected_revision > 0) AND ((retry_target_revision)::numeric = ((retry_expected_revision)::numeric + (1)::numeric)) AND (retry_captured_revision <= retry_expected_revision))))"
+      },
+      {
+        "name": "bpay_next_workbench_retry_work_ck",
+        "definition": "CHECK (((work_id IS NOT NULL) OR (NOT ((result ->> 'retry_kind'::text) IS DISTINCT FROM 'PREPARE'::text))))"
+      },
+      {
+        "name": "bpay_next_worker_issue_scope_ck",
+        "definition": "CHECK ((((review_issue_code IS NULL) AND (review_issue_work_id IS NULL)) OR ((review_issue_code = ANY (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text, 'PF08_NEEDS_ATTENTION'::text])) AND (review_issue_work_id IS NULL)) OR ((review_issue_code IS NOT NULL) AND (review_issue_code <> ALL (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text, 'PF08_NEEDS_ATTENTION'::text])) AND (review_issue_work_id IS NOT NULL))))"
+      },
+      {
+        "name": "bpay_next_worker_managed_capture_count_check",
+        "definition": "CHECK ((captured_managed_position_count <= expected_managed_position_count))"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "bpay_next_job_case_owner_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_job_case_owner_key ON private.bpay_next_job USING btree (id, command_id, candidate_id, module_epoch)"
+      },
+      {
+        "name": "bpay_next_job_command_id_candidate_id_job_kind_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_job_command_id_candidate_id_job_kind_key ON private.bpay_next_job USING btree (command_id, candidate_id, job_kind)"
+      },
+      {
+        "name": "bpay_next_job_expired_lease_idx",
+        "definition": "CREATE INDEX bpay_next_job_expired_lease_idx ON private.bpay_next_job USING btree (lease_until_utc, id) WHERE (status = 'LEASED'::text)"
+      },
+      {
+        "name": "bpay_next_job_pkey",
+        "definition": "CREATE UNIQUE INDEX bpay_next_job_pkey ON private.bpay_next_job USING btree (id)"
+      },
+      {
+        "name": "bpay_next_job_queue_expired_idx",
+        "definition": "CREATE INDEX bpay_next_job_queue_expired_idx ON private.bpay_next_job USING btree (GREATEST(queue_wake_after_utc, lease_until_utc), command_sequence, id) WHERE (status = 'LEASED'::text)"
+      },
+      {
+        "name": "bpay_next_job_queue_ready_idx",
+        "definition": "CREATE INDEX bpay_next_job_queue_ready_idx ON private.bpay_next_job USING btree (queue_wake_after_utc, command_sequence, id) WHERE (status = ANY (ARRAY['READY'::text, 'BLOCKED'::text]))"
+      },
+      {
+        "name": "bpay_next_job_ready_idx",
+        "definition": "CREATE INDEX bpay_next_job_ready_idx ON private.bpay_next_job USING btree (status, available_at_utc, command_sequence, id) WHERE (status = ANY (ARRAY['READY'::text, 'BLOCKED'::text]))"
+      },
+      {
+        "name": "bpay_next_job_retry_due_idx",
+        "definition": "CREATE INDEX bpay_next_job_retry_due_idx ON private.bpay_next_job USING btree (GREATEST(queue_wake_after_utc, next_retry_at_utc), command_sequence, id) WHERE ((NOT needs_attention) AND (status = ANY (ARRAY['READY'::text, 'BLOCKED'::text])))"
+      },
+      {
+        "name": "bpay_next_job_retry_expired_idx",
+        "definition": "CREATE INDEX bpay_next_job_retry_expired_idx ON private.bpay_next_job USING btree (GREATEST(queue_wake_after_utc, lease_until_utc, next_retry_at_utc), command_sequence, id) WHERE ((NOT needs_attention) AND (status = 'LEASED'::text))"
+      },
+      {
+        "name": "bpay_next_job_worker_order_idx",
+        "definition": "CREATE INDEX bpay_next_job_worker_order_idx ON private.bpay_next_job USING btree (candidate_id, command_sequence, id) WHERE (status <> 'DONE'::text)"
+      },
+      {
+        "name": "bpay_next_position_job_candidate_seek_idx",
+        "definition": "CREATE INDEX bpay_next_position_job_candidate_seek_idx ON private.bpay_next_job USING btree (candidate_id, module_epoch, command_sequence, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+      },
+      {
+        "name": "bpay_next_position_job_pending_age_idx",
+        "definition": "CREATE INDEX bpay_next_position_job_pending_age_idx ON private.bpay_next_job USING btree (module_epoch, created_at_utc NULLS FIRST, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+      },
+      {
+        "name": "bpay_next_position_job_pending_seek_idx",
+        "definition": "CREATE INDEX bpay_next_position_job_pending_seek_idx ON private.bpay_next_job USING btree (module_epoch, command_sequence, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+      },
+      {
+        "name": "bpay_next_prepare_attention_candidate_idx",
+        "definition": "CREATE INDEX bpay_next_prepare_attention_candidate_idx ON private.bpay_next_job USING btree (retry_run_id, candidate_id, id) WHERE ((job_kind = 'PREPARE'::text) AND needs_attention)"
+      },
+      {
+        "name": "bpay_next_prepare_job_open_command_idx",
+        "definition": "CREATE INDEX bpay_next_prepare_job_open_command_idx ON private.bpay_next_job USING btree (command_id, id) WHERE ((job_kind = 'PREPARE'::text) AND (status <> 'DONE'::text))"
+      },
+      {
+        "name": "bpay_next_write_off_active_candidate_once_idx",
+        "definition": "CREATE UNIQUE INDEX bpay_next_write_off_active_candidate_once_idx ON private.bpay_next_job USING btree (candidate_id) WHERE ((job_kind = 'CASE_WRITE_OFF'::text) AND (status = 'LEASED'::text))"
+      }
+    ]
+  },
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

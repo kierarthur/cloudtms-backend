@@ -1,0 +1,65 @@
+{
+  "item": "DR-06",
+  "sequence": 82,
+  "status": "BUILT_REVIEWED",
+  "builderDecisions": [
+    "BD093"
+  ],
+  "predecessors": {
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": {
+      "path": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "sha256": "7cbc3fb757e2fdb4493d50815e5f0c558c4882dcb5028b49f0f69d7fba9fb313"
+    },
+    "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": {
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6"
+    }
+  },
+  "files": {
+    "supabase/migrations/11102026_0708_banking_pay_next_preparation_wake_rate.sql": "c24e3f732ce45e83b83d97e3a764a73238820e773e97587ef3c67355c2755ae0",
+    "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql": "2494774c07a27861f05e32015e9de26e81a91942a04cc8d211dac149744bbbf8",
+    "broker/src/bpay-next-preparation.js": "c18af4ce82da211592931bb9acc8f881698233909787cb0cdef25b7798bfddc4",
+    "scripts/bpay-next-source-gates.mjs": "e48e26cc3a44e9726de96f210c97480e50f4e5a17c0d3a77ba5a704e21274c71"
+  },
+  "finalDefiners": [
+    "private.bpay_next_preparation_progress_v1(uuid)",
+    "private.bpay_next_preparation_wake_v1(uuid)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)"
+  ],
+  "reusedOwners": [
+    "0537 stored parent counters",
+    "native original PREPARE command enrollment",
+    "0559 retained-input retry and typed release",
+    "original ENROLL queue hint and READY/expired-lease recovery"
+  ],
+  "normalChecks": {
+    "dbCheck": "PASS 339 migrations/888 repeatables before changed local PG17 load",
+    "localPG17": "PASS one additive migration/four repeatable closures; installed0708 immutable",
+    "nodeCheck": "PASS changed Worker/Office/UI/source gate",
+    "sourceGates": "PASS 12/12 existing source controls",
+    "contractExportSealCoupling": "PASS ba030463e8a08c8765b1dbcd98282c6fb737afa4f16a4fcede1d29283795275f",
+    "publicSecurityDefinerMembershipDelta": 0,
+    "firstUse": "AUTHORED_NOT_RUN",
+    "joinedApp": "AUTHORED_NOT_RUN",
+    "hostedInstallation": "NOT_RUN"
+  },
+  "reviews": [
+    "reviews/DR-06-progress-sql-review.md",
+    "reviews/DR-06-office-transport-review.md",
+    "reviews/DR-06-screen-review.md"
+  ],
+  "screenFolders": [
+    "SCR-40",
+    "SCR-40b",
+    "SCR-40c",
+    "SCR-40d",
+    "SCR-40e"
+  ],
+  "screenScreenshots": 39,
+  "implementationCommits": {
+    "backend": "2f1c308cfae6a0352fc33c1078b4e0b99edf0666",
+    "frontend": "c059f3078c4cb8124492bd9ea22dfbbd5da993d5"
+  },
+  "screenReview": "PASS current card scope, 39 actual captures; composite later-owner additions DEFERRED"
+}

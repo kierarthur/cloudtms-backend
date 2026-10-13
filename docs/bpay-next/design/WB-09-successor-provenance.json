@@ -1,0 +1,25 @@
+{
+  "item": "WB-09",
+  "sequence": 55,
+  "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+  "sourceSha256": "eebe1a463cac604165a8b9e460ba2a5e82c95d45edd118806d96ae3d03736409",
+  "signatures": [
+    "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_blocked_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_issue_detail_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_candidate_groups_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_group_lines_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_pick_candidates_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)",
+    "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
+    "public.bpay_next_workbench_page_v1(jsonb)"
+  ],
+  "predecessors": [],
+  "scope": "Ten closed current Workbench readers; later B9.3a kinds/fields merge this full winner; factual0580 and Rule-B owners unchanged",
+  "localContractSha256": "3d8d40aa4694189b822ff99018eea5e9140adbde5480e0462b499acc5784f9f7",
+  "installed": "LOCAL_PG17_ONLY",
+  "inApp": "NOT_RUN"
+}

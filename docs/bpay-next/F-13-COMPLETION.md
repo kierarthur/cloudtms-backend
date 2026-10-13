@@ -1,0 +1,17 @@
+# F-13 completion — source implementation
+
+10 October 2026. The three named deliverables are complete at source level. Hosted queue, switch, DLQ and app acceptance remain NOT_RUN.
+
+| Checklist object | Exact implementation |
+| --- | --- |
+| D01 exact legacy/NEXT envelope classifier | `broker/src/bpay-next-legacy-retirement.js` validates the original three closed raw legacy schemas with the existing operation source policy. NEXT envelopes retain the existing metadata/financial adapters. The shared consumer in `broker/src/index.js` reads fresh owner/epoch, explicitly retries unqualified messages, and never runs the old engine under NEXT. |
+| D02 durable reconciled message-retirement receipt | Exact completed certificate and completed unused-Draft SELF paths positively qualify native identities before inserting and rereading a bounded, unique existing audit event. ACK additionally requires fresh NEXT owner and unchanged epoch. Lost insert replies requalify and reread the same original message ID. No best-effort audit, receipt mismatch, absent row, unsupported ID, partial scope or terminal label alone authorizes ACK. |
+| D03 DLQ/transport-exhaustion recovery procedure | `F-13-DLQ-RECOVERY.md` records the unchanged TEST transport, bounded later-authorized inspection, retained old obligations and durable NEXT rediscovery after separately authorized resume and F-26 validity treatment. No purge, manual ACK or old recovery engine is authorized. |
+
+The completed-certificate path uses the existing read-only V8 status owner and exact envelope session/actor/certificate. The completed-Draft path uses actual frozen completed operation facts, its entire bounded native candidate scope and every distinct positively matched unused batch in F-18. Scope over 100 or an off-page batch remains retained. Queue IDs preserve all native 128 bits in the audit UUID and the complete original spelling in the compared receipt; unsupported formats remain retained.
+
+All money operations, ROOT/CHILD and Workbench SESSION/CANDIDATE/GLOBAL wakes remain retained. The actual queued Workbench wrapper runs unfiltered global reconciliation before its filtered drain, so a local ready session or certificate cannot establish the whole wake's disposition. This preserves genuinely unknown or nonterminal obligations; it does not fabricate a new completion owner. The clean-launch census and any real old obligations remain F-18/F-19 release requirements.
+
+BUILDER DECISION BD022: use the narrow existing native completion paths and the existing unique audit event for the required transport receipt. Retain every unproved scope. Do not introduce a new digest, certificate, witness, command, SQL owner, global protocol or operational old engine. The earlier broader design proposals are historical and superseded by this note and the binding scope guard.
+
+Root checks: changed JS syntax PASS; existing background/legacy-fence source cases 31/31 PASS, including isolated pending-certificate refusal with no audit access; db:check 308 locked migrations/808 repeatables PASS; sole local PG17 unchanged contract seal `a0177a8200237bc983e8eb8cc303b97243299903ef18829a296746fc1af2753a`; db:contract:coupling PASS. No SQL changed, so no additional load was needed. Independent source/native/DLQ reviews are saved under `reviews/F-13-*`; findings corrected before closure. Product files are the one supporting module and the shared-consumer seam; the existing source-unit file supplies finite checks. No configuration, Office, producer or money-owner changes.

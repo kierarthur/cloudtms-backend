@@ -1,0 +1,65 @@
+{
+  "packet": "SOURCE_DISPOSITION_COMPARISON_V2_20261007",
+  "status": "FROZEN_E_ONLY_JOINED_REVIEW",
+  "source_only": true,
+  "native_sql_executed": false,
+  "w_adopted": false,
+  "database_installed": false,
+  "files": [
+    {
+      "path": "build-candidate.mjs",
+      "bytes": 10102,
+      "sha256": "a5a99204aeb4a6d57465963d67c569d15798dc6b30c7f5c614248514cd94c50e"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11280,
+      "sha256": "3b513eda0422ca5bcfc62d86072d19a59533065676dfa21a2ef1b445e322b50b"
+    },
+    {
+      "path": "seal.mjs",
+      "bytes": 1309,
+      "sha256": "47a1c3006b523ce1fa14112c256e75ef3f02fc0247e4fb2b8c8313ce291ec048"
+    },
+    {
+      "path": "source-book.inverse.patch",
+      "bytes": 32707,
+      "sha256": "d12efc41834712f609d062ff233437da2a84c69c9d49e7953aed665742d59053"
+    },
+    {
+      "path": "source-book.patch",
+      "bytes": 32707,
+      "sha256": "e36fa8805de31794cfebfb203684446f4d17d8bc0722967e4808c3f3ac9c42e2"
+    },
+    {
+      "path": "source-pins.json",
+      "bytes": 1670,
+      "sha256": "6477eae85009c7f427894bbad4276ff951c17a7f64d49b87019677daff47d1f1"
+    },
+    {
+      "path": "source-verification.json",
+      "bytes": 2498,
+      "sha256": "d35991b10930dd08bd89943e8fe44052431ee1b059c4309902d9ea295ea34ebc"
+    },
+    {
+      "path": "supabase/migrations/07102026_0156_bpay_next_source_comparison_full.sql",
+      "bytes": 37629,
+      "sha256": "0efd11f240132182e19cf4c36e382bd8b9174c1a6aaf69a8d712ac5aafb4310e"
+    },
+    {
+      "path": "supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql",
+      "bytes": 114094,
+      "sha256": "604ba1141c30baec99e7b8f5f65374675fa17eec5612348d793d94a86cea1dea"
+    },
+    {
+      "path": "supabase/repeatable/07102026_0158_bpay_next_source_book_certified_v2.sql",
+      "bytes": 47567,
+      "sha256": "afd7851975e5c22b137013122f7622e304a13f9ec5f8310783f6b8e8ac9459b1"
+    },
+    {
+      "path": "verify-source.mjs",
+      "bytes": 16228,
+      "sha256": "5987b6b6e8f8fc16db304886f6c68e8b4aedf1f6073ea0131769dfa36e0ccdbb"
+    }
+  ]
+}

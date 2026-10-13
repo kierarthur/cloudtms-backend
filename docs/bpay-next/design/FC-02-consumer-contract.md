@@ -1,0 +1,7 @@
+# FC-02 native consumers
+
+D01: CURRENT_CASES stays on the existing preparation transport. Candidate drill-down consumes the exact finite Case/status/principal/hold facts by Candidate and after_case_id; no invented summary or money arithmetic. D02: CASE_COMPONENTS stays on the same transport, independently walks native component ordinals and uses actual component identity, schedule and Due/Outstanding/Approved values. Native existing action modules receive those identities and return through their existing receipts.
+
+D03: the sole Payment Advances / Snoozes list keeps independent Case and Work Snooze cursors, full-filter counters, native header sorts,5/10/20/50 chunks, retained Last loaded/Refresh/Clear/Retry, continuous scrolling, existing Candidate/Client pickers and exact Candidate drill-down. FC11/12/13 future actions remain honestly unavailable underF16/RQ234. Work Snooze Open uses its fresh exact-ID native point and actual Timesheet window. History locates only original current-row journal keys; the existing CLEAR/MANY readback retains original bytes/cut/request and never creates a fresh proposal on refusal. No new command, route, public trigger, producer or money owner.
+
+Source and fixed-local actual-screen evidence are separate from all future joined application acceptance, which is AUTHORED_NOT_RUN. FC01D08 closes only with this actual screen integration and independentA4 PASS.

@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
@@ -63,6 +63,13 @@ jobs:
       - run: npm run security:secrets
       - run: npm run db:check
       - run: npm run db:contract:coupling
+      - name: Verify Banking Pay NEXT source boundaries and exact route exemptions
+        run: node --test tests/bpay-next-source-gates.test.js tests/bpay-next-legacy-fence.test.js
+      - name: Verify final function authority for the reviewed release range
+        shell: bash
+        run: |
+          base="$(node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('docs/bpay-next/final-definer-closures.json','utf8')); if(!/^[0-9a-f]{40}$/.test(r.releaseBaseCommit))process.exit(1); console.log(r.releaseBaseCommit)")"
+          CLOUDTMS_FINAL_DEFINER_BASE="$base" node --test tests/bpay-next-final-definers.test.js
       - run: node --test tests/database-release-system.test.mjs
       - run: node --test tests/automatic-test-release-policy.test.mjs
       - id: commit

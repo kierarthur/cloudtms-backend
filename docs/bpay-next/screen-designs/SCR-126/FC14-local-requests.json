@@ -1,0 +1,1240 @@
+[
+  {
+    "id": "SCR-126",
+    "file": "FC14-normal-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-empty-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\n\nNo Case events.\n\n0 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-failed-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nClose\n!\n\nCould not load the Case audit; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Retry",
+          "width": 60.375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-unknown-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-sorted-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN\tEVENT\tWHO ▲\tSOURCE\tAMOUNT\tREASON\tDETAILS\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n5 events · Sorted by Who, ascending",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHO",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button class=\"bt",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-scroll-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1"
+            },
+            "scope": {
+              "kind": "CASE_AUDIT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+              "active_only": null,
+              "sort": "WHEN",
+              "direction": "ASC"
+            },
+            "section": 0,
+            "key": [
+              false,
+              "2026-08-20 09:14:22.000000"
+            ],
+            "source": "CREATE_REQUEST",
+            "source_id": "00000000-0000-4000-8000-000000000001",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-normal-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-empty-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\n\nNo Case events.\n\n0 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-failed-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nClose\n!\n\nCould not load the Case audit; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Retry",
+          "width": 60.375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-unknown-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-sorted-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN\tEVENT\tWHO ▲\tSOURCE\tAMOUNT\tREASON\tDETAILS\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n5 events · Sorted by Who, ascending",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHO",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button class=\"bt",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-scroll-device-light.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nWHEN ▲\tEVENT\tWHO\tSOURCE\tAMOUNT\tREASON\tDETAILS\n20/08/2026 10:14:22\tCreation requested\tSarah Lewis\tOffice\t£900.00\tDeposit for flat\tCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n\n24/08/2026 15:02:10\tAdvance paid\tSarah Lewis\tDraft\t£900.00\t—\tFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n\n31/08/2026 16:40:05\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n\n14/09/2026 09:12:44\tSnoozed\tSarah Lewis\tOffice\t—\tHoliday week\tUntil 21/09/2026\n05/10/2026 16:38:51\tRecovered\tSarah Lewis\tDraft\t−£150.00\t—\tRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1"
+            },
+            "scope": {
+              "kind": "CASE_AUDIT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+              "active_only": null,
+              "sort": "WHEN",
+              "direction": "ASC"
+            },
+            "section": 0,
+            "key": [
+              false,
+              "2026-08-20 09:14:22.000000"
+            ],
+            "source": "CREATE_REQUEST",
+            "source_id": "00000000-0000-4000-8000-000000000001",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "When ▲",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Event",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Who",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Source",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Amount",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Reason",
+          "width": 156.703125,
+          "height": 24
+        },
+        {
+          "text": "Details",
+          "width": 156.78125,
+          "height": 24
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nSort by\nWhen · ascending\nWhen · descending\nEvent · ascending\nEvent · descending\nWho · ascending\nWho · descending\nSource · ascending\nSource · descending\nAmount · ascending\nAmount · descending\nReason · ascending\nReason · descending\nDetails · ascending\nDetails · descending\n20/08/2026 10:14:22\nCreation requested\nSarah Lewis\nOffice\n£900.00\nDeposit for flat\nCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n24/08/2026 15:02:10\nAdvance paid\nSarah Lewis\nDraft\n£900.00\n—\nFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n31/08/2026 16:40:05\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n14/09/2026 09:12:44\nSnoozed\nSarah Lewis\nOffice\n—\nHoliday week\nUntil 21/09/2026\n05/10/2026 16:38:51\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "When · ascendingWhen · descendingEvent · ascendingEvent · descendingWho · ascendingWho · descendingSource · ascendingSource · descendingAmount · ascendingAmount · descendingReason · ascendingReason · descendingDetails · ascendingDetails · descending",
+          "width": 178.421875,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-empty-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nSort by\nWhen · ascending\nWhen · descending\nEvent · ascending\nEvent · descending\nWho · ascending\nWho · descending\nSource · ascending\nSource · descending\nAmount · ascending\nAmount · descending\nReason · ascending\nReason · descending\nDetails · ascending\nDetails · descending\n\nNo Case events.\n\n0 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "When · ascendingWhen · descendingEvent · ascendingEvent · descendingWho · ascendingWho · descendingSource · ascendingSource · descendingAmount · ascendingAmount · descendingReason · ascendingReason · descendingDetails · ascendingDetails · descending",
+          "width": 178.421875,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-failed-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nClose\n!\n\nCould not load the Case audit; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><b",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 376,
+      "scrollWidth": 376,
+      "bodyWidth": 376,
+      "bodyScrollWidth": 376,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Retry",
+          "width": 54.375,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-unknown-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nSort by\nWhen · ascending\nWhen · descending\nEvent · ascending\nEvent · descending\nWho · ascending\nWho · descending\nSource · ascending\nSource · descending\nAmount · ascending\nAmount · descending\nReason · ascending\nReason · descending\nDetails · ascending\nDetails · descending\n20/08/2026 10:14:22\nCreation requested\nSarah Lewis\nOffice\n£900.00\nDeposit for flat\nCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n24/08/2026 15:02:10\nAdvance paid\nSarah Lewis\nDraft\n£900.00\n—\nFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n31/08/2026 16:40:05\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n14/09/2026 09:12:44\nSnoozed\nSarah Lewis\nOffice\n—\nHoliday week\nUntil 21/09/2026\n05/10/2026 16:38:51\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "When · ascendingWhen · descendingEvent · ascendingEvent · descendingWho · ascendingWho · descendingSource · ascendingSource · descendingAmount · ascendingAmount · descendingReason · ascendingReason · descendingDetails · ascendingDetails · descending",
+          "width": 178.421875,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-sorted-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nSort by\nWhen · ascending\nWhen · descending\nEvent · ascending\nEvent · descending\nWho · ascending\nWho · descending\nSource · ascending\nSource · descending\nAmount · ascending\nAmount · descending\nReason · ascending\nReason · descending\nDetails · ascending\nDetails · descending\n24/08/2026 15:02:10\nAdvance paid\nSarah Lewis\nDraft\n£900.00\n—\nFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n31/08/2026 16:40:05\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n05/10/2026 16:38:51\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n20/08/2026 10:14:22\nCreation requested\nSarah Lewis\nOffice\n£900.00\nDeposit for flat\nCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n14/09/2026 09:12:44\nSnoozed\nSarah Lewis\nOffice\n—\nHoliday week\nUntil 21/09/2026\n5 events · Sorted by Who, ascending",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHO",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button class=\"bt",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "When · ascendingWhen · descendingEvent · ascendingEvent · descendingWho · ascendingWho · descendingSource · ascendingSource · descendingAmount · ascendingAmount · descendingReason · ascendingReason · descendingDetails · ascendingDetails · descending",
+          "width": 178.421875,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-126",
+    "file": "FC14-scroll-phone-dark.png",
+    "errors": [],
+    "copy": "Case audit\n\nPayment Advance · Bethany Clarke · TMS 10502\n\nClose\nSort by\nWhen · ascending\nWhen · descending\nEvent · ascending\nEvent · descending\nWho · ascending\nWho · descending\nSource · ascending\nSource · descending\nAmount · ascending\nAmount · descending\nReason · ascending\nReason · descending\nDetails · ascending\nDetails · descending\n20/08/2026 10:14:22\nCreation requested\nSarah Lewis\nOffice\n£900.00\nDeposit for flat\nCreation submitted · Weekly £150.00 · 6 weeks · From 31/08/2026 · Car repair\nSource ex VAT £900.00 · Target inc VAT —\n24/08/2026 15:02:10\nAdvance paid\nSarah Lewis\nDraft\n£900.00\n—\nFunding recorded\nSource ex VAT £900.00 · Target inc VAT £900.00\n31/08/2026 16:40:05\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n14/09/2026 09:12:44\nSnoozed\nSarah Lewis\nOffice\n—\nHoliday week\nUntil 21/09/2026\n05/10/2026 16:38:51\nRecovered\nSarah Lewis\nDraft\n−£150.00\n—\nRepayment recorded\nSource ex VAT £150.00 · Target inc VAT £150.00\n5 events · Sorted by When, oldest first",
+    "requests": [
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CASE_AUDIT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "sort": "WHEN",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1"
+            },
+            "scope": {
+              "kind": "CASE_AUDIT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+              "active_only": null,
+              "sort": "WHEN",
+              "direction": "ASC"
+            },
+            "section": 0,
+            "key": [
+              false,
+              "2026-08-20 09:14:22.000000"
+            ],
+            "source": "CREATE_REQUEST",
+            "source_id": "00000000-0000-4000-8000-000000000001",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Case events\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"ascending\"><button clas",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "When · ascendingWhen · descendingEvent · ascendingEvent · descendingWho · ascendingWho · descendingSource · ascendingSource · descendingAmount · ascendingAmount · descendingReason · ascendingReason · descendingDetails · ascendingDetails · descending",
+          "width": 178.421875,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

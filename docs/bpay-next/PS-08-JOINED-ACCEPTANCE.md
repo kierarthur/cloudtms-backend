@@ -1,0 +1,5 @@
+# PS-08 future joined acceptance
+
+NOT_RUN. No business/fixture/rehearsal execution. After authorised release use one joined receipt: legal preparation INSERT creates complete run_work/run_line captures; direct UPDATE/DELETE/TRUNCATE each rejects23514 BPAY_NEXT_FINANCIAL_EFFECT_IMMUTABLE, with no whitelist/depth/bypass. Confirm/cancel/expiry/outcome progress succeeds only on worker/holds/requests/outcomes. CM-03 must reconcile RBC scope against these unchanged triggers, never bypass them. Foreign scope and ordinary role writes remain denied.
+
+F-06/0718 is the sole DDL owner. F24 release runbook must read back exact four enabledO, type27(row UPDATE+DELETE BEFORE)/34(statement TRUNCATE BEFORE), callbackprivate.bpay_next_effect_immutable_v1(), no WHEN/args/constraint/defer/columns/internal and retained history/pending indexes. Local schema catalog proof is compile/readback only, not hosted installed or app acceptance. Current source census covers all repeatable physical/include files regardless of dirty status; inserts and workflow tables remain allowed.

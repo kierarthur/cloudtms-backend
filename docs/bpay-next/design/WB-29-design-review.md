@@ -1,0 +1,39 @@
+# WB-29 first-batch design review
+
+12 October 2026; seq140 / BD154. Independent read-only review before product authoring. Root alone owns product. No tests, compilation, SQL/RPC/business data, hosted calls, fixtures, product or checklist edits by this reviewer.
+
+Read the complete WB29 card02:1073–1137 and all D01–D24 working rows, R2-F01/F03 and R2:98–110,330–336, current investigation and resolution-owner design, updated EX08 card04:322,325,334–335 / R4:275–277, actual EX08 apply/scope1624 and current classifier1858. WB45's committed2100 foundation is reused. D20 is the first batch; publication, W1/W2, accepted attachments and quote/share/advice seams remain required follow-on work within WB29. No whole-card completion or app acceptance is implied.
+
+## First-batch boundary
+
+The two private invoker helpers are appropriate. Producer `(operation_id uuid, work_id uuid default null)` may join the immutable exact receipt/member after EX08's full finite insert, in the same existing transaction. The optional exact Work qualifier allows retained receipt joins in the current projection owner without a Candidate/history sweep per Work. Reader is read-only and consumes persisted NEED events; it does not manufacture a need from a channel mismatch. The explicit existing event identity makes retry idempotent, with no immutable receipt rewrite or extra command/store/clock/proof.
+
+Latest **Candidate** receipt by native `post_metadata_version` must be selected before filtering its member scope or target; then exact target/channel/Umbrella/VAT and own Work/revision/line/segment qualify it. COMPATIBLE, UNCHANGED, PROTECTED or absent exact membership in that latest transition suppresses older NEEDs, including A→B→A and U1→U2. Do not first filter for NEEDS_DECISION or matching target and then choose latest: that would resurrect an old need. Metadata name-only changes need not erase a retained transition simply because their general metadata version is newer. Existing unique `(candidate_id,post_metadata_version)` and Work-member point index provide the required native ordering/qualification.
+
+Updated EX08/R4 compatibility explicitly overrides the old blanket example02:1130. Ordinary/Source/move channel difference without an unresolved EX08 need retains the existing resolver. Reimbursement and Cases do not enter the Work need producer. Native TAXABLE qualification and actual family/bucket identity are required; missing used rate alone is not a new resolution kind or a guessed amount-led basis. Each exact compatible ACTIVE decision suppresses only its own family/code at the original boundary/target/policy/date, using WB45's no-decision fallthrough and strict matching-decision basis. No late Candidate substitution is allowed for accepted/frozen portions.
+
+## Concrete conditions to close before first-batch source PASS
+
+1. **N29-D01 — preserve actual WAIT precedence.** Core1858:198–200 sets FUTURE_WEEK100 and SNOOZED110. An insertion gated only by `reason_priority>75` would override both with ACTION. Require positive AVAILABLE, unaccepted/unselected and current READY (or an explicit equivalent exclusion of existing date/snooze/WAIT reasons) after the existing hold/query processing. Keep the original `v_base`207 for H/R, accepted selection179–184, RESERVED303–313 and recovery/manual liability paths. Query-unavailable60/open61 and canonical gap15/hold40 already win by priority, but WAIT100/110 needs the explicit state gate. No amount or conservation operand changes.
+2. **N29-D02 — exact segment buckets.** For an EX08 segment member, require the exact native `(revision_id,approved_line_id,approved_segment_id)` and expand only its own positive DAY/NIGHT/SAT/SUN/BH hours, using approved_segment1100:11–33. Parent rate_detail contains buckets of other segments and cannot alone define this member's unresolved scope. Parent-only members may use their exact native positive rate-detail rows. Arbitrary ADDITIONAL code and ADJUSTMENT component key stay exact. Reader matches the same segment/null-segment identity and the event's original member key; no sibling segment or bucket need is borrowed.
+3. **N29-D03 — existing native note CHECK.** Schema1252:116 permits channel_note_code only CHANNEL_RESOLVER/MOVE_CHANNEL_RESOLVER. If the implementation stores CHANNEL_RESOLUTION_REQUIRED there, add the narrow existing CHECK extension for that required header code; otherwise define its exact native header reason without inserting an invalid note. Do not relabel source nominal money as selected target. Existing Worker note field is nullable text; other existing code/shape behavior remains unchanged.
+
+The original EX08 scope is at most1000 members and the real Standard family is at most five buckets per native line. An expansion cap1000 is a stricter **need-event** envelope than the existing member envelope; document that distinction and fail atomically before any accepted result rather than truncate or call it an impossible input. The optional Work join does not replace the full-operation bound at initial apply. No public producer/trigger or broad lifecycle framework is required to enforce this finite join.
+
+EX08 apply1624:234–264 already locks module/Candidate/control, clock NOWAIT and the bounded sorted native Work/Case scope;269–291 captures metadata task, immutable receipt and all members. Add the producer only after that loop, retaining replay241–246 before mutable checks. Core1858:24–25 already owns Candidate control then Work. Lazy retained publication belongs in this existing write/projection owner, with a latest-receipt point lookup, not inside the STABLE reader or a public read request. Native NEED unique-target DO NOTHING must make exact repeated insertion harmless; a generic conflict must not hide a genuinely conflicting retained identity.
+
+Design is **acceptable with N29-D01–03 made explicit**; final design/source PASS remains pending those concrete clarifications. Whole WB29 and all joined runtime/queue/UI acceptance remain **NOT_RUN**.
+
+Inspected SHA256 checkpoints:
+
+- Resolution-owner design: `5e78c871c7bec94d09031692335ebf3f1772dd3751af210cd1f8e40030a01dfb`.
+- Actual EX08 apply/scope1624: `e05d8b9a751f83c6485a0e5d00826489d777483e0332a7fa50fcb6e18aab2c4e`.
+- Current classifier1858: `455e61cb1df71f04dd3394a4b03e3320f9ccdaecf1c4d32b096e6185a24d20ff`.
+
+## Final first-batch design closure
+
+Re-read the amended resolution-owner design SHA `9ccf24912539fd7afaf7dc250c925936a5962fd4354516157c8ccde1d42882d3`. **First-batch DESIGN PASS.** N29-D01–03 are now explicit: exact current READY/unaccepted/positive AVAILABLE gate preserves WAIT/accepted/H/R; each segment expands its own positive native buckets with matching rate-detail and NULL-safe member identity; only the existing channel-note CHECK receives the one required value. No new public producer/trigger, financial authority or missing-rate kind is added.
+
+Root's final stated implementation bound is **5000** expanded event identities, derived from the existing1000 native EX08 member maximum × at most five Standard buckets (one for each non-bucket member). That closes the stricter1000-envelope observation above without changing the existing EX08 scope; source review must verify the bound and native membership conservation, with overflow refusal and no truncation. Optional exact Work publication remains bounded and avoids repeated full-Candidate expansion in projection. Latest-transition-before-member/target selection and indexed exact original NEED conflict identity remain required as described above.
+
+This approval authorises design closure of the first explicit-need/classifier batch only. Actual SQL/transport source is not yet reviewed. W2/W1, complete native Source publication bridge, accepted attachments and same-quote capture/estimate/share/advice/snooze integrations remain separate required WB29 batches and **NOT_RUN**; no whole-card delivery or app acceptance claim.

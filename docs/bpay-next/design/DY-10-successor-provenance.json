@@ -1,0 +1,96 @@
+{
+  "item": "DY-10",
+  "sequence": 97,
+  "decision": "BD109",
+  "status": "BUILT_REVIEWED",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "sha256": "b5f2f9ec742a11a88ede05ae0eb433725b410907827bf10300b3540824a92a72",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql",
+      "sha256": "8d9dfa131740391903d8aa68c6ce8a478f9a646b0f431ad43d30987a37b65911",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "sha256": "4a21ab611b90ed39fed312a5d8aaa0754e72f980da9c621ee815ec1f611c6c1a",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "sha256": "8934065d152ab69bbe2ec8ee298bd03b66f4c20a82fbbcdced78567db37bb69f",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
+      "sha256": "f7964500c4c691390eb75a1150a634a7e73bd2918747ef57cb7ce81de139411f",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "reused": true
+    }
+  ],
+  "worker": {
+    "path": "broker/src/index.js",
+    "sha256": "1ae4b5df3c72a5659fc4454a49e7b617b541fc71d0c312ed7a78b272f5f5f2ff"
+  },
+  "frontend": [
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-office.js",
+      "sha256": "4c94f4b141da939b2fbe7e7512a5394bb955fd15a9ae85225a53570161e59211"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/main.js",
+      "sha256": "fdd305b676d649a327f4865cbc26cf70f80ea6ea00a0d9b5b8e9aec9adcf1193"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/modal-modernisation.js",
+      "sha256": "c2262959e41516ebfc8069f88b997d71e4d5763e36e0edc90bc7ff57ce7970ed"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "css/bpay-next-office.css",
+      "sha256": "3dcb84f0a005919e9dbcf26e114ea4fbae2c3765080b29604dab5ed24b5b4146"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "index.html",
+      "sha256": "115d705eb719a66a287b817bccb816d0ce20776ea55fb1d26648beb367e863d9"
+    }
+  ],
+  "chain": "1530 -> WB-01 -> WB-36 -> WB-02 -> DY-04 -> DY-06 -> DY-10 exact publication reuse -> DR-38",
+  "catalogue": "design/DY-10-current-owner-catalogue.json",
+  "checks": {
+    "integrity": "345 migrations /903 repeatables",
+    "sourceGates": "12/12 PASS",
+    "syntax": "Worker/Office/main/moderniser PASS",
+    "localPG": "five fresh current installed bodies/signatures/ACLs match; no SQL delta",
+    "contractHash": "3a0244519e91d9554be7d7499a29173a08786d78806f2ff203acbb55296c4fbe",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "publicMembershipDelta": 0
+  },
+  "screenshots": 54,
+  "sourceReview": [
+    "reviews/DY-10-worker-source-review.md",
+    "reviews/DY-10-office-source-review.md"
+  ],
+  "screenReview": "screen-designs/SCR-156/review.md",
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "9ff07fd9d4d793c632ce5f1cfd48207b2d099e50",
+  "screenPolicy": "32 PASS /0 FAIL /10 N/A,54 actual native captures",
+  "implementationCommit": "fb0e5a383304916d20c4a45c5b7555dd398780c6"
+}

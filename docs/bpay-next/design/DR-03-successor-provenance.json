@@ -1,0 +1,52 @@
+{
+  "item": "DR-03",
+  "sequence": 80,
+  "status": "BUILT_REVIEWED",
+  "exactRows": [
+    "D01",
+    "D02",
+    "D03",
+    "D05",
+    "D06",
+    "D08"
+  ],
+  "builderDecisions": [
+    "BD089"
+  ],
+  "newSQL": "NONE_PER_CARD112",
+  "retainedSourceFiles": {
+    "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql": "d7bafb5c0c9aade50a3779ccb26dabe2dbf2a6c38e78fd379d82da25babffba5",
+    "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql": "2eeaafb8f14444715c30e13dc898f9b35614de1f53920344913f2986e09d6b0c",
+    "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql": "d40cc95cb6675f09b1fe06a87801e42a6a28ca1f02a563534ae5e1a65263b5cb",
+    "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql": "3f77bbb57500f1320d3873935c8504264a46e50287be9740267f838f8d1dc750",
+    "supabase/migrations/04102026_0300_banking_pay_next_case_instruction_core.sql": "04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e",
+    "broker/src/bpay-next-preparation.js": "594e62ce0cc860853e8a9462a7d901afc456c9c7ebba732a40d580e00fb65760"
+  },
+  "frontendSource": {
+    "js/bpay-next-office.js": "af49a6df915410fb6c11ddc5c389d3f27f64ff018eee6ce61d05b1115f513e51"
+  },
+  "changes": "Only nine-line retired Sheet Case selection branch removed; original source owners retained",
+  "checks": {
+    "dbCheck": "PASS336/883",
+    "localPG17": "COMPILED0migrations/0repeatables",
+    "sourceGates": "PASS11/11",
+    "seal": "7632010fd5996fe031550ff1ad9c3437d390718a9bdb6ea8d7e1277549f13ee7",
+    "coupling": "PASS",
+    "syntax": "PASS",
+    "diff": "PASS"
+  },
+  "application": "AUTHORED_NOT_RUN",
+  "installation": "NOT_RUN",
+  "reviews": [
+    "reviews/DR-03-case-choice-review.md",
+    "reviews/DR-03-screen-review.md"
+  ],
+  "frontendCommit": "2bdf639ca97dced7ff1204df592cbc8343c4f614",
+  "reviewStatus": "PASS_SOURCE_AND_RETAINED_MAIN_A4",
+  "screenshots": {
+    "DR03-main-dark.png": "06713ee5659db106c487746af94a90f5a1f968acf7c072c14638130947bb75d5",
+    "DR03-main-device-light.png": "06713ee5659db106c487746af94a90f5a1f968acf7c072c14638130947bb75d5",
+    "DR03-main-phone-dark.png": "538b8b292e10b3ce6aa0500e4c77758cf7b38313f9fc205e9f8cb37cdfd05cc8"
+  },
+  "backendCommit": "14631ff3c65626ced77984885e055a1c84e45acd"
+}

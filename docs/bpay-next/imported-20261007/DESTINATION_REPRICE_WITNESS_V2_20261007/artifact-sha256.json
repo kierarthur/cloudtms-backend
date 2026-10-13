@@ -1,0 +1,105 @@
+{
+  "schema_version": "E_ONLY_DESTINATION_REPRICE_ARTIFACT_HASHES_V2",
+  "artifacts": [
+    {
+      "file": "07102026_0105_weekly_source_destination_reprice_witness.sql",
+      "sha256": "36b7cb975e4f0d98707e43a62cb9f2879d24fa18a5d3d76eb20dff5dd208d552"
+    },
+    {
+      "file": "07102026_0135_weekly_source_destination_reprice_v2.sql",
+      "sha256": "21e01f9944e775254115b9e895382af49efcab4b3f020e098d03a0404eaaf07a"
+    },
+    {
+      "file": "build-candidate.mjs",
+      "sha256": "0b13c275d092ed7020f9458fb0957b33f7bcb0faf6f9486b6dd96e7cfb7ad7b5"
+    },
+    {
+      "file": "destination-reprice-preview.mjs",
+      "sha256": "122b901f69fb00103429e61342a35570a0475453e768bd36a7ab9a67cd494c21"
+    },
+    {
+      "file": "destination-reprice.test.mjs",
+      "sha256": "48c7cd691fccf7401e2f3e7ac87532b638334d40d9845c5ec8373e6f3dadbd17"
+    },
+    {
+      "file": "exact-preimages-and-replacements.json",
+      "sha256": "a8f39ffc8b6ef697859129fba7ee66915c4493f10af2b8e8fcb2abc812f6fb93"
+    },
+    {
+      "file": "readiness.md",
+      "sha256": "3de7eddedc7fc5d11f46bec16e0aad40ac644b35040b9c3d6c0510d97ca45068"
+    },
+    {
+      "file": "source-owner.inverse.patch",
+      "sha256": "6421c3b8b52401682e0f008efc26895259f19fb64e6eb0ef02958e8077214438"
+    },
+    {
+      "file": "source-owner.patch",
+      "sha256": "3d96a4b0132b1625fd969c7001277aebc1ddd171316545e460945c89cd8d88e4"
+    }
+  ],
+  "unchangedAuthorityDependencies": [
+    {
+      "file": "broker/src/weekly-source/weekly-rate-owner.js",
+      "rawSha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "file": "broker/src/weekly-source/economic-snapshot.js",
+      "rawSha256": "52588a0d7c3d9a3eac77ca13c3edd133f0a38ce86397419150f880e60b4baafa"
+    },
+    {
+      "file": "broker/src/weekly-source/source-price-comparator.js",
+      "rawSha256": "7d37576a0db97f0423592ec2fadb8983ae1a702c485300aed29bd3b191df8a48"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "rawSha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed"
+    },
+    {
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "rawSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "rawSha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "file": "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql",
+      "rawSha256": "98db776a421ca42b1b8e5a996f30c9739cdb340509e14f01e00c06908fb08188"
+    },
+    {
+      "file": "supabase/migrations/03102026_1324_banking_pay_next_core.sql",
+      "rawSha256": "f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c"
+    },
+    {
+      "file": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+      "rawSha256": "2870041da540f108671f9df9c0952db05430e8ccbf8eb076428fdb03920b8343"
+    }
+  ],
+  "frozenEvidenceDependencies": [
+    {
+      "file": "DESTINATION_REPRICE_WITNESS_V1_20261007/07102026_0105_weekly_source_destination_reprice_witness.sql",
+      "rawSha256": "36b7cb975e4f0d98707e43a62cb9f2879d24fa18a5d3d76eb20dff5dd208d552"
+    },
+    {
+      "file": "DESTINATION_REPRICE_WITNESS_V1_20261007/07102026_0106_weekly_source_destination_reprice_v1.sql",
+      "rawSha256": "868f46227166965854b457111c601d3498ec5c1a5bd6f05bcad1633b15209c58"
+    },
+    {
+      "file": "DESTINATION_REPRICE_WITNESS_V1_20261007/source-owner.patch",
+      "rawSha256": "bdf7c4b915868562e5c68d70bb164f60f79395652bb84987574b3b971deaf06d"
+    },
+    {
+      "file": "DESTINATION_REPRICE_WITNESS_V1_20261007/INDEPENDENT_ACCEPTANCE_SNAPSHOT_CORRECTION_20261007.md",
+      "rawSha256": "9c0fbbbc41d3097b25a09180865a0ec384ec80b6ed9f7a474d10f9ea0a36cf4e"
+    },
+    {
+      "file": "SOURCE_DISPOSITION_COMPARISON_V1_20261007/candidate.patch",
+      "rawSha256": "199ef67f061a19f128e447f6c86d53d0f89175083975eeeb805474a91cd67fc9"
+    },
+    {
+      "file": "SOURCE_DISPOSITION_COMPARISON_V1_20261007/packet-manifest.json",
+      "rawSha256": "ffd0ea40a650b0386988f1a2ef1675eea6937492f0dfab71a01543c9debe4dc7"
+    }
+  ]
+}

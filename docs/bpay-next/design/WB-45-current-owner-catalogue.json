@@ -1,0 +1,317 @@
+{
+  "source": "Sole local PG17 schema/catalogue only; no business SQL/RPC or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_component_resolution_active_v1(uuid,uuid,uuid,text,text,text,uuid,boolean,uuid,date)",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "af91d2268a6675b2d1cada69a10d90ae",
+      "installed": {
+        "bodyMd5": "af91d2268a6675b2d1cada69a10d90ae",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "identityArguments": "p_work_id uuid, p_boundary_revision_id uuid, p_line_id uuid, p_family text, p_code text, p_target_channel text, p_target_umbrella_id uuid, p_target_vat boolean, p_policy_id uuid, p_valuation_date date"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_audit_guard_v1()",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "862a181a01545b25c40abbd56f3012e3",
+      "installed": {
+        "bodyMd5": "862a181a01545b25c40abbd56f3012e3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "identityArguments": ""
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_basis_v1(uuid,uuid,text,text)",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "b371a68f3f8f65ea98fd441027289f6c",
+      "installed": {
+        "bodyMd5": "b371a68f3f8f65ea98fd441027289f6c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "identityArguments": "p_revision_id uuid, p_line_id uuid, p_family text, p_code text"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_event_audit_guard_v1()",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "3fd56e85925a950e3b3c510dc21552d3",
+      "installed": {
+        "bodyMd5": "3fd56e85925a950e3b3c510dc21552d3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "identityArguments": ""
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_event_guard_v1()",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "e68dfcfb63f9c8525719c1572ccd476e",
+      "installed": {
+        "bodyMd5": "e68dfcfb63f9c8525719c1572ccd476e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "identityArguments": ""
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_guard_v1()",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "ab45996db7d7eb21f43def8071641c81",
+      "installed": {
+        "bodyMd5": "ab45996db7d7eb21f43def8071641c81",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "identityArguments": ""
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_2100_banking_pay_next_resolution_remaining_quote_v1.sql",
+      "sourceMd5": "df8a5068e3b70ea7d976c676348faba0",
+      "installed": {
+        "bodyMd5": "df8a5068e3b70ea7d976c676348faba0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "identityArguments": "p_decision_id uuid, p_version bigint, p_boundary_revision_id uuid, p_run_position_id uuid"
+      },
+      "matches": true
+    }
+  ],
+  "tables": [
+    {
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "rls": true,
+      "owner": "cloudtms_bpay_local_owner",
+      "table": "bpay_next_component_resolution",
+      "forced": true,
+      "columns": [
+        "id",
+        "work_id",
+        "candidate_id",
+        "based_on_revision_id",
+        "approved_line_id",
+        "physical_timesheet_id",
+        "component_key",
+        "rate_family",
+        "rate_code",
+        "decision_version",
+        "original_basis",
+        "published_revision_id",
+        "published_line_id",
+        "published_basis",
+        "state",
+        "command_id",
+        "actor_user_id",
+        "request_body",
+        "target_pay_channel",
+        "target_umbrella_id",
+        "target_umbrella_vat_chargeable",
+        "valuation_policy_id",
+        "valuation_date",
+        "resolution_mode",
+        "manual_replacement_rate",
+        "manual_amount_ex_vat",
+        "reason",
+        "saved_at_utc",
+        "original_position_basis"
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_pkey ON private.bpay_next_component_resolution USING btree (id)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_id_decision_version_key ON private.bpay_next_component_resolution USING btree (id, decision_version)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_version_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date, decision_version) NULLS NOT DISTINCT",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_active_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE (state = 'ACTIVE'::text)",
+        "CREATE INDEX bpay_next_component_resolution_boundary_idx ON private.bpay_next_component_resolution USING btree (work_id, based_on_revision_id, approved_line_id, rate_family, rate_code) WHERE (state = 'ACTIVE'::text)",
+        "CREATE INDEX bpay_next_component_resolution_published_idx ON private.bpay_next_component_resolution USING btree (work_id, published_revision_id, published_line_id, rate_family, rate_code) WHERE (state = 'ACTIVE'::text)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_published_active_idx ON private.bpay_next_component_resolution USING btree (published_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE ((state = 'ACTIVE'::text) AND (published_line_id IS NOT NULL))"
+      ],
+      "policies": [
+        {
+          "name": "service_owner",
+          "roles": [
+            "16385"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "name": "bpay_next_component_resolution_audit_guard",
+          "deferred": true,
+          "definition": "CREATE CONSTRAINT TRIGGER bpay_next_component_resolution_audit_guard AFTER INSERT OR UPDATE ON private.bpay_next_component_resolution DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_audit_guard_v1()"
+        },
+        {
+          "name": "bpay_next_component_resolution_guard",
+          "deferred": false,
+          "definition": "CREATE TRIGGER bpay_next_component_resolution_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_component_resolution FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_guard_v1()"
+        },
+        {
+          "name": "bpay_next_component_resolution_no_truncate",
+          "deferred": false,
+          "definition": "CREATE TRIGGER bpay_next_component_resolution_no_truncate BEFORE TRUNCATE ON private.bpay_next_component_resolution FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_component_resolution_guard_v1()"
+        }
+      ],
+      "constraints": [
+        "FOREIGN KEY (based_on_revision_id, approved_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT",
+        "FOREIGN KEY (published_revision_id, published_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT",
+        "FOREIGN KEY (work_id, based_on_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT",
+        "FOREIGN KEY (work_id, published_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT",
+        "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT",
+        "TRIGGER DEFERRABLE INITIALLY DEFERRED",
+        "CHECK ((((published_revision_id IS NULL) AND (published_line_id IS NULL) AND (published_basis IS NULL)) OR ((published_revision_id IS NOT NULL) AND (published_revision_id <> based_on_revision_id) AND (published_line_id IS NOT NULL) AND (published_basis IS NOT NULL) AND (jsonb_typeof(published_basis) = 'object'::text) AND (octet_length((published_basis)::text) <= 8192))))",
+        "CHECK ((((target_pay_channel = 'PAYE'::text) AND (target_umbrella_id IS NULL) AND (target_umbrella_vat_chargeable IS NULL)) OR ((target_pay_channel = 'UMBRELLA'::text) AND (target_umbrella_id IS NOT NULL) AND (target_umbrella_vat_chargeable IS NOT NULL))))",
+        "CHECK ((((resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::pay_finance_component_resolution_mode_enum) AND (manual_replacement_rate IS NULL) AND (manual_amount_ex_vat IS NULL)) OR ((resolution_mode = 'MANUAL_REPLACEMENT_RATE'::pay_finance_component_resolution_mode_enum) AND (manual_replacement_rate IS NOT NULL) AND ((manual_replacement_rate)::text <> ALL (ARRAY['NaN'::text, 'Infinity'::text, '-Infinity'::text])) AND (manual_replacement_rate >= (0)::numeric) AND (manual_replacement_rate < ('1000000000000'::bigint)::numeric) AND (manual_replacement_rate = trunc(manual_replacement_rate, 6)) AND (manual_amount_ex_vat IS NULL) AND (NULLIF(btrim(reason), ''::text) IS NOT NULL)) OR ((resolution_mode = 'MANUAL_AMOUNT'::pay_finance_component_resolution_mode_enum) AND (manual_amount_ex_vat IS NOT NULL) AND ((manual_amount_ex_vat)::numeric >= (0)::numeric) AND ((manual_amount_ex_vat)::numeric < ('10000000000000000'::bigint)::numeric) AND (manual_replacement_rate IS NULL) AND (NULLIF(btrim(reason), ''::text) IS NOT NULL))))",
+        "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT",
+        "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT",
+        "CHECK (((length(component_key) >= 1) AND (length(component_key) <= 256)))",
+        "CHECK (((decision_version > 0) AND (decision_version < '9223372036854775807'::bigint)))",
+        "UNIQUE (id, decision_version)",
+        "CHECK (((jsonb_typeof(original_basis) = 'object'::text) AND (octet_length((original_basis)::text) <= 8192)))",
+        "CHECK (((jsonb_typeof(original_position_basis) = 'object'::text) AND (octet_length((original_position_basis)::text) <= 2048)))",
+        "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT",
+        "PRIMARY KEY (id)",
+        "CHECK (((length(rate_code) >= 1) AND (length(rate_code) <= 256)))",
+        "CHECK ((rate_family = ANY (ARRAY['STANDARD'::text, 'ADDITIONAL'::text, 'ADJUSTMENT'::text])))",
+        "CHECK ((octet_length(reason) <= 2000))",
+        "CHECK (((jsonb_typeof(request_body) = 'object'::text) AND (octet_length((request_body)::text) <= 8192)))",
+        "CHECK (isfinite(saved_at_utc))",
+        "CHECK ((state = ANY (ARRAY['ACTIVE'::text, 'CLEARED'::text])))",
+        "CHECK ((target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))",
+        "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT",
+        "CHECK ((isfinite(valuation_date) AND ((valuation_date >= '0001-01-01'::date) AND (valuation_date <= '9999-12-31'::date))))",
+        "FOREIGN KEY (valuation_policy_id) REFERENCES private.bpay_next_valuation_policy(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+      ]
+    },
+    {
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "rls": true,
+      "owner": "cloudtms_bpay_local_owner",
+      "table": "bpay_next_component_resolution_event",
+      "forced": true,
+      "columns": [
+        "id",
+        "event_kind",
+        "work_id",
+        "candidate_id",
+        "revision_id",
+        "approved_line_id",
+        "rate_family",
+        "rate_code",
+        "decision_id",
+        "decision_version",
+        "need_operation_id",
+        "need_member_key",
+        "need_version",
+        "command_id",
+        "actor_user_id",
+        "reason",
+        "occurred_at_utc"
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_event_pkey ON private.bpay_next_component_resolution_event USING btree (id)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_event_version_idx ON private.bpay_next_component_resolution_event USING btree (decision_id, decision_version, event_kind) WHERE (decision_id IS NOT NULL)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_need_idx ON private.bpay_next_component_resolution_event USING btree (need_operation_id, need_member_key, approved_line_id, rate_family, rate_code, need_version) WHERE (event_kind = 'NEED'::text)",
+        "CREATE UNIQUE INDEX bpay_next_component_resolution_event_request_idx ON private.bpay_next_component_resolution_event USING btree (command_id, event_kind, approved_line_id, rate_family, rate_code) WHERE (command_id IS NOT NULL)",
+        "CREATE INDEX bpay_next_component_resolution_event_work_idx ON private.bpay_next_component_resolution_event USING btree (work_id, revision_id, approved_line_id, rate_family, rate_code)"
+      ],
+      "policies": [
+        {
+          "name": "service_owner",
+          "roles": [
+            "16385"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "name": "bpay_next_component_resolution_event_audit_guard",
+          "deferred": true,
+          "definition": "CREATE CONSTRAINT TRIGGER bpay_next_component_resolution_event_audit_guard AFTER INSERT ON private.bpay_next_component_resolution_event DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_event_audit_guard_v1()"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_guard",
+          "deferred": false,
+          "definition": "CREATE TRIGGER bpay_next_component_resolution_event_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_component_resolution_event FOR EACH ROW EXECUTE FUNCTION private.bpay_next_component_resolution_event_guard_v1()"
+        },
+        {
+          "name": "bpay_next_component_resolution_event_no_truncate",
+          "deferred": false,
+          "definition": "CREATE TRIGGER bpay_next_component_resolution_event_no_truncate BEFORE TRUNCATE ON private.bpay_next_component_resolution_event FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_component_resolution_event_guard_v1()"
+        }
+      ],
+      "constraints": [
+        "FOREIGN KEY (decision_id, decision_version) REFERENCES private.bpay_next_component_resolution(id, decision_version) ON DELETE RESTRICT",
+        "FOREIGN KEY (need_operation_id, need_member_key) REFERENCES private.bpay_next_pay_method_change_member(operation_id, member_key) ON DELETE RESTRICT",
+        "FOREIGN KEY (revision_id, approved_line_id) REFERENCES private.bpay_next_approved_line(revision_id, id) ON DELETE RESTRICT",
+        "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT",
+        "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT",
+        "TRIGGER DEFERRABLE INITIALLY DEFERRED",
+        "CHECK ((((event_kind = 'NEED'::text) AND (decision_id IS NULL) AND (decision_version IS NULL) AND (command_id IS NULL) AND (need_operation_id IS NOT NULL) AND (need_member_key IS NOT NULL) AND (need_version IS NOT NULL) AND (need_version > 0)) OR ((event_kind = ANY (ARRAY['SAVED'::text, 'CLEARED'::text])) AND (decision_id IS NOT NULL) AND (decision_version IS NOT NULL) AND (command_id IS NOT NULL) AND (need_operation_id IS NULL) AND (need_member_key IS NULL) AND (need_version IS NULL))))",
+        "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT",
+        "CHECK ((event_kind = ANY (ARRAY['NEED'::text, 'SAVED'::text, 'CLEARED'::text])))",
+        "CHECK (isfinite(occurred_at_utc))",
+        "PRIMARY KEY (id)",
+        "CHECK (((length(rate_code) >= 1) AND (length(rate_code) <= 256)))",
+        "CHECK ((rate_family = ANY (ARRAY['STANDARD'::text, 'ADDITIONAL'::text, 'ADJUSTMENT'::text])))",
+        "CHECK (((octet_length(reason) >= 1) AND (octet_length(reason) <= 2000)))",
+        "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT",
+        "FOREIGN KEY (work_id, revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+      ]
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ],
+  "publicSecurityDefinerMembershipDelta": 0
+}

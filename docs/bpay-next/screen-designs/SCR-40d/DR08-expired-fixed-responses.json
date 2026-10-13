@@ -1,0 +1,37 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "run_id": "33333333-3333-4333-8333-333333333333",
+          "status": "CANCELLED",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-08T06:20:14.000Z",
+          "expires_at_utc": "2026-10-11T06:20:14.000Z",
+          "selected_candidates": "227",
+          "ready": "0",
+          "review": "0",
+          "pending": "0",
+          "preparing": "0",
+          "removed": "227",
+          "enrolled_candidates": "227",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": "2026-10-11T06:30:00.000Z"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    }
+  ]
+}

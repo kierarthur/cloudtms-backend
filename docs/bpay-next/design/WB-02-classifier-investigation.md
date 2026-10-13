@@ -1,0 +1,55 @@
+# WB-02 withdrawal / WAIT classifier investigation
+
+10 October 2026. Read-only source investigation for sequence50: full card02:120–151, all nine checklist deliverables, W10–W14, R2 WB-02/06/41/44 and the master successor order. No product changes, SQL/tests/gates, runtime, fixtures or hosted access. RuleB/0151 accepted selection, Candidate snapshot and existing PIN authority are preserved; parked F25 producers/resolvers remain untouched.
+
+## Actual owners and gap
+
+| Object | Current actual final source / seam |
+|---|---|
+| `bpay_next_workbench_refresh_work_v1(uuid)` / `refresh_case_v1(uuid)` | `10102026_1252_banking_pay_next_workbench_summary_v1.sql`:282 /461; raw SHA `2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b` |
+| `bpay_next_workbench_work_members_v1(uuid,uuid)` | `10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql`:5; SHA `4f07a5ab56fd01aa40ccdb9163f3458c66a838af8e056f35987be2c24cb70542` |
+| `bpay_next_ordinary_authorisation_trigger_v1()` | `03102026_1530_banking_pay_next_ordinary_approval_v1.sql`:608–683; SHA `df943acaa6ddc4fa5bea877621762e96c93360d4030383f29b5bffca2d3aa301` |
+| Ordinary publisher | `10102026_1236_banking_pay_next_segment_authority_final_v1.sql`, publisher calls staged publication at1014; SHA `f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d` |
+| `bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)` / position APPLIED tail / coarse payable state | `03102026_1430_banking_pay_next_position_writer_v1.sql`:7 /613–642 /650–659; SHA `395ead5cf46a1399ef4859f056d89508b0862f9b0fda8dde92454107f17602fa` |
+| `bpay_next_source_withdrawal_guard_v1()` | `03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql`:11; SHA `90e1f9ad45ba1d64a9e02b009058da45841da2d0515b057eda29699349659ad1` |
+| Actual Source withdraw / first-authorise callers | Withdraw: frozen `04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql`:2126, root update2513; first authorise public tail remains `09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql` |
+
+The ordinary withdrawal trigger already locks Candidate control then exact work (1530:650–655), validates the original current physical revision (662–671), sets WITHDRAWN/current_revision_id=NULL (673–676), and increments financial_view_revision (677–680). It writes no zero approval, position, effect, Case or job. Preserve this body and add only the exact projection support after the original transition/counter update. Its Source-work early return (659–660) remains.
+
+The Source guard independently locks the same Candidate/work order, validates genuine SOURCE identity and the approved transition, and refuses any existing exact-work financial effect before clearing the pointer. Preserve that safety refusal. The public Source withdrawal already takes its existing Source admission and performs the root update; that update invokes this guard. A guard hook gives the successful public path its NEXT projection without duplicating or replacing the frozen 0556 wrapper. A paid Source withdrawal that is currently refused is not a new successful path to invent.
+
+Current1252:304 reads only current_revision_id. It then derives completeness/current member amounts from that revision, so WITHDRAWN loses the last approved display and becomes missing data. Current1321 correctly preserves removed Source classification using actual immutable binding/classification_line evidence; it remains the latest normal approved-member owner. It must not be called with a NULL revision and treated as A=0 for withdrawal.
+
+## One native WAIT predicate and honest last-approved evidence
+
+Add the named private STABLE/owner-only `bpay_next_work_wait_state_v1(uuid)`, NEXT-gated with fixed search_path. Its initial contract is exact work approval_state=WITHDRAWN and **signed sum** of that work's position.realised_source_ex_vat >0. Do not use ABS, positive-part sums, target cash, a bank-return amount, historical transfer/effect enumeration, Pay Query, debt balance, or a Candidate-wide paid flag. Actual known native zero/unpaid produces false; missing work is not an authorised false/clear substitute. Locked refresh knows the work exists; future WB-41 owns any further qualified Source-origin/unknown disposition.
+
+The last approved amount comes from coherent positions and the sealed work.applied_revision_id, not current_revision_id, which is intentionally NULL. Require actual same-work sealed revision and exact applied-position membership before advertising a complete last-approved figure. Positions contain A/C/H and target counters; no recomputation, new delta or recovery is authorised by their use as display evidence. Preserve native signs. Do not turn absent/mixed evidence into zero with COALESCE.
+
+There is a real partial-apply caveat: 1430:534–553 updates per-position approved/applied revision during NEW while work.applied_revision_id advances only at613–620. Therefore withdrawal during an already accepted unfinished apply can leave mixed position revisions. A raw sum in that state is not proof of one complete last-applied approval. Show Processing/unavailable last-approved evidence until the existing accepted apply reaches its genuine final pointer. Do not repair/stop that job or infer a debt in WB-02.
+
+## Minimal nonfinancial withdrawal display shape
+
+Handle WITHDRAWN before the normal current-approved member loop and positive/reserved/recovery decomposition. Retain complete exact group and, where qualified, native component/segment identities and the last applied revision's immutable labels. The reason is APPROVAL_WITHDRAWN/Blocked for unpaid work and AWAITING_REAUTHORISATION/Action for paid WAIT. Both are nonselectable. Preserve the genuine accepted run/receipt link as information where it exists; no captured offer, selection, run line, reservation or already accepted RuleB input is rewritten.
+
+A withdrawal is not a new AVAILABLE, ZERO or RECOVERY portion. The current item schema requires unknown EVIDENCE's current monetary fields to be NULL (1252 migration156–175); this must stay intact. The smallest supporting typed display addition is nullable **last_approved_source_ex_vat** on the exact item and complete group, with a nullable same-work **last_approved_revision_id** on the group if a distinct revision provenance field is needed. Existing item.revision_id may bind the actual applied historical revision; group.current_revision_id remains the real NULL current pointer. Names must clearly distinguish retained original approval from current payable money. Ordinary role grants remain revoked.
+
+Populate those display-only fields from the qualified native position/applied evidence. Existing current approved/gross_due/included/excluded/recovery fields remain NULL on the nonfinancial EVIDENCE row; nominal current payable is not last-approved A. Thus Candidate ready/waiting pay sums do not include withdrawn A, and recovery_source_ex_vat is not fabricated by subtracting C from a synthetic zero/current approval. Genuine current withdrawal rows remain visible even when A=C and ordinary Ready would omit a fully paid remainder. If the historical amount cannot be proved, retain NULL with explicit unavailable/Processing evidence; never print GBP0 as the last approval. A genuine previous certified zero may be a factual last figure0 but never a new authorised ZERO offer.
+
+Paid WAIT is a native control independent of the last-amount display's completeness. Preserve it as an explicit secondary typed control if a higher-priority damaged-evidence reason must replace AWAITING_REAUTHORISATION; otherwise using only the displayed winning reason can lose the true transition. The card's normal before-WAIT probe is `exists stored item where exact group and reason_code='AWAITING_REAUTHORISATION'` before deletion. Read the current predicate once under the locks. Calling it twice after withdrawal only returns the new state twice.
+
+## Exact linked Case refresh and lock order
+
+Build the exact distinct Case UUID set from `private.bpay_next_work_collection` for this work and Candidate, with non-NULL case_id. The native schema1519:24–47 binds Case/component/Candidate and permits one actual Case per component. No Case list comes from all Candidate debt, a Pay Query family, transfers, or obsolete projection rows.
+
+Read stored before-WAIT and genuine current after-WAIT before replacing the item. On a change, refresh every actual linked Case in the same transaction through the existing projection owner. WB-02 does not add WB-41's allocation pause or mutate Case principal/counters. WB-41 later adds ORIGIN_UNAUTHORISED_WAIT using this one predicate and its existing allocation-plan chain.
+
+Prehold Candidate control → exact work → sorted exact linked Cases → Candidate metadata before taking the singleton workbench revision. Refreshing a Case for the first time after refresh_work has locked that singleton violates current Case→metadata→singleton order and can wait on a Case owned by another established path. Use the existing bounded refresh_many prehold shape or equivalent finite prehold inside the named refresh owner, then apply complete work delta and linked Case deltas. The exact related set must fit the existing total100/16KiB envelope; larger fanout needs WB-44's real fenced continuation, never silently first100/500 complete.
+
+## Publication / final-apply timing and honest handoff
+
+Staged publication1430:79–84 sets APPROVED/current_revision before it allocates POSITION_APPLY at88–99. It does **not** advance work.applied_revision_id. D01's publisher hook must expose a dirty/Processing barrier and must not offer mixed native positions or refresh captured inputs. Add/prehold any projection support before the receiver's deliberately last agency clock; no new business/control locks after that clock.
+
+Do not erase the stored before-WAIT evidence in an early publication-only replacement and then expect final APPLIED to detect true→false: its stored AWAITING reason would already be gone. A small Processing invalidation can preserve the prior WAIT evidence while readers see the dirty barrier. Full replacement and origin-Case release refresh belong to actual final APPLIED pointer transition1430:613–642. That physical owner is in WB-06's later chain, and WB-44 owns the complete producer closure. Record its exact handoff rather than editing the position owner ahead of its chain or marking the reauthorisation convergence tested now.
+
+Leave `bpay_next_work_payable_state_v1` coarse NOT_APPROVED/APPLY_PENDING/READY unchanged. It is not the maintained component classifier. Preserve current1236 publisher/rates/segment capture and current1321 normal approved-member semantics; write successors only for this card's finite classifier/predicate, ordinary withdrawal trigger, Source guard and named publisher invalidation support. WB-13 later owns the exact wording; there is no Worker or Office product change here. Runtime acceptance, Source paid-refusal cases, before/after Create, linked recovery display and final-apply convergence remain NOT_RUN.

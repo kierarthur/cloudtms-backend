@@ -1,0 +1,21 @@
+{
+  "authority": "Noncredential local presentation samples only; no database rows, signed token, email or financial action.",
+  "actor": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "worker": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "command": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "transfer": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "challenge": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "preview": {
+    "action_kind": "CANCEL_REQUEST", "action_label": "Cancel payment",
+    "candidate_count": 1, "candidate_name": "Mary Evans",
+    "total_amount": "252.00", "amount_basis": "DRAFT_GROSS",
+    "scope_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "accepted": false, "second_factor_required": true
+  },
+  "codeRequired": {"ok": true, "tfa_required": true, "purpose": "BPAY_NEXT_ACTION", "challenge_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "expires_in": 300},
+  "wrongPassword": {"error": "Invalid credentials"},
+  "wrongCode": {"error": "Invalid code"},
+  "expiredCode": {"error": "invalid_or_expired_code"},
+  "unavailable": {"error": "BPAY_NEXT_REAUTH_REQUIRED"}
+}

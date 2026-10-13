@@ -1,0 +1,69 @@
+{
+  "item": "WB-18",
+  "sequence": 66,
+  "state": "PARTLY_BUILT; mixed-stage selected-total WB27 join remains open",
+  "builderDecision": "BD074",
+  "exactDeliverables": [
+    "WB-18-D02",
+    "WB-18-D03"
+  ],
+  "successors": [
+    {
+      "object": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "chain": [
+        "2105",
+        "2128"
+      ],
+      "change": "EXPORT_ROWS finite native sorted seed and retained exact revision factual enrichment only"
+    },
+    {
+      "object": "public.bpay_next_workbench_page_v1(jsonb)",
+      "chain": [
+        "1946",
+        "2128"
+      ],
+      "change": "finite export-only source-list sort and typed cursor validation"
+    }
+  ],
+  "sourceFiles": {
+    "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql": "92e5021fd277fb71c07947fe33b1ad46e73838313b5f8bc1e31964219a5c55e4",
+    "supabase/migrations/10102026_2128_banking_pay_next_workbench_export_seek.sql": "a7b4ce1897e0dbd065853fe330e1e16bb052ef0216b4506a85a3d0890cf8428f"
+  },
+  "checks": {
+    "dbCheck": "329 migrations/856 repeatables PASS",
+    "localPg17": "CHANGED 1 migration/4 final repeatable closures compiled",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "608e4a83352de948cb95626375a7b308c383824c75f19a9fa28d9992937e6188",
+    "coupling": "PASS",
+    "changedJsSyntax": "PASS"
+  },
+  "reviews": [
+    "reviews/WB-18-export-sql-review.md",
+    "reviews/WB-18-export-worker-review.md",
+    "reviews/WB-18-export-ui-review.md"
+  ],
+  "screens": {
+    "id": "SCR-15",
+    "screenshots": 12,
+    "policyReview": "33 PASS / 0 FAIL / 9 N/A",
+    "review": "screen-designs/SCR-15/review.md",
+    "method": "Actual local Office frames, minimal fixed read/CSV responses, hosted network blocked, no DB rows"
+  },
+  "deviations": [
+    "Published legacy19 total already includes Included; no invented20th column",
+    "Break has no retained projected scalar equivalent and remains blank; no duration arithmetic",
+    "Preview row ID uses actual native itemUUID",
+    "Unsupported design pre-export Candidate/payment counts omitted under ownerA2",
+    "Header has only Filters/Export; retained Refresh moved to root footer for policy secondary-control limit",
+    "Case deduction Amount is labelled outstanding balance, never claimed as this Draft allocation; mixed-stage selected-total equality requires WB27 named server-owned estimate"
+  ],
+  "pendingJoins": [
+    "WB27 matching-basis selected-estimate and real mixed-stage Included-total reconciliation; no browser monetary sum or new money owner"
+  ],
+  "publicCatalogue": "No publicSECDEF addition/removal or ACL change; verifier unchanged",
+  "joinedAppAcceptance": "NOT_RUN; no1000-row fixtures or test programme",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED",
+  "frontendCommit": "76be066e4e7520247d8cbdd47b39726496270c63",
+  "backendCommit": "e778bab5090811fef649929be5702e2079b2bff5"
+}

@@ -1,0 +1,96 @@
+{
+  "item": "FC-04",
+  "sequence": 104,
+  "decision": "BD116",
+  "status": "BUILT_REVIEWED",
+  "deliverables": [
+    "FC-04-D06"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "91bdfd79d1da7cf62214ee743284aafd471f527308fa995cd0b86c5ce4ebdb94"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "40c02030afe7fbf15366d2ea9cfbfd19745a9a8e5c399b85b6bc04156025c646"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-payment-advance.js",
+      "sha256": "cccc07b702b6de26af6e9a13d2423c910dbfbde5e9fb74dc0eacb19f93a5d46b"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-preview.js",
+      "sha256": "580d3ed723e873e7f289a85c9bda1174cfe7f463529862703b76e2eb6073d0f3"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-ui.js",
+      "sha256": "718c2ac4bd4827cbdd07218fa846db5ccfaf9f5457fea0ff7ef7b4fcc8911462"
+    },
+    {
+      "repository": "FE",
+      "path": "js/modal-modernisation.js",
+      "sha256": "0cdb7f981c039afd8b86c14124d728cd1ad824cefd18cb294a313393112f642b"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "2c47ef647af8b98911db16483de87bd8f83ee3e858d65e81d2f325f21a05abed"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "739146aa05caaa7215b273bbce1ec58ee09b5ddba236f1468e738dc8de679dad"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "402770bd4343761a178e95087fdf7b05e8d1078f36e33973ccb50e19f96d0b70"
+    }
+  ],
+  "checks": {
+    "integrity": "351 migrations/913 repeatables PASS",
+    "sourceGates": "12/12 PASS",
+    "nodeSyntax": "affected Worker and Office modules PASS",
+    "sqlDelta": "NONE; local PG17 remains FC01 current catalogue",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "contractHash": "ac7310eff30094b09bb6bfc2786c07eb54d523b4f770df36477f78b029df2cef",
+    "futureJoined": "AUTHORED_NOT_RUN"
+  },
+  "reviews": [
+    "design/FC-04-design-review.md",
+    "reviews/FC-04-source-review.md",
+    "reviews/FC-04-worker-error-advisory.md",
+    "screen-designs/SCR-117/review.md"
+  ],
+  "screenshots": "42 actual native local variants;13 states in dark/device-light/phone plus3 upper-phone captures",
+  "ownersRetained": "FC03 native creator/preview/intake, original ledger/funding/queue; no SQL or public definer membership change",
+  "correctionOwner": "FC-03 finite existing SOURCE_CHANNEL_UNBOUND decoder; see FC03 corrections",
+  "futureHost": "FC02 generated sequence117 supplies full Cases page; exact accepted Case callback ready",
+  "implementationCommit": "f51a40c33674716799c50f4f6c72429831faa7ec",
+  "frontendCommit": "df95a98209f11e75b57ae4f6e2b52dce45ca9299",
+  "screen": "A4 PASS:42 actual captures; full42policy no unexplained difference or essential failure",
+  "corrections": [
+    {
+      "id": "FC05-phone-hit-area",
+      "owner": "FC-04 shared native creation style",
+      "foundBy": "FC-05 A4 P11802",
+      "change": "Scope existing44px phone rule by native creation body instead of requiring mounted shared actions. Closes unselected/header/footer hit-area gap on next shared-style touch; no financial/control change.",
+      "source": {
+        "repository": "FE",
+        "path": "css/bpay-next-office.css",
+        "sha256": "dc976dd81d95e7fac3555a1a9c2470782c4ab84c61c16e22aa4b6cb619d6feb4"
+      },
+      "evidence": "SCR117 unselected phone main+top recaptured only; original remaining pixels retained; original A4 manifest remains historical except2 new PNGs",
+      "implementationCommit": "df544a35d2b7d7d281692ed0966e4081d7627f1e",
+      "frontendCommit": "eb4ef182b1548b4b0b86052a96bcbd09131382da",
+      "review": "SCR117 review additive2phonePASS receipt"
+    }
+  ]
+}

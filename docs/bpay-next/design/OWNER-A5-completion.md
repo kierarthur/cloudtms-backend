@@ -1,0 +1,9 @@
+# Owner A5 correction / BUILDER DECISION BD107
+
+11October2026 boundary afterDY08. Exact owner requirement, original schemas, descriptor journal/receipt/control paths,0814 publicintake/0454 append-firstdescriptor branch/2232 acknowledgement reviewed. Worker and Office now accept only run_id,command_id,descriptor for CREATE and the existing12-field receipt. Exact descriptor validation/captured namespace/IDs/command/upload crosschecks and all same-key exact-byte journals remain. Both old pay_date and run_id-only forms are rejected beforedispatch; no default descriptor or retry is created.
+
+The retired manual ChooseCandidate/Startselection/rawRun/Resume/CurrentApprovalFacts/NextWorkpage renderblock and inaccurate unsavedticks copy are removed. Actual Workbench,accepted upload sequencer,sealed progress/Review/Draft/frozenusers remain. Workbench's existing MODULE_NOT_ACTIVE decoder now reads exactly: Banking Pay is not available for this agency yet.
+
+No SQL successor is needed: descriptor append enters the native ACK path before the old non-descriptor missing-manifest refusal, which remains unreachable from the closed callers. The internal preparation helper remains a dependency of actual accepted creation. No protocol, new route, metadata, fixture or moneyowner is added. Card counts unchanged. Normal source12/12,345/903 integrity,syntax and unchanged contractseal/coupling3a024451 PASS. Source review and exact localcommits follow in completion receipt. No new screen/window is built; the removed block was behind the existing unsealed render return. A4 existing visible modulecopy will be captured at next relevant screen review; no runtime/screenshot claim here. JoinedCreate/replay/recovery remainNOT_RUN.
+
+Implementation BEa71814644a47c2d0d30100f1162d48cecfe94c6d; FE9d39ba39ff5cdefaa426663f864f4a10df97c34e; reviews/OWNER-A5-source-review.md SOURCE PASS. Original whole submission/controller/sealed suffix verified unchanged. Counts77/288 unchanged.

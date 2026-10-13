@@ -1,0 +1,36 @@
+# DR-27 independent design review
+
+12 October 2026. **DESIGN PASS**, including the final BD142 deferred-directory refinement. This is an independent review of the saved design and existing source, before product implementation. No product/checklist changes, SQL execution, fixtures, tests, captures or hosted calls were performed. D08, the genuine DR28 host, future execution-writer integration and the whole ITEM remain open as the design states.
+
+## Reviewed authority and bytes
+
+- Full approved card `03_DRAFT_PAYE_NET_BATCHES_FINANCE_CASES.md:744–769`, and all DR-27 ITEM/D01–D09 rows in `IMPLEMENTATION_CHECKLIST.md:3760–3783`.
+- `design/DR-27.md:3–48`, final SHA256 `2f3df6d93c7fc962902e7870d24b5174a815262585705ff1fd6748d6123a4316`.
+- `design/DR-27-contract.md:3–17`, final SHA256 `43fc62f8391f04b809f0f23acbcafe020e743273c8c60b69f9805d1104e83569`.
+- `design/DR-27-build-investigation.md`, the current final-definer registry, and current owners below. Owner directions on scope, real native identity and no pre-execution pay date control the implementation; picture-only fields do not create another execution owner.
+- Confirm and channel owner `supabase/repeatable/12102026_0645_banking_pay_next_confirm_refresh_v1.sql`, SHA256 `5c1e24129cf8a14c97c80d4a7027eaf7f434bfffec2ff58872a159fe824552a1`: native module/Run locks and replay at lines 21–33; SEALED/revision/deadline/completed-release gates at 35–78; original refresh and final DRAFT transition at 81–110; channel membership at 114–149.
+- DR16 contribution/trigger owner `supabase/repeatable/12102026_0442_banking_pay_next_run_channel_totals_trigger_v1.sql`, SHA256 `ecec108929c8c2492a8d104a7f648d420c70e754fe45761044fb8e3fb9c68a11`: exact retained contribution at 4–40 and fixed PAYE/UMBRELLA OLD/NEW arithmetic at 44–98. Public preparation merge parent is current 1019, not the older 0718 literal.
+
+## Findings and required source checks
+
+No essential design failure remains. Extending the same DR16 physical summary, keeping its financial contribution unchanged and routing native Worker OLD/NEW through one helper satisfies the exact-once requirement without introducing caller money deltas. Confirm and later operational touches use absent Worker sides as zero money changes; a writer whose Worker UPDATE already applied a contribution must not apply it again. These are implementation checks, not permission to alter the existing calculation.
+
+The final lock arrangement supersedes the earlier directory-before-summary proposal. The helper acquires only the original fixed per-Run summary locks. The private initially-deferred summary constraint trigger publishes directory generation and seven status-count deltas at COMMIT, after original business mutations. Its O(1) OLD/NEW metadata operations may take the singleton directory lock but never acquire Run, Candidate, Work, Case or financial locks. Multiple same-row events telescope; generation and counts become visible atomically with the writer transaction. Current source searches found no `SET CONSTRAINTS ALL` in native migrations/repeatables. Keep this named constraint deferred in every supported future writer; do not quietly restore an early global lock. Equal or hidden changes, including DR21's totals-revision-only job clock, do not change the current list DTO or generation.
+
+The seven stored directory counts and one generation make COUNT and LIST share an exact scope without recounting history. Closed context is actor/agency/owner epoch/status/generation; both kinds accept the explicitly nullable context. Static native keyset order uses original creation timestamp descending, full Run UUID ascending and channel ascending. Exact visible filtered anchor lookup and changed-context refusal preserve cross-page membership. Source review must verify request, cursor and whole-reply bounds, null qualification, timestamp precision and terminal empty-page behavior; no latency or universal index-cost proof is claimed here.
+
+Confirm must call the helper last, after its retained refresh and successful Run transition, while preserving original replay, 72-hour, SEALED, expected revision and completed-release guards. Original gross/worker/Timesheet facts freeze once. True Timesheet count uses distinct native `work.original_timesheet_id` from captured run Work membership, not line count or one-Work-one-Timesheet assumptions. Later cancellation retains those original figures. Only exact completed pre-confirm RELEASE excludes original admitted members. Historical COMPLETE/CANCELLED rows remain readable independently of preparation readiness.
+
+Status definitions are truthful: a Draft is Not paid, neither Run COMPLETE nor worker COMPLETE proves Paid, and approval/submission/settlement/refusal/retry remain owned by their real native execution writers. Current whole-channel Cancelled is allowed only for actual completed all-cancelled native obligations, not a vacuous zero count or cancellation of a subset. Partial cancellation keeps original membership/amounts and a plain note. PAYE current cash is qualified by existing missing counters; pending/refused facts are separate from accepted amounts. Nullable future reference/route/execution date remains unknown, and no date is exposed before Execute.
+
+The small owner-only/RLS metadata singleton is necessary support for exact global count/currentness, not a second financial summary. The migration must fail closed on a genuine already-confirmed Run without a truthful frozen list snapshot. An unavailable census is not evidence of absence; no fabricated zero/backfill or hidden-history fallback is approved. Resolve any actual census finding through a bounded explicit amendment before admission.
+
+The contract records every named future writer and prohibits money replay or replacing native proof with arithmetic. Those future integrations and DR28's actual renderer/all-visible-header server sorts remain explicit later deliverables. Existing source reuse and this design review do not claim the 30-run/45-channel or joined in-app acceptance checks.
+
+## Verdict
+
+**DESIGN PASS at the hashes above.** Proceed to the planned narrow product implementation and its independent source review. Product construction, installation, runtime behavior, visual approval, performance and future handoffs are not certified by this receipt.
+
+## Final commit-order amendment
+
+The final design/contract addition at lines 48/17 is reviewed and **DESIGN PASS** remains. Other native deferred business hooks can still run after a queued summary event, so COMMIT timing alone does not prove a waiting directory lock safe. The directory hook now takes its one metadata row `FOR UPDATE NOWAIT`; contention aborts the entire original transaction with existing `55P03` recovery instead of waiting in a global-to-business cycle. It still acquires no business lock itself and the native helper never locks the directory. No new command, automatic retry, financial delta or protocol is authorized. Equal metadata with `p_touch=false` is a true no-op, deliberate native touch advances revision, and replacing a scheduled route clears obsolete scheduling metadata. These are narrow corrections to the same native helper/directory contract, not extra execution features. Local installation/check outcomes belong to root's separate receipts; this review made no database call.

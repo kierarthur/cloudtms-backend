@@ -1,0 +1,107 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql",
+      "sourceMd5": "c7435d90e2695f10ecec0b64ac8e339f",
+      "installed": {
+        "bodyMd5": "c7435d90e2695f10ecec0b64ac8e339f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_revision_guard_v1()",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql",
+      "sourceMd5": "c4b984694caeaeaa2f6ba036f3582075",
+      "installed": {
+        "bodyMd5": "c4b984694caeaeaa2f6ba036f3582075",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_treatment_approval_revision_v1(uuid)",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "sourceMd5": "4ac1d17bc0761a845a21b6ce607753f0",
+      "installed": {
+        "bodyMd5": "4ac1d17bc0761a845a21b6ce607753f0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_treatment_payload_assert_v1(uuid)",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "sourceMd5": "a9a8007152bafaa987763907a71918cf",
+      "installed": {
+        "bodyMd5": "a9a8007152bafaa987763907a71918cf",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_stage_treatment_revision_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "sourceMd5": "087300bb5ee78a20bb2bfa40f6079fc3",
+      "installed": {
+        "bodyMd5": "087300bb5ee78a20bb2bfa40f6079fc3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_treatment_approval_distinct_check",
+      "definition": "CHECK (((payment_treatment_approval_revision_id IS NULL) OR ((payment_treatment_approval_revision_id <> id) AND (source_event_id IS NULL))))"
+    },
+    {
+      "name": "bpay_next_treatment_approval_revision_fk",
+      "definition": "FOREIGN KEY (work_id, payment_treatment_approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

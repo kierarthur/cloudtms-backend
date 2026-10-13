@@ -47,6 +47,7 @@ const rows = [
   ['repeatable/06102026_1041_source_pending_order_canonical_reassert.sql','087ef13f52e24925527033115ceb7a127ce29f62e70cd440bce2dceee8eef7ec','SOURCE_REASSERT'],
   ['repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql','2c86099adcb66732872c56923b9eb1806967761af7a5a8912663360f020b6b81','INSTRUMENTATION'],
   ['repeatable/03102026_0600_stage2_plan_cache_after_h1h2_retry.sql','b7f5a59950b185313a9059733cde9f031fd6cdc9327b15bbbbaa7ed3044f21ba','PLAN_CACHE'],
+  ['repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql','06ee379760f437ae18dc8f965acd4920775d0571e7da74e160f2592ec67a8a72','CANDIDATE_RUNTIME_RELOAD'],
 ];
 export const REPLAY_REASONS = Object.freeze({
   INDEX_REBUILD: 'Only exclusively named concurrent indexes: original DROP IF EXISTS removes interrupted invalid builds; CREATE and final indisvalid/indisready assertions rerun. No data writes.',
@@ -63,6 +64,7 @@ export const REPLAY_REASONS = Object.freeze({
   SOURCE_REASSERT: 'Definition/ACL stages, exact notification trigger DROP IF EXISTS then CREATE and role ACL guards. No Source financial or notification caller executes.',
   INSTRUMENTATION: 'Definition stage then readonly exact function-hash guard; rerun replaces same body and rechecks same two allowed hashes. No financial writes.',
   PLAN_CACHE: 'Two stages set exact retained function configuration then readonly owner/configuration guards. Reapplying the same SET attributes is idempotent; no business writes.',
+  CANDIDATE_RUNTIME_RELOAD: 'Five exact current native files replace complete routine definitions and ACLs, retaining their original physical sources and BEGIN/COMMIT stages; two DO blocks only inspect role existence and reapply grants. Final NOTIFY reloads schema before the wrapper receipt. Replaying interrupted stages reapplies identical CREATE OR REPLACE/ACL declarations. No Candidate, Daily, notification, Source or payment caller is invoked; no business rows, tables or triggers are changed.',
 });
 export const MANAGED_EXCEPTIONS = Object.freeze(rows.map(([file, sha256, reason]) => Object.freeze({
   path: `supabase/${file}`, sha256, reason, rationale: REPLAY_REASONS[reason],

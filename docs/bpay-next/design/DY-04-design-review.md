@@ -1,0 +1,42 @@
+# DY-04 independent design review
+
+11 October 2026. **DESIGN PASS for the narrow complete Contractless Daily closure in `DY-04-build-design.md`.** It is sufficient to proceed to source authoring with the precise conditions below. No extra table, ledger, public RPC/command, Source producer, binding protocol, public trigger or money calculator is required. This review executed no SQL, tests, database/hosted calls, fixtures or browser work and changed no product.
+
+## Controlling scope and actual parents
+
+Read the complete DY-04 card `06_CONTRACT_MOVES_DAILY_PAYMENT_SUMMARY_PERFORMANCE.md:954–980`, adjacent DY-02/DY-03/DY-05 ownership, every local DY-04 row `IMPLEMENTATION_CHECKLIST.md:2678–2680`, future clauses 2686–2690, R2's genuine native segment/aggregate distinction, F-05/F-06 and WB-03 retained route, and the supplied joint `DAILY_AVAILABLE_RATE_CAPTURE_V1_20261006/contractless-late.sql`. The contracted-only overlay is not a complete Contractless closure.
+
+Current registry parents are route1450, ordinary publisher1236, authorisation trigger1332, revision/insert guards1342, generic Authorise0931, immutable pointer0928 and corrected evidence0925. Six native definitions need to change: route, publisher, trigger, revision guard, insert guard and existing generic Authorise; the existing Work pointer/evidence owners are reused. DY-04-D02 names the existing Worker authorise/materialise call path even though the card lists no new Worker feature: the finite current-parser support is necessary to connect the named Daily refusal, not authority to add a route or producer.
+
+The design correctly composes the joint Daily branch onto these latest owners. Do not promote the historical whole capsule or overwrite WB/Source/query/segment/rate/frozen-history successors. The current common publication/application owner remains `10102026_1346_banking_pay_next_position_projection_boundary_v1.sql`; current Source helpers remain their existing owners.
+
+## Joint publication and guard conditions
+
+Route1450 currently rejects NULL Contract through its inner join (34–43). The supplied joint route's 169–189 LEFT JOIN/Contractless branch shows the necessary correction: factual current DAILY/HOURS, no adjustment/parent/correction markers, and explicit internal DAILY_HOURS discriminator. Retain all original contracted expense, import-correction, self-bill Source and resolved Source-family paths. “No new route” in the design means no new public Worker route; the named internal discriminator is the assigned card branch.
+
+Publisher1236's strict Contract point read at 413–424 must become conditional for this genuine Daily branch. Candidate, Client, role/band and date come from the exact authorised TF/evidence; the unchanged real Contract branch remains authoritative for contracted ordinary work. Retain actual channel/Umbrella/source references, all five Standard identities and fifteen native cells, existing ancillary availability, approved rates, component/count/total conservation and common staged publication. The design correctly rejects selected Daily ancillary pay and retains existing contracted behavior.
+
+Reuse corrected0925 evidence rather than the old pack helper. Set revision Daily evidence only for DAILY-origin NULL-Contract Work; contracted Daily still freezes dated Standard rates through the existing helper but keeps CONTRACT-origin behavior. The stable booking lookup and NULL-safe Candidate/Contract/origin/date/week comparisons in joint spans 466–484 prevent duplicate Work or silent reclassification. Original Work physical anchor stays immutable; revision carries the permitted later physical UUID/version. Daily WORK:DAY/time/break/used-bucket detail is part of this complete publisher, without inventing segments for native aggregate Daily.
+
+The two named1342 guard additions are required, bounded point qualifications. Insert must qualify the original genuine NULL-Contract DAILY/HOURS/London date with its current authorised SELF_REPORTED financial Candidate/version. Seal must bind object contract version, physical UUID/version, financial ID, Candidate, booking and worked date to the retained DAILY Work/revision, and refuse Daily evidence on CONTRACT-origin revisions. Preserve original INSERT/seal/delete/whole-row immutability, physical financial matching, child counts and money totals. Existing pointer0928 already protects origin/date and must remain final.
+
+Trigger1332 currently admits only ORDINARY_HOURS/EXPENSE_CARRIER (316–319); add DAILY_HOURS to this same publication path and retain its existing attachment. Withdrawal must use OLD approved financial identity and the actual current revision/physical version so an unrelated stale unauthorisation cannot withdraw a newer approval. Preserve Candidate-control then Work order, NULL-safe Contract identity, financial revision increment and current Workbench refresh at 352–360. No new public attachment or Source-withdrawal replacement is needed.
+
+## Missing-rate support and producer boundary
+
+The small existing generic Authorise successor is necessary: canonical Daily `broker/src/daily-canonical-authority.js:17–25,207–210` produces RATE_MISSING for actual used pay OR charge NULL, while current0931:2145–2147 raises AUTHORISE_NOT_ALLOWED before stamping TF at 2200–2207. Publisher1236's named bucket guard cannot supply the required visible refusal on that earlier path.
+
+Place the read-only native bucket refusal immediately before that status guard, after the original locked current Timesheet/TF, expected physical/signature, invoice and already-authorised checks (0931:1855–1935,2089–2114). Restrict it to genuine ordinary Daily; do not intercept SOURCE_HOURS, imported corrections, archived/stale/non-current or wrong physical-version paths. Inspect actual used stored hours and pay OR charge NULL in a fixed five-bucket order, return the existing BPAY_NEXT_ORDINARY_USED_RATE_MISSING plus exact native Daily context, and perform no resolver lookup, calculation, status/eligibility change or authorisation write. The complete current body must otherwise remain exact, including Source/query admission and busy/unknown semantics.
+
+Current Worker parser `broker/src/index.js:93941–93961` requires a UUID Contract and tells the user to set Contract rates. Add only a finite native Daily-context branch for the same existing code and actual bucket; keep the original Contract branch unchanged and reject malformed context. The message must direct the factual dated override/default authority rather than fabricate a Contract. No new RPC/kind or general error-schema redesign is justified.
+
+There is no need to broaden Source binding producers. Daily Work is ORDINARY and its revision ORDINARY. Source initial certification explicitly requires SOURCE Work/revision (0018:39–43), and accepted input's Source binding/query branches are explicitly conditional on SOURCE/PROTECTED (2153:132,303–304). The common staged publisher retains real physical/currentness and immutable revision/publication identity; it does not require a synthetic Daily HEAD. Preserve those exact conditional branches and the original1600 Source joins. The current projection's nullable Contract-based Client lookup is not permission to invent a Client: DY-05 explicitly owns frozen Client identity/detail follow-through. Genuine Client remains the TF/evidence authority in this publisher.
+
+## Source closure and acceptance limits
+
+Use the existing scaffold/release machinery, exact final-definer advances, unchanged public membership, fixed signatures/search paths/ACLs, reload notification and only finite full-parent guard allowances. Review complete current definitions after composition, not only positive Daily snippets. No authorisation, fixture, worker drain, agency switch or hosted install is implied by design approval.
+
+Before/after-click publication ordering, two-Candidate enrollment, same owner for auto-finalisation, RECEIVED remaining non-final, permitted unpaid rotation, retained frozen history and unchanged contracted/Source/expense paths remain AUTHORED_NOT_RUN future joined clauses. Local source/compile/catalogue checks cannot substitute for those. DY-02's named-bucket dependency can be closed at source only when the actual Authorise insertion and finite transport branch are present and independently reviewed.
+
+Reviewed design SHA-256: `a211c34ccf0e85de6b596e830af84ad7e1bbee7be2721f3466bc61922925ee69`. Fresh final product review is still required; no implementation verdict is asserted by this design note.
+

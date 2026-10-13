@@ -1,0 +1,1370 @@
+[
+  {
+    "id": "SCR-111",
+    "file": "FC14-normal-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-empty-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£0.00\nOVERPAYMENTS OUTSTANDING\n£0.00\nSNOOZED ITEMS\n0\nActive only\n\nNo finance items.\n\n0 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-unknown-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n—\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-sorted-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-scroll-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1",
+              "local_date": "2026-10-11",
+              "official_pay_date": "2026-10-16",
+              "pay_week_start": "2026-10-12",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "valuation_policy_id": null
+            },
+            "scope": {
+              "kind": "CANDIDATE_CASE_REPORT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": null,
+              "active_only": true,
+              "sort": "NEXT_DATE",
+              "direction": "ASC"
+            },
+            "section": 1,
+            "key": [
+              false,
+              "2026-10-19"
+            ],
+            "source": "CASE",
+            "source_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-normal-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-empty-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£0.00\nOVERPAYMENTS OUTSTANDING\n£0.00\nSNOOZED ITEMS\n0\nActive only\n\nNo finance items.\n\n0 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-unknown-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n—\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-sorted-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-scroll-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nITEM\tCLIENT\tORIGINAL\tOUTSTANDING\tWEEKLY AMOUNT\tNEXT DATE ▲\tSNOOZED UNTIL\tSTATUS\tNOTES\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nAudit\n\tGeneral / no specific Client\t£100.00\t£80.00\t£20.00\t19/10/2026\t—\tActive\tCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\n\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nAudit\n\tRiverside Care Home\t£60.00\t£60.00\t£30.00\t19/10/2026\t—\tActive\t—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\n\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\n\tRiverside Care Home\t£281.60\t—\t—\t—\t23/10/2026\tSnoozed\tQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1",
+              "local_date": "2026-10-11",
+              "official_pay_date": "2026-10-16",
+              "pay_week_start": "2026-10-12",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "valuation_policy_id": null
+            },
+            "scope": {
+              "kind": "CANDIDATE_CASE_REPORT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": null,
+              "active_only": true,
+              "sort": "NEXT_DATE",
+              "direction": "ASC"
+            },
+            "section": 1,
+            "key": [
+              false,
+              "2026-10-19"
+            ],
+            "source": "CASE",
+            "source_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 1318,
+      "scrollWidth": 1318,
+      "bodyWidth": 1307,
+      "bodyScrollWidth": 1307,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Client",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Original",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Outstanding",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Weekly amount",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Next date ▲",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Snoozed until",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Status",
+          "width": 116.546875,
+          "height": 24
+        },
+        {
+          "text": "Notes",
+          "width": 116.625,
+          "height": 24
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        },
+        {
+          "text": "Audit",
+          "width": 33.8125,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nSort by\nItem · ascending\nItem · descending\nClient · ascending\nClient · descending\nOriginal · ascending\nOriginal · descending\nOutstanding · ascending\nOutstanding · descending\nWeekly amount · ascending\nWeekly amount · descending\nNext date · ascending\nNext date · descending\nSnoozed until · ascending\nSnoozed until · descending\nStatus · ascending\nStatus · descending\nNotes · ascending\nNotes · descending\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nOpen\nGeneral / no specific Client\n£100.00\n£80.00\n£20.00\n19/10/2026\n—\nActive\nCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nOpen\nRiverside Care Home\n£60.00\n£60.00\n£30.00\n19/10/2026\n—\nActive\n—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\nOpen\nRiverside Care Home\n£281.60\n—\n—\n—\n23/10/2026\nSnoozed\nQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item · ascendingItem · descendingClient · ascendingClient · descendingOriginal · ascendingOriginal · descendingOutstanding · ascendingOutstanding · descendingWeekly amount · ascendingWeekly amount · descendingNext date · ascendingNext date · descendingSnoozed until · ascendingSnoozed until · descendingStatus · ascendingStatus · descendingNotes · ascendingNotes · descending",
+          "width": 222.078125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-empty-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£0.00\nOVERPAYMENTS OUTSTANDING\n£0.00\nSNOOZED ITEMS\n0\nActive only\nSort by\nItem · ascending\nItem · descending\nClient · ascending\nClient · descending\nOriginal · ascending\nOriginal · descending\nOutstanding · ascending\nOutstanding · descending\nWeekly amount · ascending\nWeekly amount · descending\nNext date · ascending\nNext date · descending\nSnoozed until · ascending\nSnoozed until · descending\nStatus · ascending\nStatus · descending\nNotes · ascending\nNotes · descending\n\nNo finance items.\n\n0 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item · ascendingItem · descendingClient · ascendingClient · descendingOriginal · ascendingOriginal · descendingOutstanding · ascendingOutstanding · descendingWeekly amount · ascendingWeekly amount · descendingNext date · ascendingNext date · descendingSnoozed until · ascendingSnoozed until · descendingStatus · ascendingStatus · descendingNotes · ascendingNotes · descending",
+          "width": 222.078125,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-unknown-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n—\nActive only\nSort by\nItem · ascending\nItem · descending\nClient · ascending\nClient · descending\nOriginal · ascending\nOriginal · descending\nOutstanding · ascending\nOutstanding · descending\nWeekly amount · ascending\nWeekly amount · descending\nNext date · ascending\nNext date · descending\nSnoozed until · ascending\nSnoozed until · descending\nStatus · ascending\nStatus · descending\nNotes · ascending\nNotes · descending\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nOpen\nGeneral / no specific Client\n£100.00\n£80.00\n£20.00\n19/10/2026\n—\nActive\nCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nOpen\nRiverside Care Home\n£60.00\n£60.00\n£30.00\n19/10/2026\n—\nActive\n—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\nOpen\nRiverside Care Home\n£281.60\n—\n—\n—\n23/10/2026\nSnoozed\nQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item · ascendingItem · descendingClient · ascendingClient · descendingOriginal · ascendingOriginal · descendingOutstanding · ascendingOutstanding · descendingWeekly amount · ascendingWeekly amount · descendingNext date · ascendingNext date · descendingSnoozed until · ascendingSnoozed until · descendingStatus · ascendingStatus · descendingNotes · ascendingNotes · descending",
+          "width": 222.078125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-sorted-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nSort by\nItem · ascending\nItem · descending\nClient · ascending\nClient · descending\nOriginal · ascending\nOriginal · descending\nOutstanding · ascending\nOutstanding · descending\nWeekly amount · ascending\nWeekly amount · descending\nNext date · ascending\nNext date · descending\nSnoozed until · ascending\nSnoozed until · descending\nStatus · ascending\nStatus · descending\nNotes · ascending\nNotes · descending\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nOpen\nGeneral / no specific Client\n£100.00\n£80.00\n£20.00\n19/10/2026\n—\nActive\nCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nOpen\nRiverside Care Home\n£60.00\n£60.00\n£30.00\n19/10/2026\n—\nActive\n—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\nOpen\nRiverside Care Home\n£281.60\n—\n—\n—\n23/10/2026\nSnoozed\nQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item · ascendingItem · descendingClient · ascendingClient · descendingOriginal · ascendingOriginal · descendingOutstanding · ascendingOutstanding · descendingWeekly amount · ascendingWeekly amount · descendingNext date · ascendingNext date · descendingSnoozed until · ascendingSnoozed until · descendingStatus · ascendingStatus · descendingNotes · ascendingNotes · descending",
+          "width": 222.078125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111",
+    "file": "FC14-scroll-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nBethany Clarke · TMS 10502\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n£80.00\nOVERPAYMENTS OUTSTANDING\n£60.00\nSNOOZED ITEMS\n1\nActive only\nSort by\nItem · ascending\nItem · descending\nClient · ascending\nClient · descending\nOriginal · ascending\nOriginal · descending\nOutstanding · ascending\nOutstanding · descending\nWeekly amount · ascending\nWeekly amount · descending\nNext date · ascending\nNext date · descending\nSnoozed until · ascending\nSnoozed until · descending\nStatus · ascending\nStatus · descending\nNotes · ascending\nNotes · descending\nPAYMENT ADVANCES\nPayment Advance\nCreated 01/09/2026\nOpen\nGeneral / no specific Client\n£100.00\n£80.00\n£20.00\n19/10/2026\n—\nActive\nCar repair\nFunded\n£100.00\nRecovered\n£20.00\nWritten off\n£0.00\nReserved\n£0.00\nOVERPAYMENTS\nOverpayment recovery\nCreated 13/09/2026\nOpen\nRiverside Care Home\n£60.00\n£60.00\n£30.00\n19/10/2026\n—\nActive\n—\nFunded\n£0.00\nRecovered\n£0.00\nWritten off\n£0.00\nReserved\n£0.00\nSNOOZED ITEMS\nTimesheet TS-10491\nSnoozed 05/10/2026\nOpen\nRiverside Care Home\n£281.60\n—\n—\n—\n23/10/2026\nSnoozed\nQuery with ward manager\n3 items · Sorted by Next date, soonest first",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      },
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": {
+            "context": {
+              "agency_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "owner_epoch": "1",
+              "local_date": "2026-10-11",
+              "official_pay_date": "2026-10-16",
+              "pay_week_start": "2026-10-12",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "valuation_policy_id": null
+            },
+            "scope": {
+              "kind": "CANDIDATE_CASE_REPORT",
+              "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              "case_id": null,
+              "active_only": true,
+              "sort": "NEXT_DATE",
+              "direction": "ASC"
+            },
+            "section": 1,
+            "key": [
+              false,
+              "2026-10-19"
+            ],
+            "source": "CASE",
+            "source_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            "event_ordinal": "1"
+          },
+          "include_count": false
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><button cla",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(134, 185, 237) solid 2px",
+        "shadow": "none"
+      },
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Item · ascendingItem · descendingClient · ascendingClient · descendingOriginal · ascendingOriginal · descendingOutstanding · ascendingOutstanding · descendingWeekly amount · ascendingWeekly amount · descendingNext date · ascendingNext date · descendingSnoozed until · ascendingSnoozed until · descendingStatus · ascendingStatus · descendingNotes · ascendingNotes · descending",
+          "width": 222.078125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

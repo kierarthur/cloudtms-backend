@@ -1,0 +1,170 @@
+{
+  "kind": "INDEPENDENT_CASE_WEEK_BASIS_VERSION_REVIEW",
+  "author": { "identity": "/root/pilot_b_case_week_basis", "model": "gpt-6.1-sol", "reasoningEffort": "xhigh" },
+  "reviewer": { "identity": "/root/method_crosswalk_defect16_v2", "model": "gpt-6.1-sol", "reasoningEffort": "xhigh", "independentOfAuthor": true },
+  "sourceDecision": "APPROVE_NARROW_PRODUCT_SOURCE_CANDIDATE_FOR_ROOT_OUTER_ROLLBACK_TEST",
+  "priorSourceReviewSha256": "C92E5EA639E08460FF8514E741DE4554C79DCB3825952BD9546803770EF68160",
+  "finalActualAdmission": "APPROVE_COMPLETED_FOCUSED_CANDIDATE_EVIDENCE_ONLY",
+  "toolReview": "APPROVE_COMPLETED_FOCUSED_TOOL_SOURCE_AND_ACTUAL_EVIDENCE_ONLY",
+  "canonicalIntegrationAdmission": {
+    "decision": "APPROVE_ROOT_CANONICAL_SOURCE_INTEGRATION_OF_EXACT_TWO_FUNCTION_BODIES",
+    "executor": "/root",
+    "scope": "The exact reviewed source repair only, under the standing local source-defect authority. This does not admit installation, a release, a counted runner, a changed cleanup predicate, a row award or wider protected/mixed acceptance.",
+    "conditions": [
+      "Keep both complete function signatures, security-invoker posture, search_path, owner/ACL closure and all unchanged financial owners/assertions/calculators.",
+      "Use the normal immutable-migration/repeatable source workflow; never rewrite an old locked migration or repair a ledger.",
+      "Rebind the actual final ordered source winners, catalogue/contract and executable closure for any later installation or counted successor. The old installed 5F4 contract and old signed metadata do not admit changed definitions.",
+      "Preserve every earlier STOP and the actual strict fingerprint false/cleanup STOPs. No sequence reset, expected-fingerprint repin or normalization is authorized."
+    ]
+  },
+  "rootAdmission": { "status": "ADMITTED_EXACT_CANONICAL_SOURCE_ONLY", "by": "/root", "reviewedRecordSha256BeforeAdmission": "F3D2BDDFD7933B8EA0FFB3823A83364C48F20B50E83646A8F96A5011912FD33F", "canonicalPath": ".codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql", "canonicalSha256": "9E2488857DC7AD0823B172E2C4EFBC9EEF6687C0300392ED812E7A99E88F027E", "dbCheckBefore": "PASS 297/793", "dbCheckAfterInitialIntegration": "PASS 297/794", "installationAdmitted": false, "countedPilotBAdmitted": false, "rowAward": false },
+  "subjects": [
+    { "path": "08102026_0510_banking_pay_next_overpayment_week_applicability_v1.sql", "sha256": "9E2488857DC7AD0823B172E2C4EFBC9EEF6687C0300392ED812E7A99E88F027E", "classification": "PRODUCT_SOURCE_CANDIDATE" },
+    { "path": "08102026_0510_banking_pay_next_overpayment_week_applicability_v1.inverse.sql", "sha256": "9B173688EEB2A3826409C5F5059505CBE659E45159079E0F01A516BB781D24E5", "classification": "EXACT_EFFECTIVE_PRODUCT_PREIMAGES" },
+    { "path": "source-proposal.mjs", "sha256": "74AA9C9DE3C95A57997923497727AA5F7D1BF236755D62CCD932594692DAD80E", "classification": "EXACT_TWO_FUNCTION_OUTER_TRANSACTION_HOOK_AND_BOUNDED_READINESS_PROBE_ACTUALLY_EXERCISED" },
+    { "path": "SOURCE_MATERIAL.json", "sha256": "491BA183BD891BA8DB29A6F84F33C101D34231787ED4E7E3D253212893207074", "classification": "SOURCE_ONLY_MATERIAL_AND_EXPLICIT_LIMITATIONS" }
+  ],
+  "findings": [
+    {
+      "number": 1,
+      "id": "FINAL_EFFECTIVE_PREIMAGE_AND_TWO_FUNCTION_SCOPE",
+      "disposition": "RESOLVED_SOURCE_ONLY",
+      "evidence": "All 864 candidate SQL lines and the complete focused inverse diff were read. Independent source recomputation rehashed all declared material sources and proved the inverse definitions equal the last effective definitions in managed-overlay SHA6CF8093E9D651306CE284A729D4ACF7D902BF9D0B4CD9E122A84E5DD9AAD2530. PREPARE has one declaration; capacity proof has two and the later declaration is the preimage. Both signatures, language, security-invoker posture and search_path headers are identical. Only these two existing bodies change; there is no top-level transaction control, grant/revoke/owner change, schema addition or calculator replacement.",
+      "bodyPins": {
+        "prepareBeforeMd5": "fb6946e158aafa2327f075fde9b70615",
+        "prepareAfterMd5": "f533c6f67f4d5d9edad0b465d6742093",
+        "capacityBeforeMd5": "f5e8ccd8c08fb88ebe4a4204f746d713",
+        "capacityAfterMd5": "f3f3c0bb9bc2b460aeb877dbadfe12f2"
+      }
+    },
+    {
+      "number": 2,
+      "id": "REAL_REFUSAL_AND_NARROW_APPLICABILITY",
+      "disposition": "RESOLVED_NARROW_SOURCE_AND_ACTUAL_POSITIVE_PROOF",
+      "evidence": "Prior actual V3 witness SHA6F8A2BC358E68DC1506D2C9C2BECB2884565FDF163AD7341B3FA0CE6830968C7 remains the genuine UMBRELLA_PAYE_-30 REVIEW/CASE_WEEK_BASIS_UNBOUND refusal at unchanged callback SHA851DD line148. The focused candidate receipt now proves that exact vector READY with a complete one-item SEALED gross-OVERPAYMENT set, NOT_AFFECTED, complete capture/allocation and no membership mismatch. This new vector has prior_worker_count=0 and prior_missing_contribution_count=0; it does not retroactively establish the old refusal's exact same-code branch or prior operands. A separate actual UMBRELLA_UMBRELLA_-30 vector proves READY/NOT_AFFECTED with two real prior Umbrella workers lacking contributions, without inserting substitute contributions. The current allocator applies H/floor protection only to LOAN/ADVANCE/MANUAL_DEBT. The bounded applicability correction is supported; historical missing operands are not fabricated."
+    },
+    {
+      "number": 3,
+      "id": "COMPLETE_NONEMPTY_SELECTION_AND_NULL_SAFETY",
+      "disposition": "RESOLVED_SOURCE_ONLY",
+      "evidence": "SQL137-146 requires count equal to the SEALED header selected_count, count greater than zero and every joined case/component tuple exactly OVERPAYMENT/OVERPAYMENT/RECOVERY/GROSS_DEDUCT. Left joins plus row IS NOT DISTINCT FROM and coalesced bool_and reject missing/null/contradictory identities. Existing selection/component PKs, scoped FKs, NOT NULL counts and unique selected identities prevent join multiplication. Empty, protected, mixed, payout and other-stage selections do not obtain the bypass; their original absence/unresolved/WEEK_CAPTURE path remains. No excluded protected item is promoted to selected eligibility."
+    },
+    {
+      "number": 4,
+      "id": "FROZEN_REPROOF_AND_REAL_CAPACITY_ACCEPTANCE",
+      "disposition": "RESOLVED_SOURCE_ONLY",
+      "evidence": "SQL264-268 rechecks the live class during existing instruction capture. SQL497-520 rechecks the entire exact run-worker/preparation/selection frozen instruction set, nonempty expected count, actual count, captured and worker counts, exact selected membership and SEALED header before allocation. SQL758-774 independently requires the same frozen completeness/class/membership for NOT_AFFECTED CASE_RESERVE; every inherited actual PREPARE job, lease, owner epoch, state/revision, result, hold/capacity-use, source position/comparison tuple and monetary capacity proof remains. The changed branch does not infer BOUND or consult live economic history after Draft. CASE_RELEASE and frozen source quote/slice/amount algorithms are unchanged."
+    },
+    {
+      "number": 5,
+      "id": "CURRENTNESS_CONCURRENCY_AND_NO_FAKE_PRIOR_MONEY",
+      "disposition": "RESOLVED_SOURCE_ONLY",
+      "evidence": "Existing module share lock and run->worker-control->job->worker->state update lock order, lease/cursor/revision/takeover checks, case/component/position/period locks and source currentness checks remain unchanged. SEALED selection/header and child facts are immutable; instruction capture is guarded to PREPARING and exact frozen revisions, and instructions/results cannot be updated or deleted. Thus selection membership cannot grow between the class proof and paged capture; later class or frozen mismatches refuse before allocation. The original current-week row creation/lock and floor-revision capture remain, but no missing prior contribution or prior take-home is manufactured. The NOT_AFFECTED carry is current captured gross, not a claim that missing prior H is zero or known. Protected H/floor/threshold behavior and existing NET applicability are untouched."
+    },
+    {
+      "number": 6,
+      "id": "ACTUAL_CONTROLS_AND_ACCEPTANCE_LIMITS",
+      "disposition": "RESOLVED_FOCUSED_ACTUAL_WITH_BROADER_LIMITATIONS_RETAINED",
+      "evidence": "Root actually exercised the frozen hook and focused harness once before this final tool review. Catalogue preimages/postimages and ten actual readiness contexts retain the exact two body MD5s, identical owner/ACL/security/language/search_path, and original financial sources. Actual 11-scenario VALUES controls are predicate-only; three allocator calls remain unchanged-kernel controls, explicitly genuineProtectedPreparationControlsExecuted=false. Genuine protected/mixed/missing/count/membership PREPARE negatives, concurrency load and broad performance are not proved. This focused observer stops at its completion sentinel before host effect-closure assertions or flushDeferred; it is not a complete collector/deferred-constraint acceptance receipt."
+    },
+    {
+      "number": 7,
+      "id": "FOCUSED_TOOL_EXACT_SCOPE_AND_ACTUAL_BEFORE_REVIEW",
+      "disposition": "RESOLVED_COMPLETED_TOOL_SOURCE_AND_ACTUAL_ONLY",
+      "evidence": "Fully read observer949950, bootstrapAB08, HBA5B229, controlsF20C and hook74AA after their root actual exercise. Independently reconstructed all three harness whole-byte inverses against preserved V3/HBA-V5 sources. Observer returns the identical REVIEW reply, records only bounded status/context fields and does not change any original financial callable/assertion/amount. Candidate hooks replace only two definitions inside the same original outer transaction and perform read-only catalogue/context queries. Default imports have no native dispatch; no counted reservation is called. Fixed S physical/image/nonce/volume/database/OID, network-none/no-ports, three physical guards, closed-loader source checks, unchanged activation/session/rollback owner and narrow Unix TARGET-owner HBA prefix remain. No B/C/original-EF or provider route is introduced. Independent hash audit found zero drift across 8245 union input pins, including all 8221 admitted adapter subjects and all 34 declared FIN parent/file/prerequisite descriptors. Approval covers the completed one-shot tool evidence, not replay or future changed tools."
+    },
+    {
+      "number": 8,
+      "id": "ORIGINAL_TWELVE_MATRIX_COMPLETION_AND_DIAGNOSTIC_SENTINEL",
+      "disposition": "RESOLVED_NARROW_ACTUAL_FINANCIAL_CALL_PATH",
+      "evidence": "Observer receipt732FDE proves the original ordered twelve unique vector windows and matrixCompleted=true, observationFailures=[], with ten genuine downstream REVIEW replies all_ready=true. Two original no-earnings branches need no REVIEW; this is not twelve CASE PREPARE proofs. The unmodified matrix propagates every original callback assertion, preserveOriginalPayments and settleCurrentDifferences(CURRENT_ONLY) before completion. First retained assertion is observer.mjs:77 READINESS_ORIGINAL_FAILURE_NOT_REPRODUCED, deliberately after the entire awaited matrix. It is a diagnostic completion sentinel, not a failed financial assertion, and the outer B_FIN_ASSERTION_STOP label does not change that provenance. Actual monetary output receipts were not retained by this observer, actualFinancialResults=[] and host effect-closure/deferred flush were not reached; no full-financial-family or PilotB PASS is inferred."
+    },
+    {
+      "number": 9,
+      "id": "COMPLETE_POST_ROLLBACK_STATE_AND_STRICT_FALSE",
+      "disposition": "RESOLVED_DIAGNOSTIC_CLASSIFICATION_NOT_PRESERVATION_PASS",
+      "evidence": "Independently recomputed both complete logical fingerprints and all three complete diffs. BEFORE equals prior factual7041ce4a... exactly; AFTER is ad82b0e618561c93586b26ee7744d7f6465d0cfac6c6ae14827617aed9da7ad9. All 471 relations are present; all non-sequence row counts/digests, every relation column/type/order and other metadata, full contract and 23-section security are identical. Only six lastValue fields increase; configurations and isCalled are unchanged. Both fresh read-only RR captures retain 476 PID/session checks and acknowledged leaf rollback, postcheck and close. The healthy host path executes explicit ROLLBACK and close before its first sameSnapshot failure; no primary/cleanup transport failure is recorded. Two unchanged host B_FULL_FRESH_PRESERVATION STOPs and the full-fingerprint STOP remain separate. HBA receipt73DB proves exact prefix removal/original bytes reload, password-excluded roles and full owner profile equality, quiet clients, nine acknowledged read proofs, primary/cleanup null. Therefore definitions/rows/security rolled back; strict full sequence-inclusive preservation did not pass."
+    },
+    {
+      "number": 10,
+      "id": "CANONICAL_SOURCE_INTEGRATION_SEPARATE_FROM_COUNTED_CLEANUP",
+      "disposition": "APPROVE_EXACT_SOURCE_INTEGRATION_COUNTED_ADMISSION_BLOCKED",
+      "evidence": "The exact conservative two-body source repair plus completed unchanged twelve-vector call path justify root's local canonical source integration under standing defect-resolution authority. No source blocker was found for that narrow integration. This is not durable database installation or new package/contract admission. Existing normal fixture/trigger nextval calls and the actual post-rollback six counter changes make repeated same-database sequence-inclusive equality false; another positive diagnostic rerun cannot resolve it. Any counted route accepting those changes would change the cleanup contract and needs an explicit owner decision and exact reviewed successor. A disposable physical lifecycle is also a different operation/guard contract, not an automatic workaround. No sequence restoration, counter exclusion/normalization, H02 repin, old-failure relabel or silent substitute snapshot is approved. Owner's proposed six-counter exception remains pending, not implemented or admitted here."
+    }
+  ],
+  "sourceBlockingDefects": [],
+  "actualSubjects": [
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/observer.mjs", "sha256": "949950FC11F194025520A2E358731D5A4929386B61DF0D9267B109720C249703" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/bootstrap.mjs", "sha256": "AB08E0BA2DBC710FBBA18977847E0C9D73BE2DB47B10FDCA2866A4EF841E2508" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/with-scratch-hba.mjs", "sha256": "5B229539FD336CB684FF0B7092A6D20BC4EB59EC88FD15A2AA5CF8509E9B0566" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/source-controls.mjs", "sha256": "F20C437C056C3BCE050F095521EE7039B7D364A0E181496FF552E2E65A5B4559" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/CASE_WEEK_BASIS_STARTED_V1.json", "sha256": "34DAF56C553B3CC8DEA0666352E95975F0F3C63381C30215614CC24A342BBF20" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/CASE_WEEK_BASIS_OBSERVER_STARTED_V1.json", "sha256": "BD2EE0CCE773D486A782A107C0577FCD629B0FB0F6A5F202B6B4ADE0B89E4C69" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/CASE_WEEK_BASIS_RECEIPT_V1.json", "sha256": "B08966A8665FEB69D95D84A4B3E50F29AD2FAB8B82D4FDC428D31246EF9273BD" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/CASE_WEEK_BASIS_OBSERVER_RECEIPT_V1.json", "sha256": "732FDE474CB50A28571633F59B41C1F3807EFA3675CA29EE035717F376A1FE0B" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/FULL_BEFORE_CASE_WEEK_BASIS_V1.json", "sha256": "EA699272C565B0D06492F786F277B3EFE816571DE7E57A4DC1202F9C84F971AF" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/FULL_AFTER_CASE_WEEK_BASIS_V1.json", "sha256": "8F7F1FDB22D111BBF7740348952383D3EAF5A89182EFA1EB6A8465F3C4F51051" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/FULL_BEFORE_PROOF_CASE_WEEK_BASIS_V1.json", "sha256": "A6FBF8391C417728A835D4EEDC98E4B9799402D3635F7AA9D92278188F08A211" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/FULL_AFTER_PROOF_CASE_WEEK_BASIS_V1.json", "sha256": "85E8555B750DAB024C238483501D2DEB4993842FB64D7D3C3F41242092F0A4DE" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/BEFORE_TO_AFTER_DIFF_CASE_WEEK_BASIS_V1.json", "sha256": "297BCBED04E6307D8ADB219EDCDA6E2D6843601C125DCD58C234C8834BC3712C" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/H02_TO_BEFORE_DIFF_CASE_WEEK_BASIS_V1.json", "sha256": "F9A93E5E6AA3F51042513D7F03AE7A3564859C4758C032F579B7D0C51830795D" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/H02_TO_AFTER_DIFF_CASE_WEEK_BASIS_V1.json", "sha256": "EB70F1C1BF12B6E3233D057EF08F2950FC6E289C2FF5290B8A7C99284A14D61B" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/HBA_CASE_WEEK_BASIS_V1_STARTED.json", "sha256": "B6754A7F7F63DBE9C6696F908CE10D45586173BC3AD05CE667E8EC19E711DF6B" },
+    { "path": "../PILOT_B_CASE_WEEK_BASIS_FOCUSED_NATIVE_20261008/HBA_CASE_WEEK_BASIS_V1_RECEIPT.json", "sha256": "73DB4857536ED77344B6B909D22741F4F142A7A52AA359009531DC3BD3839E09" },
+    { "path": "../PILOT_B_NATIVE_ADAPTER_V2_20261007/SOURCE_BINDING.json", "sha256": "F56B880A8126C2ED72C8E6AF1DFE904DD7DF267F5693C03E5621D7C8BF33B395" },
+    { "path": "../PILOT_B_NATIVE_ADAPTER_V2_20261007/REVIEW_RECORD_PENDING.json", "sha256": "FE92C53879DDD8B7CE846A6CA6C8AA7C37B5030037470F0A01AA94F0C2A02324" }
+  ],
+  "actualEvidence": {
+    "reviewAfterRootActualScratch": true,
+    "originalFinancialVectorsCompleted": 12,
+    "actualReadyReviewReplies": 10,
+    "actualSelectedGrossCasePreparationContexts": 3,
+    "actualObservationFailures": 0,
+    "beforeDatabaseSha256": "7041ce4acc391020fa47dc0dfc6b9f4147beb10a4fb259916a4ee12a196d6855",
+    "afterDatabaseSha256": "ad82b0e618561c93586b26ee7744d7f6465d0cfac6c6ae14827617aed9da7ad9",
+    "all471RelationRowsMetadataContractSecurityUnchanged": true,
+    "sequenceOnlyChanges": [
+      { "identity": "private.invoice_generate_candidate_change_seq", "field": "lastValue", "before": "7196", "after": "7581" },
+      { "identity": "private.invoice_issue_candidate_change_seq", "field": "lastValue", "before": "7183", "after": "7567" },
+      { "identity": "public.audit_events_event_sequence_seq", "field": "lastValue", "before": "4278", "after": "4662" },
+      { "identity": "public.candidate_tmsref_seq", "field": "lastValue", "before": "481", "after": "493" },
+      { "identity": "public.client_cliref_seq", "field": "lastValue", "before": "313", "after": "337" },
+      { "identity": "public.global_rev_seq", "field": "lastValue", "before": "1227", "after": "1299" }
+    ],
+    "matchesExpected": false,
+    "perInvocationMatchesExpected": false,
+    "fullFingerprintPreserved": false,
+    "cleanupStopsRetained": 3,
+    "genuineProtectedMixedPreparationControlsExecuted": false,
+    "collectorEffectClosureAndDeferredFlushExecuted": false,
+    "fullInputsRehashed": 8245,
+    "inputDriftCount": 0,
+    "reviewerNativeExecution": false
+  },
+  "openBoundaries": [
+    { "id": "COUNTED_SEQUENCE_INCLUSIVE_PRESERVATION", "blocksCountedAdmission": true, "resolution": "Explicit owner decision plus exact changed successor/admission required; current strict false remains false. No approved exception exists in this record." },
+    { "id": "FULL_COLLECTOR_AND_CHANGED_INSTALLATION", "blocksCountedAdmission": true, "resolution": "Exact final installed source/contract and executable closure plus normal full collector/effect/deferred-constraint proof remain separate. This focused sentinel run does not supply them." },
+    { "id": "PROTECTED_MIXED_PREPARE_AND_PERFORMANCE", "blocksCanonicalNarrowIntegration": false, "resolution": "No broad claim is made; genuine corresponding journeys are required before extending acceptance beyond this narrow proven class." }
+  ],
+  "permittedSourceTestScope": {
+    "executor": "/root",
+    "twoExistingFunctionBodiesOnly": true,
+    "outerTransactionMustRollback": true,
+    "originalFinancialAssertionsAndAmountsUnchanged": true,
+    "preserveOriginalFailedReceipts": true,
+    "actualToolAndResultReviewMustCompleteSameVersionRecord": true
+  },
+  "notApproved": [
+    "Replay of completed one-shot tools or admission of a changed tool without its required actual exercise/review",
+    "Durable installation, release publication or a counted PilotB run; canonical source integration is approved only in the separate exact scope above",
+    "Whole-product/protected/mixed PREPARE acceptance or performance claims",
+    "Manufactured prior weekly contributions, sequence reset, expected-baseline repin or partial-fingerprint preservation claims"
+  ],
+  "reviewerNativeExecution": false,
+  "financialPass": false,
+  "focusedOriginalFinancialCallPathCompleted": true,
+  "admittedForCountedPilotB": false,
+  "h02Qualified": false,
+  "counted": false,
+  "awards": []
+}

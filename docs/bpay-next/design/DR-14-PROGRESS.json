@@ -1,0 +1,29 @@
+{
+  "item": "DR-14",
+  "sequence": 120,
+  "decision": "BD133",
+  "route": "Existing GET preparation-page",
+  "kinds": [
+    "PROGRESS",
+    "PREPARE_ISSUES"
+  ],
+  "requestAddition": {
+    "waiting_only": "PREPARE_ISSUES boolean; true only CANDIDATES; part of exact cursor context"
+  },
+  "rowAdditions": {
+    "waiting_on_other_run": "boolean; exact live other current native PREPARE lease",
+    "waiting_run_id": "uuid or null, never own run",
+    "waiting_actor_display_name": "real bounded other run starter or null",
+    "capacity_reduced_by_other_run": "boolean from positive original immutable instruction captured causal amount"
+  },
+  "progressAddition": {
+    "waiting_on_other_run": "boolean EXISTS own selected Candidates with qualified current owner"
+  },
+  "unchanged": "Original native counts, economic revision, PF08 attention/eligibility, discard/expiry, request and byte bounds, role/actor/module checks, whole-list sort/key/tie and source history remain exact.",
+  "diagnosticStorage": "Existing immutable run_case_instruction nullable source/target reduction and finite same-week or balance cause; no authority/reprice; old unknown remains NULL",
+  "remaining": {
+    "D05": "BLOCKED_ON_DR37 staged NET owning link",
+    "D07": "Exact per-repayment amount details through nextDR16 native REVIEW_CASES; common information and waiting completed here"
+  },
+  "runtime": "AUTHORED_NOT_RUN; no business calls, data, hosted or timing"
+}

@@ -1,0 +1,615 @@
+{
+  "reviewDate": "2026-10-10",
+  "purpose": "PF-04 finite source-only direct-call census; no gate, SQL or business execution",
+  "rootCount": 14,
+  "definitions": {
+    "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "finalPhysical": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "line": 456,
+      "callees": [
+        "private.bpay_next_reconcile_work_collection_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_position"
+      ]
+    },
+    "private.bpay_next_claim_prepare_job_v1(uuid,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "line": 79,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.gen_random_uuid",
+        "pg_catalog.make_interval",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_run_worker",
+        "private.bpay_next_worker_control"
+      ]
+    },
+    "private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "line": 181,
+      "callees": [
+        "private._candidate_expense_source_family_v1",
+        "private.bpay_next_source_command_id_v1",
+        "private.weekly_source_pay_query_admit_v2"
+      ],
+      "catalogCallees": [
+        "pg_catalog.btrim",
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.decode",
+        "pg_catalog.isfinite",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.jsonb_typeof",
+        "pg_catalog.to_jsonb"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_run_work",
+        "private.bpay_next_run_work_query_pin_v2"
+      ]
+    },
+    "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 739,
+      "callees": [
+        "private.bpay_next_bound_source_snapshot_v1",
+        "private.bpay_next_source_disposition_seed_v1",
+        "private.bpay_next_work_collection_origin_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.array_agg",
+        "pg_catalog.cardinality",
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.octet_length"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_run_position"
+      ]
+    },
+    "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 1161,
+      "callees": [
+        "private.bpay_next_bound_source_snapshot_v1",
+        "private.bpay_next_value_source_for_target_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_hold",
+        "private.bpay_next_run_line"
+      ]
+    },
+    "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "finalPhysical": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "line": 8,
+      "callees": [
+        "private.bpay_next_publish_no_case_week_fact_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "line": 550,
+      "callees": [
+        "private.bpay_next_capture_instruction_destination_v1",
+        "private.bpay_next_case_allocation_row_v1",
+        "private.bpay_next_complete_no_case_worker_v1",
+        "private.bpay_next_value_source_for_target_v1",
+        "private.bpay_next_work_collection_origin_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp",
+        "pg_catalog.trunc"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_case_allocation_channel",
+        "private.bpay_next_case_allocation_result",
+        "private.bpay_next_case_allocation_state",
+        "private.bpay_next_case_capacity_use",
+        "private.bpay_next_case_hold",
+        "private.bpay_next_case_payout_basis",
+        "private.bpay_next_case_period",
+        "private.bpay_next_run_case_instruction",
+        "private.bpay_next_worker_week",
+        "private.bpay_next_worker_week_contribution"
+      ]
+    },
+    "private.bpay_next_confirm_simple_run_v1(uuid,bigint)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 1445,
+      "callees": [
+        "private.bpay_next_channel_drafts_page_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 1524,
+      "callees": [
+        "private.bpay_next_begin_case_transfer_v1",
+        "private.bpay_next_receive_command_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_command_member",
+        "private.bpay_next_net_projection",
+        "private.bpay_next_transfer"
+      ]
+    },
+    "private.bpay_next_claim_simple_transfer_job_v1(uuid,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+      "line": 7,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.gen_random_uuid",
+        "pg_catalog.make_interval",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_worker_control"
+      ]
+    },
+    "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 1655,
+      "callees": [
+        "private.bpay_next_build_case_transfer_page_v1",
+        "private.bpay_next_build_destination_group_page_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_transfer_member"
+      ]
+    },
+    "private.bpay_next_begin_case_transfer_v1(uuid,uuid)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "line": 6,
+      "callees": [
+        "private.bpay_next_receive_command_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.hashtextextended",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.pg_advisory_xact_lock",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_case_transfer_build",
+        "private.bpay_next_command_member",
+        "private.bpay_next_destination_group",
+        "private.bpay_next_destination_group_leg",
+        "private.bpay_next_transfer"
+      ]
+    },
+    "private.bpay_next_build_case_transfer_page_v1(uuid,uuid,bigint,bigint,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "line": 200,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_transfer_member"
+      ]
+    },
+    "private.bpay_next_build_destination_group_page_v1(uuid,uuid,bigint,bigint,integer)": {
+      "role": "ROOT",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "line": 359,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.jsonb_build_object",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_destination_group_leg",
+        "private.bpay_next_transfer",
+        "private.bpay_next_transfer_member"
+      ]
+    },
+    "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 3955,
+      "callees": [
+        "private.bpay_next_expired_work_collection_scope_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.cardinality",
+        "pg_catalog.char_length",
+        "pg_catalog.clock_timestamp",
+        "pg_catalog.transaction_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_case_component",
+        "private.bpay_next_case_event",
+        "private.bpay_next_case_rule",
+        "private.bpay_next_finance_case",
+        "private.bpay_next_work_collection"
+      ]
+    },
+    "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+      "line": 248,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.clock_timestamp"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+      "line": 11,
+      "callees": [],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "line": 585,
+      "callees": [
+        "private.bpay_next_initial_tsfin_bound_assert_v1",
+        "private.bpay_next_source_binding_members_v1",
+        "private.bpay_next_source_command_id_v1"
+      ],
+      "catalogCallees": [
+        "pg_catalog.count"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "line": 420,
+      "callees": [
+        "private.bpay_next_source_book_seed_proof_v1"
+      ],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "line": 295,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.convert_to",
+        "pg_catalog.jsonb_build_array",
+        "pg_catalog.sha256"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_source_binding_members_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "line": 11,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.cardinality"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "finalPhysical": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "line": 187,
+      "callees": [
+        "private.bpay_next_initial_tsfin_certificate_v1"
+      ],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_initial_tsfin_certificate_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "finalPhysical": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "line": 10,
+      "callees": [
+        "private.bpay_next_source_command_id_v1",
+        "private.weekly_source_effective_inventory_v1",
+        "private.weekly_source_inventory_approval_basis_v2",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_source_command_id_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+      "finalPhysical": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+      "line": 9,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.md5",
+        "pg_catalog.substr"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.weekly_source_pay_query_admit_v2()": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "CURRENT_SINGLE_DEFINITION",
+      "finalRoot": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "finalPhysical": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "line": 10,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.hashtextextended",
+        "pg_catalog.pg_try_advisory_xact_lock"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "line": 7,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.trunc"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_worker_week",
+        "private.bpay_next_worker_week_contribution"
+      ]
+    },
+    "private.bpay_next_capture_instruction_destination_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "line": 115,
+      "callees": [],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_instruction_destination"
+      ]
+    },
+    "private.bpay_next_case_allocation_row_v1(text,numeric,numeric,numeric,numeric,numeric,numeric,numeric)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+      "finalPhysical": "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+      "line": 9,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.trunc"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+      "line": 932,
+      "callees": [
+        "private.pay_finance_selected_quote_v1"
+      ],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.pay_finance_selected_quote_v1(public.pay_finance_component_resolution_mode_enum,numeric,text,text,numeric,numeric,numeric,numeric,numeric,boolean)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+      "line": 10,
+      "callees": [
+        "public._pay_convert_paye_to_umbrella",
+        "public._pay_convert_umbrella_to_paye_ex",
+        "public._pay_umbrella_vat_calc"
+      ],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_channel_drafts_page_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "line": 6,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.jsonb_agg",
+        "pg_catalog.jsonb_array_length",
+        "pg_catalog.jsonb_build_object"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    },
+    "private.bpay_next_receive_command_v1(uuid,text)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+      "line": 11,
+      "callees": [],
+      "catalogCallees": [
+        "pg_catalog.char_length"
+      ],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": [
+        "private.bpay_next_command"
+      ]
+    },
+    "private._candidate_expense_source_family_v1(uuid)": {
+      "role": "EXPLICIT_HELPER",
+      "selection": "REGISTRY_AND_CURRENT_FINAL",
+      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "finalPhysical": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "line": 178,
+      "callees": [],
+      "catalogCallees": [],
+      "unqualifiedKnownCallees": [],
+      "unclassifiedQualifiedCalls": [],
+      "excludedDmlOrCastTargets": []
+    }
+  },
+  "definitionCount": 33,
+  "existingBoundaryCallees": [
+    "private.weekly_source_effective_inventory_v1",
+    "private.weekly_source_inventory_approval_basis_v2",
+    "private.weekly_source_sha256_jsonb_v1",
+    "public._pay_convert_paye_to_umbrella",
+    "public._pay_convert_umbrella_to_paye_ex",
+    "public._pay_umbrella_vat_calc"
+  ]
+}

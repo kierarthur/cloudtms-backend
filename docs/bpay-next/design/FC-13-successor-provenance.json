@@ -1,0 +1,86 @@
+{
+  "status": "NAMED_SLICE_SOURCE_A4_REVIEWED_WHOLE_BLOCKED_ON_CM-13a",
+  "parents": [
+    {
+      "signature": "private.bpay_next_claim_case_restructure_job_v1(uuid,integer)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b",
+      "reason": "Fail closed at an FC13 decision belonging to the original captured cut; retain earlier cuts. No decision-consumption arithmetic or lifted channel gate."
+    }
+  ],
+  "newSignatures": [
+    "private.bpay_next_case_channel_input_v1(jsonb)",
+    "private.bpay_next_case_channel_schedule_v1(uuid,numeric,numeric,jsonb)",
+    "private.bpay_next_case_channel_quote_v1(uuid,text,boolean,date,public.pay_finance_component_resolution_mode_enum,numeric)",
+    "private.bpay_next_case_channel_quotes_v1(uuid,text,boolean,date,jsonb)",
+    "private.bpay_next_case_channel_preview_v1(uuid,jsonb)",
+    "private.bpay_next_accept_case_channel_v1(uuid,jsonb)",
+    "private.bpay_next_case_channel_origin_v1(uuid)",
+    "private.bpay_next_case_channel_receipt_v1(uuid,uuid,uuid)",
+    "private.bpay_next_apply_case_channel_v1(uuid,uuid,bigint)",
+    "private.bpay_next_claim_case_channel_job_v1(uuid,integer)"
+  ],
+  "signatures": [
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_enroll_one_v1()",
+    "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+    "private.bpay_next_case_edit_origin_v1(uuid)",
+    "private.bpay_next_case_allocation_plan_v1(jsonb)"
+  ],
+  "moneyConsumption": "BLOCKED_ON_CM-13a",
+  "repeatable": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+  "migration": "supabase/migrations/12102026_1649_banking_pay_next_case_channel_resolution_receipts.sql",
+  "repeatableSha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456",
+  "migrationSha256": "7f8dae48b95e67950aab1d3e898f60b912fd119274d4c3ee7b5798fae8c68c5a",
+  "contractHash": "8737c55bef84ae2d884e9e046043ba1e1e0d2c27d30ec872c9fa0a770438d94c",
+  "checks": {
+    "dbCheck": "375/955 PASS",
+    "sourceGates": "1506 SQL /28 roots PASS",
+    "localPG17": "17 exact bodies/config/ACL/owner/volatility matches; both isolation DO PASS",
+    "publicSecurityDefinerDelta": 0,
+    "generalCatalogue": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "exportSealCoupling": "PASS",
+    "business": "AUTHORED_NOT_RUN",
+    "screens": "A4 PENDING"
+  },
+  "a4": "73 actual local native PNG; full42 policy:36 PASS/0 FAIL/6 N/A; all differences/control purposes independently reviewed. Business acceptance AUTHORED_NOT_RUN.",
+  "implementationCommit": "5a13c6958ada71acf26b2a498131e44e555f0aa5",
+  "frontendCommit": "46ab46ac4bcf6fe313b177754c6da41a8f800737"
+}

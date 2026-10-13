@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-09",
+  "indexBeforeRawSha256": "8e3b8c8384241e55dde39a02dfcad3bb760f5469967b1c1405ef046c22c68834",
+  "indexAfterRawSha256": "4ad6c296eb400f71d15258a7362042e9b606a17972b1794eb3ef505181363659",
+  "donorRoutesSha256": "c9d70b5539cf5b26cb27ef744b12ca9bc8982607794981bee8f5b0b7c65ac686",
+  "changes": [
+    "Exactmethod+normalizedpath predicate; unauthenticated401/nonadmin403 before RPC; trustedadmin supplied to existingfixedhandlers.",
+    "Five exactmethodguards plusUUIDadvice matcher; wrongmethods/unknownfinancialpaths remainfenced.",
+    "Originalawaitedacceptedqueuewakebehavior preserved; failedwake doesnotrejectacceptedreceipt.",
+    "History trustedadminread remainswithoutNEXTactivationguard.",
+    "VisibleLOAN kind/subtype mappedPaymentAdvance; storedkinds unchanged.",
+    "Review correction: scoped nextPath normalizes duplicate/trailing slashes for both predicate and six dispatches; global p unchanged."
+  ],
+  "adviceBeforeRawSha256": "368483f19a7b0523e31ae022da69a334c22ed4db83e706f438af85b3bad63c1c",
+  "adviceAfterRawSha256": "010d06386af89983e48c63a3eafcc2796eba929f0aa74def33202157b55c00c4",
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN"
+}

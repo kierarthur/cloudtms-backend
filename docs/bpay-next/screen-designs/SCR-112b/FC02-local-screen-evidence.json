@@ -1,0 +1,176 @@
+[
+  {
+    "id": "SCR-112b",
+    "file": "FC02-normal-dark.png",
+    "errors": [],
+    "copy": "Filters\nClose\nCandidate\nAll Candidates\nClient\nAll Clients\nCase type\nAll types\nPayment Advance\nOverpayment\nUnderpayment\nManual Credit\nManual Debt\nOther Cases\nView\nAll\nActive\nSnoozed\nHistory\nSnooze type\nAll snoozes\nDated\nIndefinite\nHide completed\nClear filters\nApply filters",
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "All Candidates",
+          "width": 547,
+          "height": 38
+        },
+        {
+          "text": "All Clients",
+          "width": 547,
+          "height": 38
+        },
+        {
+          "text": "All typesPayment AdvanceOverpaymentUnderpaymentManual CreditManual DebtOther Cases",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "AllActiveSnoozedHistory",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "All snoozesDatedIndefinite",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Clear filters",
+          "width": 97.953125,
+          "height": 38
+        },
+        {
+          "text": "Apply filters",
+          "width": 102.90625,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-112b",
+    "file": "FC02-normal-device-light.png",
+    "errors": [],
+    "copy": "Filters\nClose\nCandidate\nAll Candidates\nClient\nAll Clients\nCase type\nAll types\nPayment Advance\nOverpayment\nUnderpayment\nManual Credit\nManual Debt\nOther Cases\nView\nAll\nActive\nSnoozed\nHistory\nSnooze type\nAll snoozes\nDated\nIndefinite\nHide completed\nClear filters\nApply filters",
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "All Candidates",
+          "width": 547,
+          "height": 38
+        },
+        {
+          "text": "All Clients",
+          "width": 547,
+          "height": 38
+        },
+        {
+          "text": "All typesPayment AdvanceOverpaymentUnderpaymentManual CreditManual DebtOther Cases",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "AllActiveSnoozedHistory",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "All snoozesDatedIndefinite",
+          "width": 547,
+          "height": 41
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Clear filters",
+          "width": 97.953125,
+          "height": 38
+        },
+        {
+          "text": "Apply filters",
+          "width": 102.90625,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-112b",
+    "file": "FC02-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Filters\nClose\nCandidate\nAll Candidates\nClient\nAll Clients\nCase type\nAll types\nPayment Advance\nOverpayment\nUnderpayment\nManual Credit\nManual Debt\nOther Cases\nView\nAll\nActive\nSnoozed\nHistory\nSnooze type\nAll snoozes\nDated\nIndefinite\nHide completed\nClear filters\nApply filters",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "All Candidates",
+          "width": 338,
+          "height": 44
+        },
+        {
+          "text": "All Clients",
+          "width": 338,
+          "height": 44
+        },
+        {
+          "text": "All typesPayment AdvanceOverpaymentUnderpaymentManual CreditManual DebtOther Cases",
+          "width": 338,
+          "height": 44
+        },
+        {
+          "text": "AllActiveSnoozedHistory",
+          "width": 338,
+          "height": 44
+        },
+        {
+          "text": "All snoozesDatedIndefinite",
+          "width": 338,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Clear filters",
+          "width": 91.953125,
+          "height": 44
+        },
+        {
+          "text": "Apply filters",
+          "width": 96.90625,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

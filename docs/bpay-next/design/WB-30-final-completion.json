@@ -1,0 +1,134 @@
+{
+  "item": "WB-30",
+  "sequence": 141,
+  "backendImplementationCommit": "e8f5ac42da903ada4526ddf1f8915449357628be",
+  "frontendImplementationCommit": "dda957deaae647cfd302eecdcf679a054f786233",
+  "decision": "BD171",
+  "whole": "BUILT_REVIEWED",
+  "businessAcceptance": "AUTHORED_NOT_RUN",
+  "reconciliation": {
+    "path": "docs/bpay-next/design/WB-30-final-deliverable-reconciliation.md",
+    "sha256": "42e1e54019303aa151c0565c6f3858fded415697dfca0b0e438fabf73539059a"
+  },
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-30-screen-policy-review.md",
+      "sha256": "3dd17800c772b55cd18059979340132adb25c92b7726422102d9b9b1a4d17422"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-30-Office-source-review.md",
+      "sha256": "e1ed62d56b45b6908cb55a2bbf3f6b72e48e8c08d229c3e07ef9385aa6414874"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-30-reader-final-review.md",
+      "sha256": "cc3caf471c0755a390c4f7987378d91d49961a2f97d2cd77e3c95e9e726f8799"
+    }
+  ],
+  "captures": [
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-evidence-dark.png",
+      "sha256": "707c89067594671c9683c4ea531f0881e1518b9564709c229641c0db9562f1c4"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-evidence-device-light.png",
+      "sha256": "932d09a41b824134d95ac7bedcc4589e2ecb2bd12f133537f2a8c80aae2d7bbc"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-evidence-phone-dark.png",
+      "sha256": "d412d3c98f3d173fc32cb71641581df2cde2a98098b9cca486106566e81a42ca"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-rates-bottom-phone-dark.png",
+      "sha256": "682dbae1ec8d7ef5a067a52a47b548c96fcd8b577a0cda099a85fb7ba0235e72"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-rates-dark.png",
+      "sha256": "071c568d93cbcbb64e3c93792a81aa3600ca708429f69c150bb903634556cb35"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-rates-device-light.png",
+      "sha256": "071c568d93cbcbb64e3c93792a81aa3600ca708429f69c150bb903634556cb35"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20/WB30-rates-phone-dark.png",
+      "sha256": "e6cef5b76a20d2a626138ad9b3d71db9ae24f0a0ad8040709f2b32f289554632"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20b/WB30-detail-error-dark.png",
+      "sha256": "da5f30890975b3eb3df3364892e5a1b1cb1de2c4391f84e94a7bddfb6a565aed"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20b/WB30-detail-error-device-light.png",
+      "sha256": "da5f30890975b3eb3df3364892e5a1b1cb1de2c4391f84e94a7bddfb6a565aed"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-20b/WB30-detail-error-phone-dark.png",
+      "sha256": "1c76718e63e4ea491608e8cf6f97fc371306c19536a77ab16daeb13a969e1b04"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21/WB30-confirm-dark.png",
+      "sha256": "2bf13941693367d44fec41150f05c5e7dc7d36a5130a4eb58eaeebbe4eb67af3"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21/WB30-confirm-device-light.png",
+      "sha256": "2bf13941693367d44fec41150f05c5e7dc7d36a5130a4eb58eaeebbe4eb67af3"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21/WB30-confirm-phone-dark.png",
+      "sha256": "336ff1509e0554eef24c9511a2cf56c7a13ddffc02daad949469b72187614c97"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-recovered-result-dark.png",
+      "sha256": "617f6cfdea28a873618b8c0d9ba6b7307d41160ff7339c5d95faf35fe5532097"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-recovered-result-device-light.png",
+      "sha256": "617f6cfdea28a873618b8c0d9ba6b7307d41160ff7339c5d95faf35fe5532097"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-recovered-result-phone-dark.png",
+      "sha256": "1a6ac45a853a5b0ba7edfa607076e0f5dc018c13b6560d4cb482ba2fbad3c152"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-result-bottom-phone-dark.png",
+      "sha256": "fa8484502fe51200a0deb9b05a735756f3ef0aed45e1eac0cbe0f4bff863098e"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-result-dark.png",
+      "sha256": "3c83526ede2ab55fdfebc2dcbefe94023f6d61f70e37fabea3917cd49b3e636b"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-result-device-light.png",
+      "sha256": "3c83526ede2ab55fdfebc2dcbefe94023f6d61f70e37fabea3917cd49b3e636b"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-21b/WB30-result-phone-dark.png",
+      "sha256": "5c3e6981dd64209d86dd383aa3d02c59419dd7e6f95852d0270a451784618a67"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-22/WB30-discard-dark.png",
+      "sha256": "15abf534ba755443f23939f14bb80d50cb11a374122751c9dabd4f6f3d1e312e"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-22/WB30-discard-device-light.png",
+      "sha256": "15abf534ba755443f23939f14bb80d50cb11a374122751c9dabd4f6f3d1e312e"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-22/WB30-discard-phone-dark.png",
+      "sha256": "613831f30792b318c3cab2cfbba9adb38732d68a3a0344bfb56cb5a6ebdc1e25"
+    }
+  ],
+  "checks": {
+    "dbCheck": "384 migrations/998 repeatables PASS",
+    "sourceGates": "1558 SQL/31 RPC/173 routine-work/37 typed transports PASS",
+    "localPG17": "0 migrations/4 closures compiled; three exact catalogue bodies/configuration/owner/ACL PASS; no business SQL/data",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf unchanged; both existing isolation DO PASS",
+    "changedJS": "node --check PASS",
+    "contract": "b9c6079fd9a3652db396e765f7de47782c542067800f4b7856be35d0d29f4399 export/seal/coupling PASS"
+  },
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "next": {
+    "sequence": 142,
+    "item": "WB-31"
+  }
+}

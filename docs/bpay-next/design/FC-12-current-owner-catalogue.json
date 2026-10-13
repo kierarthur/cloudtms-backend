@@ -1,0 +1,728 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "4ce67c04e4af57e69c8575f8bc31a410",
+      "installed": {
+        "bodyMd5": "4ce67c04e4af57e69c8575f8bc31a410",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "52054b863cc3da09eb3aab39cc8a796f",
+      "installed": {
+        "bodyMd5": "52054b863cc3da09eb3aab39cc8a796f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "a3553787e49ad129032a050ec7592fd7",
+      "installed": {
+        "bodyMd5": "a3553787e49ad129032a050ec7592fd7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "9b66a37e02a7024aca652fce85b19aa6",
+      "installed": {
+        "bodyMd5": "9b66a37e02a7024aca652fce85b19aa6",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "489a0cf4ba93fe3a8c71581766cee11b",
+      "installed": {
+        "bodyMd5": "489a0cf4ba93fe3a8c71581766cee11b",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "5cd4a4f47ff831d47cb5400a1160a867",
+      "installed": {
+        "bodyMd5": "5cd4a4f47ff831d47cb5400a1160a867",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "e1653d0a0a8118e8bec37c9a2510d49a",
+      "installed": {
+        "bodyMd5": "e1653d0a0a8118e8bec37c9a2510d49a",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "f0d882f6c7ef4c6e537153c0fc687770",
+      "installed": {
+        "bodyMd5": "f0d882f6c7ef4c6e537153c0fc687770",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_edit_state_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "c3c8dd2d5ab87dd1d58446d7e3b8b4e1",
+      "installed": {
+        "bodyMd5": "c3c8dd2d5ab87dd1d58446d7e3b8b4e1",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "ee5253bc3c46e27bced3f67d9227e831",
+      "installed": {
+        "bodyMd5": "ee5253bc3c46e27bced3f67d9227e831",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_origin_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "ff7a08a830df52d1f6af1e8dbd2ba715",
+      "installed": {
+        "bodyMd5": "ff7a08a830df52d1f6af1e8dbd2ba715",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_preview_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "b530b3cffb349d9b710a4cc5df5e990c",
+      "installed": {
+        "bodyMd5": "b530b3cffb349d9b710a4cc5df5e990c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_case_restructure_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "77e8e635a6bd4f9bc77d1ef51cd800a0",
+      "installed": {
+        "bodyMd5": "77e8e635a6bd4f9bc77d1ef51cd800a0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_receipt_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "dbc81534aaad631eaf8344ed073906d3",
+      "installed": {
+        "bodyMd5": "dbc81534aaad631eaf8344ed073906d3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_restructure_v1(uuid,uuid,bigint)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "e2f6a52dad5048d4c303b610a3e190cd",
+      "installed": {
+        "bodyMd5": "e2f6a52dad5048d4c303b610a3e190cd",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_restructure_period_free_v1(uuid,date,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "e965867700b1e12d2d4b29d9079c6b94",
+      "installed": {
+        "bodyMd5": "e965867700b1e12d2d4b29d9079c6b94",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_restructure_period_v1(uuid,jsonb,jsonb,uuid)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "ca9018a1853f515bfa373c72c81f0068",
+      "installed": {
+        "bodyMd5": "ca9018a1853f515bfa373c72c81f0068",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_claim_case_restructure_job_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sourceMd5": "3392d45a74dd2c14444212395909c1f4",
+      "installed": {
+        "bodyMd5": "3392d45a74dd2c14444212395909c1f4",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_case_restructure_outcome",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "applied_case_revision",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "applied_rule_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "issue_code",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_restructure_ou_applied_rule_id_case_id_cand_fkey",
+          "definition": "FOREIGN KEY (applied_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_ou_command_id_case_id_candidate_fkey",
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_restructure_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_check",
+          "definition": "CHECK ((((outcome = 'APPLIED'::text) AND (applied_case_revision > 0) AND (applied_case_revision IS NOT NULL) AND (applied_rule_id = command_id) AND (applied_rule_id IS NOT NULL) AND (issue_code IS NULL)) OR ((outcome = 'BLOCKED'::text) AND (applied_case_revision IS NULL) AND (applied_rule_id IS NULL) AND (issue_code = ANY (ARRAY['BPAY_NEXT_CASE_PROTECTION_CHANGED'::text, 'BPAY_NEXT_CASE_RESTRUCTURE_UNSUPPORTED'::text, 'BPAY_NEXT_CASE_RESTRUCTURE_NO_BALANCE'::text, 'BPAY_NEXT_CASE_RESTRUCTURE_TOTAL_CHANGED'::text, 'BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'::text])) AND (issue_code IS NOT NULL))))"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_completed_at_utc_check",
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_job_id_fkey",
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_job_id_key",
+          "definition": "UNIQUE (job_id)"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_outcome_check",
+          "definition": "CHECK ((outcome = ANY (ARRAY['APPLIED'::text, 'BLOCKED'::text])))"
+        },
+        {
+          "name": "bpay_next_case_restructure_outcome_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_restructure_outcome_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_restructure_outcome FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_restructure_outcome_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_restructure_outcome FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_restructure_period",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "restructure_command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "pay_week_start",
+          "type": "date",
+          "nullable": false
+        },
+        {
+          "name": "period_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_period_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_opening_outstanding",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "previous_opening_due",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "opening_outstanding",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "opening_due",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_restructure_p_previous_opening_outstanding_check",
+          "definition": "CHECK (((previous_opening_outstanding)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_restructure_pe_case_component_id_case_id_ca_fkey",
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_pe_case_component_id_pay_week_s_fkey",
+          "definition": "FOREIGN KEY (case_component_id, pay_week_start) REFERENCES private.bpay_next_case_period(case_component_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_pe_previous_rule_id_case_id_can_fkey",
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_pe_restructure_command_id_case__fkey",
+          "definition": "FOREIGN KEY (restructure_command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_restructure_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_pe_rule_id_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_check",
+          "definition": "CHECK ((previous_period_revision = (period_revision - 1)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_opening_due_check",
+          "definition": "CHECK (((opening_due)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_opening_outstanding_check",
+          "definition": "CHECK (((opening_outstanding)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_period_revision_check",
+          "definition": "CHECK ((period_revision > 1))"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_pkey",
+          "definition": "PRIMARY KEY (case_component_id, pay_week_start, period_revision)"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_previous_opening_due_check",
+          "definition": "CHECK (((previous_opening_due)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_restructure_period_restructure_command_id_fkey",
+          "definition": "FOREIGN KEY (restructure_command_id) REFERENCES private.bpay_next_case_restructure_request(command_id) ON DELETE RESTRICT"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_restructure_period_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_restructure_period FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_restructure_period_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_restructure_period FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_restructure_request",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "command_sequence",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "new_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "new_rule_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "original_command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "approved_principal",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "approval_input",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "approval_edit_command_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "input",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "terms",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "preview_token",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_restructure_re_command_id_case_id_candidate__key",
+          "definition": "UNIQUE (command_id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_case_restructure_re_previous_rule_id_case_id_can_fkey",
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id, previous_rule_revision) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id, rule_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_req_command_id_command_sequence_fkey",
+          "definition": "FOREIGN KEY (command_id, command_sequence) REFERENCES private.bpay_next_command(id, agency_sequence) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_reques_approval_edit_command_id_fkey",
+          "definition": "FOREIGN KEY (approval_edit_command_id) REFERENCES private.bpay_next_case_edit_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_accepted_at_utc_check",
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_actor_user_id_fkey",
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_approval_input_check",
+          "definition": "CHECK (((jsonb_typeof(approval_input) = 'object'::text) AND (octet_length((approval_input)::text) <= 12288)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_approved_principal_check",
+          "definition": "CHECK (((approved_principal)::numeric > (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_check",
+          "definition": "CHECK ((new_rule_revision = (previous_rule_revision + 1)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_check1",
+          "definition": "CHECK ((new_rule_id = command_id))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_command_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_command_sequence_check",
+          "definition": "CHECK ((command_sequence > 0))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_expected_case_revision_check",
+          "definition": "CHECK (((expected_case_revision > 0) AND (expected_case_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_input_check",
+          "definition": "CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 8192)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_module_epoch_check",
+          "definition": "CHECK ((module_epoch > 0))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_new_rule_id_key",
+          "definition": "UNIQUE (new_rule_id)"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_original_command_id_fkey",
+          "definition": "FOREIGN KEY (original_command_id) REFERENCES private.bpay_next_case_create_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_preview_token_check",
+          "definition": "CHECK (((jsonb_typeof(preview_token) = 'object'::text) AND (octet_length((preview_token)::text) <= 16384)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_previous_rule_revision_check",
+          "definition": "CHECK (((previous_rule_revision > 0) AND (previous_rule_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_restructure_request_terms_check",
+          "definition": "CHECK (((jsonb_typeof(terms) = 'object'::text) AND (octet_length((terms)::text) <= 8192)))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_restructure_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_restructure_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_restructure_request_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_restructure_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

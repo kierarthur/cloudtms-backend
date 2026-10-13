@@ -1,0 +1,33 @@
+# PS-15 server source review
+
+10 October 2026. **PASS — captured display gap closed; no remaining actionable source finding in D01–D03.** Fresh-reviewed the full scoped0653 successor, both closed schema mirrors, corrected BD039/PSC_CLOSURE and final registry against the full PS-15 card06:1636–1660, all seven checklist rows, controlling R2§7 and owner start-sheet AUTH-PS approval. This is source review only; no SQL, tests, fixtures, plans, database/catalog, runtime, network or business action was executed. Root alone writes product.
+
+D01 correctly reuses existing index support. The closed52-section history registry's equality operands and ordered keys match native primary/unique keys or full history indexes. In particular, full historical Case events use F-06's `(case_id,occurred_at_utc,id)` index, Candidate command membership uses `(candidate_id,command_id)`, and component-scoped financial effects use `(work_id,component_key,occurred_at_utc,id)`. The component operand is mandatory. Case instruction/hold/result keysets, worker transfer/member/outcome keysets and the frozen revision/line/shift/break/rate/schedule paths have their genuine ordered ties. SOURCE_DETAIL, POLICY, CHOICE, SELECTION, JOBS and COMMAND_WORKER supply the additional equality operands needed by their existing compound keys. Unique receipt/request keys serve the exact point reads. No missing index for this current contract was found, so omitting a redundant migration is appropriate; source support is not a measured query-plan or latency guarantee.
+
+D02 accurately distinguishes state-independent historical itemised detail from operational Draft review. History SHIFTS/BREAKS/RATES/SCHEDULE follow exact sealed/captured ancestry without worker READY, current-revision or active financial-owner predicates. The operational `/frozen-detail` guards remain. Stored transfer/projection/outcome/return amounts are separate authorities; members are provenance, current/cache sections remain explicitly current, and missing moved-root/vector/comparison/approval facts are declared unavailable rather than inferred. Whole detail requires terminal traversal of the typed children. The document retains bounded rows/bytes and explains that live keysets require refresh for late commits and cannot establish a consistent filtered report export.
+
+The original1206 REVISIONS transport omitted actual core1324 frozen `candidate_display_name`, `candidate_reference`, `client_display_name`, `job_title`, `band_label` and `timesheet_reference`. Current0653 adds exactly those six stored fields. These are genuine historical captures, not missing facts needing fabrication or a new RUN_WORK capture. Nullable values retain the existing STRING_OR_NULL contract; text remains subject to the existing row/response byte refusal. Both Worker and Office RAW_SECTIONS have exactly52 sections and match SQL parent/key/field/amount-scope metadata, with no mismatch. Static source comparison confirms the complete function definition outside the registry literal is byte-identical to original1206, and the parsed registry differs only in those six REVISIONS fields. The earlier include-only assessment is superseded by this final source.
+
+R2§7 assigns new Summary list/filter/export signatures to S1. The owner start sheet explicitly approves AUTH-PS with recommended choices and requires S1, so BD039 correctly records approved future ownership rather than an approval pause. PSC_CLOSURE records bounded list/filter, whole itemised detail, transfer-once multi-Client counting, consistent CSV/print or explicit incomplete-export refusal, and PSP-81 scrolling. Existing closed history rejects unsupported export/filter payloads before its RPC; this batch does not claim those later S1 features are implemented. D06's saved joined checklist is explicitly NOT_RUN.
+
+Security remains the original service-JWT plus active-admin actor and exact Candidate/Timesheet/parent/context checks. The actual Worker route authenticates/admin-checks and applies its TEST environment guard before constructing the one fixed history RPC; its exact legacy-fence exemption remains. SQL checks scoped ancestry on every page. No table grants, policies, Source owner bypass or financial write was introduced. PSC_CLOSURE correctly avoids claiming every NEXT table has FORCE-RLS: the existing2010 Source binding/version FORCE-RLS and owner-policy boundary remains distinct and unchanged.
+
+D03 selects one final root and physical definer0653 for `public.bpay_next_payment_history_page_v1(jsonb)`, composing the retained PS-07/PS-11 reader semantics after0623/0614/original1206. The new full function uses one BEGIN/COMMIT transaction and retains original STABLE SECURITY DEFINER, fixed search path/UTC, logical postgres ownership, PUBLIC/anon/authenticated revocation, service_role EXECUTE and schema reload. The registry retains original1206 as an allowed predecessor physical source, selects0653 as the sole final closure/physical authority, records the preceding roots and retains later EX-41 then CM-18 ownership. BD039's stale include/unchanged-adapter wording has been corrected to describe this final implementation. No new API, ledger, historical calculator, money owner, parked F-25 protocol or live pricing lookup was added.
+
+## Source receipts
+
+| Source | SHA256 |
+| --- | --- |
+| `supabase/repeatable/10102026_0653_banking_pay_next_ps_c16_indexed_history_v1.sql` | `a6c76d789c3ffae22ed7b7749fa0943807a16c0477cf8cbe2cd56e878c33cec3` |
+| previous0623 root | `f53ca9dae5e297c628b5e1abcf491ceec1dd3bbea05e99aa2fea61fec108573e` |
+| original1206 physical history | `d963c739f743e1526647ef101db7b9460dad88be3e2f56c2775c199aeddc2c73` |
+| core1324 | `f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c` |
+| F-06 history indexes2013 | `cb08a6b28d8a2eeace2e0f4ed3561c84dcda33022bb0fe54d7f46ee5e43eacc2` |
+| `docs/bpay-next/design/PS-15-SCOPE.md` | `7dc9c3e2efd4af45ebaec11b3ebef1c00a8c04fe34cc61068d5ef5f8a51bd998` |
+| `docs/bpay-next/PSC_CLOSURE.md` | `f68da4e70a5a78b74df82d58774c39df928b0ee57bfe74bc1eb9b4fb3399cc1e` |
+| `docs/bpay-next/final-definer-closures.json` | `ac856b9f9bd3866f2e080c1272b4fe4922d093708b9a980ad0ce8ec4a7d870e3` |
+| `broker/src/bpay-next-history.js` | `1262a7961045a44b294939257db93e2ef54a3cf0754f76f90e8ebc52982335e0` |
+| BUILD-FE `js/bpay-next-payment-history.js` | `467a78cd820f61cb0ee0e461f02f78d6c06f468024e7121f629770351f074d4e` |
+| `docs/bpay-next/PS-15-JOINED-ACCEPTANCE.md` | `c5eedba5b9ec3b880111e4faebbe4e7774a0140dea7319bf711cc6bae882c7a2` |
+
+Installation, root-run source checks and application acceptance require their own receipts. This verdict establishes source closure for the reviewed server scope, not measured performance or connected execution.

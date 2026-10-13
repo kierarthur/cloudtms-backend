@@ -21,6 +21,20 @@ export class WeeklySourceC1RawRpcKnownOutcomeError extends Error {
     this.rpcName = rpcName;
     this.outcomeKnown = true;
     this.unknownOutcome = false;
+    // Only a finite received DB error identifies retirement; business JSON stays lossless.
+    if (typeof body === 'string' && body.length <= 8192) {
+      try {
+        const refusal = JSON.parse(body);
+        if (refusal && !Array.isArray(refusal)
+            && ['PT410','55000'].includes(refusal.code)
+            && refusal.message === 'BPAY_NEXT_LEGACY_WRITER_RETIRED') {
+          this.code = refusal.message; this.status = 410;
+        } else if (refusal && !Array.isArray(refusal)
+            && refusal.code === 'PT503' && refusal.message === 'BPAY_NEXT_LEGACY_WRITER_DISABLED') {
+          this.code = refusal.message; this.status = 503;
+        }
+      } catch {}
+    }
   }
 }
 
@@ -72,7 +86,8 @@ function normalizeHeaders(value) {
  * Build the one raw PostgREST transport used by the protected-hours C1
  * publisher.  It deliberately sends and returns untouched JSON text so
  * signed-bigint values never pass through JSON.parse or JSON.stringify.
- * It performs exactly one HTTP attempt.  A received HTTP response is a known
+ * It admits through one separate DB read, then performs exactly one C1 HTTP attempt.
+ * The preflight is not a lease across transactions. A received HTTP response is a known
  * refusal; a timeout or transport loss is ambiguous and must be recovered by
  * the durable C1 owner before anything is replayed.
  */
@@ -108,6 +123,19 @@ export function createWeeklySourceC1RawRpc({
       options?.responseBody !== 'LOSSLESS_JSON_TEXT'
     ) {
       throw new WeeklySourceC1RawRpcInputError('C1 RPC lossless no-retry contract is required.');
+    }
+
+    // DB owns this retired-finance entry. No owner values or business JSON are interpreted here.
+    if (rpcName !== 'bpay_next_source_legacy_finance_admit_v1') {
+      try {
+        const admitted = await weeklySourceC1RawRpc('bpay_next_source_legacy_finance_admit_v1', '{}', options);
+        if (admitted.trim() !== 'true') throw new Error('Invalid entry admission.');
+      } catch (error) {
+        if (['BPAY_NEXT_LEGACY_WRITER_RETIRED','BPAY_NEXT_LEGACY_WRITER_DISABLED'].includes(error?.code)) throw error;
+        const unavailable = new WeeklySourceC1RawRpcKnownOutcomeError(503, '', 'bpay_next_source_legacy_finance_admit_v1');
+        unavailable.code = 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE';
+        throw unavailable; // The requested external C1 action was never attempted.
+      }
     }
 
     const controller = new AbortController();

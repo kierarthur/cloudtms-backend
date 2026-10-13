@@ -919,8 +919,10 @@ declare
   v_bundle uuid:='b0000000-0000-4000-8000-0000000000b1';
   v_head uuid:='b0000000-0000-4000-8000-0000000000e1';
   v_token uuid:='b0000000-0000-4000-8000-0000000000f1';
+  v_phase text:='ENTRY';v_message text;v_detail text;v_counts jsonb;
   v_digest bytea:=pg_catalog.decode(pg_catalog.repeat('14',32),'hex');
 begin
+  v_phase:='DECISION_INSERT';
   -- Step 1: the accepted Office decision bundle revision.
   insert into public.weekly_source_entitlement_decision_bundles(
     decision_bundle_id,bundle_revision,agency_id,candidate_id,week_ending_date,bundle_kind,
@@ -940,6 +942,8 @@ begin
     array[v_head]::uuid[],'PROPOSED'
   );
 
+  SET CONSTRAINTS public.weekly_source_entitlement_head_inventory_assert, public.weekly_source_entitlement_head_component_inventory_assert DEFERRED;
+  v_phase:='HEAD_INSERT';
   -- Step 2: the head, staged.
   insert into public.weekly_source_entitlement_heads(
     id,authority_kind,agency_id,candidate_id,contract_id,week_ending_date,
@@ -956,6 +960,7 @@ begin
     v_bundle,1,'b0000000-0000-4000-8000-0000000000d1','b0000000-0000-4000-8000-000000000001'
   );
 
+  v_phase:='IMMEDIATE_NEGATIVES';
   -- F1: the stored family identity and version must be the physical root's own.
   perform pg_temp.expect_failure($sql$
     insert into public.weekly_source_entitlement_heads(
@@ -1150,6 +1155,7 @@ begin
     );
   $sql$,'23514','','certified zero declared while components remain');
 
+  v_phase:='COMPONENT_INSERT';
   -- Step 3: the complete component inventory, tagged with the same bundle.
   insert into public.weekly_source_entitlement_head_components(
     head_id,component_ordinal,component_id,component_kind,economic_key_type,
@@ -1163,6 +1169,7 @@ begin
     7.50,false,'SOURCE',v_bundle,1,pg_catalog.decode(pg_catalog.repeat('42',32),'hex')
   );
 
+  v_phase:='RECEIPT_INSERT';
   -- Step 4: the receipt, appended before the heads activate.
   insert into private.weekly_source_entitlement_publication_receipts(
     decision_bundle_id,pending_bundle_id,bundle_revision,request_digest,publication_mode,
@@ -1176,15 +1183,18 @@ begin
     '{}'::jsonb,'{}'::jsonb
   );
 
+  v_phase:='ACTIVATE_HEAD';
   -- Step 5: activate.
   update public.weekly_source_entitlement_heads
      set state='COMMITTED_CURRENT',committed_at_utc=pg_catalog.clock_timestamp(),
          publication_receipt_digest=v_digest,scope_change_tx_token=v_token
    where id=v_head;
+  v_phase:='COMMIT_DECISION';
   update public.weekly_source_entitlement_decision_bundles
      set state='COMMITTED',committed_at_utc=pg_catalog.clock_timestamp()
    where decision_bundle_id=v_bundle and bundle_revision=1;
 
+  v_phase:='POSITIVE_NAMED_FLUSH';
   -- The state is now internally consistent, so all three deferred assertions
   -- pass.  Forcing them here also drains their pending events, so the two
   -- expect_deferred_failure calls below fail for their own mutation and not for
@@ -1199,6 +1209,7 @@ begin
     public.weekly_source_entitlement_head_component_inventory_assert,
     public.weekly_source_entitlement_head_receipt_assert deferred;
 
+  v_phase:='F3_INVENTORY_NEGATIVE';
   -- F3: the inventory is no longer a writer assertion.
   perform pg_temp.expect_deferred_failure(pg_catalog.format($sql$
     insert into public.weekly_source_entitlement_head_components(
@@ -1212,6 +1223,7 @@ begin
   $sql$,v_head,v_bundle),
   'WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH','a component beyond the head''s declared inventory');
 
+  v_phase:='F4_RECEIPT_NEGATIVE';
   -- F4: a committed head must be the head a real receipt published.
   perform pg_temp.expect_deferred_failure(pg_catalog.format($sql$
     update public.weekly_source_entitlement_heads
@@ -1220,6 +1232,7 @@ begin
   $sql$,v_head),
   'WEEKLY_SOURCE_HEAD_RECEIPT_MISSING','a committed head whose receipt digest matches no receipt');
 
+  v_phase:='POST_FLUSH_NEGATIVES';
   -- 24 section 4.3, both root identities. The guard makes the family string on a
   -- second head for this physical root necessarily identical, so the family
   -- index is what refuses it; the physical index is the second, independent key.
@@ -1277,6 +1290,28 @@ begin
         and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
           where rel='public.weekly_source_entitlement_heads'::regclass))=1,
     'exactly one committed current head must exist for the root');
+exception when sqlstate '55000' then
+  get stacked diagnostics v_message=message_text,v_detail=pg_exception_detail;
+  if v_message<>'WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH' then raise;end if;
+  -- Diagnostic only: preserve the actual guard's closed counts, never recount
+  -- after this subtransaction has rolled back or invent unavailable values.
+  begin v_counts:=v_detail::jsonb;exception when others then v_counts:=null;end;
+  if jsonb_typeof(v_counts)='object'
+    and v_counts->>'reason_code'='WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH'
+    and jsonb_typeof(v_counts->'head_id')='string'
+    and (v_counts->>'head_id')~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+    and jsonb_typeof(v_counts->'declared_component_count')='number'
+    and (v_counts->>'declared_component_count')~'^(0|[1-9][0-9]{0,18})$'
+    and jsonb_typeof(v_counts->'actual_component_count')='number'
+    and (v_counts->>'actual_component_count')~'^(0|[1-9][0-9]{0,18})$'
+    and jsonb_typeof(v_counts->'declared_certified_zero')='boolean' then
+    raise exception using errcode='55000',message=v_message||pg_catalog.format(
+      ' [S19 phase=%s head=%s declared=%s actual=%s certified_zero=%s]',
+      v_phase,v_counts->>'head_id',v_counts->>'declared_component_count',
+      v_counts->>'actual_component_count',v_counts->>'declared_certified_zero');
+  end if;
+  raise exception using errcode='55000',message=v_message||
+    ' [S19 phase='||v_phase||' counts=UNAVAILABLE]';
 end
 $verify_entitlement_heads$;
 
@@ -1476,6 +1511,7 @@ do $verify_entitlement_receipt$
 declare
   v_bundle uuid:='b0000000-0000-4000-8000-0000000000b2';
   v_pending uuid;
+  v_has_receipt_foreign_reference boolean;
   v_root uuid:='b0000000-0000-4000-8000-000000000006';
   v_root_b uuid:='b0000000-0000-4000-8000-000000000007';
   v_head uuid:='b0000000-0000-4000-8000-0000000000e2';
@@ -1965,9 +2001,37 @@ begin
   perform pg_temp.expect_failure($sql$
     delete from private.weekly_source_entitlement_publication_receipts;
   $sql$,'55000','WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE','deleting a receipt');
-  perform pg_temp.expect_failure($sql$
-    truncate private.weekly_source_entitlement_publication_receipts;
-  $sql$,'55000','WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE','truncating the receipt relation');
+  -- Banking's additive incoming FKs pre-empt BEFORE TRUNCATE with 0A000.
+  -- Keep the real-relation refusal and prove the same native trigger on an
+  -- empty FK-free temporary copy; never CASCADE or remove a real constraint.
+  select exists(select 1 from pg_catalog.pg_constraint constraint_row
+    where constraint_row.contype='f'
+      and constraint_row.confrelid='private.weekly_source_entitlement_publication_receipts'::regclass
+      and constraint_row.conrelid<>constraint_row.confrelid)
+   into v_has_receipt_foreign_reference;
+  perform pg_temp.expect_failure('truncate private.weekly_source_entitlement_publication_receipts;',case when v_has_receipt_foreign_reference then '0A000' else '55000' end,
+   case when v_has_receipt_foreign_reference then 'cannot truncate a table referenced in a foreign key constraint'
+     else 'WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE' end,
+   'truncating the receipt relation');
+  create temporary table ws_verify_receipt_truncate_probe
+    (like private.weekly_source_entitlement_publication_receipts including all) on commit drop;
+  create trigger ws_verify_receipt_truncate_probe_guard
+    before truncate on pg_temp.ws_verify_receipt_truncate_probe for each statement
+    execute function private.weekly_source_entitlement_publication_receipt_immutable_v1();
+  perform pg_temp.assert_true(
+    (select count(*) from pg_catalog.pg_trigger real_trigger
+      join pg_catalog.pg_trigger probe_trigger on probe_trigger.tgfoid=real_trigger.tgfoid
+       and probe_trigger.tgrelid='pg_temp.ws_verify_receipt_truncate_probe'::regclass
+       and probe_trigger.tgname='ws_verify_receipt_truncate_probe_guard'
+       and probe_trigger.tgtype=34 and probe_trigger.tgenabled='O'
+       and probe_trigger.tgnargs=0 and probe_trigger.tgqual is null and not probe_trigger.tgisinternal
+     where real_trigger.tgrelid='private.weekly_source_entitlement_publication_receipts'::regclass
+       and real_trigger.tgname='weekly_source_entitlement_publication_receipt_truncate_guard'
+       and real_trigger.tgfoid='private.weekly_source_entitlement_publication_receipt_immutable_v1()'::regprocedure
+       and real_trigger.tgtype=34 and real_trigger.tgenabled='O'
+       and real_trigger.tgnargs=0 and real_trigger.tgqual is null and not real_trigger.tgisinternal)=1,
+    'receipt truncate: the temporary probe executes the exact real BEFORE TRUNCATE statement guard');
+  perform pg_temp.expect_failure('truncate pg_temp.ws_verify_receipt_truncate_probe;','55000','WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE','the real receipt guard on its empty temporary probe');
 
   -- A complete, legal release record (proof/32 section 8 step 5).
   update public.weekly_source_pending_entitlement_bundles

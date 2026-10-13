@@ -1,0 +1,134 @@
+[
+  {
+    "mode": "dark",
+    "file": "docs/bpay-next/screen-designs/SCR-59/DR23-net-change-dark.png",
+    "errors": [],
+    "controls": [
+      {
+        "text": "Keep current net",
+        "width": 129.9375,
+        "height": 44
+      },
+      {
+        "text": "Accept new net",
+        "width": 122.171875,
+        "height": 44
+      }
+    ],
+    "retained": {
+      "answer": null,
+      "requests": [
+        {
+          "kind": "PAYE_WORKSHEET",
+          "args": {
+            "kind": "PAYE_WORKSHEET",
+            "run_id": "33333333-3333-4333-8333-000000000998",
+            "pay_channel": "PAYE",
+            "query": "",
+            "sort": "CANDIDATE_ASC",
+            "limit": "50"
+          }
+        },
+        {
+          "kind": "PAYE_NET_PREVIEW",
+          "args": {
+            "kind": "PAYE_NET_PREVIEW",
+            "run_worker_id": "33333333-3333-4333-8333-000000000102",
+            "entered_paye_net": "834.20",
+            "after": "null",
+            "limit": "100"
+          }
+        }
+      ],
+      "error": null
+    }
+  },
+  {
+    "mode": "device-light",
+    "file": "docs/bpay-next/screen-designs/SCR-59/DR23-net-change-device-light.png",
+    "errors": [],
+    "controls": [
+      {
+        "text": "Keep current net",
+        "width": 129.9375,
+        "height": 44
+      },
+      {
+        "text": "Accept new net",
+        "width": 122.171875,
+        "height": 44
+      }
+    ],
+    "retained": {
+      "answer": null,
+      "requests": [
+        {
+          "kind": "PAYE_WORKSHEET",
+          "args": {
+            "kind": "PAYE_WORKSHEET",
+            "run_id": "33333333-3333-4333-8333-000000000998",
+            "pay_channel": "PAYE",
+            "query": "",
+            "sort": "CANDIDATE_ASC",
+            "limit": "50"
+          }
+        },
+        {
+          "kind": "PAYE_NET_PREVIEW",
+          "args": {
+            "kind": "PAYE_NET_PREVIEW",
+            "run_worker_id": "33333333-3333-4333-8333-000000000102",
+            "entered_paye_net": "834.20",
+            "after": "null",
+            "limit": "100"
+          }
+        }
+      ],
+      "error": null
+    }
+  },
+  {
+    "mode": "phone-dark",
+    "file": "docs/bpay-next/screen-designs/SCR-59/DR23-net-change-phone-dark.png",
+    "errors": [],
+    "controls": [
+      {
+        "text": "Keep current net",
+        "width": 123.9375,
+        "height": 44
+      },
+      {
+        "text": "Accept new net",
+        "width": 116.171875,
+        "height": 44
+      }
+    ],
+    "retained": {
+      "answer": null,
+      "requests": [
+        {
+          "kind": "PAYE_WORKSHEET",
+          "args": {
+            "kind": "PAYE_WORKSHEET",
+            "run_id": "33333333-3333-4333-8333-000000000998",
+            "pay_channel": "PAYE",
+            "query": "",
+            "sort": "CANDIDATE_ASC",
+            "limit": "50"
+          }
+        },
+        {
+          "kind": "PAYE_NET_PREVIEW",
+          "args": {
+            "kind": "PAYE_NET_PREVIEW",
+            "run_worker_id": "33333333-3333-4333-8333-000000000102",
+            "entered_paye_net": "834.20",
+            "after": "null",
+            "limit": "100"
+          }
+        }
+      ],
+      "error": null
+    }
+  }
+]

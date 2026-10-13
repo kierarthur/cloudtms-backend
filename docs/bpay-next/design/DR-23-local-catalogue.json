@@ -1,0 +1,437 @@
+{
+  "source": "Sole local PG17 catalogue only; no business rows or routine execution",
+  "registrySha256": "384c04e7d3452806fb508f45cb6af7b4b196dcd60176e5f6e0e8687c2465f60a",
+  "rows": [
+    {
+      "signature": "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "15982d30119067b91fa1dc3210dcbc75",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "b90c60af428c57b98f898e52a55d409ddc87263278b1a6681209004f44abb987"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_simple_paye_net_v1(uuid,uuid,numeric)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "2b19fb8798ca0ef254272a6e14840664",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "e2cf6b41fcee817f1f17f4593a633c9aa3370978211a0aa81e36093c55b82708"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "edcf45837b32a5c735e8a4143658bfe3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "bd1701f07b4bc383e827a2aa6733430b023ff7c81e4719270af10151294d3718"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_begin_case_transfer_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "9eb1f4043bb36c5dc71b971016db3e7e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "964250bb028131af11e5692658920a5444cda4ac7eb0edde0ec6473ae76815fa"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "784e797123350335cb6926ff69efda3b",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "0a394305dd3c4d0426b4478786e4aca9753e8771f538fa13d467697a3e01f9ae"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "2213ce66cbe5ef24bc9ecb3518047a1e",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "125001c028d2056c86adffd69be281a02a2687e2a1a6e96336863995289d4d7b"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "24cb997d495a3ea00f36efdb18e8ba30",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "e07f622cda03bddb9a298b5ae9eef576cadbba60f0ac74d14873c78b70e3206e"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_validate_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "a6d5c2ab44d82e96a23c64447582378c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "206ef8e77b7f8543678337de0b97623f3e910a78163be91d2e57bab045fe2daa"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_stage_case_net_page_v1(uuid,integer)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "5dd27fc4db6b7ef70aabf2e355c906df",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "9e18db23edcad880b2a6da4c0c186a8b436e1533fbc8735717675172dbe3b456"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_net_entry_in_progress_v1(uuid)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "67ca102399e35431973c416f81935357",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "367b5057a70a07c84b4fe4baa03b6cfbc2a899d98ccb604fb6c8efa89cb5f6fc"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_simple_paye_net_v1(uuid,uuid,numeric,uuid)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "8a2a126ea0895501398e94b2e9afc353",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "6db0c4bbef94fd553ac480281cf87a2b669507f1665bc9493446fb6e42117c7d"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_net_capacity_v1(numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "d001b689e92ac66741ef70e7e930ed9b",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog"
+        ],
+        "volatility": "i",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "bb09a2dccb8c52fca1d1e33e6fcd2cbf1a9989731a9861fba65a656dddf16506"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_net_cash_v1(numeric,numeric,numeric)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "07ad0994e004047d1fa0b957ed506633",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog"
+        ],
+        "volatility": "i",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "30113b0991a2978afa29c8b9c0be3f2d2bb619cdd7dc22843bfd5b0f173e261a"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_paye_net_preview_v1(uuid,uuid,numeric,jsonb,integer)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "5bb57e981760167f79ab54ee53a7f2a1",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public",
+          "statement_timeout=5s"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "e519900d55607f63f5378d0970d7b259fc0f4fff29416075df2d827819d9362f"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_case_net_request_v1(uuid,uuid,uuid,text,numeric,bigint,bigint)",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "c73d4b0c3b4d6b3f7bc7c12292a425a6",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "eb228c94e9aaf66ef4555988f6c9d49ff9f76afccdb88e029e2ca44b978edf10"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_net_capacity_revision_v1()",
+      "finalPhysical": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "fileSha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3",
+      "installed": {
+        "bodyMd5": "f322dcb1d8b3953e1d8af96a19a50493",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "2cb336a0d16ac4e62c4d3779cdc22e96e2768fc8458e227cd9015261287fd6c4"
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "schemaSupport": {
+    "columns": [
+      {
+        "table": "bpay_next_paye_net_request",
+        "column": "preview_capacity_revision",
+        "type": "bigint",
+        "notNull": false,
+        "default": null
+      },
+      {
+        "table": "bpay_next_paye_net_request",
+        "column": "prior_entered_paye_net",
+        "type": "private.bpay_next_penny_amount",
+        "notNull": false,
+        "default": null
+      },
+      {
+        "table": "bpay_next_paye_net_request",
+        "column": "prior_projection_id",
+        "type": "uuid",
+        "notNull": false,
+        "default": null
+      },
+      {
+        "table": "bpay_next_worker_control",
+        "column": "net_capacity_revision",
+        "type": "bigint",
+        "notNull": true,
+        "default": "0"
+      }
+    ],
+    "triggers": [
+      {
+        "schema": "private",
+        "table": "bpay_next_case_capacity_use",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_capacity_use FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      },
+      {
+        "schema": "private",
+        "table": "bpay_next_case_component",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_component FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      },
+      {
+        "schema": "private",
+        "table": "bpay_next_case_hold",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      },
+      {
+        "schema": "private",
+        "table": "bpay_next_case_period",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_period FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      },
+      {
+        "schema": "private",
+        "table": "bpay_next_finance_case",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_finance_case FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      },
+      {
+        "schema": "private",
+        "table": "bpay_next_worker_week_contribution",
+        "enabled": "O",
+        "function": "private.bpay_next_net_capacity_revision_v1()",
+        "definition": "CREATE TRIGGER bpay_next_net_capacity_revision AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_worker_week_contribution FOR EACH ROW EXECUTE FUNCTION private.bpay_next_net_capacity_revision_v1()"
+      }
+    ],
+    "priorConstraint": "CHECK (((prior_projection_id IS NULL) OR ((expected_projection_revision IS NOT NULL) AND (expected_projection_revision > 0))))"
+  }
+}

@@ -1,0 +1,13 @@
+# PF-04 completion
+
+Sequence22,10 October2026. D01–D05 source delivery uses exactly the five scoped objects and their small service/cursor support under BD026. Terminal cleanup alternates one PK page of at most100 upload pages/jobs, advances past retained rows, deletes only closed temporary metadata, and retains all seven job references and permanent financial/accepted origins. COMPLETE command eligibility already retains open PREPARE jobs. Late retired metadata uses existing truthful refusal. No TTL/archive, drain, new financial command, producer or money-owner rewrite.
+
+Health returns five read-only measures: actual queue creation age/unknown count, bounded stored error-code counts, oldest ACTIVE work/case hold age, explicitly qualified PF06 job start-to-finish latency and private catalog table sizes. Fixed service wrappers preserve role/NEXT admission and owner-only private functions. The existing NEXT minute recovery gains one bounded, independently caught cleanup lane with zero queue publications; transport keeps its original byte/deadline/error/unknown-reply semantics and exact counters.
+
+The checked design's history gate inspects all33 current routine/helper definitions through actual final authority. It permits exactly four complete ledger-point clauses, retains legitimate private row types/inserts, and rejects extra/changed ledger access (including ONLY/comma/TABLE), direct audit calls, dynamic SQL and unknown helper delegation. Existing source gate and ordinary units are reused; no parser/proof framework or testing tool. Future joined checklist covers every Done clause and stays NOT_RUN.
+
+Independent D01/D02/D03/D04/D05 reviews are recorded in reviews/PF-04-cleanup-review.md, PF-04-health-review.md, PF-04-worker-review.md and PF-04-history-gate-review.md. All actionable findings must be resolved before the completion tick. The review's initial PREPARE concern was withdrawn after checking actual command-state writers; ONLY/comma history-gate omissions were corrected and rechecked.
+
+Local validation:48/48 affected ordinary Worker checks and5/5 source/final-definer checks; changed JS syntax and dbcheck310lockedmigrations/812repeatables PASS. Sole PG17 CHANGED loaded1migration+5repeatable closures, LOCAL_SCHEMA_COMPILED with protected release verification PENDING; seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a and coupling PASS. No business functions/scenarios/fixtures, hosted installation, application journey, timing or external action ran.
+
+At whole-item completion the log records BUILT20/288 and REVIEWED20/288. Proceed PF09 sequence23; final F23R1/PF15/PF16/R2 and runbook remain later.

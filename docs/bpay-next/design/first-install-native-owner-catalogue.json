@@ -1,0 +1,397 @@
+{
+  "source": "Clean sole local PG17 catalogue only; no business SQL or data",
+  "contractHash": "168bd9fccdb69e4dcc3bdea19d6ef852a8c771d7801891989169d55655f29959",
+  "serverVersion": "17.11 (Debian 17.11-1.pgdg12+2)",
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "rows": [
+    {
+      "signature": "private.weekly_source_office_contact_policy_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "sourceBodyMd5": "4c76393d51ab9921657fdfdd2a539db0",
+      "installed": {
+        "bodyMd5": "4c76393d51ab9921657fdfdd2a539db0",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "c9428e5fdbe2b3fd026277ac1d6d8c7f54a138f84b32aa2abc137a4dc59be3f2"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private._expense_approval_policy_v1(uuid,uuid,date,text)",
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sourceBodyMd5": "1b624b6cbd916be44ecf38691fbd5f59",
+      "installed": {
+        "bodyMd5": "1b624b6cbd916be44ecf38691fbd5f59",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, public, private, extensions, pg_temp"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "72cd6e6d927ae8afa935ba66eb1a63cf9ae52cf7526b80909881147664feba87"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private._expense_approval_route_v1(uuid,uuid,text)",
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sourceBodyMd5": "e8320ef9b78828a56a6b6cf29fd55fb0",
+      "installed": {
+        "bodyMd5": "e8320ef9b78828a56a6b6cf29fd55fb0",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, public, private, pg_temp"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "a15a01946ab958f278c23e272c34b1a5bac12e6b7c7f817986d96c78c4ee9b6b"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sourceBodyMd5": "f3b990f914c95d1bd7308eb414c82f16",
+      "installed": {
+        "bodyMd5": "f3b990f914c95d1bd7308eb414c82f16",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, public, private, pg_temp"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+      "file": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "sourceBodyMd5": "701e7a73a216f454cd9c04657caa2026",
+      "installed": {
+        "bodyMd5": "701e7a73a216f454cd9c04657caa2026",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, public, private, pg_temp",
+          "lock_timeout=5s",
+          "statement_timeout=120s"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "2ea7d395959ec5cb93e70097eb117e4ddfcee0a4d0388c79a4ccf82d9be04fc5"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sourceBodyMd5": "08f7dd739f7392b574fe4f683f06b273",
+      "installed": {
+        "bodyMd5": "08f7dd739f7392b574fe4f683f06b273",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, public, private, pg_temp"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "096c818818f2bc07dca0cd21aa694694fda96258bcac2ee7f67c8796edfe0a44"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+      "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sourceBodyMd5": "0bcd486dd073153b04c2ec9ae59146aa",
+      "installed": {
+        "bodyMd5": "0bcd486dd073153b04c2ec9ae59146aa",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "1cb77387e5a11bc91e8317d887d3d735eb6df4daccd6862da773f57bc8a892ff"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_app_notifications_page_v1(uuid,text,integer,integer,timestamp with time zone,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sourceBodyMd5": "f883b5e7dc82ed41b4ef18a940e83046",
+      "installed": {
+        "bodyMd5": "f883b5e7dc82ed41b4ef18a940e83046",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "f4a06370f2c81eed49243a52d4e92da78c4360b5503f0d27b3c2d533232bb5d9"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_app_notifications_manage_v1(uuid,text,integer,text,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sourceBodyMd5": "66c188615053ca9762d89a358f50f2e2",
+      "installed": {
+        "bodyMd5": "66c188615053ca9762d89a358f50f2e2",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "eb7ea221f973e4ba80e83040b539f28be623befbc28e2d9c3264ac38cd22bbbd"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private._candidate_home_summary_v1(text,uuid,uuid,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sourceBodyMd5": "9b6838aa3973369bf5776c2b94d7c881",
+      "installed": {
+        "bodyMd5": "9b6838aa3973369bf5776c2b94d7c881",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "d08a87f80930c68e046d23cc7ed831b7d7aace9e9f6f92982c60aaa4ffc752d4"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_claim_v1(jsonb)",
+      "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sourceBodyMd5": "80f56bd5c3f92a851602b5a3b277a844",
+      "installed": {
+        "bodyMd5": "80f56bd5c3f92a851602b5a3b277a844",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "f82adcd26c4deeed6d2f7bf2aabba324afd027f172c93dcf4b92718b15e825b0"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+      "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sourceBodyMd5": "9a72b4cafae5b1e807e8aee895e7e595",
+      "installed": {
+        "bodyMd5": "9a72b4cafae5b1e807e8aee895e7e595",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "cb000cd0b29792b9a748375461f6881e95c7b07e5e7c3486a1ca9cb8be95df87"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_daily_legacy_availability_apply_atomic_v1(jsonb,text,uuid,text,jsonb,text)",
+      "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+      "sourceBodyMd5": "c9a19e8dcd6687ccef34b8bbcdd25133",
+      "installed": {
+        "bodyMd5": "c9a19e8dcd6687ccef34b8bbcdd25133",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "d1914fb11dc13b45c53994f8d253e406b10f3b4c769b948c360597af3060a6ae"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text)",
+      "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+      "sourceBodyMd5": "1e63528705a21bd51646cd9eb552379d",
+      "installed": {
+        "bodyMd5": "1e63528705a21bd51646cd9eb552379d",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "ce3606df0ce93430b055396b11ac581f8be11f90d882ff7ff1166eb447072dcd"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private._candidate_daily_freshness_v1(text,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+      "sourceBodyMd5": "5b72f83ab284e6af854e578022f0d1d7",
+      "installed": {
+        "bodyMd5": "5b72f83ab284e6af854e578022f0d1d7",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "20ae27e3c0c568ff6321d6fc9761be81f6d1a00cf86074584f93fb73a2846799"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.candidate_daily_tiles_get_v1(jsonb,date,integer)",
+      "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+      "sourceBodyMd5": "5af0bf83a8b8270e7faccb263cb92998",
+      "installed": {
+        "bodyMd5": "5af0bf83a8b8270e7faccb263cb92998",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "definitionSha256": "be3a1eed2dd784f03012cfa234b5e7489f3f284880210872aa90a5bda158e9e8"
+      },
+      "matches": true
+    }
+  ],
+  "dynamicReaders": [
+    {
+      "schema": "private",
+      "name": "bpay_next_workbench_kind_page_v1",
+      "identity": "p_kind text, p_scope jsonb, p_after jsonb, p_limit integer",
+      "definitionSha256": "3da92df9dc98041fb351b55d27124c612016462a408dae1db9226d646f9bf61c"
+    },
+    {
+      "schema": "private",
+      "name": "bpay_next_worker_status_page_v1",
+      "identity": "p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer",
+      "definitionSha256": "06d21f0a05447f14f84eeca97fbd42bf1c28c21821b3f8cd75751d9057135a8c"
+    },
+    {
+      "schema": "public",
+      "name": "bpay_next_frozen_detail_page_v1",
+      "identity": "p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer",
+      "definitionSha256": "d1e4953789854e0fd6e7f27b47d56672ff7efa22c24dba2a145cf0c24d35f675"
+    },
+    {
+      "schema": "public",
+      "name": "bpay_next_original_csv_advice_page_v1",
+      "identity": "p_actor_user_id uuid, p_instruction_id uuid, p_kind text, p_run_work_id uuid, p_run_line_id uuid, p_shift_detail_id uuid, p_after_work_id uuid, p_after_member_no bigint, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer",
+      "definitionSha256": "c59c6f8b7deed671a063642c0f89405a8e563191729c96e4ee7cbb4a580da596"
+    },
+    {
+      "schema": "public",
+      "name": "bpay_next_payment_history_page_v1",
+      "identity": "p_request jsonb",
+      "definitionSha256": "8e6ed1aa10cd21b7a744d6cf562216f3d636f7d3a3c6c362563959d60ce3c0ca"
+    }
+  ],
+  "readinessMarker": {
+    "identity": "p_type text, p_context text, p_reference text, p_key text",
+    "definitionSha256": "620f34f16bd48a082f1e8d3ae00c7458060ad065580771a782617e0fa6bc395e",
+    "bodySha256": "06bcfd367722f866b3efd1dc2164c922f9baaa5488dcc7e33e332df09da6644a",
+    "language": "sql",
+    "result": "text",
+    "config": [
+      "search_path=pg_catalog, private"
+    ],
+    "owner": "cloudtms_bpay_local_owner",
+    "securityDefiner": false,
+    "parallel": "u",
+    "volatility": "i",
+    "strict": false,
+    "leakproof": false,
+    "returnsSet": false,
+    "kind": "f",
+    "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+  }
+}

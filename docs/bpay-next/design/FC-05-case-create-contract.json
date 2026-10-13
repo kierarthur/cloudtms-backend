@@ -1,0 +1,51 @@
+{
+  "item": "FC-05",
+  "sequence": 105,
+  "decision": "BD117",
+  "deliverables": ["FC-05-D03", "FC-05-D04"],
+  "dependencies": ["FC-03", "WB-08", "F-16"],
+  "serverChange": "NONE",
+  "workerChange": "NONE",
+  "currentOwners": {
+    "termsContextPreviewAcceptApplyIntake": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+    "preparationPage": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+    "authority": "docs/bpay-next/final-definer-closures.json"
+  },
+  "preview": {
+    "method": "GET",
+    "existingKind": "CASE_PREVIEW",
+    "fields": "Existing closed fourteen-field CASE_INPUT_SCHEMA in FE js/bpay-next-case-preview.js and BE bpay-next-case-contract.js",
+    "presentation": "Original total and explicit entered tax only. No repayment, affordability, due date, payroll net or final bank cash estimate."
+  },
+  "create": {
+    "method": "POST",
+    "existingAction": "CASE_CREATE",
+    "family": "CREDIT",
+    "subtype": "MANUAL_CREDIT",
+    "tax": "Exactly one staff choice TAXABLE or NON_TAXABLE. Neither is preselected.",
+    "principal": "Entered positive decimal text, at most two decimal places (whole pence), original 1024-byte bound; no floating-point normalization.",
+    "reason": "Required Comment, nonblank <=2048 UTF-8 bytes and no NUL.",
+    "note": "Optional Note, null when blank, otherwise <=2048 UTF-8 bytes and no NUL.",
+    "nullOperands": ["due_date", "start_monday", "weekly_due", "week_count", "minimum_earnings_threshold", "take_home_floor_override", "original_liability_reference"],
+    "authority": "Existing original command id plus identical native input/context Preview token; original accept/apply owns all money/ledger/queue behavior.",
+    "taxStages": "Current creator1536 preserves PAYE TAXABLE GROSS_ADD and NON_TAXABLE NET_ADD. Non-taxable reimbursement fixed; canonical remaining/channel calculators retained. Umbrella Create independent of later CM-13a allocation.",
+    "receipt": "Existing ACCEPTED_PENDING_CASE with original Case/command/sequence/replay; never funding or payout proof."
+  },
+  "recovery": {
+    "journal": "Original Candidate-scoped .case-create.<candidate_id>; no parallel family journal.",
+    "unknown": "Staff Try again sends exact original bytes and command only. No automatic mutation retry/new identity.",
+    "sameFamily": "Restore CREDIT/MANUAL_CREDIT principal, explicit tax, Comment and Note only from original pending bytes.",
+    "otherFamily": "Preserve original bytes; hide fresh form and empty footer, retain actual Candidate and existing instruction/header Close. No reinterpretation or new command.",
+    "accepted": "Hide unavailable fresh terms; retain actual Candidate and original accepted identity. Existing Refresh reads only accepted Case/Candidate."
+  },
+  "readback": {
+    "method": "GET",
+    "existingKind": "CASE_COMPONENTS",
+    "scope": "Original accepted candidate_id and case_id, existing cursor reader.",
+    "empty": "This Case is being added.",
+    "return": "Only validated matching Case/page triggers onCaseCreated and bpay_next result. Original controller completes the journal after callback; main suppresses legacy whole-Workbench refresh. FC02 later consumes targeted Case row."
+  },
+  "excludedLaterOwners": ["FC-07 one-off bank details", "FC-08 funding", "FC-09 pre-activity edit and read-only restrictions", "CM-13a Umbrella allocation", "FC-02 full Cases page"],
+  "futureJoinedAcceptance": "AUTHORED_NOT_RUN: GBP40 non-taxable due-once NET_ADD, persisted Case, original retry, queue/funding/payout/Draft and exact host update.",
+  "timing": "Timing check moved to TEST after installation (owner 10/10/2026)."
+}

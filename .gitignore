@@ -3,3 +3,6 @@
 dist
 .env
 supabase/.temp/
+.bpay-next-local-schema-load.log
+docs/bpay-next/LOCAL_SCHEMA_CHECKPOINT.json.preparing-*
+.codex-local/

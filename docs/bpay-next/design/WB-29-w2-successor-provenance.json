@@ -1,0 +1,44 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "8012c45b9932c381dd4fbcd02e63dc522287a3c3",
+  "builderDecisions": [
+    "BD161",
+    "BD162"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2313_banking_pay_next_resolution_exact_carry_v1.sql",
+      "sha256": "eccd78cc642eda212420fbf336e8cae72827a8f567bd3c2eb31195df791d1e1b"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+      "sha256": "5e0e66249e76555fe14a65d68aee704ef7518e3c38883d13d5cc6b656508bc56"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+      "sha256": "1dd72479ba41c1997439f80b8a2546d285f29cd1f791bbdf28dc2fc615385ce2"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "4047f588297aece326c9259b6b8e008d452becfac000e2ff97ec70c5db71a617"
+    }
+  ],
+  "sourceReviews": [
+    "WB-29-exact-carry-source-review.md",
+    "WB-29-publication-scope-source-review.md",
+    "WB-29-w2-command-source-review.md",
+    "WB-29-w2-lock-source-review.md"
+  ],
+  "checks": {
+    "localCompile": "PASS; changed schema only, no business calls",
+    "exactCatalogue": "5 bodies/owners/ACL/config/volatility PASS",
+    "isolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both browser verification DO PASS; public membership delta 0",
+    "dbCheck": "383 migrations / 986 repeatables PASS",
+    "sourceGates": "1545 SQL / 30 RPC roots / 164 routine signatures / 37 typed transport signatures PASS",
+    "nodeCheck": "source gate module syntax PASS",
+    "contractSealAndCoupling": "38a705bf829dde3890d34e01dc1c01f7c5d89fe5734e6dd8afd0f65945ad4c14 PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; transport/captured composition/reader/screen joins remain"
+}

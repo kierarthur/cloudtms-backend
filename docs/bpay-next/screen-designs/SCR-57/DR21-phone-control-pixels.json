@@ -1,0 +1,128 @@
+[
+  {
+    "text": "Close",
+    "label": "Close",
+    "visible": true,
+    "width": 54.515625,
+    "height": 44
+  },
+  {
+    "text": "Search",
+    "label": null,
+    "visible": true,
+    "width": 62.5625,
+    "height": 44
+  },
+  {
+    "text": "Refresh",
+    "label": null,
+    "visible": true,
+    "width": 67.875,
+    "height": 44
+  },
+  {
+    "text": "Candidate",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Gross",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Payment Advance repayment",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Overpayment recovery",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "PAYE net",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Bank amount",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Source",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "Status",
+    "label": null,
+    "visible": false,
+    "width": 0,
+    "height": 0
+  },
+  {
+    "text": "▸",
+    "label": "Show payments for Amelia Hart",
+    "visible": true,
+    "width": 44,
+    "height": 44
+  },
+  {
+    "text": "Open",
+    "label": null,
+    "visible": true,
+    "width": 54.828125,
+    "height": 44
+  },
+  {
+    "text": "▾",
+    "label": "Hide payments for Bethany Hart",
+    "visible": true,
+    "width": 44,
+    "height": 44
+  },
+  {
+    "text": "Open",
+    "label": null,
+    "visible": true,
+    "width": 54.828125,
+    "height": 44
+  },
+  {
+    "text": "Open Timesheet detail",
+    "label": null,
+    "visible": true,
+    "width": 159.453125,
+    "height": 44
+  },
+  {
+    "text": "▸",
+    "label": "Show payments for Chloe Iqbal",
+    "visible": true,
+    "width": 44,
+    "height": 44
+  },
+  {
+    "text": "Open",
+    "label": null,
+    "visible": true,
+    "width": 54.828125,
+    "height": 44
+  }
+]

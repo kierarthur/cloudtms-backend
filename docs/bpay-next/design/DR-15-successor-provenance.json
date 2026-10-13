@@ -1,0 +1,126 @@
+{
+  "item": "DR-15",
+  "sequence": 119,
+  "decision": "BD132",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
+  "exactDeliverables": [
+    "DR-15-D02",
+    "DR-15-D04",
+    "DR-15-D05",
+    "DR-15-D07"
+  ],
+  "retainedContext": [
+    "DR-15-D01",
+    "DR-15-D03",
+    "DR-15-D06"
+  ],
+  "sources": [
+    {
+      "path": "supabase/migrations/12102026_0259_banking_pay_next_preparation_issue_read_indexes.sql",
+      "sha256": "73b350c5823dcbdeb125e19dec83d1f6372527620a6c7d7651a41deee3334d34"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0252_banking_pay_next_preparation_issues_v1.sql",
+      "sha256": "183a17cb1800e4980945e0e348d249bc07d0829945f6a30c95414ba82c478955"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0307_banking_pay_next_preparation_issues_bounds_v1.sql",
+      "sha256": "7c83ed8ebedc42f63f97320db565904fdd33e4f26e298ed96592076d0eaa9274"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0332_banking_pay_next_preparation_issue_payment_sort_v1.sql",
+      "sha256": "d424565e4301d8f7b8ffbfc64c82cf40f85f20d4d7c046c627fdd084f828e751"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+      "sha256": "3526263068aefa3c351e68b6eca3c6ee3cc30c40474027c14c97dd6d13007ca5"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "00f21fd6db791e3f2990344ede3fd0eef2a417fa60120792f67a99f196cb7a48"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "3a12537091e8056ba6d29f551ac158f159cafe83ade5c0698a5ad43f97f884ef"
+    }
+  ],
+  "frontendSources": [
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "7baf62658a63ad218a55f7806e4ab507e7569b6ad636aaed8ed6f484afa6594f"
+    },
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "4049207aed657e1857f18c6922a104dda6ffba3ff15150a2bfaa2019aedb9b86"
+    },
+    {
+      "path": "js/main.js",
+      "sha256": "69d84496624ef0f3aebfb204e1e81cd7ebd824a793bc130a8379d4e7a0992f5b"
+    },
+    {
+      "path": "index.html",
+      "sha256": "9252d255dba51987fc978fb097f8ed59a571bf69537d3c93d0616eccf35c64cd"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "path": "supabase/repeatable/12102026_0341_banking_pay_next_preparation_issue_review_order_v1.sql",
+      "sourceMd5": "c8202338a55e6d1f352f67f47b89d118"
+    }
+  ],
+  "chain": [
+    "04102026_0575",
+    "11102026_2259",
+    "12102026_0252",
+    "12102026_0307",
+    "12102026_0332",
+    "12102026_0341"
+  ],
+  "checks": {
+    "dbSource": "363 migrations / 936 repeatables PASS",
+    "sourceGates": "12 PASS",
+    "syntax": "preparation Worker, Office and main PASS",
+    "local": "sole PG17 exact body/configuration/ACL and General/Candidate isolation DO PASS; membership delta 0",
+    "contract": "8a2dd815323a04599a7c2ffe8cf4cefe2331b8fa824869a219d490d1e70ff97f export / seal-local / coupling PASS",
+    "actualScreens": "14 real local minimal fixed-response captures; three independent42-row A4 PASS receipts",
+    "businessJoinedQueueHostedTiming": "AUTHORED_NOT_RUN; timing moved to TEST after installation"
+  },
+  "screenEvidence": [
+    "screen-designs/SCR-46/DR15-empty-dark.png",
+    "screen-designs/SCR-46/DR15-empty-replies.json",
+    "screen-designs/SCR-46/DR15-failed-read-dark.png",
+    "screen-designs/SCR-46/DR15-failed-read-replies.json",
+    "screen-designs/SCR-46/DR15-fixed-responses.json",
+    "screen-designs/SCR-46/DR15-omitted-dark.png",
+    "screen-designs/SCR-46/DR15-omitted-device-light.png",
+    "screen-designs/SCR-46/DR15-omitted-last-row-phone-dark.png",
+    "screen-designs/SCR-46/DR15-omitted-phone-dark.png",
+    "screen-designs/SCR-46/DR15-omitted-replies.json",
+    "screen-designs/SCR-46/DR15-review.md",
+    "screen-designs/SCR-46/DR15-stale-dark.png",
+    "screen-designs/SCR-46/DR15-stale-replies.json",
+    "screen-designs/SCR-46/DR15-unknown-labels-dark.png",
+    "screen-designs/SCR-46/DR15-unknown-labels-replies.json",
+    "screen-designs/SCR-43c/DR15-fixed-responses.json",
+    "screen-designs/SCR-43c/DR15-review-dark.png",
+    "screen-designs/SCR-43c/DR15-review-device-light.png",
+    "screen-designs/SCR-43c/DR15-review-phone-dark.png",
+    "screen-designs/SCR-43c/DR15-review-replies.json",
+    "screen-designs/SCR-43c/DR15-review.md",
+    "screen-designs/SCR-40/DR15-fixed-responses.json",
+    "screen-designs/SCR-40/DR15-progress-dark.png",
+    "screen-designs/SCR-40/DR15-progress-device-light.png",
+    "screen-designs/SCR-40/DR15-progress-phone-dark.png",
+    "screen-designs/SCR-40/DR15-progress-replies.json",
+    "screen-designs/SCR-40/DR15-review.md"
+  ],
+  "scope": "Named PREPARE_ISSUES branch/mapping/native consumer and small private read-index support only; no new command, producer, protocol, public trigger or money owner.",
+  "implementationCommit": "a35177750b7037c8ad437fdd354a6d2a81bb1877",
+  "frontendImplementationCommit": "a7b1b8ee3689d176761fad6d613d5aa36bde70ae",
+  "screenReviews": [
+    "screen-designs/SCR-46/DR15-review.md",
+    "screen-designs/SCR-43c/DR15-review.md",
+    "screen-designs/SCR-40/DR15-review.md"
+  ]
+}

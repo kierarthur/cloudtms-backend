@@ -1,0 +1,45 @@
+[
+  {
+    "kind": "PAYE_WORKSHEET",
+    "args": {
+      "kind": "PAYE_WORKSHEET",
+      "run_id": "33333333-3333-4333-8333-000000000998",
+      "pay_channel": "PAYE",
+      "query": "",
+      "sort": "CANDIDATE_ASC",
+      "limit": "50"
+    }
+  },
+  {
+    "kind": "LINES",
+    "args": {
+      "kind": "LINES",
+      "run_worker_id": "33333333-3333-4333-8333-000000000102",
+      "worksheet_run_id": "33333333-3333-4333-8333-000000000998",
+      "limit": "10"
+    }
+  },
+  {
+    "kind": "PAYE_WORKSHEET",
+    "args": {
+      "kind": "PAYE_WORKSHEET",
+      "run_id": "33333333-3333-4333-8333-000000000998",
+      "pay_channel": "PAYE",
+      "query": "",
+      "sort": "CANDIDATE_ASC",
+      "after": "{\"context\":{\"run_id\":\"33333333-3333-4333-8333-000000000998\",\"pay_channel\":\"PAYE\",\"actor_user_id\":\"33333333-3333-4333-8333-000000000999\",\"owner_epoch\":\"1\",\"review_revision\":\"1\",\"run_status\":\"DRAFT\",\"totals_revision\":\"7\",\"net_request_sequence\":\"15\",\"candidate_id\":null,\"query\":\"\",\"sort\":\"CANDIDATE_ASC\"},\"candidate_id\":\"33333333-3333-4333-8333-000000000003\",\"run_worker_id\":\"33333333-3333-4333-8333-000000000103\"}",
+      "limit": "50"
+    }
+  },
+  {
+    "kind": "PAYE_WORKSHEET",
+    "args": {
+      "kind": "PAYE_WORKSHEET",
+      "run_id": "33333333-3333-4333-8333-000000000998",
+      "pay_channel": "PAYE",
+      "query": "",
+      "sort": "CANDIDATE_ASC",
+      "limit": "50"
+    }
+  }
+]

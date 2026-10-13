@@ -1,0 +1,136 @@
+{
+  "copy": "Weekly source queries\nSigned out\nLogout\nACTIONS & FILTERS\nLoading…\nColumns\nCandidate Banking\n\nAmelia Hughes · TMS 10421\n\nClose\n\nReady to pay\n£100.00\nPayment addition £35.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\nManual Credit\n\t—\tPAYE\tNo\t£35.00\t\n\n\n\t\nPayment Advance repayment\nWeekly limit £40.00\n\t—\tPAYE\tYes\t−£40.00\nDue\n\t\n\n\n\t\n▸\nTimesheet · w/e 04/10/2026\nTS 6111\n\tRiverside Care Home\tPAYE\tNo\t£100.00\t\nOpen Timesheet\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "documentWidth": 1600,
+  "controls": [
+    {
+      "text": "Weekly source queries",
+      "aria": null,
+      "classes": "ws-office-notifications__toggle",
+      "width": 149.875,
+      "height": 34
+    },
+    {
+      "text": "Logout",
+      "aria": null,
+      "classes": "",
+      "width": 58.703125,
+      "height": 28
+    },
+    {
+      "text": "Columns",
+      "aria": null,
+      "classes": "",
+      "width": 73.03125,
+      "height": 36
+    },
+    {
+      "text": "Close",
+      "aria": "Close",
+      "classes": "",
+      "width": 60.515625,
+      "height": 38
+    },
+    {
+      "text": "Refresh",
+      "aria": null,
+      "classes": "btn",
+      "width": 73.875,
+      "height": 38
+    },
+    {
+      "text": "Ready",
+      "aria": null,
+      "classes": "btn is-active",
+      "width": 65.1875,
+      "height": 38
+    },
+    {
+      "text": "Waiting",
+      "aria": null,
+      "classes": "btn",
+      "width": 75.921875,
+      "height": 38
+    },
+    {
+      "text": "Action required",
+      "aria": null,
+      "classes": "btn",
+      "width": 123.609375,
+      "height": 38
+    },
+    {
+      "text": "Blocked",
+      "aria": null,
+      "classes": "btn",
+      "width": 76.578125,
+      "height": 38
+    },
+    {
+      "text": "PAYMENT ▼",
+      "aria": null,
+      "classes": "btn",
+      "width": 69.40625,
+      "height": 32
+    },
+    {
+      "text": "CLIENT",
+      "aria": null,
+      "classes": "btn",
+      "width": 40.609375,
+      "height": 32
+    },
+    {
+      "text": "PAY CHANNEL",
+      "aria": null,
+      "classes": "btn",
+      "width": 81.5,
+      "height": 32
+    },
+    {
+      "text": "DEDUCTIONS",
+      "aria": null,
+      "classes": "btn",
+      "width": 76.078125,
+      "height": 32
+    },
+    {
+      "text": "AMOUNT EX VAT",
+      "aria": null,
+      "classes": "btn",
+      "width": 96.859375,
+      "height": 32
+    },
+    {
+      "text": "▸",
+      "aria": "Expand Timesheet",
+      "classes": "btn bpay-next-payment-caret",
+      "width": 40,
+      "height": 38
+    },
+    {
+      "text": "Open Timesheet",
+      "aria": null,
+      "classes": "btn bpay-next-candidate-desktop-open",
+      "width": 111.6875,
+      "height": 38
+    },
+    {
+      "text": "Export CSV",
+      "aria": null,
+      "classes": "btn",
+      "width": 96,
+      "height": 44
+    },
+    {
+      "text": "Show estimate",
+      "aria": null,
+      "classes": "btn primary",
+      "width": 117.515625,
+      "height": 44
+    }
+  ]
+}

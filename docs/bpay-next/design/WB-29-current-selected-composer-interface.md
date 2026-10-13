@@ -1,0 +1,41 @@
+# WB-29 current selected composer interface
+
+13 October 2026, seq140. Concrete design before implementation. WB-29 remains PARTLY_DONE. Root writes product; source review and local schema checks follow implementation. No business acceptance is claimed.
+
+The card/checklist names the shared residual quote, capture/hold, Workbench classification/readers and existing decision store. Owner F requires the saved chosen Ready amount, while WB-26's existing estimate must consume those same decisions for exactly its selected native leaves. No new public reader, command, table, Source producer or financial formula is required. The scalar quote cannot express a selected multibucket segment subset; the current captured entry requires real RunPosition/Run/accepted refs which an estimate does not possess. The following private support is necessary for those named consumers.
+
+## Exact intended product owners
+
+* Add a private seven-argument overload of `bpay_next_component_resolution_input_quote_v1`, with the existing six arguments plus `p_current_working jsonb`. Move the current2357 body into that overload; retain the existing six-argument overload as a NULL-current-working delegate. The four-argument entry continues its existing six-argument delegate. All are owner-only invokers.
+* Add `private.bpay_next_current_component_resolution_quote_v1(p_work_id uuid,p_revision_id uuid,p_approved_line_id uuid,p_pay_date date,p_selected_leaf_keys text[],p_through_segment_key text default null)`. This gathers actual current native operands and calls that same seven-argument body. Its arguments contain identities/date only, never caller amounts/units/target values. No service/browser EXECUTE grant.
+* Later add only the named current Workbench reader/display/date-repair successors from the approved estimate/chosen-sort designs. No change to1157, public producers, case arithmetic or accepted pin owners.
+
+The current helper is the only fresh working-set producer. Its JSON is an internal native operand structure, not a public proof/protocol. The extra argument is mutually exclusive with a non-NULL RunPosition. Scalar mode has neither; captured mode has the real RunPosition and obtains its unchanged current2357 captured gather itself. No working JSON is smuggled through a cursor or scalar four-key Position basis.
+
+## Three explicit authorities, one math body
+
+Captured mode retains exact actual RunPosition/RunWork/Worker/Run, immutable Header and attached ID/version references, original complete physical parent census, and every current2357 qualification. Cleared captured decisions remain allowed. It returns the original `accepted_resolution_refs`, bucket details and prefix targets unchanged.
+
+Current mode uses the actual `private.bpay_next_position` and qualified current/applied Work/revision/approved line, complete/clean/CURRENT Workbench projection and native Candidate financial-view revision. Target channel/Umbrella/VAT is derived from the actual Candidate/Umbrella; policy from the immutable revision; date must equal the existing current official-date reader. No composite pretending to be a RunPosition/RunWorker is created. Common math uses explicitly named native identity/target/source/Position scalar variables initialized from the real captured rows or real current rows, with distinct admission blocks. Native physical identities and decision basis remain genuine.
+
+Current decisions come from the existing bounded mapped-candidate discovery and exact2100 active owner. Inspect physical mapped candidates before compatibility filtering, refuse ambiguity, then qualify exact line/family/code/target/policy/date. Only current ACTIVE independently compatible decisions are used. Return NULL when genuinely no current compatible saved decision exists, so the caller retains its original shared resolver (or original authorised Source display). An unavailable saved quote is a refusal, never a default. Unresolved exact positive selected needs refuse; unselected unresolved siblings do not.
+
+For segmented STANDARD work, use at most five saved/default native bucket treatments, as2357 already does. Genuine untouched defaults retain the same positive eligible/basis qualification. The new current path feeds the existing mode/basis/window, original/native unit qualification, same-member Source conservation, exact single-bucket residual quotient and one1157 arithmetic loop. It adds no per-bucket wrapper calculator. Nonsegment Additional/Adjustment retain their original amount-led/rate-bearing restrictions and full Position/residual association.
+
+Fresh result exposes `current_decision_versions` to its trusted existing reader, rather than labelling current decisions as accepted refs. Existing native versions tuples carry those IDs/versions/xmin in the current estimate continuation; no hash, store, cursor kind or version counter is added. Shared prefix outputs in fresh mode use actual `approved_segment_id` where present and native segment key; no fabricated RunWorkSegment ID. Captured prefix outputs retain their original fields exactly.
+
+## Native finite gather
+
+Use the findings in `WB-29-estimate-current-parent-census.md`, not a count of selected Ready rows. Workbench items are portions; fully realised current members have no item. Bound the complete current approved-segment key set UNION all current projected WORK_SEGMENT keys before filtering. Aggregate every AVAILABLE/RECOVERY/RESERVED/ZERO portion by native member; H belongs to RESERVED. Only an absent current approved member may reconstruct A=R,H=0 under the proved current projection writer semantics. Removed absent historical keys contribute zero financial coverage and no units; do not claim a complete historical physical-key inventory. Require complete component A/R/H totals equal the actual Position and Source currency. No new effect/hold history SUM.
+
+Per component: physical parents<=10000, original projection portion sentinel<=50000 under the inspected finite emission shape, encoded working-set<=8388608 bytes before quote. Selected input is the exact existing reader's actual READY leaves; rejoin keys to current native items and approval IDs and require all selected identities/Included values covered, not a subset silently dropped. Positive Included belongs only to selected native AVAILABLE payment leaves. All unselected/snoozed/query-held/signed/paid/held parents remain in financial coverage with Included0. Keep current Source book/binding/publication/approval-root guards in the owning reader/display; the helper is not a Source admission bypass.
+
+For current positive selected segments, check the exact existing durable need only on that selected segment. Whole-line need rejection must not block eligible siblings. Preserve original whole/component snooze and per-segment exclusion through the actual selected leaf projection, rather than calling the whole-scope live scalar wrapper. Full native vectors and honestly NULL attributed Source for all-manual intact buckets retain2357 rules. Unproved partially spent multibucket allocation remains typed unavailable.
+
+Any optional prefix is derived from the complete qualified current working set after native full coverage. Shared cumulative-target differences conserve component pennies; no proportional allocation. The estimate uses only the whole selected component total. Ready child display uses prefixes only where its named reader requires them.
+
+## Remaining public joins
+
+The2241 estimate successor retains current descriptor/FVR/version/Case/order/floor/threshold/budgets/PENDING/OUTDATED contracts, original Source qualification and DR38 fixed reimbursement branch. It supplies selected keys to the native helper, sums Source once and Target ex once, and includes actually consumed native decision versions. The Ready chosen display/sort successors retain Candidate/header Source summaries and update only the existing Ready Work group display key with the approved date-sensitive metadata/finite original rollover lane. These required consumers are separate later parts of WB-29, not complete by this design.
+
+This interface must receive independent design review before source implementation. No runtime, database, fixture, timing or provider action is authorised by this note.

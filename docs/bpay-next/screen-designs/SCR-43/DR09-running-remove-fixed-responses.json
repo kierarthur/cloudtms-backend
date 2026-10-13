@@ -1,0 +1,141 @@
+{
+  "scope": "Small fixed screen responses only, no database rows or joined evidence",
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "bytes": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "bytes": "{\"action\":\"REVIEW\",\"run_id\":\"22222222-2222-4222-8222-222222222222\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "WORKERS",
+      "bytes": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "STATUS",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "run_id": "22222222-2222-4222-8222-222222222222",
+          "status": "PREPARING",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T08:20:14Z",
+          "expires_at_utc": "2026-10-14T08:20:14Z",
+          "selected_candidates": "2",
+          "ready": "0",
+          "review": "1",
+          "pending": "1",
+          "preparing": "1",
+          "removed": "0",
+          "enrolled_candidates": "2",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "action": "REVIEW",
+      "result": {
+        "run_id": "22222222-2222-4222-8222-222222222222",
+        "phase": "PREPARING",
+        "reason": "WORKERS_INCOMPLETE",
+        "review_revision": "1",
+        "all_ready": false,
+        "replay": true
+      }
+    },
+    {
+      "ok": true,
+      "kind": "WORKERS",
+      "rows": [
+        {
+          "run_worker_id": "33333333-3333-4333-8333-333333333333",
+          "candidate_id": "44444444-4444-4444-8444-444444444444",
+          "worker_status": "PREPARING",
+          "frozen_ex_vat": null,
+          "frozen_vat": null,
+          "frozen_inc_vat": null,
+          "review_issue_code": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null
+        },
+        {
+          "run_worker_id": "55555555-5555-4555-8555-555555555555",
+          "candidate_id": "66666666-6666-4666-8666-666666666666",
+          "worker_status": "PREPARING",
+          "frozen_ex_vat": "1284.50",
+          "frozen_vat": "0.00",
+          "frozen_inc_vat": "1284.50",
+          "review_issue_code": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "STATUS",
+      "header": {
+        "run_id": "22222222-2222-4222-8222-222222222222",
+        "run_status": "PREPARING",
+        "selection_state": "SEALED",
+        "review_revision": "1",
+        "run_worker_id": "33333333-3333-4333-8333-333333333333",
+        "candidate_id": "44444444-4444-4444-8444-444444444444",
+        "worker_status": "PREPARING",
+        "target_pay_channel": "PAYE",
+        "umbrella_id": null,
+        "preparation_revision": "1",
+        "case_selection_revision": "0",
+        "net_request_revision": "0",
+        "net_projection_revision": "0",
+        "net_pending": false,
+        "review_issue_code": null,
+        "review_issue_work_id": null,
+        "frozen_gross_ex_vat": "0.00",
+        "frozen_gross_vat": "0.00",
+        "frozen_gross_inc_vat": "0.00",
+        "projection_id": null,
+        "projection_input_kind": null,
+        "entered_paye_net": null,
+        "accepted_recoveries": null,
+        "accepted_net_additions": null,
+        "cash_amount": null,
+        "reservation_mode": "UNCONFIRMED",
+        "reservation_projection_id": null,
+        "remaining_reservation_cash": null,
+        "reservation_internal_zero": false,
+        "reservation_holds_state": "NONE"
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null
+    }
+  ]
+}

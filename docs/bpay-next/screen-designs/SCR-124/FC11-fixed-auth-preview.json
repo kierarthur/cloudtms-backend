@@ -1,0 +1,14 @@
+{
+  "authority": "A4 one fixed read-only EX01preview, no password/code/auth/financial dispatch.",
+  "preview": {
+    "action_kind": "WRITE_OFF",
+    "action_label": "Write off",
+    "candidate_count": 1,
+    "candidate_name": "Amelia Hughes",
+    "total_amount": "50.00",
+    "amount_basis": "SOURCE_DEBT",
+    "scope_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "accepted": false,
+    "second_factor_required": true
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "item": "WB-25",
+  "sequence": 70,
+  "state": "BUILT_REVIEWED",
+  "exactDeliverables": [
+    "WB-25-D12"
+  ],
+  "builderDecision": "BD078",
+  "contextOwners": "D01-D11/D13 retain current WB21/23 native intake, WB22 memory, WB16 detail and RuleB original pin; no duplicate owners",
+  "sourceFiles": {
+    "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql": "115f2619b240a046440d389289bb6f17d1915db52834f86adc01564ab3306a95",
+    "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql": "f06c42312917da60c70ed9e5b95daafb5f816053075e8a73274a340082f563f7",
+    "broker/src/bpay-next-workbench.js": "4cbe9ebfdcbe8db3a8534f42e54693810a1362deb1daeb37eee44710d3020e74"
+  },
+  "successors": [
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid)",
+      "predecessor": "10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+      "change": "Only exact parent validation for a component-only memory edit; replay/locks/helper/native ALL-SUBSET membership/100-page seal and existing E1 skips unchanged"
+    },
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "predecessor": "10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+      "chain": [
+        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+        "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
+      "change": "Same exact component identity validation for Count, using original resolved memory scope for hidden overrides"
+    }
+  ],
+  "support": "D12 local native line overlays require two existing named-owner validation successors and the existing CSV inclusion mirror. No new table/helper/mode/protocol/command/route/public trigger/producer/money-owner replacement. Installed0005 is immutable;0008 preserves its provenance.",
+  "checks": {
+    "dbCheck": "332 migrations/865 repeatables PASS",
+    "localPg17": "Sole PG17 compile only0migrations/4finalclosures for0005 then0008; zero business rows or financial invocation",
+    "changedJsSyntax": "PASS",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "a7ce4c1954757ea57bea4e992f62a692f9720f17255a197202ef2d0a1d960758",
+    "coupling": "PASS",
+    "diffCheck": "PASS"
+  },
+  "publicCatalogue": {
+    "count": 833,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "hash": "01ac3d90c572327934daabf869623c85",
+    "delta": "Fresh local catalogue unchanged; no public SECURITY DEFINER signature addition/removal"
+  },
+  "reviews": [
+    "reviews/WB-25-sql-review.md",
+    "reviews/WB-25-office-review.md"
+  ],
+  "screens": {
+    "id": "SCR-10",
+    "screenshots": 24,
+    "review": "screen-designs/SCR-10/WB25-review.md",
+    "sample": "screen-designs/SCR-10/WB25-fixed-read-responses.json",
+    "method": "Actual Office with smallest local fixed responses; dark/device-light/390px; no database fixtures",
+    "policyReview": {
+      "pass": 39,
+      "fail": 0,
+      "notApplicable": 3
+    }
+  },
+  "joinedAppAcceptance": "NOT_RUN; four named card journeys remain authored app acceptance",
+  "deployment": "NOT_INSTALLED",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "backendCommit": "209df956090dc7ac051fd523a165872bb201db5e",
+  "frontendCommit": "ec065427b7078e5a79cc1ff5bdcbf6b0107fbe8e"
+}

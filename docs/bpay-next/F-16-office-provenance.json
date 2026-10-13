@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-09",
+  "frontendBranch": "codex/bpay-next-build-20261009",
+  "frontendBase": "aada67455afe5a3b6828a713c7062832c0617782",
+  "design": "design/F-16-office-port.md",
+  "files": [
+    {
+      "path": "js/bpay-next-owner.js",
+      "sha256": "4947d2e61cd4fa734cbaa99b05c415bad8552865d286233123cc48f34e1ca922"
+    },
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "a4ba8ea0b63f3723a062dea7f915e91ed193c3c20c03e9dfae7765e8de25a356"
+    },
+    {
+      "path": "js/bpay-next-payment-history.js",
+      "sha256": "715a1035f88204b39771932a479f733b98ef7c971656c77767bd396861a24e9b"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "5fa3e52ab734f0fee7071d364f57c44e7130478648fe797d98bf3b6804b50b1f"
+    },
+    {
+      "path": "js/main.js",
+      "sha256": "337ad43e351b88f8661169365c391fbca9e9d98cb2b877828df49aa7e2c2963c"
+    },
+    {
+      "path": "index.html",
+      "sha256": "608de5cecc565a7d22071059de48978655c2b2554fb223f8d85d577d7e91bd78"
+    },
+    {
+      "path": "BANKING_PAY_BIBLE.md",
+      "sha256": "7d208f1162b39be38227b093445904ab2027666d06c6c5330eac19345c206bf2"
+    },
+    {
+      "path": "tests/unit/bpay-next-office.test.cjs",
+      "sha256": "6e905cab92c36eafbea0425524038f7e3157fba2014d4711fa1164dcfeca6048"
+    },
+    {
+      "path": "tests/unit/bpay-next-office-frozen-detail.test.cjs",
+      "sha256": "3ac53acadc4251376f2ffcdc703892414bcabaee8447a2e8837848a1df1e6b89"
+    },
+    {
+      "path": "tests/unit/bpay-next-payment-history.test.cjs",
+      "sha256": "48b496e942232ae15e7bedebe7da61aa89e6fe65bc5fd71e09c348caf3ce7cdf"
+    }
+  ],
+  "staticIncludeLines": [
+    {
+      "line": 15,
+      "include": "<link rel=\"stylesheet\" href=\"./css/bpay-next-office.css?v=20261009-next-foundation-r1\">"
+    },
+    {
+      "line": 3023,
+      "include": "<script src=\"./js/bpay-next-owner.js?v=20261009-next-foundation-r1\"></script>"
+    },
+    {
+      "line": 3024,
+      "include": "<script src=\"./js/bpay-next-office.js?v=20261009-next-foundation-r1\"></script>"
+    },
+    {
+      "line": 3025,
+      "include": "<script src=\"./js/bpay-next-payment-history.js?v=20261009-next-foundation-r1\"></script>"
+    }
+  ],
+  "sharedChanges": "13minimal main hunks;3html hunks;original unchangedmixednewlines preserved",
+  "sourceGates": "60/60existing normalunitPASS;4nodechecksPASS;no new fixture/harness/browser",
+  "review": "PASS reviews/F-16-office-port-review.md",
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN",
+  "frontendCommit": "20aa3894d202538699e69136faa41481d4c4406d"
+}

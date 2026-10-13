@@ -1,0 +1,60 @@
+{
+  "authority": "A4 minimal fixed local presentation responses only. No DB rows, hosted requests, financial dispatch or reusable tool.",
+  "actor": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "candidate": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "command": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "input": {
+    "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "case_kind": "MANUAL_DEBT",
+    "case_subtype": "MANUAL_DEBT",
+    "tax_treatment": "TAXABLE",
+    "principal": "120.00",
+    "due_date": null,
+    "start_monday": "2026-10-12",
+    "weekly_due": null,
+    "week_count": "4",
+    "minimum_earnings_threshold": null,
+    "take_home_floor_override": null,
+    "reason": "Overpaid overtime",
+    "note": null,
+    "original_liability_reference": "INV-2291"
+  },
+  "value": {
+    "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "weekly_due": "30.00",
+    "week_count": "4",
+    "first_due_monday": "2026-10-12",
+    "last_due_monday": "2026-11-02",
+    "total": "120.00",
+    "minimum_earnings_threshold": null,
+    "take_home_floor_override": null,
+    "effective_take_home_floor": "100.00",
+    "warnings": [],
+    "preview_token": {
+      "input": {
+        "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "case_kind": "MANUAL_DEBT",
+        "case_subtype": "MANUAL_DEBT",
+        "tax_treatment": "TAXABLE",
+        "principal": "120.00",
+        "due_date": null,
+        "start_monday": "2026-10-12",
+        "weekly_due": null,
+        "week_count": "4",
+        "minimum_earnings_threshold": null,
+        "take_home_floor_override": null,
+        "reason": "Overpaid overtime",
+        "note": null,
+        "original_liability_reference": "INV-2291"
+      },
+      "context": {
+        "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "owner_epoch": "1",
+        "financial_view_revision": "0",
+        "pay_channel": "PAYE",
+        "candidate_default_floor": "100.00",
+        "valuation_policy_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+      }
+    }
+  }
+}

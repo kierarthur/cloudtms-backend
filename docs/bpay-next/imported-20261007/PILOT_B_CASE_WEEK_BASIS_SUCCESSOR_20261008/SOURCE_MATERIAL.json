@@ -1,0 +1,188 @@
+{
+  "kind": "PILOT_B_CASE_WEEK_BASIS_SOURCE_ONLY_SUCCESSOR_V1",
+  "date": "2026-10-08",
+  "authorTask": "/root/pilot_b_case_week_basis",
+  "sourceAuthored": true,
+  "native": false,
+  "counted": false,
+  "awards": [],
+  "financialPass": false,
+  "admittedForCountedPilotB": false,
+  "scope": {
+    "ownedDirectory": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/PILOT_B_CASE_WEEK_BASIS_SUCCESSOR_20261008",
+    "canonicalEdits": false,
+    "worktreeEdits": false,
+    "registration": false,
+    "commits": false,
+    "databaseCalls": 0,
+    "dockerCalls": 0,
+    "networkCalls": 0,
+    "providerCalls": 0,
+    "newTables": 0,
+    "newFunctions": 0,
+    "existingDefinitionsReplaced": 2,
+    "rootSoleExecutor": true
+  },
+  "authorityRead": {
+    "goal": "C:/Users/KierArthur/.codex/attachments/8fa93656-24dc-48fa-a495-14ab31ea4c5d/goal-objective.md",
+    "workspaceAgentsFullyRead": true,
+    "backendAgentsFullyRead": true,
+    "worktreeAgentsFullyRead": true,
+    "databaseReleaseBibleFullyRead": true,
+    "laneOpening": {
+      "path": "cloudtms-backend/codex_outputs/CLAUDE_BPAY_THREE_LANE_OPENING_20261007.zip",
+      "sha256": "E98359E8158E66BD3223E32F4790C841FEC7A062E19AC69A6E31CF7153DF401D",
+      "entriesFullyReadWithoutExtraction": [
+        "00_LANE_SYSTEM_OVERVIEW.md",
+        "01_LANE_A_NOTICE.md"
+      ]
+    },
+    "skill": {
+      "name": "supabase-postgres-best-practices",
+      "usedFor": "SQL/source review; existing owner only, no index/schema/algorithm expansion"
+    },
+    "policyX": "Current exact source is permitted only before Draft. Candidate changes only PREPARE applicability and its real PREPARE capacity acceptance; existing frozen instruction/quote/capacity/owner proofs remain. No post-Draft live economic fallback."
+  },
+  "diagnosis": {
+    "originalCountedReceipt": {
+      "path": "BOUNDED_METHOD_TRIAL_RUNS_20261007/PILOT_B/PILOT_B_RUN_02_RECEIPT.json",
+      "sha256": "36AFEABAEFD317F07779CCB124D09B11C89A859F83DE89E314ABEBBC2E8C8E72"
+    },
+    "callback": {
+      "path": "PILOT_B_FINANCIAL_JOURNEYS_V1_20261007/actual-financial-callbacks.mjs",
+      "sha256": "851DD20997A752C1792CD34C9A7B041D4D1C0C1E1AB9CD5535458BFB449DB4FA",
+      "line": 148,
+      "assertion": "review.all_ready",
+      "expected": true,
+      "actual": false
+    },
+    "uncountedWitness": "PILOT_B_RUN02_READINESS_OBSERVER_V3_20261008/READINESS_OBSERVER_RECEIPT_V3.json",
+    "witnessStatus": "Original callback true/false reproduced; genuine complete WORKERS page exactly 1, matching candidate REVIEW / CASE_WEEK_BASIS_UNBOUND. Seven vector windows reached, not the complete 12-vector financial matrix.",
+    "failingVector": "UMBRELLA_PAYE_-30",
+    "genuineInputChain": [
+      "Two actual original payments are created through parsed Final/APP/source/pay run/payment completion owners; originals are preserved immutable point links.",
+      "Original payments and recovery pay run all use pay_date 2026-10-09, same ISO Monday week 2026-10-05. Source/work weeks are earlier; pay-date week, not work week, controls this binding.",
+      "0420 no-case week fact publisher returns for target channel other than PAYE; prior genuine no-case Umbrella originals therefore have no worker_week_contribution.",
+      "0430 original no-case Umbrella outcome is likewise not an eligible maintained prior fact. Joined widening is case-only and does not retrofit no-case originals.",
+      "Effective joined PREPARE currently demands a contribution for every earlier READY/DRAFT/ISSUED/COMPLETE same-candidate worker in this pay-date week, before instruction capture/origin/valuation.",
+      "0290 explicitly applies H/floor/threshold protection only to LOAN/ADVANCE/MANUAL_DEBT; OVERPAYMENT gross recovery uses exact nominal, usable capacity and channel headroom without H/floor money.",
+      "0390 NET already expresses NOT_AFFECTED when no allocated protected NET debt needs the week basis; it still requires the current week metadata relation."
+    ],
+    "missingAuthority": "Maintained eligible prior take-home contributions for the exact earlier Umbrella run workers. Not a missing CASE origin, work_collection, quote, policy window, or current channel configuration.",
+    "classification": "Independently confirmed narrow product applicability defect. Same-week genuine channel change is not made harmless by editing the fixture date, expected recovery money, paid originals, or injecting prior contributions. Missing weekly authority remains a real blocker for every selected protected or other unsupported instruction set.",
+    "precisionLimit": "The V3 receipt captures the issue code, not the exact SQL branch. Source traces independently explain the missing prior-Umbrella metadata path; root successor probe records actual prior counts/current-week unresolved count to distinguish it from the other same-code branch."
+  },
+  "sources": {
+    "managedOverlay": {
+      "path": "SOURCE_MOVE_JOINED_UM_MATERIAL_V2_20261007/managed-overlay.sql",
+      "sha256": "6CF8093E9D651306CE284A729D4ACF7D902BF9D0B4CD9E122A84E5DD9AAD2530"
+    },
+    "managedMaterial": {
+      "path": "SOURCE_MOVE_JOINED_UM_MATERIAL_V2_20261007/SOURCE_MATERIAL.json",
+      "sha256": "B08EC0D0258143A46590AF69A1EC0BEE836A6065941FDEDA757B373110AD21F3"
+    },
+    "savedRealCallers": {
+      "path": "BPAY_NEXT_LOCAL_PAID_RECOVERY_C2_TAIL_V3_20261006.mjs",
+      "sha256": "3B563836363F642D06476DCE66BC227AAFEDF7C8566DD6C99AC92C8ABF8898E4"
+    },
+    "unchangedRowOwner": {
+      "path": "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+      "worktreeSha256": "400E854BFD5619F7BD004E9E922D4681A673216EE001DD1A7CBD81ECF6D20AC6"
+    },
+    "sealedSelectionGuards": {
+      "path": "supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+      "worktreeSha256": "7DD5085D3307A0194B3745487CC19A952EE3B8CB11D03F096D275D23632500FE"
+    },
+    "existingNetApplicability": {
+      "path": "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+      "worktreeSha256": "9622C5B9259F80E69A4FB661425C0016A4F3EE69EE8B02FCB3A7BAA7BA389FBB"
+    },
+    "noCaseWeekOwner": {
+      "path": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "worktreeSha256": "335F80467B7EB434034C3AA67295355AA8AF04CC9C0834E313A67B056D10766B"
+    },
+    "originalOutcomeOwner": {
+      "path": "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+      "worktreeSha256": "59BFF08B9E651DAAD96E0C686BF322E180F3B038467D3BD12DB17002E57E73DF"
+    }
+  },
+  "proposal": {
+    "candidateFile": "08102026_0510_banking_pay_next_overpayment_week_applicability_v1.sql",
+    "candidateSha256": "9E2488857DC7AD0823B172E2C4EFBC9EEF6687C0300392ED812E7A99E88F027E",
+    "inverseFile": "08102026_0510_banking_pay_next_overpayment_week_applicability_v1.inverse.sql",
+    "inverseSha256": "9B173688EEB2A3826409C5F5059505CBE659E45159079E0F01A516BB781D24E5",
+    "hookFile": "source-proposal.mjs",
+    "hookSha256": "74AA9C9DE3C95A57997923497727AA5F7D1BF236755D62CCD932594692DAD80E",
+    "eligibility": "Nonempty exact SEALED selected set; selected count equals actual selected identities; case/component both OVERPAYMENT, instruction RECOVERY, stage GROSS_DEDUCT. Every other set preserves the original UNBOUND/WEEK_CAPTURE path.",
+    "frozenReproof": "Every captured instruction must retain class. Before allocation, exact frozen count, captured/header/worker counts, sealed header and selected identity membership are checked. CASE_RESERVE accepts NOT_AFFECTED only with its own exact frozen count/class/membership proof plus every inherited real PREPARE, source tuple, hold, capacity, module/candidate owner and operation proof.",
+    "currentWeek": "Existing genuine current week row creation/lock/floor revision capture remains exactly unchanged for NET and current worker lifecycle. It is not a fabricated prior contribution.",
+    "scalarCarry": "NOT_AFFECTED does not claim BOUND weekly take-home. The existing initial carry uses the exact captured current gross, as before; no earlier money is guessed. For this proved class H is not an affordability operand. Remaining carry is not evidence of the missing prior week's take-home.",
+    "unchanged": [
+      "all 12 original financial vectors and order",
+      "actual financial callbacks SHA851DD",
+      "expected recovery money",
+      "0290 row algorithm",
+      "source quote/value/slice owners",
+      "genuine origin and work_collection binding",
+      "active capacity reservations and actual completion",
+      "protected-debt floor/threshold rules",
+      "all existing WEEK_CAPTURE and return-floor checks",
+      "owner/ACL/security/search_path posture",
+      "no-case Umbrella lifecycle scope"
+    ],
+    "metadataSetProofsRunScopedNotPageLimited": true,
+    "performanceNote": "New scalar count/class membership proofs are indexed to the exact selected run/candidate/revision or frozen run worker/revisions; no prior-money SUM, all-candidate scan or serialization is introduced. Their scan cost is not claimed as a performance acceptance."
+  },
+  "definitions": [
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "existingOwnerPath": "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+      "managedWinnerDefinitionSha256": "B2E0A72CD979C969CF503CC9143AA406EB0D87044FB64C530BEFA3905BF9F237",
+      "preimageBodyMd5": "fb6946e158aafa2327f075fde9b70615",
+      "candidateBodyMd5": "f533c6f67f4d5d9edad0b465d6742093",
+      "preimageBodySha256": "595C490657729551259B999924879E9BC168A90FF6584FE3746D27ADB0FF8EBD",
+      "candidateBodySha256": "776A6091AD3BB632BB9FA4B86CD2324A09F37CBEBF046C0AF1538663391C8C3C"
+    },
+    {
+      "signature": "private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)",
+      "existingOwnerPath": "supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql",
+      "managedWinnerDefinitionSha256": "84AF172991F6398A877D8F8502C807585302138D0104335BD3928FFAA7E8AB0B",
+      "preimageBodyMd5": "f5e8ccd8c08fb88ebe4a4204f746d713",
+      "candidateBodyMd5": "f3f3c0bb9bc2b460aeb877dbadfe12f2",
+      "preimageBodySha256": "8E04DA5F9AEA84F68BEF6F8D4F5F59EE3BBD96FF55777EDAD7A02A0F7B87801B",
+      "candidateBodySha256": "677BD9D690B293091EFA0A8246FD45BA5C842761A18FA4C0EA903A9503D89E55"
+    }
+  ],
+  "sourceOnlyChecks": {
+    "exactTwoFunctionDefinitions": true,
+    "noTopLevelTransactionControls": true,
+    "noExplicitOwnerGrantRevoke": true,
+    "noNewTableOrCalculator": true,
+    "originalManagedBodiesReadDirectlyAndMd5Verified": true,
+    "candidateAndInverseReadBack": true,
+    "focusedDiffFullyRead": true,
+    "sourceFilesNotExecuted": true
+  },
+  "focusedControls": {
+    "hookNativeControls": "Exact two existing prosrc MD5 pre/post and retained posture; 11 read-only class/count/absence/mixed predicate scenarios; unchanged original allocator floor control for all three protected kinds.",
+    "controlLimit": "Predicate VALUES are not financial rows. Kernel calls validate unchanged protected floor semantics only. These controls do not claim genuine protected PREPARE journey proof.",
+    "rootMatrix": "Root-only existing rolled-back host, original unchanged all12 matrix/callback/expected money. Install candidate only after distinct Extra High review. Observe actual downstream REVIEW without altering the reply.",
+    "requiredObservedPositive": "For UMBRELLA_PAYE_-30: actual prior Umbrella missing contribution count remains >0; no fake prior facts; exactly one current week row; truthful NOT_AFFECTED, complete exact frozen overpayment selection; original REVIEW/all recovery/payment assertions must pass unchanged.",
+    "genuineProtectedPreparationControlsExecuted": false,
+    "furtherGenuineNegativeControlsRequiredBeforeBroaderProtectedAcceptance": [
+      "Through existing CASE_CREATE/queue/selection owners, select each LOAN/ADVANCE/MANUAL_DEBT with genuine same-week missing prior Umbrella metadata: must retain CASE_WEEK_BASIS_UNBOUND and no recovery hold.",
+      "Through the same owners, mixed selected overpayment plus protected recovery must stay week-dependent. Excluded protected rows must not be promoted to selected eligibility.",
+      "Missing/contradictory sealed selection or frozen capture counts/identities must be refused, never treated as NOT_AFFECTED.",
+      "A fully bound protected debt retains genuine floor/threshold amount/replay semantics; returned/reissued unresolved prior facts retain original refusal."
+    ],
+    "freshRollback": "Require the existing full fresh preservation capture, distinguish expected global/sequence gaps from any real row/catalogue change, retain all old failed receipts. Inverse is complete preimage source, not permission to install durably."
+  },
+  "handoff": {
+    "reviewerMustDifferFromAuthor": true,
+    "rootActualTestRequired": true,
+    "rootNativeAdmission": false,
+    "notAReleaseOrFinancialPass": true,
+    "interface": "applyToOuter({c,rootAuthority:'/root'}), probeReadiness({c,actor,runId,candidate,specKey,allReady}); c.query receives one SQL expression, c.sql receives exact pinned function-only SQL."
+  }
+}
+

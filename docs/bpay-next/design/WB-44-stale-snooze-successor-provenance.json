@@ -1,0 +1,52 @@
+{
+  "item": "WB-44",
+  "correction": "WB36/WB44 owner 11Oct A2",
+  "decision": "BD128",
+  "destination": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+  "sourceSha256": "2d9822da9881179dace5a2ff97c65fcaaf1dfbaad920337a4701133d8fe487ae",
+  "supportingHelpers": [
+    "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)",
+    "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)"
+  ],
+  "successors": [
+    {
+      "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
+      "parent": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "parentSha256": "8934065d152ab69bbe2ec8ee298bd03b66f4c20a82fbbcdced78567db37bb69f",
+      "parentBodySha256": "10df8aa91955019d114607981e8ccee6b82f137af2b6ff4d99b97589a952ae38",
+      "sourceBodySha256": "29e14294f8fd28a9d6428fe43d8e86dae713b71784aa4dfa2a5d30a40299812d"
+    },
+    {
+      "signature": "private.bpay_next_snooze_metadata_guard_v1()",
+      "parent": "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql",
+      "parentSha256": "b0d1efa5398f6340e3c3a399b7334bbabd46f33f9128731945a81587872d8c16",
+      "parentBodySha256": "be58524ddcfb30eb311ab95573e42fc993748475961b19630655942815a90e46",
+      "sourceBodySha256": "681e794ef7ba90d92e8bfaac6596c52f90dc325b40b321eb7c7008ee98a5ce9e"
+    },
+    {
+      "signature": "private.bpay_next_snooze_receipt_guard_v1()",
+      "parent": "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql",
+      "parentSha256": "b0d1efa5398f6340e3c3a399b7334bbabd46f33f9128731945a81587872d8c16",
+      "parentBodySha256": "ae2586063387aa9856c1e195971c34005adb9efd1a4de62841d4bcb3476aa0c4",
+      "sourceBodySha256": "47620a9859fef972681bc7e3b7256dffd2280fdeae0578182d1babf79e4af824"
+    },
+    {
+      "signature": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+      "parent": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "parentSha256": "1a57552c42d63d0dc885a4e7294472c03319537da9e913a96cbbadc10c2ab879",
+      "parentBodySha256": "59ff7c8139805f5ab79df52005ff8d1439b40d3194b9fc456a83c28181af7843",
+      "sourceBodySha256": "12971e322965f110a9fe1e645abfe22e48a8a4f64b234e6c6166412afdc03a01"
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "parent": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "parentSha256": "1a57552c42d63d0dc885a4e7294472c03319537da9e913a96cbbadc10c2ab879",
+      "parentBodySha256": "87a12e83d12d244a51ccad4900b81215cd733c7fac82cb122a54cdaf39455b9e",
+      "sourceBodySha256": "d5e434df38a85d49ed90161b771de68fb103d2143378690e602dbf901cfed569"
+    }
+  ],
+  "publicSecurityDefinerDelta": 0,
+  "implementationCommit": "954e23b85a1d62f4bd6e4204cd478921b9d06f17",
+  "frontendImplementationCommit": "04de470f6ceb1e4e863966e62779e49814c2d015",
+  "status": "BUILT_REVIEWED"
+}

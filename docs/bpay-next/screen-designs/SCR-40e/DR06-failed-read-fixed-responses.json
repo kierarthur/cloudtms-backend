@@ -1,0 +1,17 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": false,
+      "error_code": "BPAY_NEXT_PREPARATION_UNAVAILABLE",
+      "retryable": true,
+      "outcome_unknown": false
+    }
+  ]
+}

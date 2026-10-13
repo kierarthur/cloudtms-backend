@@ -1,0 +1,125 @@
+[
+  {
+    "id": "SCR-123c",
+    "file": "FC10-resume-dark.png",
+    "errors": [],
+    "copy": "?\nResume recovery for this Payment Advance?\n\nNew Drafts can collect repayments again.\n\nBethany Clarke · Outstanding £300.00\n\nReason\nKeep paused\nResume recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep paused",
+          "width": 105.703125,
+          "height": 44
+        },
+        {
+          "text": "Resume recovery",
+          "width": 131.90625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep paused"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123c",
+    "file": "FC10-resume-device-light.png",
+    "errors": [],
+    "copy": "?\nResume recovery for this Payment Advance?\n\nNew Drafts can collect repayments again.\n\nBethany Clarke · Outstanding £300.00\n\nReason\nKeep paused\nResume recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep paused",
+          "width": 105.703125,
+          "height": 44
+        },
+        {
+          "text": "Resume recovery",
+          "width": 131.90625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep paused"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123c",
+    "file": "FC10-resume-phone-dark.png",
+    "errors": [],
+    "copy": "?\nResume recovery for this Payment Advance?\n\nNew Drafts can collect repayments again.\n\nBethany Clarke · Outstanding £300.00\n\nReason\nKeep paused\nResume recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 328,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep paused",
+          "width": 99.703125,
+          "height": 44
+        },
+        {
+          "text": "Resume recovery",
+          "width": 125.90625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep paused"
+    },
+    "pauseFailure": null
+  }
+]

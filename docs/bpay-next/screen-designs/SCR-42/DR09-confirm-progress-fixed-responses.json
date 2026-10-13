@@ -1,0 +1,83 @@
+{
+  "scope": "Small fixed screen responses only, no database rows or joined evidence",
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "bytes": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "bytes": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "run_id": "22222222-2222-4222-8222-222222222222",
+          "status": "PREPARING",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T08:20:14Z",
+          "expires_at_utc": "2026-10-14T08:20:14Z",
+          "selected_candidates": "2",
+          "ready": "0",
+          "review": "1",
+          "pending": "1",
+          "preparing": "1",
+          "removed": "0",
+          "enrolled_candidates": "2",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "run_id": "22222222-2222-4222-8222-222222222222",
+          "status": "PREPARING",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T08:20:14Z",
+          "expires_at_utc": "2026-10-14T08:20:14Z",
+          "selected_candidates": "2",
+          "ready": "0",
+          "review": "1",
+          "pending": "1",
+          "preparing": "1",
+          "removed": "0",
+          "enrolled_candidates": "2",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    }
+  ]
+}

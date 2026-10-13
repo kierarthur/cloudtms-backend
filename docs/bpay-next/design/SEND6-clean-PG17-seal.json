@@ -1,0 +1,21 @@
+{
+  "sourceHead": "3abaed3e4f74644bf229c2b58d7e0805ea7284fb",
+  "status": "LOCAL_SCHEMA_COMPILED",
+  "database": "banking_modal_v2_test",
+  "owner": "cloudtms_bpay_local_owner",
+  "compiledAtUtc": "2026-10-13T17:57:58.861Z",
+  "inventory": {
+    "migrations": 389,
+    "repeatables": 1018
+  },
+  "selected": {
+    "migrations": 207,
+    "repeatables": 791
+  },
+  "fullProtectedVerification": "PENDING",
+  "contractHash": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+  "contractDiff": "No semantic or byte change from current committed contract",
+  "container": "bpay-next-send6-clean-pg17",
+  "volume": "bpay-next-send6-clean-pg17-data",
+  "proof": "Fresh schema-only canonical NEW compilation; no local fixture programme"
+}

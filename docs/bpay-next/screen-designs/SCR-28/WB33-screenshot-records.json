@@ -1,0 +1,1403 @@
+[
+  {
+    "scr": "SCR-28",
+    "file": "WB33-rates-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-one-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": "61000000-0000-0000-0000-000000000901"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-linked-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 04/10/2026\n£549.34\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 2 Timesheets. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-channel-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved pay channel?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep decision\nCancel decision",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-gross-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved gross total?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nAdditional pay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£51.48\nSaved pay · Umbrella, ex VAT\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep amount\nCancel amount",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "GROSS",
+              "owner_id": "61000000-0000-0000-0000-000000000902"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-unavailable-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-stale-dark.png",
+    "errors": [],
+    "copy": "The list has changed; refresh and try again.\n\n!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-pending-dark.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nCheck result",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "ec171b0c-9e13-42fb-b93e-63187f96bea9",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-processing-dark.png",
+    "errors": [],
+    "copy": "Choice removed\nChloe Davies · TMS 10233\nClose\n\nChoice removed.\n\nTimesheet w/e 11/10/2026 · Processing\n\nCheck progress",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "e02bbd13-3efa-4f3b-96ab-23e35515b112",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-ready-dark.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · PAYE to Umbrella\nClose\n\nReady.\n\nChoice removed.\n\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "channel_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000001000"
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "filters": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "client_id": null,
+            "case_subtype": "ALL",
+            "view": "ACTIVE",
+            "snooze": "ALL",
+            "hide_completed": true
+          },
+          "sort": "CREATED_DESC",
+          "after": null,
+          "limit": 5
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "a1586de1-4492-4b3a-a8b3-ab413c4d2ab6",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001200",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001201",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null
+                  }
+                ]
+              }
+            ],
+            "reason": null
+          }
+        }
+      },
+      {
+        "kind": "GROUP_LINES",
+        "args": {
+          "candidate_id": "61000000-0000-0000-0000-000000000001",
+          "group_key": "WORK:61000000-0000-0000-0000-000000000100",
+          "channel": "ALL",
+          "section": "ALL",
+          "search": "",
+          "sort": "NAME_ASC",
+          "after": null,
+          "limit": 100
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-rates-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-one-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": "61000000-0000-0000-0000-000000000901"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-linked-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 04/10/2026\n£549.34\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 2 Timesheets. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-channel-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved pay channel?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep decision\nCancel decision",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-gross-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved gross total?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nAdditional pay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£51.48\nSaved pay · Umbrella, ex VAT\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep amount\nCancel amount",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "GROSS",
+              "owner_id": "61000000-0000-0000-0000-000000000902"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-unavailable-device-light.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-stale-device-light.png",
+    "errors": [],
+    "copy": "The list has changed; refresh and try again.\n\n!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-pending-device-light.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nCheck result",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "e972b6ae-952c-460a-b86b-59d7a0da463f",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-processing-device-light.png",
+    "errors": [],
+    "copy": "Choice removed\nChloe Davies · TMS 10233\nClose\n\nChoice removed.\n\nTimesheet w/e 11/10/2026 · Processing\n\nCheck progress",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "5c1682ec-44a7-4548-8c6c-9bc08516464a",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-ready-device-light.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · PAYE to Umbrella\nClose\n\nReady.\n\nChoice removed.\n\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "channel_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000001000"
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "filters": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "client_id": null,
+            "case_subtype": "ALL",
+            "view": "ACTIVE",
+            "snooze": "ALL",
+            "hide_completed": true
+          },
+          "sort": "CREATED_DESC",
+          "after": null,
+          "limit": 5
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "f336bb27-0269-4de1-9a40-73d495b178db",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001200",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001201",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null
+                  }
+                ]
+              }
+            ],
+            "reason": null
+          }
+        }
+      },
+      {
+        "kind": "GROUP_LINES",
+        "args": {
+          "candidate_id": "61000000-0000-0000-0000-000000000001",
+          "group_key": "WORK:61000000-0000-0000-0000-000000000100",
+          "channel": "ALL",
+          "section": "ALL",
+          "search": "",
+          "sort": "NAME_ASC",
+          "after": null,
+          "limit": 100
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-rates-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-one-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": "61000000-0000-0000-0000-000000000901"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-linked-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 04/10/2026\n£549.34\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 2 Timesheets. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nCancel rate",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-channel-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved pay channel?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep decision\nCancel decision",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-gross-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved gross total?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nAdditional pay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£51.48\nSaved pay · Umbrella, ex VAT\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep amount\nCancel amount",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "GROSS",
+              "owner_id": "61000000-0000-0000-0000-000000000902"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-unavailable-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n—\nSaved pay · Umbrella, ex VAT\n\nThe saved amount cannot be checked yet.\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28",
+    "file": "WB33-stale-phone-dark.png",
+    "errors": [],
+    "copy": "The list has changed; refresh and try again.\n\n!\nCancel the resolved rate?\n\nChloe Davies · TMS 10233\n\nThis removes the saved choice for the payments below.\n\nDay · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£469.13\nSaved pay · Umbrella, ex VAT\nNight · St Anne’s Hospital\nTimesheet w/e 11/10/2026\n£274.67\nSaved pay · Umbrella, ex VAT\nAlso cancel for 1 linked Timesheet\n\nCancels for 1 Timesheet. Any Draft already created stays unchanged.\n\n1 linked Timesheet is in a Draft and will stay unchanged.\n\nKeep rate\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nCheck result",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "7df370fe-c0f0-47fb-ba29-71a58f74cf9b",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-processing-phone-dark.png",
+    "errors": [],
+    "copy": "Choice removed\nChloe Davies · TMS 10233\nClose\n\nChoice removed.\n\nTimesheet w/e 11/10/2026 · Processing\n\nCheck progress",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "eccc5bf9-c01a-424d-b728-d5f06e90d10d",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      }
+    ]
+  },
+  {
+    "scr": "SCR-28b",
+    "file": "WB33-ready-phone-dark.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · PAYE to Umbrella\nClose\n\nReady.\n\nChoice removed.\n\nRefresh",
+    "requests": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "channel_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000001000"
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "filters": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "client_id": null,
+            "case_subtype": "ALL",
+            "view": "ACTIVE",
+            "snooze": "ALL",
+            "hide_completed": true
+          },
+          "sort": "CREATED_DESC",
+          "after": null,
+          "limit": 5
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "clear_review": {
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+              "owner_family": "WORK_BUCKET",
+              "owner_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_COMMAND_ONLY",
+        "body": {
+          "action": "RESOLUTION_CLEAR",
+          "args": {
+            "request_id": "68d4d484-cf81-4d19-88f8-4907e278ace7",
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "context": {
+              "agency_id": "61000000-0000-0000-0000-000000000003",
+              "actor_user_id": "61000000-0000-0000-0000-000000000002",
+              "candidate_id": "61000000-0000-0000-0000-000000000001",
+              "owner_epoch": "1",
+              "metadata_version": "1",
+              "financial_view_revision": "1",
+              "workbench_revision": "1",
+              "adoption_revision": "1",
+              "last_command_sequence": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "target_umbrella_enabled": true,
+              "official_pay_date": "2026-10-16"
+            },
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000900",
+                    "expected_decision_version": "1"
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000000410",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null,
+                    "expected_decision_id": "61000000-0000-0000-0000-000000000901",
+                    "expected_decision_version": "1"
+                  }
+                ]
+              }
+            ],
+            "reason": null,
+            "zero_confirmed": false
+          },
+          "readback": false
+        }
+      },
+      {
+        "kind": "LOCAL_COMPONENTS_ONLY",
+        "args": {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+          "after_line_no": null,
+          "limit": 100
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "61000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "61000000-0000-0000-0000-000000001000",
+                "rows": [
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001200",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": null
+                  },
+                  {
+                    "approved_line_id": "61000000-0000-0000-0000-000000001201",
+                    "rate_family": "STANDARD",
+                    "rate_code": "NIGHT",
+                    "intent": null
+                  }
+                ]
+              }
+            ],
+            "reason": null
+          }
+        }
+      },
+      {
+        "kind": "GROUP_LINES",
+        "args": {
+          "candidate_id": "61000000-0000-0000-0000-000000000001",
+          "group_key": "WORK:61000000-0000-0000-0000-000000000100",
+          "channel": "ALL",
+          "section": "ALL",
+          "search": "",
+          "sort": "NAME_ASC",
+          "after": null,
+          "limit": 100
+        }
+      }
+    ]
+  }
+]

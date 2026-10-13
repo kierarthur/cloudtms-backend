@@ -1,0 +1,11 @@
+# WB-10 exact source scope / BD066
+
+Card/all checklist/R2/master read before edits. Required support is actual maintained component/group identities and keysets, matching indexes,5s database limits,4s Worker read deadline, factual response-step metadata and bounded local browser timing. Retain0580 factual detail,1252 summary economics and1601 issue fields. No producer, money allocation, new protocol or public table trigger.
+
+BD066: use actual target_pay_channel/candidate_display_name/candidate_reference/client_scope and native item UUID ties rather than duplicate old illustrative columns. Add23 finite indexes covering named current filters/sorts/prefixes; reuse installed FUTURE_WEEK/snooze/finite seed/metadata/task indexes. The nullable group week's outward cursor stays YYYY-MM-DD or empty; native date tuple/seek/order now matches an immutable date index. Uniform ASC/DESC remains reversible.
+
+Use actual public RPC function proconfig statement_timeout5s and unchanged signature. PostgREST14 supports hoisting this setting before its main business statement; release must verify effective db-hoisted-tx-settings includes it and reload cache. Local SQL SET alone is not a top-level timing proof. No new pre-request hook or gateway/financial baseline120s rewrite is needed. Primary sources: [PostgREST14 transactions](https://docs.postgrest.org/en/v14/references/transactions.html#hoisted-function-settings), [configuration](https://docs.postgrest.org/en/v14/references/configuration.html#db-hoisted-tx-settings), [exact14.17 query implementation](https://raw.githubusercontent.com/PostgREST/postgrest/v14.17/src/PostgREST/Query.hs).
+
+Existing parent seed limits10 before indexed current-group enrichment, which still aggregates all actual current members of each selected group for exact amounts. No historical rows or truncation; do not claim heavy-group2s or100-child bound by assumption. All real app/Worker/RPC/DOM/page-size latency remains NOT_RUN under the owner no-testing programme. Historical300/30/twoDraft result remains owner-reported DB-only, original receipt unlocated, no invented proof.
+
+Source review, local compile and standard gates precede lock. Measurement contains fixed kind/count/bytes/status/elapsed only, never payload/identity/cursors/search/bank data, never sent externally or added to financial retry bytes.

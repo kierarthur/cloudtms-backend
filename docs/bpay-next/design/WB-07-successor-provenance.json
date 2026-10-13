@@ -1,0 +1,8 @@
+[
+  {
+    "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
+    "predecessor": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+    "final": "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql",
+    "delta": "Call-only STABLE gate trap/cache with finite exact scope validation and isolated AVAILABLE60/61 priority; preserve pre-query base for RESERVED."
+  }
+]

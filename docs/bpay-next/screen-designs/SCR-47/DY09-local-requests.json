@@ -1,0 +1,485 @@
+[
+  {
+    "file": "DY09-not-accepted-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-accepted-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-recovered-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-shifts-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-not-accepted-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-accepted-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-recovered-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-shifts-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-not-accepted-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-accepted-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-recovered-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-shifts-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/frozen-detail",
+        "kind": null,
+        "query": "",
+        "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-both-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-totals-recovered-detail-failed-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-both-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-totals-recovered-detail-failed-device-light.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-failed-both-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY09-totals-recovered-detail-failed-phone-dark.png",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "LINES",
+        "query": "?kind=LINES&run_worker_id=33333333-3333-4333-8333-333333333333&limit=100",
+        "body": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "STATUS",
+        "query": "?kind=STATUS&run_id=22222222-2222-4222-8222-222222222222&run_worker_id=33333333-3333-4333-8333-333333333333&limit=1",
+        "body": null
+      }
+    ]
+  }
+]

@@ -1,0 +1,345 @@
+{
+  "source": "Sole local PG17 catalogue and existing isolation DO verifiers only; no business rows/RPC/fixtures.",
+  "tables": [
+    {
+      "name": "bpay_next_case_edit_request",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "original_command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "new_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "new_rule_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_principal",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "principal",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "input",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "terms",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "preview_token",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_edit_request_accepted_at_utc_check",
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_actor_user_id_fkey",
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_check",
+          "definition": "CHECK ((new_rule_revision = (previous_rule_revision + 1)))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_check1",
+          "definition": "CHECK (((new_rule_id = command_id) AND (new_rule_id <> previous_rule_id)))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_check2",
+          "definition": "CHECK (((((input ->> 'candidate_id'::text))::uuid = candidate_id) AND (((input ->> 'principal'::text))::numeric = (principal)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_command_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_command_id_case_id_candidate_id_key",
+          "definition": "UNIQUE (command_id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_case_edit_request_command_id_fkey",
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_expected_case_revision_check",
+          "definition": "CHECK ((expected_case_revision > 0))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_input_check",
+          "definition": "CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 12288)))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_new_rule_id_key",
+          "definition": "UNIQUE (new_rule_id)"
+        },
+        {
+          "name": "bpay_next_case_edit_request_original_command_id_fkey",
+          "definition": "FOREIGN KEY (original_command_id) REFERENCES private.bpay_next_case_create_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_edit_request_preview_token_check",
+          "definition": "CHECK (((jsonb_typeof(preview_token) = 'object'::text) AND (octet_length((preview_token)::text) <= 32768)))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_previous_principal_check",
+          "definition": "CHECK (((previous_principal)::numeric > (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_previous_rule_id_case_id_candi_fkey",
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id, previous_rule_revision) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id, rule_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_edit_request_previous_rule_revision_check",
+          "definition": "CHECK ((previous_rule_revision > 0))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_principal_check",
+          "definition": "CHECK (((principal)::numeric > (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_edit_request_terms_check",
+          "definition": "CHECK (((jsonb_typeof(terms) = 'object'::text) AND (octet_length((terms)::text) <= 12288)))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_edit_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_edit_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_period_amendment",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "edit_command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "pay_week_start",
+          "type": "date",
+          "nullable": false
+        },
+        {
+          "name": "previous_period_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "period_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_opening_outstanding",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "previous_opening_due",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "opening_outstanding",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "opening_due",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "recorded_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_period_amendm_previous_opening_outstanding_check",
+          "definition": "CHECK (((previous_opening_outstanding)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_period_amendme_case_component_id_case_id_ca_fkey",
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id, pay_week_start) REFERENCES private.bpay_next_case_period(case_component_id, case_id, candidate_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_period_amendme_edit_command_id_case_id_cand_fkey",
+          "definition": "FOREIGN KEY (edit_command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_edit_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_period_amendme_previous_rule_id_case_id_can_fkey",
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_period_amendme_rule_id_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_check",
+          "definition": "CHECK ((period_revision = (previous_period_revision + 1)))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_check1",
+          "definition": "CHECK ((((previous_opening_due)::numeric >= (0)::numeric) AND ((previous_opening_due)::numeric <= (previous_opening_outstanding)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_check2",
+          "definition": "CHECK ((((opening_due)::numeric >= (0)::numeric) AND ((opening_due)::numeric <= (opening_outstanding)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_check3",
+          "definition": "CHECK ((previous_rule_id <> rule_id))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_opening_outstanding_check",
+          "definition": "CHECK (((opening_outstanding)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_pay_week_start_check",
+          "definition": "CHECK ((isfinite(pay_week_start) AND (EXTRACT(isodow FROM pay_week_start) = (1)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_pkey",
+          "definition": "PRIMARY KEY (case_component_id, pay_week_start, period_revision)"
+        },
+        {
+          "name": "bpay_next_case_period_amendment_previous_period_revision_check",
+          "definition": "CHECK ((previous_period_revision > 0))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_period_amendment_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_period_amendment FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    }
+  ],
+  "indices": [
+    {
+      "name": "bpay_next_case_hold_case_history_idx",
+      "definition": "CREATE INDEX bpay_next_case_hold_case_history_idx ON private.bpay_next_case_hold USING btree (case_id, id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_nonapproved_event_idx",
+      "definition": "CREATE INDEX bpay_next_case_nonapproved_event_idx ON private.bpay_next_case_event USING btree (case_id, id) WHERE (event_kind <> 'APPROVED'::text)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_period_used_idx",
+      "definition": "CREATE INDEX bpay_next_case_period_used_idx ON private.bpay_next_case_period USING btree (case_component_id, pay_week_start) WHERE (((realised_recovery_source_ex_vat)::numeric <> (0)::numeric) OR ((active_unrealised_recovery_source_ex_vat)::numeric <> (0)::numeric) OR ((active_payout_source_ex_vat)::numeric <> (0)::numeric))",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_transfer_case_hold_idx",
+      "definition": "CREATE INDEX bpay_next_transfer_case_hold_idx ON private.bpay_next_transfer_member USING btree (case_hold_id, transfer_id) WHERE (case_hold_id IS NOT NULL)",
+      "valid": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

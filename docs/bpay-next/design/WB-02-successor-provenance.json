@@ -1,0 +1,28 @@
+[
+  {
+    "signature": "private.bpay_next_work_wait_state_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_ordinary_authorisation_trigger_v1()",
+    "predecessor": "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+    "final": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_source_withdrawal_guard_v1()",
+    "predecessor": "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql",
+    "final": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_group_contribution_v1(text)",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+    "reason": "WITHDRAWN native H remains held once without duplicated RESERVED/A/C rows"
+  }
+]

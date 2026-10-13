@@ -1,0 +1,32 @@
+# PF-12 keyboard and focus source review
+
+10 October 2026. Read-only review of full card06:1919–1938, the exact three checklist objects, PF-12-SCOPE.md/BD029 and current UI census. Reviewed saved BUILD-FE js/bpay-next-ui.js, complete changed Office/history sections, index dependency order, changed ordinary source-unit hunks and the existing main.js modal opening, tab, Close and parent-return seams. No product edit, test execution, browser/scenario, runtime/SQL or hosted operation by reviewer. This covers D01 keyboard/focus support; D02 CSS and D03 joined acceptance remain separately scoped.
+
+Final verdict: PASS for the bounded D01 keyboard/focus implementation after the correction below. Initial finding (now closed): onDismiss performed a single setTimeout(0) focus attempt. It guarded the actual captured parent frame but did not bind the attempt to completion of that parent's asynchronous return render. The shared shell hides btnPaymentHistory while the history child owns it (main.js333461). Parent return invokes renderTop through syncParentChromeAfterChildReturn (337125/336975); real Timesheet setTab awaits hydrateTimesheetEditStateFromDetails (329121), and _updateButtons runs at setTab exit. The timer could therefore select Close before the original opener became available.
+
+The remaining bounded D01 changes pass source inspection:
+
+- Office uses native buttons/inputs and stable existing work, component, case, worker, transfer CSV, line, shift, work-rate and channel keys. CSV label changes keep the same transfer key. Input keys preserve selection positions where supported. Key attributes affect presentation only; monetary requests, journal bytes, selected IDs, Rule-B inputs, clocks and pending-request controls are unchanged.
+- continuity captures before actual replaceChildren/setTab and restores the same enabled visible keyed control. A busy repaint falls back to Close and retains the unavailable original token for recovery; a deliberate move to another control supersedes it. New page rows that remove the original control retain a safe Close fallback. No focus-by-row-index substitution is introduced.
+- The latest shared available filter rejects disconnected, own/fieldset-disabled, negative-tabindex, aria-disabled, hidden/inert/aria-hidden, CSS visibility hidden/collapse and zero-rectangle controls. Tab includes native summary/select/textarea/anchor controls as well as buttons/inputs. It wraps first/last and recovers when focus is on the dialog or outside the actual eligible set. stopPropagation prevents the older record-only window trap from applying a second policy on the same Tab.
+- Office Escape stops propagation, closes the sheet and removes timer/owner/visibility listeners. Close remains enabled during busy/unknown work and retains the controller journal. Connected original opener restoration is preserved; removal/disposal prevents later renders from refocusing the removed sheet.
+- History's local trap uses exact current frame identity and kind for both Candidate and Timesheet parents, so it closes the pre-existing non-record-parent Tab gap. Escape still uses the existing shared Close/stack owner. Initial focus enters the shared header Close. Scope/group/row summaries and child links have stable exact keys, and Back retains the originating request plus focus token, then restores only while the same actual history frame remains current.
+- History disposal closes/aborts its read client and removes click/keyboard listeners. Repaint performs the existing guarded setTab, checks actual frame identity again before updating buttons/restoring focus, and does not steal focus from a subsequent unrelated frame. Original exact actor/read schemas, cursor/navigation values and native parent stack remain in use. Escaped data-next-focus-key attributes do not introduce HTML interpolation of unescaped financial facts.
+- index loads shared UI before both consumers with coherent 20261010-next-ui-r1 markers. No DB/Worker/financial owner or future CM/DY/XD workflow is introduced.
+
+Ordinary changed units were read, not executed. They cover native trap edges, disabled/hidden/negative/inert filtering, busy fallback/recovery, scope/key wiring and preserved complete tables/CSS; source checks do not certify installed keyboard behavior. Future joined mouse/keyboard/375px/light/dark and Close/Back acceptance remains NOT_RUN.
+
+Saved-source SHA-256 at this review:
+
+| Frontend path | SHA-256 |
+|---|---|
+| js/bpay-next-ui.js | 73f3a0aafd0d2f4df99c6163c659d43a41de8e191ace7eaca049e4e16249590e |
+| js/bpay-next-office.js | abb793e194df1ed714677796bd9351f7df8aaadd367317b0ae448ee9fbbd114a |
+| js/bpay-next-payment-history.js | 8294652bf0c9845e14193d467ec15a546dbd5de8e6ba1bab0c18f61e310a0917 |
+| index.html | 6f426a38b5a3594065cbef906e5b2d0342c040a08fd2a4a976e9b9eb0afb0ec6 |
+| tests/unit/bpay-next-office.test.cjs | 0a6b33c54913f4b0d86dbf83fc0b31ad74cca545e624e220950cf1c069830da9 |
+| tests/unit/bpay-next-payment-history.test.cjs | 6f4e5418342b42d03712c4f2cf9f9e8961acffaf3d5a1e03059e8a5e7d175552 |
+
+Fresh closure: re-read final saved history dismissal, repaint/navigation and shared helper source plus changed ordinary-unit hunks. Dismissal now installs a local MutationObserver on the existing shell before parent restoration mutates it; it waits for the actual captured parent's visible connected original opener. Successful restoration disconnects the observer and removes intent listeners. Parent identity mismatch or new active history also stops it; captured parent-shell pointer/keyboard navigation stops it before later focus can override that navigation. No frame method is wrapped/replaced, no extra render/business action is invoked and no guessed delay remains. The normal restore focus call now permits the browser to expose a lower control instead of suppressing scrolling. Existing history read client/listener disposal and frame guards remain. No actionable D01 finding remains in the fresh scoped bytes. D02 visual/CSS verdict and D03 future joined acceptance are separate; this review executes neither.
+
+Final changed hashes: js/bpay-next-payment-history.js ca46c0d595ba94757feb869242b2209df2e6047eb778f2787f97d5ef4d8b87db; tests/unit/bpay-next-office.test.cjs 402d52476057b9e762a085014548291a09af458c98f487ef0bb55ff63174331e. Shared UI, Office, index and history-unit hashes above remain current. All source verdicts here are independent reads, not runtime receipts.

@@ -1,0 +1,129 @@
+{
+  "copy": "Weekly source queries\nLogout\nACTIONS & FILTERS\nLoading…\nColumns\nBanking Pay\nClose\nReady1\nAction required1\nBlocked0\nREADY TO PAY\n£100.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 12/10/2026 02:47:33\n\nSearch Candidate, TMS ref or Timesheet\nSearch\nSort by\nCandidate ▲\nCandidate ▼\nPayment ▲\nPayment ▼\nWhat needs attention ▲\nWhat needs attention ▼\nAmount ex VAT ▲\nAmount ex VAT ▼\nCANDIDATE ▲\tPAYMENT\tWHAT NEEDS ATTENTION\tAMOUNT EX VAT\tACTIONS\nAmelia Hughes\nTMS 10421\nOverpayment recovery\nWaiting for re-authorisation — recovery paused\n£60.00\nOutstanding deduction balance £60.00\nOpen\n\n1 payment · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "documentWidth": 390,
+  "controls": [
+    {
+      "text": "Weekly source queries",
+      "aria": null,
+      "classes": "ws-office-notifications__toggle",
+      "width": 66.5625,
+      "height": 34
+    },
+    {
+      "text": "Logout",
+      "aria": null,
+      "classes": "",
+      "width": 63.265625,
+      "height": 38
+    },
+    {
+      "text": "Columns",
+      "aria": null,
+      "classes": "",
+      "width": 73.03125,
+      "height": 36
+    },
+    {
+      "text": "Close",
+      "aria": "Close",
+      "classes": "",
+      "width": 54.515625,
+      "height": 44
+    },
+    {
+      "text": "Ready1",
+      "aria": null,
+      "classes": "btn",
+      "width": 84.421875,
+      "height": 44
+    },
+    {
+      "text": "Action required1",
+      "aria": null,
+      "classes": "btn",
+      "width": 142.84375,
+      "height": 44
+    },
+    {
+      "text": "Blocked0",
+      "aria": null,
+      "classes": "btn",
+      "width": 97.484375,
+      "height": 44
+    },
+    {
+      "text": "Filters",
+      "aria": null,
+      "classes": "btn",
+      "width": 59.140625,
+      "height": 44
+    },
+    {
+      "text": "Refresh",
+      "aria": null,
+      "classes": "btn",
+      "width": 67.875,
+      "height": 44
+    },
+    {
+      "text": "Search",
+      "aria": null,
+      "classes": "btn",
+      "width": 62.5625,
+      "height": 44
+    },
+    {
+      "text": "CANDIDATE ▲",
+      "aria": null,
+      "classes": "btn",
+      "width": 67.5,
+      "height": 32
+    },
+    {
+      "text": "PAYMENT",
+      "aria": null,
+      "classes": "btn",
+      "width": 55.6875,
+      "height": 32
+    },
+    {
+      "text": "WHAT NEEDS ATTENTION",
+      "aria": null,
+      "classes": "btn",
+      "width": 67.15625,
+      "height": 47.8125
+    },
+    {
+      "text": "AMOUNT EX VAT",
+      "aria": null,
+      "classes": "btn",
+      "width": 53.328125,
+      "height": 32
+    },
+    {
+      "text": "Open",
+      "aria": null,
+      "classes": "btn bpay-next-issue-phone-open",
+      "width": 54.828125,
+      "height": 44
+    },
+    {
+      "text": "Export CSV",
+      "aria": null,
+      "classes": "btn",
+      "width": 90,
+      "height": 44
+    },
+    {
+      "text": "Create Draft",
+      "aria": null,
+      "classes": "btn primary",
+      "width": 96.796875,
+      "height": 44
+    }
+  ]
+}

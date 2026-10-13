@@ -1,0 +1,129 @@
+{
+  "item": "SP-15",
+  "decision": "BD125",
+  "destination": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+  "successors": [
+    {
+      "signature": "private.bpay_next_source_query_refresh_v1(uuid,uuid)",
+      "parent": null,
+      "parentBodySha256": null,
+      "sourceBodySha256": "6f195ed2753fac20e0b29454c5862c9780a45ae434bb03ac3a67954ff654a4bf"
+    },
+    {
+      "signature": "public.weekly_source_manual_review_open_v1(jsonb)",
+      "parent": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "parentSha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+      "parentBodySha256": "830422e3766a343637c84ea108091ec73047d6d2dea547dfd9419ff041d90b82",
+      "sourceBodySha256": "4eb5e114afdab960eb00e6132ad9fa2ab32b381f327e8fe35d5b81db5650443d"
+    },
+    {
+      "signature": "public.weekly_source_manual_review_resolve_v1(jsonb)",
+      "parent": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "parentSha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+      "parentBodySha256": "77987c4c308ab50d2ce271efa7f25f2ee516e34367578c2ee90be2ad7f7273b9",
+      "sourceBodySha256": "a522deee42487d3a582dda9d74f3c270a186d69d9659f0c31978589005c9a282"
+    },
+    {
+      "signature": "private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)",
+      "parent": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "parentSha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+      "parentBodySha256": "0e67fd6a74fdf3f077b972605bb78862e005d5fff3673342dd7a41eaf5828172",
+      "sourceBodySha256": "aca683c58b274102191ef9044bd1a9471d0c23ba86d3a5bfc017bff04539de69"
+    },
+    {
+      "signature": "public.weekly_source_query_accept_system_hours_atomic_v1(jsonb)",
+      "parent": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "parentSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "parentBodySha256": "1f6acd15bdc692f37f990c088512cd9e1d50e4a0123881930c36b4021effe9ba",
+      "sourceBodySha256": "d50764ad65ae1539ef254f79a3a13ea7b3ffb98c0b9458dbeb94e76c0a5b7422"
+    },
+    {
+      "signature": "public.weekly_source_manager_review_respond_atomic_v1(jsonb)",
+      "parent": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "parentSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "parentBodySha256": "cc386ee645bc9886a7e015cf1651a3defe955dcf057aa52681562bb81c3e9ebe",
+      "sourceBodySha256": "4a76edc4910316ac0d5e5f1f5a3d89f6c0878714778888861a645d595574af34"
+    },
+    {
+      "signature": "public.weekly_source_candidate_response_submit_atomic_v1(jsonb)",
+      "parent": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "parentSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "parentBodySha256": "7ec5e0ee5d3799af8feb65d208283556f13d1f91deb5b174d5bce089a81976f9",
+      "sourceBodySha256": "3d3ff6ab1c2c7c691cf5ec2bc71299212b90ec733286ba3f4574e7597e538a08"
+    },
+    {
+      "signature": "public.weekly_source_query_sync_atomic_v1(jsonb)",
+      "parent": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "parentSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "parentBodySha256": "d3ee4c39c5fb44a0ffc921c34d3d87d8f8a4b0d000626feba73ab8f0e6126fde",
+      "sourceBodySha256": "2e670dd5178314ddc19d477d3551ba43ddd1d2f6878c7dedeae1a75ce3c262dc"
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "parent": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "parentSha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6",
+      "parentBodySha256": "8d312292dffb581b13241a8148b389f4c645c4a69ce4e84f99b353f2f2cc84ca",
+      "sourceBodySha256": "8c5dba0fd51cb20504c3a06f6bca0f4e15c9bb7e36753cf48b9c7d251969539a"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "parent": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+      "parentSha256": "0ea79ae265cffb2370926e1728f483b8846e7539ffcac428f5d5fa557a56ac44",
+      "parentBodySha256": "fa7f23f37bdd7a1fd859c31a5c3e29bfdcb029762b1878b5487b3bd7bba9c9e3",
+      "sourceBodySha256": "e9039348f330e945644789b4afc760cbe906afa45f45e0d420db337e6e919bda"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "parent": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "parentSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+      "parentBodySha256": "f0ab0f97134b034f016d6d29ef92da4799f8992ea21400311249fa595755cfef",
+      "sourceBodySha256": "1186a3d5447152e55be5cb1e7dfce6641d86fee7a158404d3c720c2b879d910a"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_wait_atomic_v1(jsonb)",
+      "parent": "supabase/repeatable/10102026_0821_banking_pay_next_protected_wait_permission_v1.sql",
+      "parentSha256": "47f7f1befc74f5e5fc8e891d1e8b5b199ac3467ff047ef4555226be89a96f6a0",
+      "parentBodySha256": "ca098fba1db5d7e5420c606dfaf08bce406f729dd591853f3536c727feef3a45",
+      "sourceBodySha256": "c0fa34d80d5a0b63f2e61d2b3392f472dbf9a9dbededbcbdef0a7b1047b76270"
+    }
+  ],
+  "checks": {
+    "sourceGates": "12/12PASS",
+    "dbCheck": "358/920PASS",
+    "catalogue": "12exactbody/config/owner/ACLmatches; both browser isolation DO PASS; publicmembershipdelta0",
+    "contract": "30b4121d3e8ce535ca074943eb686fb00aec217b151986811c65fdb536e3a04d sealed/coupledPASS",
+    "joined": "AUTHORED_NOT_RUN",
+    "timing": "MovedtoTESTafterinstallation"
+  },
+  "reusedSources": [
+    "broker/src/weekly-source/routes.js"
+  ],
+  "sourceSha256": "7a5b4b56a424b2a07a8a54c895c4841ce6e0c2cbb0e9a80d06c27842fde5c96a",
+  "frontendImplementationCommit": "2afd650b672780e88c2e03b462e1fa2efd553ca1",
+  "reviews": [
+    {
+      "path": "reviews/SP-15-boundary-review.md",
+      "sha256": "903d1834d77d18785727f3eca1e44b5d72a7a05edfd3ffb092c561a6d101b6e5"
+    },
+    {
+      "path": "reviews/SP-15-source-hook-review.md",
+      "sha256": "2a208ad93ae6f380e9289c88d139f50bd60a8247c62f2fcbe2ab91e5d1690af4"
+    },
+    {
+      "path": "reviews/SP-15-office-source-review.md",
+      "sha256": "697fd6e91d345084f2a104465ea067f7435934601c95f0f30da9ce1ef1eede04"
+    },
+    {
+      "path": "screen-designs/SCR-45/review.md",
+      "sha256": "77f55e58fdaba34dc675e411e54c3828af45f08869204f49535ac1a7aed13c09"
+    }
+  ],
+  "screenEvidence": {
+    "images": 26,
+    "policy": "Scoped SP15 A4 33 PASS / 0 FAIL / 9 N/A",
+    "deferred": "Full DR15 human identity/composition remains required at DR15; actual Timesheet child journey AUTHORED_NOT_RUN",
+    "link": "Qualified callback arguments only"
+  },
+  "implementationCommit": "e0772c5282d0b7e1127971e6214127ffcdbd0d8d",
+  "status": "BUILT_REVIEWED"
+}

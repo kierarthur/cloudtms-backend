@@ -1,0 +1,13 @@
+# WB-45 foundation completion
+
+12 October2026, seq139, BD153. Owning rows D05/D06/D07/D09 implemented: exact independent native decision/event schema, append-only version economics/events, one ACTIVE version per native key, own complete-publication mapping and shared exact residual quote. Original SOURCE and selected TARGET stay distinct. DAY/NIGHT and arbitrary Additional codes have separate native identities; no guessed money split. Installed2044 is retained unchanged; additive2100 pins native save-time A/R/H/source-channel, permits explicit amount-led remaining40 only on exactly unchanged scope, and proves own publication preserves SOURCE earnings. Partial manual-rate units and changed/ambiguous saved gross scope refuse; 1157 remains the sole calculator.
+
+Seven private invoker functions, two owner-only forced-RLS tables, six private-table guard triggers; no public function/grant/producer/money writer/command/UI changed. Final definitions2100; registry retains2044 provenance. No decision returns to unchanged native resolver admission before rate-quote qualification.
+
+Independent design and final SOURCE PASS; four concrete findings fixed with fresh receipts. Normal checks: source integrity378/962, solePG17 compile, seven catalogue body/config/ACL/owner/volatility matches, two-table constraints/indexes/RLS/audit configuration, both browser isolation DOs839/76/zero, contract export/seal/coupling0e0b7bcb PASS. JS syntax N/A (no product JS changed). Final source-gate reread PASS:1516 SQL /29 public roots /154 work signatures /37 typed transport, frozen7 files /18 triggers /45 tables /24 protected signatures. No business SQL/RPC, data, rehearsal, timing, release or hosted action.
+
+R2:336 assigns commands, explicit needs/classifier, accepted decision/version associations, Source-safe complete publication, actual same-quote estimate/preparation/share/advice integration to WB-29 and windows/adoption to WB-30–34. These are required future joins, not implemented by a schema-only claim; whole WB-45 ITEM remains open until its assigned consumers close. All joined app/queue acceptance AUTHORED_NOT_RUN. Timing check moved to TEST after installation (owner10/10/2026).
+
+Evidence: WB-45-independent-residual-contract.md, WB-45-investigation.md, WB-45-successor-provenance.json, WB-45-current-owner-catalogue.json; independent WB-45-design-review-notes.md and reviews/WB-45-source-review.md.
+
+Implementation commit: a52a45116f45785a94a17da11f23c95ed4303a4c. Checklist D05/D06/D07/D09 BUILT_REVIEWED; whole ITEM PARTLY_DONE.

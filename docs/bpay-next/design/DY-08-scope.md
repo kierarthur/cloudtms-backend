@@ -1,0 +1,5 @@
+# DY-08 scope / BUILDER DECISION BD106
+
+Sequence95, 11October2026. Full card/D01-D04/masterchain/current0925 read; DY04 complete. Exact objects: private.bpay_next_daily_approval_evidence_v1(uuid), existing index typed authorisation failure handling, existing Office Daily damaged-data refusal presentation, future joined checklist. No migration/new screen/route or ancillary admission.
+
+Complete0925 successor moves the exact eight ancillary predicates unchanged before remaining provenance, qualified by genuine DAILY/HOURS identity. The required owner comment and23514 BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION replace only ancillary refusal; all other provenance/rate/date/channel/ACL/NULL semantics remain. Both existing1001 publisher callers propagate atomically; no publisher, Source, query or money owner rewrite. The small native main.js consumer is required to make the named Office mapper reachable in existing single/bulk authorisation errors. One sentence, nonretryable, no rate-button/data repair control/new screen. No A4 new-screen claim; these are existing failure copy only. Future joined checks authored NOT_RUN.

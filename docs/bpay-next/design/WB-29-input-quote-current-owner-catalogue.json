@@ -1,0 +1,199 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_2213_banking_pay_next_resolution_input_quote_v1.sql",
+      "sourceMd5": "a860811300e612b29aefe13cbb0ebe78",
+      "installed": {
+        "bodyMd5": "a860811300e612b29aefe13cbb0ebe78",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_component_resolution_input_quote_v1(private.bpay_next_component_resolution,uuid,jsonb,numeric)",
+      "file": "supabase/repeatable/12102026_2218_banking_pay_next_resolution_intent_candidate_guard_v1.sql",
+      "sourceMd5": "1f61a9fee3d5cc16a114d1b37d4a9668",
+      "installed": {
+        "bodyMd5": "1f61a9fee3d5cc16a114d1b37d4a9668",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_treatment_approval_distinct_check",
+      "definition": "CHECK (((payment_treatment_approval_revision_id IS NULL) OR ((payment_treatment_approval_revision_id <> id) AND (source_event_id IS NULL))))"
+    },
+    {
+      "name": "bpay_next_treatment_approval_revision_fk",
+      "definition": "FOREIGN KEY (work_id, payment_treatment_approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+    }
+  ],
+  "receipt": {
+    "checks": [
+      {
+        "name": "bpay_next_workbench_command_receipt_action_check",
+        "definition": "CHECK ((action = ANY (ARRAY['RETRY_WORK_JOB'::text, 'RESOLUTION_SAVE'::text, 'RESOLUTION_CLEAR'::text])))"
+      },
+      {
+        "name": "bpay_next_workbench_command_receipt_module_epoch_check",
+        "definition": "CHECK ((module_epoch > 0))"
+      },
+      {
+        "name": "bpay_next_workbench_command_request_size_ck",
+        "definition": "CHECK (((jsonb_typeof(request_body) = 'object'::text) AND (octet_length((request_body)::text) <=\nCASE\n    WHEN (action = 'RETRY_WORK_JOB'::text) THEN 4096\n    ELSE 32768\nEND)))"
+      },
+      {
+        "name": "bpay_next_workbench_command_result_size_ck",
+        "definition": "CHECK (((jsonb_typeof(result) = 'object'::text) AND (octet_length((result)::text) <=\nCASE\n    WHEN (action = 'RETRY_WORK_JOB'::text) THEN 8192\n    ELSE 65536\nEND)))"
+      },
+      {
+        "name": "bpay_next_workbench_command_variant_ck",
+        "definition": "CHECK (((((action = 'RETRY_WORK_JOB'::text) AND (job_id IS NOT NULL)) OR ((action = ANY (ARRAY['RESOLUTION_SAVE'::text, 'RESOLUTION_CLEAR'::text])) AND (job_id IS NULL) AND (retry_run_worker_id IS NULL) AND (retry_input_job_id IS NULL) AND (retry_captured_revision IS NULL) AND (retry_expected_revision IS NULL) AND (retry_target_revision IS NULL) AND ((result ->> 'action'::text) = action) AND\nCASE\n    WHEN ((jsonb_typeof((request_body -> 'works'::text)) = 'array'::text) AND (jsonb_typeof((result -> 'works'::text)) = 'array'::text)) THEN (((jsonb_array_length((request_body -> 'works'::text)) >= 1) AND (jsonb_array_length((request_body -> 'works'::text)) <= 100)) AND (jsonb_array_length((result -> 'works'::text)) = jsonb_array_length((request_body -> 'works'::text))) AND\n    CASE\n        WHEN (jsonb_array_length((request_body -> 'works'::text)) = 1) THEN ((work_id IS NOT NULL) AND ((request_body #>> '{works,0,work_id}'::text[]) = (work_id)::text) AND ((result #>> '{works,0,work_id}'::text[]) = (work_id)::text))\n        ELSE (work_id IS NULL)\n    END)\n    ELSE false\nEND)) IS TRUE))"
+      },
+      {
+        "name": "bpay_next_workbench_retry_execution_ck",
+        "definition": "CHECK ((((retry_run_worker_id IS NULL) AND (retry_input_job_id IS NULL) AND (retry_captured_revision IS NULL) AND (retry_expected_revision IS NULL) AND (retry_target_revision IS NULL)) OR ((num_nonnulls(retry_run_worker_id, retry_input_job_id, retry_captured_revision, retry_expected_revision, retry_target_revision) = 5) AND (retry_captured_revision > 0) AND (retry_expected_revision > 0) AND ((retry_target_revision)::numeric = ((retry_expected_revision)::numeric + (1)::numeric)) AND (retry_captured_revision <= retry_expected_revision))))"
+      },
+      {
+        "name": "bpay_next_workbench_retry_work_ck",
+        "definition": "CHECK (((action <> 'RETRY_WORK_JOB'::text) OR ((work_id IS NOT NULL) OR (NOT ((result ->> 'retry_kind'::text) IS DISTINCT FROM 'PREPARE'::text)))))"
+      }
+    ],
+    "columns": [
+      {
+        "name": "request_id",
+        "required": true,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "actor_user_id",
+        "required": true,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "candidate_id",
+        "required": true,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "work_id",
+        "required": false,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "job_id",
+        "required": false,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "module_epoch",
+        "required": true,
+        "type": "bigint",
+        "default": null
+      },
+      {
+        "name": "request_body",
+        "required": true,
+        "type": "jsonb",
+        "default": null
+      },
+      {
+        "name": "result",
+        "required": true,
+        "type": "jsonb",
+        "default": null
+      },
+      {
+        "name": "captured_at_utc",
+        "required": true,
+        "type": "timestamp with time zone",
+        "default": "transaction_timestamp()"
+      },
+      {
+        "name": "retry_run_worker_id",
+        "required": false,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "retry_input_job_id",
+        "required": false,
+        "type": "uuid",
+        "default": null
+      },
+      {
+        "name": "retry_captured_revision",
+        "required": false,
+        "type": "bigint",
+        "default": null
+      },
+      {
+        "name": "retry_expected_revision",
+        "required": false,
+        "type": "bigint",
+        "default": null
+      },
+      {
+        "name": "retry_target_revision",
+        "required": false,
+        "type": "bigint",
+        "default": null
+      },
+      {
+        "name": "action",
+        "required": true,
+        "type": "text",
+        "default": "'RETRY_WORK_JOB'::text"
+      }
+    ],
+    "security": {
+      "owner": "cloudtms_bpay_local_owner",
+      "rls": true,
+      "forcedRls": true,
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+    },
+    "guards": [
+      {
+        "name": "bpay_next_workbench_receipt_immutable",
+        "definition": "CREATE TRIGGER bpay_next_workbench_receipt_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_workbench_command_receipt FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_receipt_immutable_v1()"
+      },
+      {
+        "name": "bpay_next_workbench_receipt_no_truncate",
+        "definition": "CREATE TRIGGER bpay_next_workbench_receipt_no_truncate BEFORE TRUNCATE ON private.bpay_next_workbench_command_receipt FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_workbench_receipt_immutable_v1()"
+      }
+    ]
+  },
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+# DR-04 native projection source review
+
+11 October 2026. Independent static review of root-authored, uninstalled `supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql`. Product author: root. No product/checklist edits, SQL execution, tests, database calls, fixtures, browser, hosted actions or Git mutations. This review supplements `../design/DR-04-current-investigation.md` and `../design/DR-04-projection-investigation.md`.
+
+## Current verdict
+
+**PASS — final source closure, 11 October 2026.** Fresh saved bytes close all three findings below through corrected0533 and its exact0542 Case successor. The bounded native PREPARE projection, terminal handoffs and phase transport have no remaining essential source defect identified by this review. This is source acceptance within the stated scope; business/runtime acceptance remains NOT_RUN here.
+
+The selected native PREPARE phases and original membership walks fit the approved narrow scope. Three initial concrete source defects were reported to root immediately and are now closed:
+
+1. **P1 — NULL removes the private page bound.** `prepare_projection_page_v1`, lines44–46, uses `p_limit NOT BETWEEN1AND100` without `p_limit IS NULL`. With otherwise valid input and phase, SQL NULL passes that IF and `LIMIT p_limit` at77/93 becomes an unlimited walk. Explicitly reject NULL limit and NULL expected_phase before any locks/reads. The public service has a closed non-null numeric limit parser at1974–1982, but the new private page owner's bound must hold on its own. Also reject NULL `p_rows_visited` in `begin_prepare_projection_v1:17–20`; current caller values are non-null, but a NULL factual receipt must not be admitted by three-valued logic.
+2. **P2 — PIN handoff loses its factual visited count.** PIN passes1 to `begin_prepare_projection_v1:357` after examining a selected Work. The public NEW/PINNING receipt mapping at2210–2212 then overwrites it with0 because the handoff has no `work_id`. Preserve an existing owner `rows_visited` field; apply the original work_id/replay fallback only when the owner did not supply a count. This does not require changing financial membership or adding a field to the public response.
+3. **P1 — Case terminal call has no matching function signature.** Case prepare declares `v_seen bigint` at1373, while the new begin helper takes an integer fourth argument. Its terminal call at1842 passes that bigint without a cast. PostgreSQL function resolution does not implicitly narrow bigint to integer, so a financial Case terminal path can fail at execution even if the definitions load. Cast that already-bounded count to integer at this exact call, or use a consistent bigint helper signature and final owner/ACL entries. The other handoff callers supply integer variables/literals.
+
+Initial line anchors identify the draft excerpts reviewed while root was editing concurrently. Final authoritative hashes and successor ownership are recorded below.
+
+## Confirmed narrow behavior
+
+- A static body comparison against seven exact current parents found the financial changes limited to early parent UPDATE locks, terminal projection handoffs, projection admission/dispatch and exact service lease yield. No original money expression, Source producer, original0290 row kernel, old-rule cut, live Case capacity allocation or public membership constructor was replaced. The added enrolment service closure is a separate supporting addition, assessed below.
+- PIN's REVIEW handoff, all five outer capture REVIEW paths, both hold REVIEW paths, no-Case READY and Case READY/REVIEW now enter WORKBENCH_WORK before native jobDONE. The original worker issue, work-specific versus Case-wide issue ID, captured prefix and financial summary mutations remain. No-Case statusREADY still precedes its original weekly-fact publisher. Case0205 remains the immediate parent; no old0151/0549 Case reinstall appears.
+- The projection owner takes module → runUPDATE → Candidate control → job → worker before refresh_many. Work and Case run in separate bounded steps; it does not gather a whole-Candidate array or acquire new Work from the old financial Case terminal page. Original membership ordering uses indexed selection_no; Case IDs are deduplicated only after the page limit. Full retained Case items, including false inputs, are refreshed without changing their choice.
+- Case revision0 resolves only this original run/Candidate's sealed header; a retained nonzero revision requires that exact header SEALED. No header/accepted-empty gives a genuine empty Case phase. A page of exactly100 rows needs a later bounded empty probe; the phase switch resets cursorNULL.
+- Original sealed-command/member admission and earlier Candidate command ordering remain in CLAIM. Missing worker in a projection phase is rejected; the only non-PREPARING worker admission is READY/REVIEW with the two explicit projection phases. Public contention reclassification and claim cursor output include the same phases. Projection rejects nonREADY/nonREVIEW workers rather than re-entering financial allocation.
+- Final projection clears the lease and sets native DONE/READY or DONE/DONE, preserving the original financial READY/REVIEW result. The existing review owner is called only after jobDONE; its original unfinished-job and sealed-enrolment gates remain. Earlier financial jobs are not revived into projection. Original terminal readback and exact expiry receipt dispatch precede fresh phase execution in the public service.
+- Service yield follows original result/actual phase validation and verifies its own nonce and owner epoch before changing only the exact nonterminal LEASED row to READY. It clears the lease while preserving durable phase/cursors. The queue uses a fresh metadata CLAIM and one STEP, then publishes the same closed `{id,kind}` identity; it never publishes/adopts an active lease. Unknown replies wait for expiry and claim from committed native state.
+- Worker PREPARE response validation permits pending projection only with retained financial READY/REVIEW and exact native issue fields. The three already-existing finite capture issues found in the investigation have been admitted; there is no arbitrary issue-string broadening.
+
+## Supporting metadata and limits
+
+The new0537 migration initialises stored preparing/ready/review counts from existing native workers once. CLAIM increments preparing only on actual worker creation; begin handoff decrements preparing and credits the retained financial outcome before projection. These are native worker-status counts, not projection completion counts; retries/final projection do not add another delta. Taking parent UPDATE at the original header acquisition avoids a late SHARE upgrade after Candidate/worker locks.
+
+The catch in the existing enrolment service rolls back the private attempt in a subtransaction, records only SQLSTATE plus server time on the unchanged next command, and returns a closed failure receipt without re-raising that recorded failure. It preserves the original command status and original zero-job progression, so future retry can use the same command/member. Successful attempts clear the active error marker. General count conservation, supported cancellation/expiry bucket transitions, Worker enrolment failure validation/visibility and final registry/migration packaging are still pending the root's supporting review; they are not certified by this projection-only review.
+
+Owner E2 system release for the six exact codes remains the immediate DR05 dependency. The existing financial REVIEW and frozen hold/reservation facts have deliberately been preserved here; projection does not free holds or claim that release has happened. Existing release mechanics and their admission limitations are recorded in the projection investigation. No automatic-release stub was introduced.
+
+## Final fresh-byte closure
+
+Corrected0533 explicitly rejects NULL expected_phase/limit before reads at44–48, and NULL rows_visited in the begin helper at19. Its public PIN mapping at2211–2214 preserves an owner-supplied count before the original replay/work_id fallback. All other assessed projection fences and terminal hooks remain as reviewed.
+
+The locally installed0533 is retained unchanged. New immutable `11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql` contains only the exact Case prepare successor plus original owner/revoke packaging; a fresh body comparison against0533 found exactly one body-line change: the bounded terminal count is `v_seen::integer` at506. The final-definer registry's Case signature points to0542. No financial expression, plan/kernel call, selection membership, live balance lock, weekly fact, REVIEW prefix or original immutable capture was changed by this correction.
+
+Fresh Worker source review confirms `bpay-next-job-step.js:266–278` permits only READY/REVIEW financial workers in pending WORKBENCH_WORK/CASE, retains exact finite issue/work-ID relationships, enforces request page-count limits and zero replay count, and requires cleared STEP lease timestamps. Checkpoint validation keeps the old position pair NULL in projection. `bpay-next-financial-queue.js:85–140,143–177` derives one STEP only from the fresh CLAIM, compares positive cursors using BigInt, admits phase changes with cursor reset, requires same-phase forward progress, publishes only the same two-field identity, awaits publication before ACK and waits for lease expiry on unknown outcomes. There is no helper drain or active-lease adoption.
+
+Hashes derived from each freshly read byte buffer:
+
+| Source | SHA256 |
+|---|---|
+| `supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql` | `3587b148012921abfc6f1117f0d2bb5691f7e181b049ecd46a46c9b833e71d60` |
+| `supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql` | `2a821faa47147de12e1005ac333c5df9249917ed03db35de069ece2a9045a4e1` |
+| `broker/src/bpay-next-job-step.js` | `1ae85f5636a7a401f3d73dc288c39502a7160b1727a5b248b37db22b7f0d954c` |
+| `broker/src/bpay-next-financial-queue.js` | `1311b89eb9b07b961140f64ee07b710170fdae975ea83e1718b72d020c6fc948` |
+
+Root reports schema-only PG17 loading passed, with no fixtures/business calls; that report is not an independent runtime result from this reviewer. Final source-gate repetition after0542 remains root-owned. Parent-counter/cancellation conservation, enrolment failure visibility, owner E2's immediate DR05 release dependency and A4/runtime boundaries retain the explicit limitations above. Source-only projection verdict: **PASS**.

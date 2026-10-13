@@ -1,0 +1,737 @@
+[
+  {
+    "file": "FC12-before-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t—\nWeeks in arrangement\t4\t—\nNext due\tMon 26/10/2026\t—\nLast week in arrangement\tMon 16/11/2026\t—\nAmount for this arrangement\t£200.00\t—\nMinimum earnings threshold\t£200.00\t—\nTake-home floor\tCandidate default\t—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview first.\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-preview-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-weekly-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-protected-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\n\n£50.00 already in a Draft stays unchanged.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-load-error-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nCould not change this arrangement; refresh and try again.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-stale-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t—\nWeeks in arrangement\t4\t—\nNext due\tMon 26/10/2026\t—\nLast week in arrangement\tMon 16/11/2026\t—\nAmount for this arrangement\t£200.00\t—\nMinimum earnings threshold\t£200.00\t—\nTake-home floor\tCandidate default\t—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-uncertain-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThe result is not known yet; refresh or try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-pending-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nYour request is being prepared.\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-applied-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nArrangement changed.\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-blocked-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-before-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t—\nWeeks in arrangement\t4\t—\nNext due\tMon 26/10/2026\t—\nLast week in arrangement\tMon 16/11/2026\t—\nAmount for this arrangement\t£200.00\t—\nMinimum earnings threshold\t£200.00\t—\nTake-home floor\tCandidate default\t—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview first.\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-preview-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-weekly-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-protected-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t£25.00\nWeeks in arrangement\t4\t8\nNext due\tMon 26/10/2026\tMon 26/10/2026\nLast week in arrangement\tMon 16/11/2026\tMon 14/12/2026\nAmount for this arrangement\t£200.00\t£200.00\nMinimum earnings threshold\t£200.00\t£200.00\nTake-home floor\tCandidate default\tCandidate default\n\n\n£50.00 already in a Draft stays unchanged.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-load-error-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nCould not change this arrangement; refresh and try again.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-stale-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t£50.00\t—\nWeeks in arrangement\t4\t—\nNext due\tMon 26/10/2026\t—\nLast week in arrangement\tMon 16/11/2026\t—\nAmount for this arrangement\t£200.00\t—\nMinimum earnings threshold\t£200.00\t—\nTake-home floor\tCandidate default\t—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-uncertain-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThe result is not known yet; refresh or try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-pending-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nYour request is being prepared.\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-applied-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nArrangement changed.\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-blocked-device-light.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\n\tBEFORE\tAFTER\nWeekly repayment\t—\t£25.00\nWeeks in arrangement\t—\t8\nNext due\t—\tMon 26/10/2026\nLast week in arrangement\t—\tMon 14/12/2026\nAmount for this arrangement\t—\t£200.00\nMinimum earnings threshold\t—\t£200.00\nTake-home floor\t—\tCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-before-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n£50.00\n—\nWeeks in arrangement\n4\n—\nNext due\nMon 26/10/2026\n—\nLast week in arrangement\nMon 16/11/2026\n—\nAmount for this arrangement\n£200.00\n—\nMinimum earnings threshold\n£200.00\n—\nTake-home floor\nCandidate default\n—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview first.\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n£50.00\n£25.00\nWeeks in arrangement\n4\n8\nNext due\nMon 26/10/2026\nMon 26/10/2026\nLast week in arrangement\nMon 16/11/2026\nMon 14/12/2026\nAmount for this arrangement\n£200.00\n£200.00\nMinimum earnings threshold\n£200.00\n£200.00\nTake-home floor\nCandidate default\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-weekly-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n£50.00\n£25.00\nWeeks in arrangement\n4\n8\nNext due\nMon 26/10/2026\nMon 26/10/2026\nLast week in arrangement\nMon 16/11/2026\nMon 14/12/2026\nAmount for this arrangement\n£200.00\n£200.00\nMinimum earnings threshold\n£200.00\n£200.00\nTake-home floor\nCandidate default\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-protected-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n£50.00\n£25.00\nWeeks in arrangement\n4\n8\nNext due\nMon 26/10/2026\nMon 26/10/2026\nLast week in arrangement\nMon 16/11/2026\nMon 14/12/2026\nAmount for this arrangement\n£200.00\n£200.00\nMinimum earnings threshold\n£200.00\n£200.00\nTake-home floor\nCandidate default\nCandidate default\n\n£50.00 already in a Draft stays unchanged.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-load-error-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nCould not change this arrangement; refresh and try again.\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-stale-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n£50.00\n—\nWeeks in arrangement\n4\n—\nNext due\nMon 26/10/2026\n—\nLast week in arrangement\nMon 16/11/2026\n—\nAmount for this arrangement\n£200.00\n—\nMinimum earnings threshold\n£200.00\n—\nTake-home floor\nCandidate default\n—\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_RESTRUCTURE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-uncertain-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThe result is not known yet; refresh or try again.\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\tBEFORE\tAFTER\nWeekly repayment\n—\n£25.00\nWeeks in arrangement\n—\n8\nNext due\n—\nMon 26/10/2026\nLast week in arrangement\n—\nMon 14/12/2026\nAmount for this arrangement\n—\n£200.00\nMinimum earnings threshold\n—\n£200.00\nTake-home floor\n—\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nNext due week\nMust be a Monday.\nAmount for this arrangement\n£\nMinimum earnings threshold\n£\nTake-home floor\n£\nReason\n\nYour request is being prepared.\n\n\tBEFORE\tAFTER\nWeekly repayment\n—\n£25.00\nWeeks in arrangement\n—\n8\nNext due\n—\nMon 26/10/2026\nLast week in arrangement\n—\nMon 14/12/2026\nAmount for this arrangement\n—\n£200.00\nMinimum earnings threshold\n—\n£200.00\nTake-home floor\n—\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-applied-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nOutstanding £200.00\n\nArrangement changed.\n\n\tBEFORE\tAFTER\nWeekly repayment\n—\n£25.00\nWeeks in arrangement\n—\n8\nNext due\n—\nMon 26/10/2026\nLast week in arrangement\n—\nMon 14/12/2026\nAmount for this arrangement\n—\n£200.00\nMinimum earnings threshold\n—\n£200.00\nTake-home floor\n—\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "failure": null
+  },
+  {
+    "file": "FC12-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "Restructure\n\nPayment Advance · Eleanor Walsh · TMS 10089\n\nClose\n\nThis case has changed; refresh and try again.\n\nOutstanding £200.00\n\n\tBEFORE\tAFTER\nWeekly repayment\n—\n£25.00\nWeeks in arrangement\n—\n8\nNext due\n—\nMon 26/10/2026\nLast week in arrangement\n—\nMon 14/12/2026\nAmount for this arrangement\n—\n£200.00\nMinimum earnings threshold\n—\n£200.00\nTake-home floor\n—\nCandidate default\n\nTo skip one week only, untick the repayment in Banking Pay.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "failure": null
+  }
+]

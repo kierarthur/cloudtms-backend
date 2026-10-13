@@ -1,0 +1,68 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "body": "{\"action\":\"REVIEW\",\"run_id\":\"60000000-0000-4000-8000-000000000002\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PREPARE_ISSUES",
+      "body": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "needs_attention": false,
+          "run_id": "60000000-0000-4000-8000-000000000002",
+          "status": "REVIEW",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-12T06:20:14.000Z",
+          "expires_at_utc": "2026-10-15T06:20:14.000Z",
+          "selected_candidates": "4",
+          "ready": "3",
+          "review": "1",
+          "pending": "0",
+          "preparing": "0",
+          "removed": "0",
+          "enrolled_candidates": "4",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0",
+          "waiting_on_other_run": false
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "action": "REVIEW",
+      "result": {
+        "run_id": "60000000-0000-4000-8000-000000000002",
+        "phase": "REVIEW",
+        "reason": null,
+        "review_revision": "1",
+        "all_ready": false,
+        "replay": true
+      }
+    }
+  ]
+}

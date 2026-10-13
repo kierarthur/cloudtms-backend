@@ -1,0 +1,45 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "Accepted reference metadata only; captured quote/line integration remains open",
+  "builderDecision": "BD158",
+  "files": [
+    {
+      "path": "supabase/migrations/12102026_2227_banking_pay_next_accepted_resolution_refs.sql",
+      "sha256": "2bc1b4e50fed7f33fab5ece420a7c53cdce04f1de92865ddb6db79e8d6efd85d"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "sha256": "739e238d39d6848c50eb90746c8f5486091eb39e38948ea28c95ae5d6353f8e8"
+    }
+  ],
+  "successors": [
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "predecessor": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_work_choice_guard_v1()",
+      "predecessor": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
+    },
+    {
+      "signature": "private.bpay_next_accepted_resolution_refs_v1(uuid,uuid,uuid)",
+      "predecessor": null
+    }
+  ],
+  "designReview": "docs/bpay-next/reviews/WB-29-accepted-reference-design-review.md: DESIGN PASS",
+  "sourceReview": "docs/bpay-next/reviews/WB-29-accepted-reference-source-review.md: SOURCE PASS",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "0101863fea48019848ad2501d61d7612d8287c57",
+  "checks": {
+    "dbCheck": "PASS:382 migrations/981 repeatables",
+    "sourceGates": "PASS:1539 SQL/157 work signatures",
+    "nodeCheck": "PASS:changed source gate",
+    "localPG17": "PASS:3 exact bodies/config/owner/ACL/volatility;2 array checks",
+    "isolation": "PASS:839|76|0||338226c4e9b878c5aa92fc8e319dd7bf;both DO verifiers",
+    "contract": "83952df181977b66355c37585ea4c5fe2dc096204089ca0c0f83c843a666fced",
+    "seal": "PASS",
+    "coupling": "PASS"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "source": "Sole local PG17 metadata/isolation DO only; no business calls, rows or timing",
+  "destination": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+  "rows": [
+    {
+      "signature": "private.bpay_next_snooze_management_row_v1(uuid)",
+      "sourceMd5": "cfdc9413d2d2d3c9cc760a38ec060a67",
+      "installed": {
+        "bodyMd5": "cfdc9413d2d2d3c9cc760a38ec060a67",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
+      "sourceMd5": "16d22c82d7f896266b552b3115dfe3df",
+      "installed": {
+        "bodyMd5": "16d22c82d7f896266b552b3115dfe3df",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "sourceMd5": "fa37c5b741e0cb783455d6f626686f00",
+      "installed": {
+        "bodyMd5": "fa37c5b741e0cb783455d6f626686f00",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public",
+          "statement_timeout=5s"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    }
+  ],
+  "indexes": [
+    {
+      "name": "bpay_next_snooze_created_desc_idx",
+      "definition": "CREATE INDEX bpay_next_snooze_created_desc_idx ON private.bpay_next_snooze USING btree (created_at_utc DESC, id) WHERE active"
+    },
+    {
+      "name": "bpay_next_snooze_created_asc_idx",
+      "definition": "CREATE INDEX bpay_next_snooze_created_asc_idx ON private.bpay_next_snooze USING btree (created_at_utc, id) WHERE active"
+    },
+    {
+      "name": "bpay_next_snooze_candidate_created_idx",
+      "definition": "CREATE INDEX bpay_next_snooze_candidate_created_idx ON private.bpay_next_snooze USING btree (candidate_id, created_at_utc DESC, id) WHERE active"
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

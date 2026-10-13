@@ -4,6 +4,8 @@ import {
   recordGuardRefusalAfterRollback,
 } from './guard-refusal-record.mjs';
 import { bpayBusyEnvelope } from '../bpay-busy.js';
+import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs';
+import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -573,6 +575,55 @@ async function handleCommand(req, env, ctx, dependencies, user) {
   assertNoBrowserFinancialFacts(payload);
   const request = { ...payload, actor_user_id: user.id };
 
+  if (action === 'LATER_CHANGE_DECISION') {
+    const keys = ['schema_version', 'decision_bundle_id', 'bundle_revision',
+      'root_timesheet_id', 'final_revision_id', 'decision', 'idempotency_key'];
+    // Digest-derived Source UUIDs use PostgreSQL's full UUID domain.
+    const sourceUuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+    if (body.action !== action || Object.keys(body).length !== 2
+        || !Object.hasOwn(body, 'payload') || Object.keys(payload).length !== keys.length
+        || !keys.every((key) => Object.hasOwn(payload, key))
+        || payload.schema_version !== 'WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1'
+        || !['decision_bundle_id', 'root_timesheet_id', 'final_revision_id']
+          .every((key) => typeof payload[key] === 'string' && sourceUuid.test(payload[key]))
+        || !Number.isSafeInteger(payload.bundle_revision) || payload.bundle_revision < 1
+        || !['APPROVE_UPDATED_HOURS', 'KEEP_CURRENTLY_APPROVED_HOURS'].includes(payload.decision)
+        || typeof payload.idempotency_key !== 'string'
+        || payload.idempotency_key !== payload.idempotency_key.trim()
+        || payload.idempotency_key.length < 16 || payload.idempotency_key.length > 200) {
+      fail('WEEKLY_SOURCE_LATER_CHANGE_REQUEST_INVALID', 'This decision could not be prepared.', 400);
+    }
+    let owner;
+    try {
+      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();
+      owner = normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));
+    } catch {
+      fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', 'This decision is unavailable; try again shortly.', 503);
+    }
+    if (owner.active_owner !== 'NEXT') {
+      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED', 'This decision is not available for this agency yet.', 409);
+    }
+    try {
+      const result = await withRefusalRecording(dependencies,
+        'broker:weekly-source:weekly_source_later_change_decide_atomic_v1', user.id,
+        () => callRpc(dependencies, 'weekly_source_later_change_decide_atomic_v1', request));
+      return jsonResponse(200, result);
+    } catch (error) {
+      // These exact native errors occur after original receipt replay and the
+      // idempotency lock. Admission/network errors cannot establish that outcome.
+      const database = error?.json;
+      const definite = new Set(['WEEKLY_SOURCE_LATER_CHANGE_SCOPE_UNAVAILABLE',
+        'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_STALE', 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE',
+        'WEEKLY_SOURCE_LATER_CHANGE_ACCEPTANCE_FAILED', 'WEEKLY_SOURCE_LATER_CHANGE_PUBLICATION_REFUSED']);
+      if (database?.code === '55000' && definite.has(database.message)) {
+        return jsonResponse(409, { ok: false, published: false,
+          error_code: database.message, sqlstate: database.code,
+          message: 'This decision was not saved; close and reopen the Timesheet.' });
+      }
+      throw error;
+    }
+  }
+
   if (BULK_QUERY_ACTIONS.has(action)) {
     try {
       const result = await callRpc(
@@ -692,14 +743,16 @@ async function handleCommand(req, env, ctx, dependencies, user) {
         503,
       );
     }
-    const result = await dependencies.orchestrateProtectedAction({
-      action,
-      request,
-      actor: user,
-      env,
-      ctx,
-    });
-    return jsonResponse(200, result);
+    try {
+      const result = await dependencies.orchestrateProtectedAction({
+        action, request, actor: user, env, ctx
+      });
+      return jsonResponse(200, result);
+    } catch (error) {
+      const typed = protectedActionErrorResponse(error);
+      if (typed) return typed;
+      throw error;
+    }
   }
   if (action === 'PREVIEW_CORRECT_FINAL_SOURCE') {
     if (typeof dependencies.previewCorrectFinalSource !== 'function') {
@@ -948,6 +1001,49 @@ async function runModeAAuthorisationFollowUp(dependencies, env, actorUserId, app
     completed += 1;
   }
   return Object.freeze({ required: true, completed });
+}
+
+// Only the named protected-action seam gains its existing typed refusal fields.
+function protectedActionErrorResponse(error) {
+  const definite = {
+    WEEKLY_PROTECTED_ACTION_STALE: { sqlstate: 'PT409', status: 409 },
+    BPAY_NEXT_PROTECTED_LOCAL_OWNER_REQUIRED: { sqlstate: '55000', status: 409 },
+    WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE: { sqlstate: '42501', status: 403 },
+    WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED: { sqlstate: '42501', status: 403 },
+    WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED: { sqlstate: '42501', status: 403 }
+  };
+  const status = error?.status;
+  const database = Number.isInteger(status) && status >= 400 && status <= 599
+    && error?.json && typeof error.json === 'object' && !Array.isArray(error.json) ? error.json : null;
+  const entry = typeof database?.message === 'string' && Object.hasOwn(definite, database.message)
+    ? definite[database.message] : null;
+  const code = entry && database.code === entry.sqlstate ? database.message
+    : error instanceof WeeklyProtectedActionError && error.code === 'LOCAL_OWNER_REQUIRED'
+      ? 'LOCAL_OWNER_REQUIRED' : null;
+  if (code) return jsonResponse(entry?.status || 409, {
+    ok: false, code, error_code: code, retryable: false,
+    message: code.includes('LOCAL_OWNER_REQUIRED')
+      ? 'Save this change through the Source editor. No payment change was accepted.'
+      : error.message || code
+  });
+  if (database?.code === '55P03' && database?.message === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY') {
+    return jsonResponse(409, {
+      ok: false, code: database.message, error_code: database.message, retryable: true,
+      message: 'Another Source update is in progress. Try again in a moment.',
+      failed_rpc_outcome: 'ROLLED_BACK', automatic_retry: false, workflow_outcome: 'NOT_ESTABLISHED'
+    });
+  }
+  const busy = bpayBusyEnvelope(error);
+  if (busy) return jsonResponse(busy.status, { ...busy.body, code: busy.body.error_code, retryable: true });
+  if (error instanceof WeeklyProtectedActionError) {
+    // Receipt/context loss can follow accepted work: preserve exact retry, not definite failure.
+    return jsonResponse(Number(error.status) || 500, {
+      ok: false, code: error.code, error_code: error.code,
+      retryable: error.details?.retryable !== false, message: error.message,
+      ...(Object.keys(error.details || {}).length ? { details: error.details } : {})
+    });
+  }
+  return null;
 }
 
 function routeErrorResponse(error) {

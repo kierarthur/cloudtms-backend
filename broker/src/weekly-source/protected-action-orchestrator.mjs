@@ -11,6 +11,7 @@ import {
 import {
   composeWeeklyProtectedTargetSchedule,
 } from './protected-target-schedule.js';
+import { buildWeeklyProtectedNextTarget } from './protected-next-preview.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -281,7 +282,7 @@ async function publicationStatus(normalized, prepared, dependencies) {
   return status;
 }
 
-async function completeLocalDecision(normalized, status, dependencies) {
+async function completeLocalDecision(normalized, prepared, status, dependencies) {
   const result = await rpc(dependencies, 'weekly_exceptional_pay_complete_local_v1', {
     schema_version: 'WEEKLY_PROTECTED_LOCAL_COMPLETE_V1',
     actor_user_id: normalized.actorUserId,
@@ -289,11 +290,17 @@ async function completeLocalDecision(normalized, status, dependencies) {
     expected_request_sha256: status.request_sha256,
     idempotency_key: `${normalized.idempotencyKey}:local-complete`,
   });
+  // Preserve the current Source returned-refusal code/message/details first.
   if (result?.ok !== true || !['PUBLISHED', 'SAVED_PENDING_FREEZE'].includes(result.outcome)) {
     fail(result?.code ?? 'WEEKLY_PROTECTED_LOCAL_COMPLETE_REFUSED',
       'The protected hours could not be saved. Your changes have been kept.', result ?? {});
   }
-  return result;
+  const accepted = localResult(result, prepared);
+  if (accepted.publication_request_id !== status.publication_request_id) {
+    fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID',
+      'The saved protected-hours result belongs to another request.');
+  }
+  return accepted;
 }
 
 function zeroRootSnapshot(context, calculated) {
@@ -382,6 +389,130 @@ function stageSnapshot(calculation, target) {
  * This owner never calculates
  * a residual, creates a Draft, mutates an invoice or calls Banking Pay.
  */
+function nextReceipt(value, prepared) {
+  const keys = ['ok', 'outcome', 'idempotent_replay', 'family_id', 'orchestration_run_id',
+    'approval_id', 'generation_id', 'work_id', 'revision_id', 'command_id', 'agency_sequence',
+    'new_family_bound_version', 'approved_pay_ex_vat', 'state'];
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))
+      || value.ok !== true || value.outcome !== 'PUBLISHED_NEXT' || value.state !== 'NEXT_PUBLISHED'
+      || typeof value.idempotent_replay !== 'boolean'
+      || value.family_id !== prepared.family_id || value.orchestration_run_id !== prepared.orchestration_run_id
+      || ['family_id', 'orchestration_run_id', 'approval_id', 'generation_id', 'work_id', 'revision_id', 'command_id']
+        .some((key) => typeof value[key] !== 'string' || !UUID.test(value[key]))
+      || ['agency_sequence', 'new_family_bound_version']
+        .some((key) => typeof value[key] !== 'string' || !/^[1-9]\d{0,18}$/.test(value[key]) || BigInt(value[key]) > 9223372036854775807n)
+      || typeof value.approved_pay_ex_vat !== 'string' || !/^-?(0|[1-9]\d*)\.\d{2}$/.test(value.approved_pay_ex_vat)) {
+    fail('WEEKLY_PROTECTED_NEXT_RECEIPT_INVALID', 'The protected-hours publication outcome is unknown. Retry the same action reference.');
+  }
+  return value;
+}
+
+function closedObject(value, keys) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
+function positiveBigintText(value) {
+  return typeof value === 'string' && /^[1-9]\d{0,18}$/.test(value)
+    && BigInt(value) <= 9223372036854775807n;
+}
+
+function nonnegativeBigintText(value) {
+  return typeof value === 'string' && /^(0|[1-9]\d{0,18})$/.test(value)
+    && BigInt(value) <= 9223372036854775807n;
+}
+
+function localResult(value, prepared, replay = false) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || value.ok !== true || !['PUBLISHED', 'SAVED_PENDING_FREEZE'].includes(value.outcome)
+      || typeof value.idempotent_replay !== 'boolean' || (replay && value.idempotent_replay !== true)
+      || value.family_id !== prepared.family_id
+      || ['family_id', 'generation_id', 'publication_request_id']
+        .some((key) => typeof value[key] !== 'string' || !UUID.test(value[key]))
+      || typeof value.requires_first_authorisation !== 'boolean'
+      || !['UNAUTHORISED_TSFIN', 'COMMON_ENTITLEMENT_HEAD'].includes(value.authority)
+      || value.requires_first_authorisation !== (value.authority === 'UNAUTHORISED_TSFIN')
+      || value.state !== (value.outcome === 'SAVED_PENDING_FREEZE' ? 'PENDING' : 'LIVE')
+      || (value.outcome === 'SAVED_PENDING_FREEZE' && value.requires_first_authorisation)) {
+    fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID',
+      'The saved protected-hours result could not be confirmed. Retry the same action reference.');
+  }
+  return value;
+}
+
+function localReceipt(value, prepared, published) {
+  const keys = ['authority', 'family_id', 'orchestration_run_id', 'publication_request_id',
+    'request_sha256', 'generation_id', 'state', 'requires_first_authorisation',
+    'idempotent_replay', 'result', 'banking_receipt'];
+  if (!closedObject(value, keys) || value.authority !== 'SOURCE_LOCAL'
+      || value.family_id !== prepared.family_id || value.orchestration_run_id !== prepared.orchestration_run_id
+      || ['family_id', 'orchestration_run_id', 'publication_request_id', 'generation_id']
+        .some((key) => typeof value[key] !== 'string' || !UUID.test(value[key]))
+      || typeof value.request_sha256 !== 'string' || !HASH.test(value.request_sha256)
+      || !['COMPLETE', 'PENDING_FREEZE'].includes(value.state)
+      || typeof value.requires_first_authorisation !== 'boolean' || value.idempotent_replay !== true) {
+    fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID', 'The saved protected-hours receipt is invalid.');
+  }
+  const result = localResult(value.result, prepared, true);
+  if (result.generation_id !== value.generation_id || result.publication_request_id !== value.publication_request_id
+      || result.requires_first_authorisation !== value.requires_first_authorisation
+      || (result.outcome === 'SAVED_PENDING_FREEZE') !== (value.state === 'PENDING_FREEZE')) {
+    fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID', 'The saved protected-hours identities do not agree.');
+  }
+  const bank = value.banking_receipt;
+  // Local COMPLETE/PUBLISHED includes an unauthorised TSFIN save. Only the
+  // separately sealed original Banking mapping may certify publication here.
+  if (published !== (bank !== null)
+      || ((value.requires_first_authorisation || value.state === 'PENDING_FREEZE') && bank !== null)) {
+    fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID', 'The saved payment-publication status does not agree.');
+  }
+  if (bank !== null) {
+    const bankKeys = ['source_head_id', 'work_id', 'revision_id', 'command_id',
+      'agency_sequence', 'publication_status', 'application'];
+    const appKeys = ['ok', 'code', 'work_id', 'owner_epoch', 'current_revision_id', 'applied_revision_id',
+      'source_event_id', 'source_head_id', 'financial_snapshot_id', 'physical_root_id',
+      'physical_root_version', 'revision_seal', 'source_inventory_digest', 'application_state',
+      'command_id', 'agency_sequence', 'financial_view_revision'];
+    const app = bank.application;
+    if (!closedObject(bank, bankKeys)
+        || ['source_head_id', 'work_id', 'revision_id', 'command_id']
+          .some((key) => typeof bank[key] !== 'string' || !UUID.test(bank[key]))
+        || !positiveBigintText(bank.agency_sequence)
+        || !['QUEUED', 'APPLYING', 'APPLIED'].includes(bank.publication_status)
+        || !closedObject(app, appKeys) || typeof app.ok !== 'boolean'
+        || !['OK', 'UNAVAILABLE', 'INCOMPATIBLE'].includes(app.code)
+        || !['APPLIED', 'PENDING', 'UNAVAILABLE', 'INCOMPATIBLE'].includes(app.application_state)
+        || app.ok !== (app.code === 'OK')
+        || (app.code === 'OK' ? !['APPLIED', 'PENDING'].includes(app.application_state) : app.application_state !== app.code)
+        || app.work_id !== bank.work_id || app.source_head_id !== bank.source_head_id
+        || app.source_event_id !== bank.source_head_id || app.command_id !== bank.command_id
+        || app.agency_sequence !== bank.agency_sequence
+        || ['current_revision_id', 'applied_revision_id', 'financial_snapshot_id', 'physical_root_id']
+          .some((key) => app[key] !== null && (typeof app[key] !== 'string' || !UUID.test(app[key])))
+        || (app.owner_epoch !== null && !positiveBigintText(app.owner_epoch))
+        || (app.financial_view_revision !== null && !nonnegativeBigintText(app.financial_view_revision))
+        || (app.physical_root_version !== null
+          && (!Number.isSafeInteger(app.physical_root_version) || app.physical_root_version < 1))
+        || (app.revision_seal !== null && (typeof app.revision_seal !== 'string'
+          || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(app.revision_seal)))
+        || (app.source_inventory_digest !== null
+          && (typeof app.source_inventory_digest !== 'string' || !HASH.test(app.source_inventory_digest)))
+        || (app.ok && (app.current_revision_id !== bank.revision_id || app.owner_epoch === null
+          || app.financial_view_revision === null || app.physical_root_id === null
+          || app.physical_root_version === null || app.revision_seal === null || app.source_inventory_digest === null
+          || (app.application_state === 'APPLIED'
+            ? app.applied_revision_id !== bank.revision_id || bank.publication_status !== 'APPLIED'
+            : app.applied_revision_id === bank.revision_id || bank.publication_status === 'APPLIED')))) {
+      fail('WEEKLY_PROTECTED_LOCAL_RECEIPT_INVALID', 'The saved payment-publication receipt is invalid.');
+    }
+    // A later authorised revision may make this unchanged I3 read INCOMPATIBLE.
+    // It does not erase the historical mapping or invite a second publication.
+  }
+  return result;
+}
+
+
 export async function orchestrateWeeklyProtectedAction(input = {}) {
   const dependencies = object(input.dependencies, 'WEEKLY_PROTECTED_DEPENDENCY_UNAVAILABLE', 'Protected-hours dependencies');
   requireDependencies(dependencies);
@@ -398,28 +529,59 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     fail('WEEKLY_PROTECTED_ACTION_KIND_CHANGED', 'The protected-hours action changed before it could be prepared.');
   }
 
+  let nextRoute = false;
   if (normalized.kind !== 'WAIT') {
-    const status = await publicationStatus(normalized, prepared, dependencies);
-    if (status.staged) {
-      // A lost response replays the same local database receipt. Do not make
-      // an external START/status/publish call or recalculate an immutable target.
-      return completeLocalDecision(normalized, status, dependencies);
+    const route = await rpc(dependencies, 'weekly_exceptional_pay_next_publication_status_v1', {
+      schema_version: 'WEEKLY_PROTECTED_NEXT_STATUS_V1',
+      actor_user_id: normalized.actorUserId,
+      family_id: prepared.family_id,
+      orchestration_run_id: prepared.orchestration_run_id,
+    });
+    if (!closedObject(route, ['ok', 'route', 'published', 'receipt'])
+        || route.ok !== true || !['NEXT', 'C1', 'SOURCE_LOCAL'].includes(route.route)
+        || typeof route.published !== 'boolean'
+        || (route.route === 'C1' && (route.published || route.receipt !== null))
+        || (route.route === 'NEXT' && !route.published && route.receipt !== null)
+        || (route.route === 'SOURCE_LOCAL' && route.published && route.receipt === null)) {
+      fail('WEEKLY_PROTECTED_NEXT_STATUS_INVALID', 'The protected-hours owner is unavailable.');
     }
-    if (prepared.run_state === 'COMPLETE' && prepared.idempotent_replay === true) {
-      fail(
-        'WEEKLY_PROTECTED_PUBLICATION_STATUS_INVALID',
-        'The protected-hours publication status is unavailable.',
-      );
+    if (route.route === 'SOURCE_LOCAL' && route.receipt !== null) {
+      return localReceipt(route.receipt, prepared, route.published);
     }
-    if (normalized.recover) {
-      fail(
-        'C1_DURABLE_RECOVERY_NOT_REQUIRED',
-        'There is no unresolved protected-hours publication to recover.',
-      );
+    nextRoute = route.route === 'NEXT';
+    if (route.published) {
+      // All non-NEXT published states were handled/rejected above.
+      if (!nextRoute || route.receipt?.idempotent_replay !== true) {
+        fail('WEEKLY_PROTECTED_NEXT_RECEIPT_INVALID',
+          'The saved protected-hours receipt is invalid.');
+      }
+      return nextReceipt(route.receipt, prepared);
+    }
+    if (!nextRoute) {
+      const status = await publicationStatus(normalized, prepared, dependencies);
+      if (status.staged) {
+        // Same current local receipt; no context/calculation/external C1 call.
+        return completeLocalDecision(normalized, prepared, status, dependencies);
+      }
+      if (prepared.run_state === 'COMPLETE' && prepared.idempotent_replay === true) {
+        fail('WEEKLY_PROTECTED_PUBLICATION_STATUS_INVALID',
+          'The protected-hours publication status is unavailable.');
+      }
+      if (normalized.recover) {
+        fail('C1_DURABLE_RECOVERY_NOT_REQUIRED',
+          'There is no unresolved protected-hours publication to recover.');
+      }
+    } else if (prepared.run_state === 'COMPLETE') {
+      // Defensive contradiction: DB says direct NEXT but returns no saved receipt.
+      fail('WEEKLY_PROTECTED_NEXT_RECEIPT_INVALID',
+        'The saved protected-hours receipt is invalid.');
     }
   }
+
   let context = await loadContext(normalized, prepared, dependencies);
-  context = await ensureRootFinancial(normalized, prepared, context, dependencies);
+  if (!nextRoute && normalized.kind !== 'WAIT') {
+    context = await ensureRootFinancial(normalized, prepared, context, dependencies);
+  }
 
   const target = composeWeeklyProtectedTargetSchedule({
     sourceSegments: context.source_segments,
@@ -452,8 +614,37 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     context,
     schedule: target.segments,
     zeroRoot: false,
+    ...(nextRoute ? { retainNextPreviewFacts: true } : {}),
   });
   const financialSnapshot = stageSnapshot(calculation, context);
+
+  if (nextRoute) {
+    const targetSnapshot = buildWeeklyProtectedNextTarget({ context, target, calculation });
+    const result = await rpc(dependencies, 'weekly_exceptional_pay_publish_next_v1', {
+      schema_version: 'WEEKLY_PROTECTED_NEXT_PUBLISH_V1',
+      actor_user_id: normalized.actorUserId,
+      family_id: context.family_id,
+      orchestration_run_id: context.orchestration_run_id,
+      source_cycle_id: context.source_cycle_id,
+      client_id: context.client_id,
+      work_event_id: context.work_event_id,
+      evidence_timesheet_id: context.candidate_submission?.submission_id ?? null,
+      expected_family_bound_version: context.family_bound_version,
+      protected_schedule: context.protected_schedule,
+      rate_classification: {
+        schema_version: 'WEEKLY_PROTECTED_SERVER_CALCULATION_V1',
+        calculator_owner: 'buildWeeklyScheduleSegmentsSnapshot',
+        policy_sha256: context.zero_rate_source_refs?.effective_policy_sha256 ?? null,
+      },
+      source_proposal: context.source_proposal,
+      target_snapshot: targetSnapshot,
+      current_comparison_revision_id: context.current_comparison_revision_id,
+      current_final_revision_id: context.current_final_revision_id,
+      reason: normalized.reason,
+      idempotency_key: `${normalized.idempotencyKey}:next`,
+    });
+    return nextReceipt(result, prepared);
+  }
   const currentFinancial = object(
     context.current_financial,
     'WEEKLY_PROTECTED_CONTEXT_INVALID',
@@ -535,7 +726,7 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
       || staged.request_sha256 !== publication.request_sha256) {
     fail('WEEKLY_PROTECTED_STAGE_RESULT_INVALID', 'The protected hours could not be prepared safely.');
   }
-  return completeLocalDecision(normalized, staged, dependencies);
+  return completeLocalDecision(normalized, prepared, staged, dependencies);
 }
 
 export const WEEKLY_PROTECTED_ACTION_ORCHESTRATOR_CONTRACT = Object.freeze({

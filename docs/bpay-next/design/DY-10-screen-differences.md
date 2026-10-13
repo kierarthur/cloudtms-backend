@@ -1,0 +1,20 @@
+# DY-10 screen differences and control scope — BD109
+
+The actual local captures use the original native Timesheet frame, original makeTimesheetFastOpenTabDefs and makeTimesheetFastOpenRenderTab, actual Overview renderer/wiring, original auth caller and full-details refresh. Earlier temporary captures with an Overview-only tab definition were replaced; only the final native-tab screenshots are acceptance evidence. The fixed responses and intercepted local static files create no database rows or hosted actions.
+
+Compare each final PNG beside the supplied read-only B10 SCR-156/SCR-156b desktop and SCR-156 phone PNG. Required differences:
+
+- The first unpublished failure is in its real Timesheet window, because no NEXT Work/Candidate row exists yet. DY-10 D02/D03 require visible failure and targeted Retry; the existing Timesheet details reader supplies that identity. Do not manufacture a Candidate Banking row, new list/reader or Work revision.
+- Native Timesheet reference, Candidate, Client, week ending, job title, type and original seven tabs remain. The worked-date and detailed entered hours stay in the native Lines/Finance views; no missing design Company value or paid/suggested amount is invented. Native qualified state distinctions are not a new payment estimate.
+- The supplied Banking selection header, totals, estimate/CSV/footer Create Draft and Open Timesheet controls have no purpose inside an already open Timesheet. They are omitted. No Banking child expansion or copied row table is added.
+- The new line is the original reader's Failed/Pending/None/Unavailable fact and actual current native approval/rate/pay-channel/revocation evidence. Failed/missing/damaged/unavailable pay displays a dash. Genuine authorised zero hours is distinct from positive-hours/zero-pay; the actual finance tab keeps its native literal money.
+- Existing Payment history and permitted Additional Timesheet actions remain their own native journeys. Additional is a secondary native action, using the existing semantic button classifier; no new per-button CSS or !important. Close and original tab navigation remain. Retry is only the existing exact current targeted recompute; Refresh is only the existing full details read. There is no primary financial submit action in this read window.
+- A failed refresh keeps the same Daily identity and Refresh-only unknown result in the original Overview; existing lifecycle/edit locks and suppressed actions remain. A successful exact current read alone can clear unknown. Original generic failed-read behavior outside this bounded NEXT Daily branch is retained.
+- NEXT-qualified labels use Timesheet type rather than technical Route. Native introductory chatter is hidden only while this notice exists. Phone tabs wrap, controls meet44px and there is no sideways page scroll.
+
+The native Timesheet reader has no genuine Daily booking-cancellation flag. A revoked/archived Timesheet, cancelled QR or false booked flag cannot supply that missing authority. Do not fabricate a Cancelled screenshot or add a cancellation producer. This remains an explicit future joined evidence limit, not an approved-zero fallback.
+
+Scope/time check: the item remains its named publication reuse, existing TSFIN Worker and original Office status/caller, with only the required bounded reader fact and native modal/class adapters. No additional money owner, command, protocol, trigger, producer, failure table, fixture or testing tool was added. All row/queue/race/money journeys remain authored / NOT_RUN.
+
+
+Final comparison fixes: Failed uses the existing red Failed badge; Updating uses the native information badge; authorised uses the native positive badge. Native footer is suppressed only when its hint is empty and every native control is absent or hidden; actual actions are preserved. Successful exact full read removes the old unknown/refresh-failure message. The retained failed-read exception requires the same actor/token/physical/version key. Error spans use alert, other results status. These replace the unexplained differences found in the first review.

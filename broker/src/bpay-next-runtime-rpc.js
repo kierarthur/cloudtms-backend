@@ -1,0 +1,425 @@
+/**
+ * INTERNAL one-call metadata enrollment/recovery, not an Office endpoint,
+ * scheduler, financial worker, historical job drain or lease-recovery API.
+ * Queue messages only wake durable jobs. CLAIM alone decides eligibility and
+ * creates a fresh lease; these calls never expose or adopt a stored token.
+ * All four SQL calls mutate metadata. Lost replies are uncertain; this adapter
+ * reports recovery direction and never silently retries or sends a message.
+ */
+export const BPAY_NEXT_RUNTIME_LIMITS = Object.freeze({
+  requestBytes: 1024, responseBytes: 32 * 1024, timeoutMs: 8000, pageRows: 100, enrollmentJobs:20
+});
+export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
+  'PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE',
+  'SIMPLE_CANCEL', 'POSITION_APPLY', 'PREPARE', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT',
+  'PREPARATION_EXPIRY','PREPARATION_DISCARD', 'CASE_CREATE','CASE_EDIT','CASE_RESTRUCTURE','CASE_CHANNEL_RESOLVE','CASE_PAUSE','CASE_RESUME', 'CASE_WRITE_OFF'
+]);
+const RPCS = Object.freeze({ ENROLL: 'bpay_next_enroll_service_v1', WAKE_PAGE: 'bpay_next_job_wake_page_v1',
+  EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1',
+  SNOOZE_DUE:'bpay_next_snooze_due_page_v1',WEEK_ROLLOVER:'bpay_next_workbench_week_rollover_page_v1',
+  WORKBENCH_DUE_PAGE:'bpay_next_workbench_runtime_service_v1',WORKBENCH_WAKE_PAGE:'bpay_next_workbench_runtime_service_v1',
+  WORKBENCH_CLAIM:'bpay_next_workbench_runtime_service_v1',WORKBENCH_STEP:'bpay_next_workbench_runtime_service_v1' });
+const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const INTEGER = /^(?:0|[1-9]\d{0,18})$/;
+const BIGINT_MAX = 9223372036854775807n;
+const ENCODER = new TextEncoder();
+const invalidTransport = () => new TypeError('BPAY_NEXT_RUNTIME_TRANSPORT_INVALID');
+function exact(value, keys) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)
+      || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
+  const own = Reflect.ownKeys(value);
+  return own.length === keys.length && own.every((key) => typeof key === 'string' && keys.includes(key)
+    && Object.getOwnPropertyDescriptor(value, key)?.enumerable === true
+    && Object.hasOwn(Object.getOwnPropertyDescriptor(value, key), 'value'));
+}
+const uuid = (value) => typeof value === 'string' && UUID.test(value);
+function integer(value, positive = false) {
+  return typeof value === 'string' && INTEGER.test(value) && BigInt(value) <= BIGINT_MAX
+    && (!positive || value !== '0');
+}
+function pageInput(value) {
+  if (!exact(value, ['lane', 'limit']) || !['READY', 'LEASE_EXPIRED'].includes(value.lane)
+      || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > 100) {
+    throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  }
+  return Object.freeze({ lane: value.lane, limit: value.limit });
+}
+function expiryInput(value) {
+  if (!exact(value, ['limit']) || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > 100) {
+    throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  }
+  return Object.freeze({ limit: value.limit });
+}
+const WORKBENCH_PHASES=Object.freeze(['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN',
+  'METADATA_GROUP','METADATA_SUMMARY','ORIGIN_CASE','ORIGIN_WORK','UMBRELLA_CANDIDATE','CONFIRM_WORK','CONFIRM_CASE','DONE']);
+function workbenchInput(action,value) {
+  if(['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)) return expiryInput(value);
+  if(action==='WORKBENCH_CLAIM') {
+    if(!exact(value,['task_id','lease_seconds'])||!uuid(value.task_id)||!Number.isInteger(value.lease_seconds)
+      ||value.lease_seconds<1||value.lease_seconds>120) throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  } else if(!exact(value,['task_id','lease_nonce','owner_epoch','generation','step_no','phase','cursor_key','limit'])
+    ||!uuid(value.task_id)||!uuid(value.lease_nonce)||!integer(value.owner_epoch,true)||!integer(value.generation,true)
+    ||!integer(value.step_no)||!WORKBENCH_PHASES.includes(value.phase)||value.phase==='DONE'
+    ||!(value.cursor_key===null||typeof value.cursor_key==='string'&&ENCODER.encode(value.cursor_key).byteLength<=64)
+    ||!Number.isInteger(value.limit)||value.limit<1||value.limit>100) throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  return Object.freeze({...value});
+}
+function workbenchArgs(action,input) {
+  const {task_id,...args}=input;
+  return Object.freeze({p_action:action.slice('WORKBENCH_'.length),p_task_id:task_id??null,p_args:Object.freeze(args)});
+}
+function workbenchResult(value,action,input) {
+  if(action==='WORKBENCH_DUE_PAGE') {
+    if(!exact(value,['rows_visited'])||!integer(value.rows_visited)||BigInt(value.rows_visited)>BigInt(input.limit)) throw new Error();
+    return Object.freeze({...value});
+  }
+  if(action==='WORKBENCH_WAKE_PAGE') {
+    if(!exact(value,['items','adoption_state','adoption_revision','pending_task_count'])
+      ||!['UNSEEDED','SEEDING','CURRENT','ERROR'].includes(value.adoption_state)||!integer(value.adoption_revision)
+      ||!integer(value.pending_task_count)||!Array.isArray(value.items)||value.items.length>input.limit) throw new Error();
+    const seen=new Set();const items=value.items.map(item=>{
+      if(!exact(item,['task_id'])||!uuid(item.task_id)||seen.has(item.task_id.toLowerCase())) throw new Error();
+      seen.add(item.task_id.toLowerCase());return Object.freeze({...item});
+    });return Object.freeze({...value,items:Object.freeze(items)});
+  }
+  const phases={SEED:['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN','DONE'],
+    METADATA:['METADATA_GROUP','METADATA_SUMMARY','DONE'],ORIGIN:['ORIGIN_CASE','ORIGIN_WORK','DONE'],UMBRELLA:['UMBRELLA_CANDIDATE','DONE'],CONFIRM:['CONFIRM_WORK','CONFIRM_CASE','DONE']};
+  if(!exact(value,['task_id','task_type','status','phase','cursor_key','generation','owner_epoch','step_no',
+    'lease_nonce','rows_visited','progressed','stale','error_code'])||!uuid(value.task_id)
+    ||value.task_id.toLowerCase()!==input.task_id.toLowerCase()||!Object.hasOwn(phases,value.task_type)
+    ||!phases[value.task_type].includes(value.phase)||!['READY','LEASED','DONE','ERROR'].includes(value.status)
+    ||(value.status==='DONE')!==(value.phase==='DONE')||!integer(value.generation,true)||!integer(value.owner_epoch,true)
+    ||!integer(value.step_no)||!integer(value.rows_visited)||BigInt(value.rows_visited)>100n
+    ||typeof value.progressed!=='boolean'||typeof value.stale!=='boolean'
+    ||!(value.cursor_key===null||typeof value.cursor_key==='string'&&ENCODER.encode(value.cursor_key).byteLength<=64)
+    ||!(value.error_code===null||typeof value.error_code==='string'&&/^SQLSTATE:[A-Z0-9]{5}$/.test(value.error_code))
+    ||(value.status==='ERROR')!==(value.error_code!==null)
+    ||(action==='WORKBENCH_CLAIM'&&value.status==='LEASED'&&!value.stale?!uuid(value.lease_nonce):value.lease_nonce!==null)
+    ||(value.stale&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_CLAIM'&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_STEP'&&BigInt(value.rows_visited)>BigInt(input.limit))
+    ||(value.status==='ERROR'&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_STEP'&&!value.stale&&['READY','DONE'].includes(value.status)
+      &&(!value.progressed||value.generation!==input.generation||value.owner_epoch!==input.owner_epoch
+        ||BigInt(value.step_no)!==BigInt(input.step_no)+1n))) throw new Error();
+  return Object.freeze({...value});
+}
+// PostgreSQL timestamps carry microseconds. Calendar validation/comparison
+// must not round through Date's millisecond precision; retain original strings.
+function timestampKey(value) {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d{1,6}))?Z$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]) return null;
+  return `${value.slice(0, 19)}.${(match[7] || '').padEnd(6, '0')}Z`;
+}
+function expiryTupleCompare(left, right) {
+  const a = timestampKey(left.expected_deadline);
+  const b = timestampKey(right.expected_deadline);
+  if (a !== b) return a < b ? -1 : 1;
+  const leftId = left.run_id.toLowerCase();
+  const rightId = right.run_id.toLowerCase();
+  return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+}
+function serviceHeaders(input) {
+  try {
+    const headers = new Headers(input);
+    const authorization = headers.get('authorization');
+    if (typeof authorization !== 'string' || authorization.length > 8192
+        || !/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(authorization)) throw new Error();
+    const payload = authorization.slice(7).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(payload), (character) => character.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    // Local shape only. PostgREST verifies the signature and the exact SQL
+    // wrappers independently require service_role; decoded claims are not auth.
+    if (claims === null || typeof claims !== 'object' || Array.isArray(claims)
+        || claims.role !== 'service_role') throw new Error();
+    headers.set('content-type', 'application/json');
+    headers.set('accept', 'application/json');
+    headers.set('X-CloudTMS-Banking-Pay-Route-Class', 'OPERATION_NUDGE');
+    return headers;
+  } catch { throw invalidTransport(); }
+}
+
+/** Fixed raw service transport; parsed adapters own bytes/deadline/cleanup. */
+export function createBpayNextRuntimeRpc(config) {
+  let endpoint;
+  let headers;
+  let fetchImpl;
+  try {
+    if (!exact(config, ['baseUrl', 'headers', ...(Object.hasOwn(config || {}, 'fetchImpl') ? ['fetchImpl'] : [])])) throw new Error();
+    const base = new URL(config.baseUrl);
+    fetchImpl = Object.hasOwn(config, 'fetchImpl') ? config.fetchImpl : fetch;
+    if (base.username || base.password || base.search || base.hash
+        || (base.protocol !== 'https:' && !(base.protocol === 'http:'
+          && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)))
+        || typeof fetchImpl !== 'function') throw new Error();
+    endpoint = `${base.href.replace(/\/+$/, '')}/rest/v1/rpc/`;
+    headers = serviceHeaders(config.headers);
+  } catch { throw invalidTransport(); }
+  return async (...values) => {
+    const [action, args, options] = values;
+    try {
+      if (values.length !== 3 || typeof action !== 'string' || !Object.hasOwn(RPCS, action)
+          || !exact(options, ['signal']) || !(options.signal instanceof AbortSignal)) throw new Error();
+      if(['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)) {
+        if(!exact(args,['p_request'])) throw new Error();
+        expiryInput(args.p_request);
+      } else if(action.startsWith('WORKBENCH_')) {
+        if(!exact(args,['p_action','p_task_id','p_args'])||args.p_action!==action.slice('WORKBENCH_'.length)) throw new Error();
+        const normalized=workbenchInput(action,['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)?args.p_args:{task_id:args.p_task_id,...args.p_args});
+        if(args.p_task_id!==(normalized.task_id??null)) throw new Error();
+      } else if (action === 'ENROLL') {
+        if (!exact(args, [])) throw new Error();
+      } else if (action === 'WAKE_PAGE') {
+        if (!exact(args, ['p_lane', 'p_limit'])) throw new Error();
+        pageInput({ lane: args.p_lane, limit: args.p_limit });
+      } else {
+        if (!exact(args, ['p_limit'])) throw new Error();
+        expiryInput({ limit: args.p_limit });
+      }
+    } catch { throw invalidTransport(); }
+    const body = JSON.stringify(args);
+    if (ENCODER.encode(body).byteLength > BPAY_NEXT_RUNTIME_LIMITS.requestBytes) throw invalidTransport();
+    return fetchImpl(`${endpoint}${RPCS[action]}`, { method: 'POST',
+      headers: new Headers(headers), body, signal: options.signal, redirect: 'error' });
+  };
+}
+
+// SQL returns closed JSON. Reject duplicate/escaped duplicate keys before
+// JSON.parse drops their evidence; cap nesting separately from byte length.
+function parseUniqueJson(text) {
+  const stack = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '{' || char === '[') {
+      stack.push(char === '{' ? new Set() : null);
+      if (stack.length > 8) throw new Error();
+    } else if (char === '}' || char === ']') stack.pop();
+    else if (char === '"') {
+      const start = index;
+      index += 1;
+      for (; index < text.length; index += 1) {
+        if (text[index] === '\\') index += 1;
+        else if (text[index] === '"') break;
+      }
+      const token = JSON.parse(text.slice(start, index + 1));
+      let next = index + 1;
+      while (next < text.length && /\s/.test(text[next])) next += 1;
+      if (text[next] === ':') {
+        const keys = stack[stack.length - 1];
+        if (!(keys instanceof Set) || keys.has(token)) throw new Error();
+        keys.add(token);
+      }
+    }
+  }
+  return JSON.parse(text);
+}
+function enrollmentResult(value) {
+  if (!exact(value, ['progressed', 'last_enrolled_sequence', 'job_id', 'job_kind', 'job_status','jobs','blocked_command_id','enrollment_error_code'])
+      || typeof value.progressed !== 'boolean' || !integer(value.last_enrolled_sequence)
+      || !Array.isArray(value.jobs)||value.jobs.length>BPAY_NEXT_RUNTIME_LIMITS.enrollmentJobs) throw new Error();
+  const seen=new Set(),jobs=value.jobs.map(item=>{
+    if(!exact(item,['job_id','job_kind','job_status'])||!uuid(item.job_id)
+      ||!BPAY_NEXT_RUNTIME_JOB_KINDS.includes(item.job_kind)||!['READY','DONE'].includes(item.job_status)
+      ||seen.has(item.job_id.toLowerCase()))throw new Error();
+    seen.add(item.job_id.toLowerCase());return Object.freeze({...item});
+  });
+  const last=jobs.at(-1);
+  if(last?value.job_id!==last.job_id||value.job_kind!==last.job_kind||value.job_status!==last.job_status
+    :value.job_id!==null||value.job_kind!==null||value.job_status!==null)throw new Error();
+  if(jobs.length>1&&jobs.some(item=>item.job_kind!=='PREPARE'||item.job_status!=='READY'))throw new Error();
+  if ((value.blocked_command_id === null) !== (value.enrollment_error_code === null)
+    || (value.blocked_command_id !== null && (!uuid(value.blocked_command_id)
+      || typeof value.enrollment_error_code !== 'string' || !/^[0-9A-Z]{5}$/.test(value.enrollment_error_code)
+      || value.progressed || value.job_id !== null))) throw new Error();
+  if (value.job_id === null) {
+    if (value.job_kind !== null || value.job_status !== null
+        || (value.progressed && value.last_enrolled_sequence === '0')) throw new Error();
+    // A genuine empty expiry can advance the ordered command lane without a
+    // job. Never turn its progressed:true into false or manufacture a worker.
+  } else if (!uuid(value.job_id) || !BPAY_NEXT_RUNTIME_JOB_KINDS.includes(value.job_kind)
+      || !['READY', 'DONE'].includes(value.job_status) || !value.progressed) throw new Error();
+  return Object.freeze({ ...value,jobs:Object.freeze(jobs) });
+}
+function pageResult(value, call) {
+  if (!exact(value, ['lane', 'items']) || value.lane !== call.lane || !Array.isArray(value.items)
+      || value.items.length > call.limit || value.items.length > 100) throw new Error();
+  const seen = new Set();
+  const items = value.items.map((item) => {
+    if (!exact(item, ['job_id', 'job_kind', 'command_sequence']) || !uuid(item.job_id)
+        || !BPAY_NEXT_RUNTIME_JOB_KINDS.includes(item.job_kind) || !integer(item.command_sequence, true)
+        || seen.has(item.job_id.toLowerCase())) throw new Error();
+    seen.add(item.job_id.toLowerCase());
+    return Object.freeze({ ...item });
+  });
+  // The SQL orders first by its server-owned wake time. That time is not in
+  // this receipt, so command_sequence must NOT be assumed globally monotonic.
+  return Object.freeze({ lane: value.lane, items: Object.freeze(items) });
+}
+function expiryResult(value, call) {
+  if (!exact(value, ['items', 'cursor_deadline', 'cursor_run_id']) || !Array.isArray(value.items)
+      || value.items.length > call.limit || value.items.length > 100) throw new Error();
+  let previous = null;
+  const seen = new Set();
+  const items = value.items.map((item) => {
+    if (!exact(item, ['run_id', 'expected_deadline']) || !uuid(item.run_id) || !timestampKey(item.expected_deadline)
+        || seen.has(item.run_id.toLowerCase()) || (previous && expiryTupleCompare(previous, item) >= 0)) throw new Error();
+    seen.add(item.run_id.toLowerCase()); previous = item;
+    return Object.freeze({ ...item });
+  });
+  const last = items.at(-1);
+  if (last ? value.cursor_deadline !== last.expected_deadline || value.cursor_run_id !== last.run_id
+    : value.cursor_deadline !== null || value.cursor_run_id !== null) throw new Error();
+  // Cursor/watermark persistence is entirely SQL-owned. This receipt's cursor
+  // describes its returned page, never permission to replace the stored key.
+  return Object.freeze({ items: Object.freeze(items), cursor_deadline: value.cursor_deadline, cursor_run_id: value.cursor_run_id });
+}
+function cleanupResult(value, call) {
+  if (!exact(value, ['lane','rows_visited','rows_deleted','rows_retained','busy'])
+      || typeof value.busy !== 'boolean'
+      || ![value.rows_visited,value.rows_deleted,value.rows_retained].every(v => integer(v) && BigInt(v) <= BigInt(call.limit))
+      || BigInt(value.rows_deleted) + BigInt(value.rows_retained) !== BigInt(value.rows_visited)
+      || (value.busy ? value.lane !== null || value.rows_visited !== '0' : !['SELECTION','JOB'].includes(value.lane))) throw new Error();
+  return Object.freeze({ ...value });
+}
+function dueResult(value,input) {
+  if(!exact(value,['rows_visited','rows_changed','rows_deferred','complete'])
+    ||typeof value.complete!=='boolean'
+    ||![value.rows_visited,value.rows_changed,value.rows_deferred].every(v=>integer(v)&&BigInt(v)<=BigInt(input.limit))
+    ||BigInt(value.rows_changed)+BigInt(value.rows_deferred)!==BigInt(value.rows_visited)
+    ||value.complete!==(BigInt(value.rows_visited)<BigInt(input.limit))) throw new Error();
+  return Object.freeze({...value});
+}
+class RuntimeError extends Error {
+  constructor(code, retryable = false, known = false) {
+    super(code); this.code = code; this.retryable = retryable; this.known = known;
+  }
+}
+function sqlFailure(value) {
+  if (!exact(value, ['code', 'message', 'details', 'hint']) || typeof value.code !== 'string'
+      || typeof value.message !== 'string' || (value.details !== null && typeof value.details !== 'string')
+      || (value.hint !== null && typeof value.hint !== 'string')) return null;
+  const faults = {
+    PGRST202: ['DEPENDENCY_UNAVAILABLE', true], '42501': ['FORBIDDEN', false],
+    '22023': ['REQUEST_INVALID', false], '22P02': ['REQUEST_INVALID', false],
+    '22003': ['REQUEST_INVALID', false], P0002: ['SCOPE_NOT_FOUND', false],
+    '23514': ['CONFLICT', false], '23505': ['CONFLICT', false],
+    '40001': ['TRANSACTION_RETRY', true], '40P01': ['TRANSACTION_RETRY', true],
+    '55P03': ['TRANSACTION_RETRY', true], '57014': ['TRANSACTION_RETRY', true]
+  };
+  let result = Object.hasOwn(faults, value.code) ? faults[value.code] : null;
+  if (value.code === '55000') result = [value.message === 'BPAY_NEXT_MODULE_NOT_ACTIVE' ? 'MODULE_NOT_ACTIVE' : 'STATE_INVALID', false];
+  return result ? new RuntimeError(`BPAY_NEXT_RUNTIME_${result[0]}`, result[1], true) : null;
+}
+async function call(action, input, dependencies) {
+  let attempted = false;
+  let controller;
+  let response;
+  let reader;
+  let timer;
+  let abandoned = false;
+  const cancel = () => {
+    try {
+      const cleanup = reader ? reader.cancel() : response?.body?.cancel();
+      if (cleanup) void cleanup.catch(() => {});
+    } catch { /* Already closed/locked by abort. */ }
+  };
+  try {
+    let normalized;
+    if (action === 'ENROLL') {
+      if (!exact(input, [])) throw new RuntimeError('BPAY_NEXT_RUNTIME_REQUEST_INVALID', false, true);
+      normalized = Object.freeze({});
+    } else normalized = action.startsWith('WORKBENCH_')?workbenchInput(action,input):action === 'WAKE_PAGE' ? pageInput(input) : expiryInput(input);
+    if (!exact(dependencies, ['runtimeRpc', ...(Object.hasOwn(dependencies || {}, 'timeoutMs') ? ['timeoutMs'] : [])])
+        || typeof dependencies.runtimeRpc !== 'function') {
+      throw new RuntimeError('BPAY_NEXT_RUNTIME_DEPENDENCY_UNAVAILABLE', true, true);
+    }
+    const timeoutMs = Object.hasOwn(dependencies, 'timeoutMs') ? dependencies.timeoutMs : BPAY_NEXT_RUNTIME_LIMITS.timeoutMs;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > BPAY_NEXT_RUNTIME_LIMITS.timeoutMs) {
+      throw new RuntimeError('BPAY_NEXT_RUNTIME_REQUEST_INVALID', false, true);
+    }
+    const args = Object.freeze(['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)?{p_request:normalized}:action.startsWith('WORKBENCH_')?workbenchArgs(action,normalized):action === 'ENROLL' ? {} : action === 'WAKE_PAGE'
+      ? { p_lane: normalized.lane, p_limit: normalized.limit } : { p_limit: normalized.limit });
+    controller = new AbortController();
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        abandoned = true; controller.abort(); cancel();
+        reject(new RuntimeError('BPAY_NEXT_RUNTIME_TIMED_OUT', true));
+      }, timeoutMs);
+    });
+    const request = Promise.resolve().then(() => {
+      attempted = true;
+      return dependencies.runtimeRpc(action, args, Object.freeze({ signal: controller.signal }));
+    }).then((raw) => {
+      response = raw;
+      if (abandoned) { cancel(); throw new RuntimeError('BPAY_NEXT_RUNTIME_TIMED_OUT', true); }
+      return raw;
+    });
+    response = await Promise.race([request, deadline]);
+    if (abandoned || controller.signal.aborted || !(response instanceof Response) || !response.body
+        || response.redirected || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) {
+      throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
+    }
+    const declared = response.headers.get('content-length');
+    if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > BPAY_NEXT_RUNTIME_LIMITS.responseBytes)) {
+      throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_TOO_LARGE', true);
+    }
+    reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let bytes = 0;
+    let text = '';
+    while (true) {
+      const part = await Promise.race([reader.read(), deadline]);
+      if (abandoned || controller.signal.aborted) throw new RuntimeError('BPAY_NEXT_RUNTIME_TIMED_OUT', true);
+      if (part.done) break;
+      if (!(part.value instanceof Uint8Array)) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
+      bytes += part.value.byteLength;
+      if (bytes > BPAY_NEXT_RUNTIME_LIMITS.responseBytes) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_TOO_LARGE', true);
+      text += decoder.decode(part.value, { stream: true });
+    }
+    text += decoder.decode();
+    if (abandoned || controller.signal.aborted) throw new RuntimeError('BPAY_NEXT_RUNTIME_TIMED_OUT', true);
+    let payload;
+    try { payload = parseUniqueJson(text); } catch { throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true); }
+    if (!response.ok) throw sqlFailure(payload) || new RuntimeError('BPAY_NEXT_RUNTIME_TRANSPORT_FAILED', true);
+    if (response.status !== 200) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
+    let result;
+    try { result = ['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)?dueResult(payload,normalized):action.startsWith('WORKBENCH_')?workbenchResult(payload,action,normalized):action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
+      ? pageResult(payload, normalized) : action === 'CLEANUP' ? cleanupResult(payload, normalized) : expiryResult(payload, normalized); }
+    catch { throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true); }
+    return Object.freeze({ ok: true, action, result });
+  } catch (error) {
+    abandoned = true; controller?.abort(); cancel();
+    const failure = error instanceof RuntimeError ? error
+      : new RuntimeError(attempted ? 'BPAY_NEXT_RUNTIME_TRANSPORT_FAILED' : 'BPAY_NEXT_RUNTIME_REQUEST_INVALID', attempted, !attempted);
+    const unknown = attempted && !failure.known;
+    return Object.freeze({ ok: false, error_code: failure.code, retryable: failure.retryable,
+      outcome_unknown: unknown, recovery: !failure.retryable ? 'NONE' : unknown
+        ? action === 'ENROLL' ? 'READ_JOB_RECOVERY' : action === 'WAKE_PAGE'
+          ? 'WAIT_FOR_WAKE_RECOVERY' : 'WAIT_FOR_SWEEP_RECOVERY' : 'RETRY_CALL' });
+  } finally {
+    clearTimeout(timer);
+    try { reader?.releaseLock(); } catch { /* Cancelled pending read. */ }
+  }
+}
+
+/** One ordered metadata page; <=20 jobs for one original PREPARE, other kinds one. */
+export function enrollBpayNextOne(...args) { return call('ENROLL', args.length === 1 ? {} : null, args[0]); }
+/** One server-rotated wake page; metadata mutation despite the reader name. */
+export function readBpayNextJobWakePage(...args) { return call('WAKE_PAGE', args.length === 2 ? args[0] : null, args[1]); }
+/** One fixed-watermark expiry sweep page; no client key/clock or auto-receive. */
+export function readBpayNextExpiryDispatchPage(...args) { return call('EXPIRY_PAGE', args.length === 2 ? args[0] : null, args[1]); }
+/** One terminal temporary-row page; SQL keeps its cursor and retained origins. */
+export function cleanupBpayNextTerminalRows(...args) { return call('CLEANUP', args.length === 2 ? args[0] : null, args[1]); }
+export function readBpayNextWorkbenchWakePage(...args) {return call('WORKBENCH_WAKE_PAGE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextWorkbenchDuePage(...args) {return call('WORKBENCH_DUE_PAGE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextSnoozeDuePage(...args) {return call('SNOOZE_DUE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextWeekRolloverPage(...args) {return call('WEEK_ROLLOVER',args.length===2?args[0]:null,args[1]);}
+export function claimBpayNextWorkbenchTask(...args) {return call('WORKBENCH_CLAIM',args.length===2?args[0]:null,args[1]);}
+export function stepBpayNextWorkbenchTask(...args) {return call('WORKBENCH_STEP',args.length===2?args[0]:null,args[1]);}

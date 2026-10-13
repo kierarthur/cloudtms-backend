@@ -1,0 +1,98 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation",
+      "kind": null,
+      "body": "{\"action\":\"REVIEW\",\"run_id\":\"22222222-2222-4222-8222-222222222222\"}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "WORKERS",
+      "body": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "needs_attention": false,
+          "run_id": "22222222-2222-4222-8222-222222222222",
+          "status": "REVIEW",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T21:20:14.000Z",
+          "expires_at_utc": "2026-10-14T21:20:14.000Z",
+          "selected_candidates": "2",
+          "ready": "1",
+          "review": "0",
+          "pending": "0",
+          "preparing": "0",
+          "removed": "1",
+          "enrolled_candidates": "2",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "1",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "action": "REVIEW",
+      "result": {
+        "run_id": "22222222-2222-4222-8222-222222222222",
+        "phase": "REVIEW",
+        "reason": null,
+        "review_revision": "1",
+        "all_ready": false,
+        "replay": true
+      }
+    },
+    {
+      "ok": true,
+      "kind": "WORKERS",
+      "rows": [
+        {
+          "run_worker_id": "33333333-3333-4333-8333-333333333333",
+          "candidate_id": "44444444-4444-4444-8444-444444444444",
+          "worker_status": "CANCELLED",
+          "frozen_ex_vat": null,
+          "frozen_vat": null,
+          "frozen_inc_vat": null,
+          "review_issue_code": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null
+        },
+        {
+          "run_worker_id": "55555555-5555-4555-8555-555555555555",
+          "candidate_id": "66666666-6666-4666-8666-666666666666",
+          "worker_status": "READY",
+          "frozen_ex_vat": "1284.50",
+          "frozen_vat": "0.00",
+          "frozen_inc_vat": "1284.50",
+          "review_issue_code": null,
+          "discard_outcome": null,
+          "discard_blocked_code": null
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    }
+  ],
+  "qualifiedOpenerArguments": []
+}

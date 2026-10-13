@@ -1,0 +1,13 @@
+# DY-09 completion — existing Umbrella transfer and frozen detail
+
+Sequence 96, 11 October 2026. The complete card, D01–D05, dependencies, current owners and master 0130 chain were read. BD108 records the narrow complete design, checked independently before implementation.
+
+D01 reuses the current CLAIM0130 and PS-01 BUILD/guard0533, original BEGIN/settlement/post2018, captured preparation0559 and Daily publication1001. No Contract join or live-after-click Umbrella lookup exists in the ordinary branch. Source-only qualification stays intact. Seven exact installed local function bodies, signatures and owner-only ACLs match the saved current sources; see current-owner-catalogue.json. There is no reason to issue an unchanged SQL successor. Later Additional/Case/zero integrations retain their named owners.
+
+D02 adds only four facts from the existing STATUS header to the existing Umbrella Lines window: Pay ex VAT, VAT, Pay inc VAT and Bank amount. All three parent entrypoints pass the captured run and Candidate identity. The existing typed read and actor/owner/namespace checks reject mismatched or late responses. Cash is a dash until an actual accepted projection exists; it is never computed from gross. Immutable Lines/Shifts/Breaks/Used rates/Available rates and bounded cursor behavior remain unchanged.
+
+The source reviewer found that refreshing failed totals could erase an independent detail failure. The summary-only action now preserves that error and its original explicit retry. Minimal fixed responses produced 21 actual native captures across seven states in dark desktop, device-light desktop and phone width. No database rows were created. The current A4 receipt in SCR-47/review.md is separate from historical DY05 approval and joined D05 acceptance.
+
+The four-fact strip below Lines is a card-required supplied-PNG difference: D02 requires per-Candidate frozen cash/detail and the existing reader provides these values. No unprovided company name/UUID, Draft-start fact, new reader, formula, command or protocol was added. Phone uses the existing cards and a two-column strip; desktop uses four columns. A4 records all visible differences and every control's purpose.
+
+Normal checks: 345 migrations / 903 repeatables, 12 source gates, Office syntax, fresh local metadata and unchanged contract export/seal/coupling 3a0244519e91d9554be7d7499a29173a08786d78806f2ff203acbb55296c4fbe. SQL did not change, so no changed SQL required loading. Public SECURITY DEFINER membership is unchanged. D05 is authored / NOT_RUN; hosted/app/queue/payment/rollback/timing checks are not claimed. Local implementation/review receipts record the actual commits.

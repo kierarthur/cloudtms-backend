@@ -1,0 +1,81 @@
+{
+  "kind": "SOURCE_RESERVATION_BASIS_CORRECTION_V1",
+  "status": "SOURCE_ONLY_NATIVE_ACCEPTANCE_PENDING",
+  "nativeExecuted": false,
+  "awards": [],
+  "pathRoot": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub",
+  "assembly": {
+    "cut": "BOUNDED_METHOD_TRIAL_ARTIFACTS_V4_20261007/generated/cut-001.json",
+    "cutSha256": "39F12D63A9DC6B21E297EE9A772887A92BD3C67C0083B08486A8ADA7632A7B9C",
+    "material": "SOURCE_MOVE_JOINED_UM_MATERIAL_V2_20261007/SOURCE_MATERIAL.json",
+    "materialSha256": "B08EC0D0258143A46590AF69A1EC0BEE836A6065941FDEDA757B373110AD21F3",
+    "originalUnits": 53,
+    "recordedOriginalDeclarationWinners": 186,
+    "addedPrivateTriggerRoutine": "private.bpay_next_source_comparison_run_line_frozen_guard_v2()",
+    "expectedCorrectedDeclarationWinners": 187,
+    "nativeCatalogueProof": "PENDING_ROOT"
+  },
+  "originalDirectory": "SOURCE_MOVE_JOINED_UM_MATERIAL_V1_20261007/managed-inputs",
+  "files": [
+    {
+      "unitId": "U013",
+      "path": "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
+      "beforeSha256": "29D44DB2091DCA9CF52CC6B6D1D655DE3ADD38575DF5D2AC27F697C38164A8F8",
+      "afterSha256": "AA31290569F177BEE67D3DF7FA106283CE299E2F49A5A70C921FA0C044D9E1F6"
+    },
+    {
+      "unitId": "U042",
+      "path": "supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql",
+      "beforeSha256": "2AC0A8E81884ABBA10E97F35610CF71EEDC82F0A4E4DE59999928F6105FE2DC6",
+      "afterSha256": "387BF695D28D0DB74B9809D371290EE87556E71F35CF671BBF6138F353F5896D"
+    },
+    {
+      "unitId": "U050",
+      "path": "supabase/repeatable/07102026_0241_source_comparison_review_credit_carry_v2.sql",
+      "beforeSha256": "1E2ECE5472F83A2132304B624D47581E4688C95F2326C670B03A6034073EFA3C",
+      "afterSha256": "642073B521B54069218154FC5ED7F4A3872681D1DFA92BAAB816A6F73796C10A"
+    }
+  ],
+  "freeze": {
+    "captureGuard": "SOURCE_CAPTURE_DISPATCH_GUARD_V1_20261007/candidate/supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+    "captureGuardSha256": "35067DC1297E10EC7D19F1A9E642AAB4D2FDA6FE555CD1523E22CA3E021B395F",
+    "capturePointKey": ["run_work_id", "component_key"],
+    "captureEconomicUpdates": "REFUSED_BY_EXISTING_U033_GUARD",
+    "lineUpdateDelete": "REFUSE_IF_OLD_OR_NEW_COMPARISON_BOUND",
+    "lineTruncate": "REFUSED",
+    "cleanupCensus": {
+      "scope": ["CURRENT_M4_53_INPUTS", "W_SUPABASE", "W_TESTS", "W_SCRIPTS", "W_BROKER"],
+      "runLineDeleteOrTruncateCallers": 0,
+      "inboundLineFks": "ON_DELETE_RESTRICT",
+      "nearbyFixtureCleanup": "SOURCE_STAGE_STUB_DELETES_RUN_WORK_WORKER_RUN_WITHOUT_RUN_LINE",
+      "activeOwnerWrites": "U012_CAPTURE_INSERT_U013_LINE_INSERT_AND_MANAGED_COMPLETION_ONLY",
+      "proofKind": "SOURCE_CENSUS_NOT_INSTALLED_CATALOGUE_PROOF"
+    }
+  },
+  "scalarEligibility": [
+    {"identity": "CANONICAL", "basis": "SAME", "frozenOriginalFlag": true, "updatesLocal": true},
+    {"identity": "CANONICAL", "basis": "DIFFERENT", "frozenOriginalFlag": false, "updatesLocal": false},
+    {"identity": "SEPARATE_APPROVAL", "basis": "SAME", "frozenOriginalFlag": false, "updatesLocal": true},
+    {"identity": "SEPARATE_APPROVAL", "basis": "DIFFERENT", "frozenOriginalFlag": false, "updatesLocal": false}
+  ],
+  "preserved": ["NATIVE_LINE_CHANNEL", "CARRY_BASIS_REFUSAL", "CALCULATOR", "CASE_RECOVERY", "NONCOMPARISON_SCALAR_POSTING", "EXISTING_SIGNATURES_SECURITY_AND_GRANTS", "CANONICAL_CAS", "HOLD_MAPPING", "POLICY_X", "M1_M2_M3_M4", "W", "REGISTER", "OLDER_FAILED_PACKETS"],
+  "sourceControls": {"command": "node --test source-controls.test.mjs", "scope": "RAW_PINS_FUNCTION_BOUNDARIES_NARROW_DIFF_AND_FAIL_CLOSED_SOURCE_PREDICATES", "passed": 7, "failed": 0, "runnerExitCode": 0, "testFileSha256": "889AA809585FDDD70E23BC300E31C38A3A8A648893470A3DAABD2FF803F5495D", "sqlCompilation": false, "sqlFirstUse": false},
+  "diff": {"path": "exact.diff", "sha256": "A3E03014792CC90862BAB59CAE81621CEA4285E458D069E12FB57E35DF59A500", "format": "GIT_NO_INDEX_UNIFIED_DIFF_LF", "sourceByteHashesRemainRaw": true},
+  "nativeAcceptance": {
+    "status": "PENDING_ROOT_EXECUTOR_NO_AWARDS",
+    "common": "Genuine destination repricing and accepted comparison quote; immutable original evidence; exact real jobs/holds/effects; frozen target amounts and channel; acknowledged rollback and full fresh restoration; regenerate exact winning source/catalogue contract.",
+    "cases": [
+      {"id": "S2-MOV17", "directions": ["PAYE_TO_PAYE", "PAYE_TO_UMBRELLA", "UMBRELLA_TO_PAYE", "UMBRELLA_TO_UMBRELLA"], "requires": "All four genuine financial proofs; scalar patch or PREPARE alone cannot award completion."},
+      {"id": "S2-MOV06", "originalPaid": 200, "newApproved": 230, "expectedResidual": 30, "requires": "Exact literal outcome through genuine accepted repricing, not an inferred result from the old 20 plus 3 pattern."},
+      {"id": "S2-MOV07", "originalPaid": 200, "newApproved": 170, "expectedExcess": 30, "requires": "Only genuine paid excess becomes debt; unpaid holds do not create debt."},
+      {"id": "S2-MOV08", "originalPaid": 200, "newApproved": 200, "expectedResidual": 0, "requires": "No fabricated new payment or debt; immutable original origins remain exact."},
+      {"id": "SCALAR_FOUR_ROWS", "requires": "Exercise canonical/separate times same/different basis through RESERVE then SETTLE. Cross-basis scalar JSON including basis and eight money fields is identical before/after; native H to R moves in frozen line channel only. Separate/same local scalar changes once while canonical historical scalar remains unchanged."},
+      {"id": "NEW_COMPARISON_RELEASES", "requires": "Independently RESERVE then simple cancel and RESERVE then preparation expiry; native/comparable H returns exactly to prior value and cross-basis scalars remain identical."},
+      {"id": "S2-MOV14_S2-MOV18_OLD_HELD_MOVE", "requires": "Real old unpaid hold survives accepted MOVE; exercise simple cancel and preparation expiry independently. Frozen old channel and scalar release correctly; no new-hold flag, later residual or unpaid-hold debt is borrowed."},
+      {"id": "REPLAY_AND_LATER_APPROVAL", "requires": "Replay exact RESERVE/SETTLE/RELEASE after later moves; immutable prior OUTPUT and all books/scalars/holds/mappings unchanged. Conflicting expected input or job identity refuses. Later live basis/approval changes never recalculate frozen eligibility."},
+      {"id": "NULL_AND_TAMPER_NEGATIVES", "requires": "Null original-scalar flag, true or null needs_financial_resolution, missing or mismatched capture identity/residual, wrong frozen flag, frozen capture/line mutation, comparison-to-null line update and table TRUNCATE all refuse atomically. Direct receipt wrong scalar image or eligible native/basis mismatch refuses."},
+      {"id": "RETAINED_INVARIANTS", "requires": "Keep lease/module/owner/ordered-job refusals; binding/currentness proof; canonical/local locks; UNBOUND collision refusal; pending/review new-reserve refusal; native/comparable conservation; immutable receipt/hash/CAS; READY/PENDING retained operations, write-off review credit, CASE_RECOVERY/release, same-basis/noncomparison and repeated tails."}
+    ]
+  },
+  "safety": {"database": false, "docker": false, "network": false, "runtimeImports": false, "hostedChanges": false, "payments": false, "commitPushPr": false, "secretsPrinted": false}
+}

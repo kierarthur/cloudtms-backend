@@ -1,0 +1,101 @@
+# F-13 retirement and F-12 external quiet barrier
+
+Read-only source design, 9 October 2026. Controlling inputs: R3 F-13 card and F-13-D01/D02/D03, F-12-D05, F-17/F-18/F-19 external-obligation clauses, B4/OR-45, and `BUILDER_START_SHEET_BPAY_NEXT_R3.md` §§1–3. The start sheet overrides switch permission/Golden Key/re-authentication/screens: the existing owner-transition function changes the database setting; no additional operator UI or permission workflow is built. This design does not execute a switch, change `active_owner`, deploy, create a fixture, run a test, or assert external quietness.
+
+## Recommended boundary
+
+Retire new old-Banking financial admission at its exact Worker entries. Leave unused implementation bodies where quickest; do not preserve operational certificate/Workbench/payment continuation, stranded recovery, nonqueue fallback or request drain. Keep genuine already-dispatched provider/email/webhook result reconciliation and related financial facts, through bounded explicit receipts. Unrelated Source, invoice, Candidate/MyTMS, paper/provider authority checks and shared factual mail keep their existing contracts.
+
+Use the existing shared queue unchanged. A recognised legacy envelope can ACK only after a durable exact terminal/reconciled disposition covers the actual obligation and its successors. Unknown/nonterminal work retries and appears in bounded reconciliation/DLQ recovery. A missing row, different owner, disabled environment flag or old timestamp is never retirement proof.
+
+F-13 adds no independent DB finance system. Its read/retirement receipt adapter consumes F-18/F-19's actual disposition owner. The external admission/barrier schema belongs to F-12-D05 joined with F-17/F-18/F-19. Source shipping is separate from installation and owner activation.
+
+## Current exact source findings
+
+`broker/src/index.js` read checkpoint:
+
+| Location | Present behavior | Bounded source edit |
+|---|---|---|
+| 41934 `bankingPayContinuationSourcePolicy`; 41966 `buildBankingPayContinuationMessage` | Legacy types DRAFT_CREATE, PAYMENT_EXECUTE, PAYMENT_RETRY_BLOCKED_FUNDS, PAYMENT_SETTLEMENT, REMITTANCE_QUEUE, PAYMENT_CORRECTION; SELF/CHILD/ROOT/NONE relations. Builder accepts aliases/coercions, rewrites enqueue time, supplies defaults, does not validate an exact raw version/key set. | Add a separate exact raw envelope classifier. Do not reuse builder as proof of schema or operation disposition. Preserve builder only as unused/reference producer where appropriate. |
+| 42018 `parseBankingPayWorkbenchCertificateContinuationV8` | Certificate family allows eight keys; numeric conversion and normalized discriminator. | Strict retirement classifier validates actual version, bounded sequence 1..1024, UUIDs, bounded lease-owner field, exact timestamp and key set. The lease token is never logged. |
+| 42126 `parseBankingPayWorkbenchDrainWakeMessage` | Workbench family allows 13 fields; optional IDs, GLOBAL/CANDIDATE/SESSION scope, wake depth 1..32, three reasons, NUDGE profile and defaults. GLOBAL or null wake ID has no direct operation identity. | Validate the exact saved producer shape without synthesizing a new wake ID, scope, reason or timestamp. Global retirement needs an F-18 scope closure receipt and producer closure, not absence of one operation. |
+| 42401 `processBankingPayContinuationMessage` | Claims/advances real legacy operation, derives successors and schedules lease retries. | No new legacy execution call from the shared consumer. Only disposition/result reconciliation adapter may be reached. |
+| 42482 `handleBankingPayContinuationQueue` | Executes legacy certificate, Workbench and operation branches before ownership routing; environment flag false ACKs an operation wake; successful worker call ACKs even without durable retirement proof. | Replace body after batch validation with exact family classification, fresh owner read and disposition matrix below. Retain actual NEXT consumer from F-11. Remove flag-only ACK and legacy advancement/successor paths. |
+| 202738 exported queue handler | Awaits this consumer. | Preserve one platform Message with its original ack/retry closures; no detached ACK or async fire-and-forget. |
+| 16950 `bankingPayWorkbenchCronTick`, 18022 `nudgeBankingPayWorkbenchDrain`, 42221 `enqueueBankingPayWorkbenchDrainWake` | Old Workbench scheduling/certificate paths remain; F-11 design names the NEXT metadata replacements. | Keep F-11 NEXT metadata wake behavior. Non-NEXT branches return a deliberate inactive/retired result or typed refusal; never fall through to old Workbench reconstruction. Preserve response shape needed by genuine shared callers. |
+| 187828 `bankingCronTick` | F-12 only stops it when current owner is not LEGACY. | Retire its new legacy discovery/advance/schedule work even while owner remains LEGACY. Keep unrelated tasks in the scheduled aggregate. Do not call an old recovery engine to achieve quietness. |
+| 200070 exact legacy financial HTTP fence; `bpayNextLegacyRefusalResponse` 42468 | LEGACY status still permits old financial entry. NEXT 410; paused/unavailable 503. | Close new legacy Banking admission by exact existing classifier/entries, preserving authentication and factual exemptions. Keep bank-name override/clear and unrelated route contracts. Genuine admitted-result receipt path is separate from legacy submit/replay/schedule/authorisation controls. |
+| 131841 `drainEmailOutboxOnce`, 132249 `markRemittanceDrainResult`, 132350 sent-state repair; financial send selection ~132636 and post ~132706 | Fresh LEGACY checks hold classified financial rows at claim/render/send/repair; own attempt lease is released without changing business state. Existing Candidate paper/manager authority and query/MyTMS receipts remain. | Close new financial mail dispatch using the durable external admission boundary. Factual buckets continue. A real already-sent result may be recorded through a scoped receipt/reconciliation owner even if new admission is closed; never resend or revive legacy mail production. |
+| `postToPowerAutomate` ~2430–2720, POST at 2688 | Shared provider POST and response body have no AbortSignal/deadline. | Add optional financial admission/deadline context at the financial caller, without changing unrelated mail routing/authority. Track the actual promise/body through settlement; a Promise.race timeout cannot declare delivery absent. |
+| `revolutPayment_create` 186710; timeout 186782 / dispatch 186976+ | Configured deadline is bounded 1..120 seconds (30s default), AbortController when available, Promise.race. Timeout explicitly marks provider outcome UNKNOWN and forbids safe retry. | Keep real request/idempotency IDs and that UNKNOWN distinction. Require the joined one-shot external ticket immediately before every financial provider/network side effect; do not clear unknown on timeout. |
+| provider webhook 56524; replay 55506; `revolutPayment_poll` 187359 | Provider events/replays/polls can lead to financial continuations. | Preserve signature/auth and real admitted-result ingestion; retain exact idempotent event/result receipt. Close new submit/replay that could cause a new effect; disable old operation wake/advance fallback. Result polling is reconciliation of an exact admitted transfer, never a new submission. |
+
+The retained SQL fence is `supabase/repeatable/04102026_0550_banking_pay_next_legacy_writer_fence_v1.sql`: 33 exact legacy relations with ALWAYS row/TRUNCATE triggers, owner transaction FOR SHARE; no external-action lease. Leave it unchanged. It cannot stop an HTTP/mail request already dispatched and cannot be exempted for a generic reconciliation backdoor. Record post-switch receipts in the joined private external/disposition owner and apply any genuine financial treatment through its legitimate F-19/NEXT owner.
+
+## Exact families and finite owner table
+
+Legacy classifier output is one of LEGACY_OPERATION_V1, LEGACY_CERTIFICATE_V8, LEGACY_WORKBENCH_WAKE_V1, NEXT_ENROLL_V1, NEXT_EXPIRY_V1, NEXT_FINANCIAL_V1, UNKNOWN. Readonly strict structural checks only; metadata is not disposition. NEXT schemas stay owned by `bpay-next-background.js` / `bpay-next-financial-queue.js` and the exact financial step adapter.
+
+Legacy operation raw fields are `version,operation_id,operation_type,pay_batch_id,root_operation_id,successor_relation,phase,run_after_utc,source,enqueued_at_utc` (producer sends all ten). Validate version 1, exact keys/types/length, canonical UUID identities, allowed original source/type/relation tuple and <=2048 bytes; never echo payload or mint a replacement timestamp. Certificate and Workbench fields are the respective eight/13-key saved producer schemas above. Invalid/extra/coerced/mixed family fields are UNKNOWN; a valid discriminator alone cannot select retirement.
+
+| Fresh database owner | Exact NEXT envelope | Exact legacy envelope with durable qualified disposition | Exact legacy unknown/nonterminal obligation | UNKNOWN envelope / owner failure |
+|---|---|---|---|---|
+| NEXT | Existing bounded NEXT consumer; SQL lease/epoch remains authority | Record idempotent retirement event; ACK; `BPAY_NEXT_LEGACY_ENVELOPE_RETIRED` | Retry and bounded reconciliation reason | Retry |
+| DISABLED | Retry/preserve durable job; never implicit ACK | ACK only if disposition explicitly covers the retained wake; no financial execution | Retry | Retry |
+| LEGACY | Retry/preserve unexpected NEXT durable work; no reverse activation | Qualified retirement may ACK; no operational old continuation required | Retry/reconcile actual obligation; no old drain revival | Retry |
+| missing/malformed/unavailable | Retry | Retry (cannot establish fresh owner/receipt authority) | Retry | Retry |
+
+The existing F-11 callback may return ACK_RECORDED only after durable exact failure recording. Terminal NEXT CLAIM/STEP semantics remain its responsibility. A retirement receipt is an envelope delivery disposition, not financial job completion.
+
+Operation status vocabulary is QUEUED, RUNNING, WAITING, WAITING_AUTHORISATION, WAITING_PROVIDER, COMPLETE, FAILED, CANCELLED, REVIEW_REQUIRED (`08062026_0944_constraints.sql`; current recovery04082026_2314). Do not equate REVIEW_REQUIRED/FAILED with settled money. Even COMPLETE or CANCELLED needs authoritative no-remaining-effect proof for the exact operation, root/child relation, bank transfer, holds and delivery facts. Current descriptor treats terminal settlement/remittance as a ROOT wake: a child terminal alone cannot retire unfinished parent work. Missing operation is UNKNOWN, never terminal.
+
+Certificate status reader currently knows MISSING, BUILDING, SEALED_CURRENT, BUILD_FAILED, REVOKED_CORRUPT_OR_SECURITY, SUPERSEDED_BY_NEW_SESSION, SESSION_NOT_CURRENT_READY. Retirement requires exact certificate/session identity and F-18 disposition; no lifecycle string alone proves a Draft/frozen obligation absent. Global/Candidate/Session Workbench wake needs a scoped producer-closure/disposition receipt covering its selected durable jobs, not a blanket agency empty guess.
+
+## Durable retirement contract and DLQ recovery
+
+Recommend one service-only F-18-owned disposition adapter accepting a closed bounded family/identity/canonical-envelope hash, returning `{state,disposition_id,reason,recorded_new}` with finite states RETIRABLE, NONTERMINAL, UNKNOWN. RETIRABLE is derived from real owner/disposition facts and closed producer census; the caller cannot supply it. Atomically append a retirement event keyed by exact family+canonical identity+schema/digest and disposition ID, before ACK. F-13-D02 is this durable idempotent event, not console output or a new financial status. `recorded_new` controls bounded console emission; durable event contains the once-only `BPAY_NEXT_LEGACY_ENVELOPE_RETIRED`, bounded IDs/reason and disposition reference. A crash/lost receipt retries and sees the existing event. No lease nonce, mail body, provider response, credential or queue payload is logged.
+
+F-13's card says DB none: implement the receipt through F-18/F-19's named actual disposition/audit owner; do not silently add an unrelated F-13 finance table. That owner is not yet present in current BUILD SQL. Until built, return retry, not mocked RETIRABLE. A fresh agency needs a genuine empty closure proof, not seeded old operations.
+
+Keep `wrangler.toml` unchanged: shared `test-cloudtms-banking-pay-continuation`, max batch size 1, timeout 1, retries 10, retry delay 5, concurrency 2, existing `test-cloudtms-banking-pay-continuation-dlq`. DISABLED deliveries may exhaust to DLQ. Queue expiry/DLQ is transport failure, not loss/completion: NEXT READY/LEASE_EXPIRED/EXPIRY lanes rediscover durable rows after F-26 epoch treatment. Actual retained legacy obligations go to their established F-18/F-19 disposition, not an old recovery engine.
+
+Recovery runbook: enumerate DLQ entries in bounded pages; classify exact schema without mutation; resolve durable identity via disposition owner; ACK only already-recorded terminal/reconciled deliveries; requeue an eligible NEXT job through current durable wake owner and exact valid epoch; preserve unknown/nonterminal entries and report bounded IDs/reasons. Never purge the DLQ, resubmit a provider action, adopt a stale token or release a money hold merely to empty transport. Queue-only envelopes not covered by the census remain a blocker: F-18 must enumerate the actual family/producer surface and prove a queue wake cannot carry an uncensused obligation.
+
+## External admission/barrier states and concrete proof
+
+Use a small per-database private barrier owner and one-shot external admission/result receipts, authored with F-12-D05/F-17/F-18, not another `active_owner` writer. Barrier states OPEN, CLOSING, QUIET; current module owner remains LEGACY while genuine admitted outcomes reconcile. No switch screen, Golden Key, permission flow, independent toggle or guessed wait. The existing transition owner is the sole writer of module owner/epoch.
+
+One external ticket references exact module owner+epoch, durable operation/transfer/outbox/event identity, action kind, stable idempotency/request ID, immutable bounded request digest, admitted time and a fixed deadline. Do not store secrets/bank details/payloads in the barrier. Ticket outcome states:
+
+| State | Meaning | Quiet blocker |
+|---|---|---|
+| ADMITTED | Exact one-shot call permitted, not dispatched | yes; must be cancelled pre-call or settled |
+| DISPATCHED | Network call began; action cannot be replayed as absent | yes |
+| OUTCOME_UNKNOWN | Deadline/network/crash/lost receipt; dispatch may have happened | yes, until authoritative reconciliation |
+| RESULT_RECORDED | Real authenticated provider/email result retained; financial/delivery projection may still be pending | yes until exact disposition recorded |
+| RECONCILED | Authoritative result and every retained obligation disposition recorded; this ticket cannot dispatch again | no |
+| CANCELLED_PRECALL | Positively proved never dispatched and ticket permanently closed | no |
+
+An immutable event chain/closed transitions is preferable to caller-written arbitrary state. `finish` never turns an abort/HTTP timeout into CANCELLED_PRECALL. F-19 must distinguish admitted/scheduled remote actions that can still occur from already terminal outcomes; neither expiry nor a local successful HTTP response proves a future scheduled payment cannot execute.
+
+Each financial outbound primitive obtains/redeems a one-shot ticket at the last possible point before network dispatch, while SQL admission locks module/barrier consistently and verifies matching owner/epoch plus OPEN. Bind ticket to the exact body digest/idempotency identity. A lost admission reply is not permission to send. Dispatch/result/finish are idempotent for the same ticket; retry cannot send again. No provider call, financial mail send, payee-map mutation, provider replay or new schedule can bypass the admission primitive. Preserve provider capability default-off and TEST containment independently.
+
+CLOSING is committed under the same barrier lock as admission, preventing new tickets. Existing tickets may only complete/cancel pre-call/reconcile their recorded action; no new successor submission or old engine advance. Incoming authenticated webhooks continue to append result evidence for an exact admitted action and duplicate receipt; they cannot originate a new financial command. Factual shared mail and unrelated Source/invoice/Candidate/MyTMS paths do not join the Banking barrier.
+
+QUIET requires a fresh, complete finite ticket/census proof: zero ADMITTED/DISPATCHED/OUTCOME_UNKNOWN/RESULT_RECORDED rows; every genuine scheduled/unknown/provider/email obligation has its real terminal result or explicit F-19 adopted/excluded disposition; all legacy producers closed; exact queue-only scope closure; no uninstrumented financial sender. `QUIET` alone is not everlasting authority: final CAS locks that barrier and module, verifies expected epoch/CLOSING generation/proof identity and recensus, then changes owner/epoch through the existing transition function atomically. New admission cannot race between proof and CAS. No 0550 exemption.
+
+### Lifetime proof, not a sleep
+
+Current source does **not** prove a finite external quiet window: F-12 owner RPC's 8s deadline is only a read; operation lease60s is database runner metadata; shared Power Automate fetch/body has no hard deadline. Revolut's 120s maximum is a client timeout and explicitly leaves UNKNOWN, not provider cancellation. A newly deployed ticket path cannot retrospectively cover an old version's untracked HTTP invocation.
+
+The verified [Cloudflare duration documentation](https://developers.cloudflare.com/workers/platform/limits/#duration) states HTTP invocations can remain active while the client stays connected; queue/cron have documented 15-minute limits, with historic-plan exceptions; waitUntil's 30 seconds starts after response/disconnect. None is a blanket 30-second cutover proof or permission to infer remote side effects absent.
+
+Concrete source completion must enforce a fixed financial invocation/action deadline, checked before each network side effect, with AbortSignal on network/body processing, and keep its durable ticket unresolved until the actual dispatched promise/body/result and all obligation reconciliation settle. No continuing detached promise after a RECONCILED ticket; Promise.race requires retained UNKNOWN until the underlying action is resolved. A single call budget is derived from the code's approved finite maximum (Revolut <=120s); mail needs an explicit finite coded budget, not a guessed sleep. Deadline expiry bounds recovery attention and does not make quiet true.
+
+Before any later activation, the release receipt must prove every reachable financial sender version is admission-aware/retired and no untracked prior invocation remains. For a genuinely old untracked call, require positive runtime/result evidence and F-18/F-19 disposition. If that proof is unavailable, keep activation fail-closed; never invent a finite wall time for connected HTTP or remote schedules. An empty installed application with closed senders and no admitted/retained external work can establish quiet by exact fresh evidence, without a legacy fixture or operational old engine.
+
+## Completion and limits
+
+Implement F-13's classifier/router/receipt adapter/runbook after F-11 and actual F-18 disposition owner. Join external tickets/barrier with F-17/F-18/F-19 before ticking F-12-D05. Retain exact authentication, current Candidate provider rechecks, MyTMS delivery receipts, Source facts, invoice operations and shared mail classifications. Retire only old Banking admissions and continuations. F-26 owns paused NEXT epoch resume. No reverse-to-LEGACY mechanism, infrastructure/configuration mutation, new old-engine operating gate or switch UI is required.
+
+Source/compile gates can verify closed shapes, bounded calls, awaited publication, receipt-before-ACK and barrier-before-network. They do not prove deployed quiescence or already-admitted result reconciliation. Those require separately authorised installation/activation evidence; no such action occurred during this design.

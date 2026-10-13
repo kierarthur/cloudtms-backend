@@ -1,0 +1,71 @@
+{
+  "source": "Sole local PG17 schema catalogue, no business rows/RPC calls",
+  "rows": [
+    {
+      "file": "supabase/repeatable/13102026_1452_banking_pay_next_stored_credit_sorted_reader_v1.sql",
+      "signature": "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)",
+      "installed": {
+        "bodyMd5": "a2afaaf47ee8dc5ec5867f6502e1fbd3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public",
+          "statement_timeout=5s"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "identityArguments": "p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer, p_sort text",
+        "definitionSha256": "6b2ca90e171ce8c834ea5062f5a28118f6438476cf519bf5783215b9cd4405a6"
+      },
+      "matches": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_1455_banking_pay_next_stored_credit_page_dispatch_v1.sql",
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "installed": {
+        "bodyMd5": "3dd4541d52394786efac4a835cfe60d9",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false,
+        "identityArguments": "p_actor_user_id uuid, p_kind text, p_args jsonb",
+        "definitionSha256": "d99f9798a0f06000b2eab4c46983e4d1881f4445957dd848b9435c503e4dc62a"
+      },
+      "matches": true
+    }
+  ],
+  "indexes": [
+    {
+      "name": "bpay_next_stored_credit_amount_cursor_v1",
+      "definition": "CREATE INDEX bpay_next_stored_credit_amount_cursor_v1 ON public.pay_advances USING btree (candidate_id, original_amount, id) WHERE ((case_type = 'MANUAL_CREDIT_ADJUSTMENT'::pay_finance_case_type_enum) AND (taxability = 'NON_TAXABLE'::pay_finance_taxability_enum) AND (routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::pay_finance_routing_kind_enum) AND (oneoff_bank_details_required IS TRUE) AND (status = 'ACTIVE'::pay_advance_status_enum) AND (payout_status = 'PENDING'::pay_advance_payout_status_enum))",
+      "valid": true,
+      "ready": true,
+      "owner": "cloudtms_bpay_local_owner"
+    },
+    {
+      "name": "bpay_next_stored_credit_created_cursor_v1",
+      "definition": "CREATE INDEX bpay_next_stored_credit_created_cursor_v1 ON public.pay_advances USING btree (candidate_id, created_at, id) WHERE ((case_type = 'MANUAL_CREDIT_ADJUSTMENT'::pay_finance_case_type_enum) AND (taxability = 'NON_TAXABLE'::pay_finance_taxability_enum) AND (routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::pay_finance_routing_kind_enum) AND (oneoff_bank_details_required IS TRUE) AND (status = 'ACTIVE'::pay_advance_status_enum) AND (payout_status = 'PENDING'::pay_advance_payout_status_enum))",
+      "valid": true,
+      "ready": true,
+      "owner": "cloudtms_bpay_local_owner"
+    },
+    {
+      "name": "bpay_next_stored_credit_payee_prefix_cursor_v1",
+      "definition": "CREATE INDEX bpay_next_stored_credit_payee_prefix_cursor_v1 ON public.pay_finance_case_oneoff_payout_bank_details USING btree (candidate_id, \"left\"(beneficiary_name, 128) COLLATE \"C\", finance_case_id)",
+      "valid": true,
+      "ready": true,
+      "owner": "cloudtms_bpay_local_owner"
+    }
+  ]
+}

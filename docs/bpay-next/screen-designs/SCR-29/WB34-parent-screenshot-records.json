@@ -1,0 +1,2447 @@
+[
+  {
+    "file": "WB34-parent-main-original-dark.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:53:59\n\nSelect all\nClear all\n\tCANDIDATE ▲\tDEDUCTIONS\tAMOUNT EX VAT (AS AUTHORISED)\tSTATUS\n\tChloe Davies\nTMS 10233\n\tNo\t£279.00\tReady\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-pending-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nRates saved; payments are being updated.\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nUpdating\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£279.00\t\nOpen Timesheet\nMore ▾\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-completed-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£291.38\t\nOpen Timesheet\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-main-completed-dark.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:54:03\n\nSelect all\nClear all\n\tCANDIDATE ▲\tDEDUCTIONS\tAMOUNT EX VAT (AS AUTHORISED)\tSTATUS\n\tChloe Davies\nTMS 10233\n\tNo\t£279.00\tReady\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-reopened-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£291.38\t\nOpen Timesheet\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-main-original-device-light.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:54:04\n\nSelect all\nClear all\n\tCANDIDATE ▲\tDEDUCTIONS\tAMOUNT EX VAT (AS AUTHORISED)\tSTATUS\n\tChloe Davies\nTMS 10233\n\tNo\t£279.00\tReady\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-pending-device-light.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nRates saved; payments are being updated.\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nUpdating\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£279.00\t\nOpen Timesheet\nMore ▾\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-completed-device-light.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£291.38\t\nOpen Timesheet\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-main-completed-device-light.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:54:08\n\nSelect all\nClear all\n\tCANDIDATE ▲\tDEDUCTIONS\tAMOUNT EX VAT (AS AUTHORISED)\tSTATUS\n\tChloe Davies\nTMS 10233\n\tNo\t£279.00\tReady\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-reopened-device-light.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSELECT\tPAYMENT ▼\tCLIENT\tPAY CHANNEL\tDEDUCTIONS\tAMOUNT EX VAT\tACTIONS\n\n\t\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\n\tSt Anne’s Hospital\tUmbrella\tNo\t£291.38\t\nOpen Timesheet\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-main-original-phone-dark.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:54:10\n\nSelect all 1 Candidate\nSelect all\nClear all\nSort by\nCandidate ▲\nCandidate ▼\nDeductions ▲\nDeductions ▼\nAmount ex VAT (as authorised) ▲\nAmount ex VAT (as authorised) ▼\nStatus ▲\nStatus ▼\nChloe Davies\nTMS 10233\nNo\n£279.00\nReady\nOpen\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nRates saved; payments are being updated.\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSort by\nPayment ▲\nPayment ▼\nClient ▲\nClient ▼\nPay channel ▲\nPay channel ▼\nDeductions ▲\nDeductions ▼\nAmount ex VAT ▲\nAmount ex VAT ▼\n▸\nUpdating\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\nSt Anne’s Hospital\nUmbrella\nNo\n£279.00\nOpen\nMore ▾\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-completed-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSort by\nPayment ▲\nPayment ▼\nClient ▲\nClient ▼\nPay channel ▲\nPay channel ▼\nDeductions ▲\nDeductions ▼\nAmount ex VAT ▲\nAmount ex VAT ▼\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\nSt Anne’s Hospital\nUmbrella\nNo\n£291.38\nOpen\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-main-completed-phone-dark.png",
+    "errors": [],
+    "copy": "Banking Pay\nClose\nReady1\nAction required0\nBlocked0\nREADY AS AUTHORISED\n£279.00\nCANDIDATES\n1\nSELECTED\nAll except 0\nPAYE + Umbrella\nFilters\nRefresh\n\nUpdated 13/10/2026 12:54:14\n\nSelect all 1 Candidate\nSelect all\nClear all\nSort by\nCandidate ▲\nCandidate ▼\nDeductions ▲\nDeductions ▼\nAmount ex VAT (as authorised) ▲\nAmount ex VAT (as authorised) ▼\nStatus ▲\nStatus ▼\nChloe Davies\nTMS 10233\nNo\n£279.00\nReady\nOpen\n\n1 Candidate · 2 payment items · Sorted by Candidate, ascending\n\nExport CSV\nCreate Draft",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  },
+  {
+    "file": "WB34-parent-reopened-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Banking\n\nChloe Davies · TMS 10233\n\nClose\n\nReady as authorised\n£279.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSort by\nPayment ▲\nPayment ▼\nClient ▲\nClient ▼\nPay channel ▲\nPay channel ▼\nDeductions ▲\nDeductions ▼\nAmount ex VAT ▲\nAmount ex VAT ▼\n▸\nTimesheet · w/e 11/10/2026\nTS 4187\nUmbrella rate set\nSt Anne’s Hospital\nUmbrella\nNo\n£291.38\nOpen\nMore ▾\n\nSorted by Payment, descending\n\nAll payments included\nExport CSV\nShow estimate",
+    "reads": [
+      {
+        "path": "/api/banking/capabilities",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "ACTIVE_PREPARATIONS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-command",
+        "kind": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "COMPONENTS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "ACTION_REQUIRED"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "RESOLUTION_CONTEXT"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "GROUP_LINES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATE_GROUPS"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "CANDIDATES"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      },
+      {
+        "path": "/api/banking/pay/next/workbench-page",
+        "kind": "HEADER"
+      }
+    ]
+  }
+]

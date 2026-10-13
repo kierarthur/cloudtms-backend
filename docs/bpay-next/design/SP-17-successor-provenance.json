@@ -1,0 +1,76 @@
+{
+  "item": "SP-17",
+  "sequence": 137,
+  "builderDecision": "BD151",
+  "status": "PARTLY_DONE",
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_1946_banking_pay_next_source_applied_category_read_v1.sql",
+      "sha256": "2cfaaea1eee500ea40ed0a60998ab9a40235e0cc50887b6ac292a80f2a912e4f"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "77673593d09145179b9855ffab5563569b8408e7bede806f1691f576642caa19"
+    }
+  ],
+  "parents": [
+    {
+      "path": "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
+      "sha256": "1b91f4b5de40d4d18606dd89d65bfa4d93e9198c3c7a2d7bc3e56b0642d911ec"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0559_weekly_source_office_category_batch_v1.sql",
+      "sha256": "7f7b89775be928ea49f001fb74b7262e7d2d6d1b1600739742bc620803d33d54"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql",
+      "sha256": "602db4edb834be6a6b3428b5d47828b62f4c7ff3589738bc36d756b30a1b8700"
+    }
+  ],
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/SP-17-design-review.md",
+      "sha256": "08e4c5887acd6142a7b770070ae37db02ad6cb9376e5b04549ebe2b03843ec8a"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-17-source-review.md",
+      "sha256": "372947ebec348e5e47428ce3e5378015345fad43a550149950c15b4e54f008bd"
+    }
+  ],
+  "closedI3Keys": [
+    "ok",
+    "code",
+    "work_id",
+    "owner_epoch",
+    "current_revision_id",
+    "applied_revision_id",
+    "source_event_id",
+    "source_head_id",
+    "financial_snapshot_id",
+    "physical_root_id",
+    "physical_root_version",
+    "revision_seal",
+    "source_inventory_digest",
+    "application_state",
+    "command_id",
+    "agency_sequence",
+    "financial_view_revision"
+  ],
+  "checks": {
+    "dbCheck": "376 migrations/960repeatables PASS",
+    "sourceGates": "1512 SQLsources/29 publicroots/154 worksignatures/37 typedtransport PASS",
+    "nodeCheck": "changed Worker index PASS",
+    "localCompile": "Sole localPG17 changed-only PASS",
+    "catalogue": "Four exact native definitions/owner/ACL/config/STABLE matches; SECDEF membership unchanged839/76/0/hash338226c4/bothDO PASS",
+    "contractHash": "d736d45cd9b3ba2d52bec569619ee3d72f725281549b4bbf82cebd16a3078095",
+    "sealCoupling": "PASS",
+    "screens": "N/A card owns no screen"
+  },
+  "blocked": [
+    "D03 S17-01 actual ordinary no-ID I3 root bound remains unproved: native full row-source category evaluation precedes outer limit. No existing equivalent preclassifier Stage paging found; unlisted Source projection/row-source rewrite forbidden by scopeguard."
+  ],
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10October2026)",
+  "sp10DocCorrection": "SP10 investigation S2 same-transaction order: locks61,publishes62–63,binds68–83; classified as documentation correction only.",
+  "implementationCommit": "ccb8de330e035029f492fa2e8eaf30d11bd5129f"
+}

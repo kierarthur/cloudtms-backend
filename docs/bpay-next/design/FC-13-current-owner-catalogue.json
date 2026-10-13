@@ -1,0 +1,889 @@
+{
+  "source": "Sole local PG17 metadata and isolation DO only; no business calls or data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "3870ed794a09159c8ca534b2ddd5aeae",
+      "installed": {
+        "bodyMd5": "3870ed794a09159c8ca534b2ddd5aeae",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "f56d8e78ab730b0300bc237c16898143",
+      "installed": {
+        "bodyMd5": "f56d8e78ab730b0300bc237c16898143",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "caf93f92507dace1d23cae17b630238b",
+      "installed": {
+        "bodyMd5": "caf93f92507dace1d23cae17b630238b",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "008c3834ac0b5592bb9715ffc3408bf4",
+      "installed": {
+        "bodyMd5": "008c3834ac0b5592bb9715ffc3408bf4",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "a2697e942c7b87ac2cd138743b09ec0b",
+      "installed": {
+        "bodyMd5": "a2697e942c7b87ac2cd138743b09ec0b",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "89413c66db9dfe039d5a9392b5716b3f",
+      "installed": {
+        "bodyMd5": "89413c66db9dfe039d5a9392b5716b3f",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "1720dd2ae9001ab97b869971b3b52045",
+      "installed": {
+        "bodyMd5": "1720dd2ae9001ab97b869971b3b52045",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_input_v1(jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "5353bafc6a9981483d87b0218472f912",
+      "installed": {
+        "bodyMd5": "5353bafc6a9981483d87b0218472f912",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "i"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_schedule_v1(uuid,numeric,numeric,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "aee0965df0cda6534c78a9741f35eba5",
+      "installed": {
+        "bodyMd5": "aee0965df0cda6534c78a9741f35eba5",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_quote_v1(uuid,text,boolean,date,public.pay_finance_component_resolution_mode_enum,numeric)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "e58a5771873d8bd716f94d90a5b5d5a7",
+      "installed": {
+        "bodyMd5": "e58a5771873d8bd716f94d90a5b5d5a7",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_quotes_v1(uuid,text,boolean,date,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "775237091c74e71d65e01f3555ed024b",
+      "installed": {
+        "bodyMd5": "775237091c74e71d65e01f3555ed024b",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_preview_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "c7f449dec53855967474b8343155b0d8",
+      "installed": {
+        "bodyMd5": "c7f449dec53855967474b8343155b0d8",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_accept_case_channel_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "eeeb10a1a192cd3f5d8a6acb1a8d51dc",
+      "installed": {
+        "bodyMd5": "eeeb10a1a192cd3f5d8a6acb1a8d51dc",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_origin_v1(uuid)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "9dafeae1ce66dfb4bd79dbc4f999b11e",
+      "installed": {
+        "bodyMd5": "9dafeae1ce66dfb4bd79dbc4f999b11e",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_case_channel_receipt_v1(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "79f9155845a486d6faf0617d8f8e01f1",
+      "installed": {
+        "bodyMd5": "79f9155845a486d6faf0617d8f8e01f1",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_channel_v1(uuid,uuid,bigint)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "d99876a87a8c86c01f678b23a4b1e7fa",
+      "installed": {
+        "bodyMd5": "d99876a87a8c86c01f678b23a4b1e7fa",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_claim_case_channel_job_v1(uuid,integer)",
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sourceMd5": "250ccaa88ab76e1484b20a4758cd06d8",
+      "installed": {
+        "bodyMd5": "250ccaa88ab76e1484b20a4758cd06d8",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "schema": [
+    {
+      "name": "bpay_next_case_channel_component",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "component_ordinal",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_component_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "applied_component_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "original_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "applied_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "source_pay_channel",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "tax_treatment",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "instruction_kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "applied_basis_source_amount_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "fixed_reimbursement",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "resolution_mode",
+          "type": "pay_finance_component_resolution_mode_enum",
+          "nullable": false
+        },
+        {
+          "name": "valuation_policy_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "valuation_window_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "quote_operands",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "original_component",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_compo_applied_basis_source_amount__check",
+          "definition": "CHECK (((applied_basis_source_amount_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_applied_rule_id_case_id_cand_fkey",
+          "definition": "FOREIGN KEY (applied_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_case_component_id_case_id_ca_fkey",
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_command_id_case_id_candidate_fkey",
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_channel_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_original_rule_id_case_id_can_fkey",
+          "definition": "FOREIGN KEY (original_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_previous_component_revision_check",
+          "definition": "CHECK (((previous_component_revision > 0) AND (previous_component_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_channel_compon_valuation_policy_id_valuatio_fkey",
+          "definition": "FOREIGN KEY (valuation_policy_id, valuation_window_id) REFERENCES private.bpay_next_valuation_policy_window(policy_id, source_window_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_compone_command_id_component_ordinal_key",
+          "definition": "UNIQUE (command_id, component_ordinal)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_captured_at_utc_check",
+          "definition": "CHECK (isfinite(captured_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check",
+          "definition": "CHECK ((applied_component_revision = (previous_component_revision + 1)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check1",
+          "definition": "CHECK (((target_inc_vat)::numeric = ((target_ex_vat)::numeric + (target_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check2",
+          "definition": "CHECK ((fixed_reimbursement = (tax_treatment = 'NON_TAXABLE'::text)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_check3",
+          "definition": "CHECK (((NOT fixed_reimbursement) OR ((target_ex_vat)::numeric = (applied_basis_source_amount_ex_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_component_ordinal_check",
+          "definition": "CHECK ((component_ordinal > 0))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_instruction_kind_check",
+          "definition": "CHECK ((instruction_kind = ANY (ARRAY['RECOVERY'::text, 'CREDIT'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_original_component_check",
+          "definition": "CHECK (((jsonb_typeof(original_component) = 'object'::text) AND (octet_length((original_component)::text) <= 16384)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_pkey",
+          "definition": "PRIMARY KEY (command_id, case_component_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_component_quote_operands_check",
+          "definition": "CHECK (((jsonb_typeof(quote_operands) = 'object'::text) AND (octet_length((quote_operands)::text) <= 8192)))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_resolution_mode_check",
+          "definition": "CHECK ((resolution_mode = ANY (ARRAY['SUGGESTED_EQUIVALENT_BASIS'::pay_finance_component_resolution_mode_enum, 'MANUAL_AMOUNT'::pay_finance_component_resolution_mode_enum])))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_source_pay_channel_check",
+          "definition": "CHECK ((source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_ex_vat_check",
+          "definition": "CHECK (((target_ex_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_pay_channel_check",
+          "definition": "CHECK ((target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_target_vat_check",
+          "definition": "CHECK (((target_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_component_tax_treatment_check",
+          "definition": "CHECK ((tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text])))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_channel_component_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_component FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_channel_component_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_component FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_channel_outcome",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "applied_case_revision",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "applied_rule_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "applied_component_count",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "issue_code",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_outcom_applied_rule_id_case_id_cand_fkey",
+          "definition": "FOREIGN KEY (applied_rule_id, case_id, candidate_id) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcom_command_id_case_id_candidate_fkey",
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id) REFERENCES private.bpay_next_case_channel_request(command_id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_applied_component_count_check",
+          "definition": "CHECK ((applied_component_count >= 0))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_check",
+          "definition": "CHECK ((((outcome = 'APPLIED'::text) AND (applied_case_revision IS NOT NULL) AND (applied_case_revision > 0) AND (applied_component_count > 0) AND (issue_code IS NULL)) OR ((outcome = 'BLOCKED'::text) AND (applied_case_revision IS NULL) AND (applied_rule_id IS NULL) AND (applied_component_count = 0) AND (issue_code IS NOT NULL) AND (issue_code = ANY (ARRAY['BPAY_NEXT_CASE_PROTECTION_CHANGED'::text, 'BPAY_NEXT_CASE_CHANNEL_UNSUPPORTED'::text, 'BPAY_NEXT_CASE_CHANNEL_NO_BALANCE'::text, 'BPAY_NEXT_CASE_PREVIEW_CHANGED'::text, 'BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'::text, 'BPAY_NEXT_CASE_CHANNEL_CONTEXT_UNAVAILABLE'::text])))))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_completed_at_utc_check",
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_job_id_fkey",
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_job_id_key",
+          "definition": "UNIQUE (job_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_outcome_check",
+          "definition": "CHECK ((outcome = ANY (ARRAY['APPLIED'::text, 'BLOCKED'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_outcome_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_channel_outcome_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_outcome FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_channel_outcome_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_outcome FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_channel_request",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "command_sequence",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "previous_rule_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "new_rule_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "new_rule_revision",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "original_command_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "approval_edit_command_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "approved_principal",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": true
+        },
+        {
+          "name": "approval_input",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "input",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "preview_token",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "target_umbrella_id",
+          "type": "uuid",
+          "nullable": true
+        },
+        {
+          "name": "target_umbrella_vat_chargeable",
+          "type": "boolean",
+          "nullable": true
+        },
+        {
+          "name": "effective_date",
+          "type": "date",
+          "nullable": false
+        },
+        {
+          "name": "source_basis",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_total_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_total_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_total_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "nullable": false
+        },
+        {
+          "name": "target_terms",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "source_terms",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "expected_component_count",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_channel_reques_command_id_case_id_candidate__key",
+          "definition": "UNIQUE (command_id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_reques_previous_rule_id_case_id_can_fkey",
+          "definition": "FOREIGN KEY (previous_rule_id, case_id, candidate_id, previous_rule_revision) REFERENCES private.bpay_next_case_rule(id, case_id, candidate_id, rule_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_accepted_at_utc_check",
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_actor_user_id_fkey",
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_approval_edit_command_id_fkey",
+          "definition": "FOREIGN KEY (approval_edit_command_id) REFERENCES private.bpay_next_case_edit_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check",
+          "definition": "CHECK (((target_total_inc_vat)::numeric = ((target_total_ex_vat)::numeric + (target_total_vat)::numeric)))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check1",
+          "definition": "CHECK ((((target_pay_channel = 'PAYE'::text) AND (target_umbrella_id IS NULL) AND (target_umbrella_vat_chargeable IS NULL)) OR ((target_pay_channel = 'UMBRELLA'::text) AND (target_umbrella_id IS NOT NULL) AND (target_umbrella_vat_chargeable IS NOT NULL))))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check2",
+          "definition": "CHECK ((((new_rule_id IS NULL) AND (new_rule_revision IS NULL) AND (original_command_id IS NULL) AND (approved_principal IS NULL) AND (approval_input IS NULL) AND (approval_edit_command_id IS NULL)) OR ((new_rule_id IS NOT NULL) AND (new_rule_id = command_id) AND (new_rule_revision IS NOT NULL) AND (new_rule_revision = (previous_rule_revision + 1)) AND (original_command_id IS NOT NULL) AND (approved_principal IS NOT NULL) AND ((approved_principal)::numeric > (0)::numeric) AND (approval_input IS NOT NULL) AND (jsonb_typeof(approval_input) = 'object'::text) AND (octet_length((approval_input)::text) <= 12288))))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_check3",
+          "definition": "CHECK ((((target_terms IS NULL) AND (source_terms IS NULL)) OR ((target_terms IS NOT NULL) AND (source_terms IS NOT NULL) AND (jsonb_typeof(target_terms) = 'object'::text) AND (jsonb_typeof(source_terms) = 'object'::text) AND (octet_length((target_terms)::text) <= 8192) AND (octet_length((source_terms)::text) <= 8192))))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_id_command_sequence_fkey",
+          "definition": "FOREIGN KEY (command_id, command_sequence) REFERENCES private.bpay_next_command(id, agency_sequence) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_command_sequence_check",
+          "definition": "CHECK ((command_sequence > 0))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_effective_date_check",
+          "definition": "CHECK ((isfinite(effective_date) AND ((effective_date >= '0001-01-01'::date) AND (effective_date <= '9999-12-31'::date))))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_expected_case_revision_check",
+          "definition": "CHECK (((expected_case_revision > 0) AND (expected_case_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_expected_component_count_check",
+          "definition": "CHECK ((expected_component_count > 0))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_input_check",
+          "definition": "CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 8192)))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_module_epoch_check",
+          "definition": "CHECK ((module_epoch > 0))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_new_rule_id_key",
+          "definition": "UNIQUE (new_rule_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_original_command_id_fkey",
+          "definition": "FOREIGN KEY (original_command_id) REFERENCES private.bpay_next_case_create_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_channel_request_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_channel_request_preview_token_check",
+          "definition": "CHECK (((jsonb_typeof(preview_token) = 'object'::text) AND (octet_length((preview_token)::text) <= 32768)))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_previous_rule_revision_check",
+          "definition": "CHECK (((previous_rule_revision > 0) AND (previous_rule_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_source_basis_check",
+          "definition": "CHECK (((source_basis)::numeric > (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_pay_channel_check",
+          "definition": "CHECK ((target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_total_ex_vat_check",
+          "definition": "CHECK (((target_total_ex_vat)::numeric > (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_total_vat_check",
+          "definition": "CHECK (((target_total_vat)::numeric >= (0)::numeric))"
+        },
+        {
+          "name": "bpay_next_case_channel_request_target_umbrella_id_fkey",
+          "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_channel_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_channel_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_channel_request_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_channel_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

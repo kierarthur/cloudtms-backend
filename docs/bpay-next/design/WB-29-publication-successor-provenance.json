@@ -1,0 +1,60 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "Complete native treatment publication foundation; consumer/W2/accepted/quote joins remain pending",
+  "builderDecision": "BD155",
+  "signatures": [
+    "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
+    "private.bpay_next_revision_guard_v1()",
+    "private.bpay_next_treatment_approval_revision_v1(uuid)",
+    "private.bpay_next_treatment_payload_assert_v1(uuid)",
+    "private.bpay_next_stage_treatment_revision_v1(uuid,uuid)"
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/12102026_2135_banking_pay_next_treatment_approval_revision.sql",
+      "sha256": "028428fd61d9a8929e0e600262f84f61be09aaa58f92402b68df693288377d6d"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_publication_boundary_v1.sql",
+      "sha256": "89a98fc7688803aabe93011edfcf588c7baa602dc46c903aa6e3000b1e0751e8"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_revision_guard_v1.sql",
+      "sha256": "5d43caf1c63c6dc4170b6bf5d6b1b5e76c065f09fddea3bdee3bb60e49c91eac"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "sha256": "56d91e37ede376018c72245ee02fd1d30237f987c656754b2fd0ec668582ddc1"
+    }
+  ],
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "sha256": "8934065d152ab69bbe2ec8ee298bd03b66f4c20a82fbbcdced78567db37bb69f"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "sha256": "b5f2f9ec742a11a88ede05ae0eb433725b410907827bf10300b3540824a92a72"
+    }
+  ],
+  "designReview": "docs/bpay-next/reviews/WB-29-publication-design-review.md",
+  "sourceReview": "docs/bpay-next/reviews/WB-29-publication-source-review.md",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "checks": {
+    "dbCheck": "PASS:380 migrations/971 repeatables",
+    "sourceGates": "PASS:1527 SQL /30 public roots /154 work signatures /37 typed transport",
+    "nodeCheck": "PASS:changed source gate",
+    "localPG17": "PASS:1 new migration/3 new repeatables,5 exact body/config/owner/ACL/volatility matches",
+    "isolation": "PASS:839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both existing verifiers",
+    "contract": "206dd94ae4514e63f0842ab35a007c8843bd7c20d275d92bd456e0c83dcdb439",
+    "seal": "PASS",
+    "coupling": "PASS"
+  },
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "reviews": {
+    "design": "PASS",
+    "source": "PASS"
+  },
+  "implementationCommit": "81fcac3dd3ba19a08b9d3497a2f4e73ed4dd491b"
+}

@@ -1,0 +1,59 @@
+{
+  "item": "FC-09",
+  "decision": "BD119",
+  "successor": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+  "parents": [
+    {
+      "path": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "sha256": "2eeaafb8f14444715c30e13dc898f9b35614de1f53920344913f2986e09d6b0c"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+      "sha256": "fa3c73a83075f67246e62adea7ba1467c019bada601d3db880ec51b48cdd1a9e"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "sha256": "853ddce45455defed9f715a2593267794f3b224e469a9eaccde2aeca6e44a470"
+    },
+    {
+      "path": "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
+      "sha256": "9dc328ef5fb4e172622f72a97ce3cb84184740c5fe2575eb67f8bf1dac5fe903"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "sha256": "86343d45963a9335de8f3af0a3465cbbcdd5c4c2fd3eeef69c628060c8df1c47"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "sha256": "ab912386daf210e25a2d5b6f37038b00aac8081ca0ba27e059deffdb17f47231"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+      "sha256": "644995fb19e4a58d0854de8191980dc7e543015358d81d229785165377e2845c"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_case_edit_origin_v1(uuid)",
+    "private.bpay_next_case_edit_state_v1(uuid,uuid)",
+    "private.bpay_next_case_edit_assert_v1(uuid,uuid,bigint)",
+    "private.bpay_next_case_edit_preview_v1(uuid,uuid,bigint,jsonb)",
+    "private.bpay_next_accept_case_edit_v1(uuid,jsonb)",
+    "private.bpay_next_apply_case_period_amendment_v1(uuid,jsonb,jsonb)",
+    "private.bpay_next_apply_case_edit_v1(uuid,uuid,bigint)",
+    "private.bpay_next_claim_case_edit_job_v1(uuid,integer)",
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_enroll_one_v1()",
+    "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+    "private.bpay_next_case_allocation_plan_v1(jsonb)",
+    "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+    "private.bpay_next_case_list_row_v1(uuid,jsonb)",
+    "private.bpay_next_case_edit_receipt_v1(uuid,uuid,uuid)"
+  ],
+  "retained": "Original CASE_CREATE/rules/events/instructions/results/0410 funding/Source/payquery/money equations unchanged"
+}

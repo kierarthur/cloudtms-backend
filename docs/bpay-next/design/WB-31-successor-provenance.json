@@ -1,0 +1,102 @@
+{
+  "item": "WB-31",
+  "sequence": 142,
+  "builderDecisions": [
+    "BD172"
+  ],
+  "stage": "Complete source and independent DESIGN/SOURCE/A4 review",
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+      "sha256": "31f38541ea9e6595fb4b59bed450f76a4edffddc5b20015ee83783459e87b08e"
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "bb6826163c83090eb66642facb33f33cdbb16e886c58e608f767bf295dc78e7d"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "b2112a22d62b212d79aa87ddc73012f955ed02c23aa2fa26522021949620d004"
+    },
+    {
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "d1ccfb0a567df216264768e809c3488c23e1a2cd246e0de72b2e427a54591a27"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "8d016f01c3a4705266d566a1c48b671e2a6bb99ae878aea7358f26dfe8c831fe"
+    }
+  ],
+  "frontendFiles": [
+    {
+      "path": "js/bpay-next-component-choice.js",
+      "sha256": "83e71ed54a9cefc3c66b64558a33f553eafe2bac8e918bf67cfb9596556912d9"
+    },
+    {
+      "path": "js/bpay-next-resolution.js",
+      "sha256": "df4a0bec13a3d1dab602ea34c7009b20bca0511096caf4b796bff618c01bff57"
+    },
+    {
+      "path": "js/bpay-next-workbench.js",
+      "sha256": "4d8e76c5f828f54467ed2d58acc30aef4902fd6f6d17607d377efdb35492e5be"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "b81c3b69b42e2e42c543a94d146a791f704cdd004e237d9ddfe5d9446f234d57"
+    },
+    {
+      "path": "index.html",
+      "sha256": "5fea9261819a511c2c9756698869edf71ec98f2fc1f35209ca5527705ea82eca"
+    }
+  ],
+  "owners": {
+    "privateContext": "0201 -> 0314; complete explicit body retained, finite component delegate/effect metadata only",
+    "newPrivateHelpers": [
+      "private.bpay_next_component_resolution_review_v1(uuid,jsonb)",
+      "private.bpay_next_component_resolution_effect_facts_v1(uuid,uuid,jsonb,jsonb)"
+    ],
+    "publicW1": "13102026_0117 unchanged",
+    "atomicW2": "12102026_2320 unchanged",
+    "sharedMoney": "06102026_1157 unchanged",
+    "producers": "Unchanged"
+  },
+  "checks": {
+    "dbCheck": "384 migrations/999 repeatables PASS",
+    "sourceGates": "1559 SQL/31 RPC/175 routine-work/37 typed transports PASS",
+    "localPG17": "0 migrations/4 closures compiled; three exact source/configuration/owner/ACL catalogue matches; no business SQL/data",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf unchanged; both isolation DO PASS",
+    "changedJS": "node --check PASS",
+    "contract": "6e1389993ead52d5439e96b3846d1dbc42a3579bcc43cf12faa0fad83d82e73d export/seal/coupling PASS"
+  },
+  "acceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "BUILT_REVIEWED; all joined acceptance AUTHORED_NOT_RUN",
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-31-screen-policy-review.md",
+      "sha256": "a354552e2547c9328c70e166aa1589959d8c8b883e0b0fa69d3a7e38ebd822be"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-31-Office-source-review.md",
+      "sha256": "69c6f14cd12f506e357b3c0175bfff0304e624f59c5d1292103d7ac76c30841e"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-31-final-deliverable-review.md",
+      "sha256": "dc1ff4314f1c7e3b7c2818a0099341d26f9625cd8071e28fc8f22ddda6ea36e3"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-31-reader-source-review.md",
+      "sha256": "23be4bb1e0338bd7ec71f93faf49897ea3753aa6b242a409898972ba2009e1fe"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-31-transport-source-review.md",
+      "sha256": "7c46175a86766434f60f2d5e9d6e94b53bf8be22262430026b2d309d416c45cb"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-31-design-review.md",
+      "sha256": "5c24ac8baf56d3c6e511cbb168f7d59b560073dda72e7dc43b1ecbbb6d6db068"
+    }
+  ],
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "0e5c4db14cc56f4f8b438d403101791997bcfe47",
+  "frontendImplementationCommit": "4bee1d4f65bb79ddea514c1e86802add1889e6d6"
+}

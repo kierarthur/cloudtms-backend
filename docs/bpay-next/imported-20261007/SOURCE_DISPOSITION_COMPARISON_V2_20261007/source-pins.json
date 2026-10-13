@@ -1,0 +1,29 @@
+{
+  "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003",
+  "file": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+  "sha256": "2e9a297ff362e41dbfbadc869b211b37176cf76d06edd3e78808a2e4c2a57340",
+  "initial_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+  "initial_sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+  "expiry_file": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+  "expiry_sha256": "f4eb08c3c963c1850396642fd98947cf27722d96e20b6bb77db394635c3341aa",
+  "functions": {
+    "guard": {
+      "before": "8dfc95afc7966d55df3139450ff78164ba754c946ddc6e6303142d6937b1e459",
+      "after": "184fbf97c6a753361cb13a3402a49e4a132abec106fd2bda76a47e6f5e14bd5e"
+    },
+    "reader": {
+      "before": "e4e42dc3512e827473ead865c84090198cac4293df5eceaf8c726a6702a8b3ae",
+      "after": "532e88450b2a9e4eca224497af140fe3469b8ab59ba09bc413e45c8674792ee4"
+    },
+    "read_only": {
+      "members": "d801f5ecf02215dc7b05a03bba14d8f88cf9c67cd35d27886430fbe288f307b1",
+      "initial_certificate": "ea5996a4ddc46bc682139e1abee92a13a6d02e74cf74cb00ff565df1ab8802ac",
+      "initial_assert": "1c4edd86d8f3bd73add4394b2dc46989d8ce141f013240e64917444c20f7c2ff",
+      "book": "ff896b37a4ce64526250451f9db7e673a4652234ab5c3595bbc1f8d0a8530142"
+    },
+    "expiry_scope": {
+      "before": "65518c0458037ce3d3bf992e9e51a2ff20918fb4e327b1678e0aaaf5bc3cff7e",
+      "after": "845439a960e69f504614b8694464599f27007fa719e9f3177749ce24fa982189"
+    }
+  }
+}

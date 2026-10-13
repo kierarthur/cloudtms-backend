@@ -1,0 +1,68 @@
+{
+  "card": "DR-20",
+  "sequence": 126,
+  "status": "BUILT_REVIEWED_LOCAL_SOURCE_COMPILE",
+  "decision": "BD140",
+  "implementationCommit": "ed8339f5233d52dbb17d647edc4f34e66e087f94",
+  "scope": [
+    "Public enroll_service0541 ->0945: <=20 original PREPARE jobs on one command, private2041 retained",
+    "Existing closed runtime receipt jobs[] and all-READY publication",
+    "Finite PREPARE16 STEP turns/freshCLAIM/10s soft starts; other kinds one STEP",
+    "Qualified accepted SEAL ctx.waitUntil support <=2 enrollment pages /2 concurrent jobs, original wakes published first"
+  ],
+  "files": [
+    {
+      "file": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+      "sha256": "c181f7fe067d1c58387dc5eeee803e9a51da3295abaa202bdbe34da53c719056"
+    },
+    {
+      "file": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "c4339ae6c3e579eabb30abc748f4e87c337a29ff343520d5db7ad5066c8fc480"
+    },
+    {
+      "file": "broker/src/bpay-next-background.js",
+      "sha256": "7858985806b52d045ec88300946c47ebc2fa4b1da01c7e23b57e16dbbdde7edd"
+    },
+    {
+      "file": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "4ba5c8ecc3d69c55d6ce0ceef3257f3848be80955d58ed634618e67b5d0b976a"
+    },
+    {
+      "file": "broker/src/index.js",
+      "sha256": "20da273aff3058378153c7e4e541325c196f1e1b96979dbb0b3127f2cd917e45"
+    }
+  ],
+  "retainedParents": [
+    {
+      "file": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+      "sha256": "2d9822da9881179dace5a2ff97c65fcaaf1dfbaad920337a4701133d8fe487ae"
+    }
+  ],
+  "checks": {
+    "source": "12/12 PASS after final race correction",
+    "dbCheck": "368 migrations/948 repeatables PASS",
+    "syntax": "Four changed Worker modules PASS",
+    "local": "SolePG17 compile; exact public body/config/owner/ACL/volatility; General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and CandidateDO PASS; publicSECDEF membershipdelta0",
+    "seal": "5c9740c321b55aadf602412c7d5c8c0c7404c336eda42bc71969c823794ae208",
+    "coupling": "PASS",
+    "screen": "N/A card has no screen",
+    "configuration": "wrangler.toml unchanged; batch1/concurrency2/retries10 retained",
+    "historicalTiming": "OWNER_REPORTED localDB30 workers/twoDrafts1.1s/1.8s; receipt unlocated; no queue/runtime proof",
+    "business": "AUTHORED_NOT_RUN; no fixture/business RPC/hosted/queue validation",
+    "timing": "Moved to TEST after installation; C3 Create-only<=60s includingqueue, no approval/execution/payments"
+  },
+  "reviews": [
+    "reviews/DR-20-design-review.md",
+    "reviews/DR-20-sql-review.md",
+    "reviews/DR-20-worker-review.md"
+  ],
+  "wholeItems": {
+    "built": 104,
+    "reviewed": 104,
+    "total": 288
+  }
+}

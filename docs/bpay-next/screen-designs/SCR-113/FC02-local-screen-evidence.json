@@ -1,0 +1,354 @@
+[
+  {
+    "id": "SCR-113",
+    "file": "FC02-normal-dark.png",
+    "errors": [],
+    "copy": "Payment Advances / Snoozes\nClose\nCases · 2\nTimesheet snoozes · 1\nTIMESHEET SNOOZES\n1\nEXPENSE SNOOZES\n0\nHide completed\nLast loaded 12/10/2026 01:59:00\nFilters\nRefresh\nRows\n5\n10\n20\n50\nCANDIDATE\tTIMESHEET\tWHAT IS SNOOZED\tSNOOZED UNTIL\tNOTE\tCREATED ▼\tACTIONS\n\nJane Doe\nJD0001 · Client X\n\t\nw/e 11/10/2026\nTS-0042\n\t\nShift\n06/10/2026 · 08:00–16:00\n\t\nIndefinitely\n\t\nFamily request\n\t\n11/10/2026\n\t\nAmend\nUnsnooze\n\n1 snooze · Sorted by Created, descending\n\nMore\nNew Manual Credit\nNew Payment Advance",
+    "geometry": {
+      "width": 1318,
+      "scrollWidth": 1318,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Cases · 2",
+          "width": 87.765625,
+          "height": 44
+        },
+        {
+          "text": "Timesheet snoozes · 1",
+          "width": 167.328125,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Filters",
+          "width": 65.140625,
+          "height": 38
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        },
+        {
+          "text": "5102050",
+          "width": 59,
+          "height": 41
+        },
+        {
+          "text": "Candidate",
+          "width": 62.0625,
+          "height": 32
+        },
+        {
+          "text": "Timesheet",
+          "width": 59.0625,
+          "height": 32
+        },
+        {
+          "text": "What is snoozed",
+          "width": 100.59375,
+          "height": 32
+        },
+        {
+          "text": "Snoozed until",
+          "width": 87.15625,
+          "height": 32
+        },
+        {
+          "text": "Note",
+          "width": 28.84375,
+          "height": 32
+        },
+        {
+          "text": "Created ▼",
+          "width": 59.859375,
+          "height": 32
+        },
+        {
+          "text": "Amend",
+          "width": 64,
+          "height": 38
+        },
+        {
+          "text": "Unsnooze",
+          "width": 80.015625,
+          "height": 38
+        },
+        {
+          "text": "New Manual Credit",
+          "width": 145.828125,
+          "height": 38
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 168.609375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-113",
+    "file": "FC02-normal-device-light.png",
+    "errors": [],
+    "copy": "Payment Advances / Snoozes\nClose\nCases · 2\nTimesheet snoozes · 1\nTIMESHEET SNOOZES\n1\nEXPENSE SNOOZES\n0\nHide completed\nLast loaded 12/10/2026 01:59:04\nFilters\nRefresh\nRows\n5\n10\n20\n50\nCANDIDATE\tTIMESHEET\tWHAT IS SNOOZED\tSNOOZED UNTIL\tNOTE\tCREATED ▼\tACTIONS\n\nJane Doe\nJD0001 · Client X\n\t\nw/e 11/10/2026\nTS-0042\n\t\nShift\n06/10/2026 · 08:00–16:00\n\t\nIndefinitely\n\t\nFamily request\n\t\n11/10/2026\n\t\nAmend\nUnsnooze\n\n1 snooze · Sorted by Created, descending\n\nMore\nNew Manual Credit\nNew Payment Advance",
+    "geometry": {
+      "width": 1318,
+      "scrollWidth": 1318,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Cases · 2",
+          "width": 87.765625,
+          "height": 44
+        },
+        {
+          "text": "Timesheet snoozes · 1",
+          "width": 167.328125,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Filters",
+          "width": 65.140625,
+          "height": 38
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        },
+        {
+          "text": "5102050",
+          "width": 59,
+          "height": 41
+        },
+        {
+          "text": "Candidate",
+          "width": 62.0625,
+          "height": 32
+        },
+        {
+          "text": "Timesheet",
+          "width": 59.0625,
+          "height": 32
+        },
+        {
+          "text": "What is snoozed",
+          "width": 100.59375,
+          "height": 32
+        },
+        {
+          "text": "Snoozed until",
+          "width": 87.15625,
+          "height": 32
+        },
+        {
+          "text": "Note",
+          "width": 28.84375,
+          "height": 32
+        },
+        {
+          "text": "Created ▼",
+          "width": 59.859375,
+          "height": 32
+        },
+        {
+          "text": "Amend",
+          "width": 64,
+          "height": 38
+        },
+        {
+          "text": "Unsnooze",
+          "width": 80.015625,
+          "height": 38
+        },
+        {
+          "text": "New Manual Credit",
+          "width": 145.828125,
+          "height": 38
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 168.609375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-113",
+    "file": "FC02-normal-phone-dark.png",
+    "errors": [],
+    "copy": "Payment Advances / Snoozes\nClose\nCases · 2\nTimesheet snoozes · 1\nTIMESHEET SNOOZES\n1\nEXPENSE SNOOZES\n0\nHide completed\nLast loaded 12/10/2026 01:59:06\nFilters\nRefresh\nRows\n5\n10\n20\n50\nSort by\nCandidate · ascending\nCandidate · descending\nTimesheet · ascending\nTimesheet · descending\nWhat is snoozed · ascending\nWhat is snoozed · descending\nSnoozed until · ascending\nSnoozed until · descending\nNote · ascending\nNote · descending\nCreated · ascending\nCreated · descending\nJane Doe\nJD0001 · Client X\nw/e 11/10/2026\nTS-0042\nShift\n06/10/2026 · 08:00–16:00\nIndefinitely\nFamily request\n11/10/2026\nAmend\nUnsnooze\nOpen\n\n1 snooze · Sorted by Created, descending\n\nMore\nNew Manual Credit\nNew Payment Advance",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Cases · 2",
+          "width": 71.765625,
+          "height": 44
+        },
+        {
+          "text": "Timesheet snoozes · 1",
+          "width": 151.328125,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Filters",
+          "width": 59.140625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        },
+        {
+          "text": "5102050",
+          "width": 59,
+          "height": 44
+        },
+        {
+          "text": "Candidate · ascendingCandidate · descendingTimesheet · ascendingTimesheet · descendingWhat is snoozed · ascendingWhat is snoozed · descendingSnoozed until · ascendingSnoozed until · descendingNote · ascendingNote · descendingCreated · ascendingCreated · descending",
+          "width": 227.609375,
+          "height": 44
+        },
+        {
+          "text": "Amend",
+          "width": 64,
+          "height": 44
+        },
+        {
+          "text": "Unsnooze",
+          "width": 80.015625,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "New Manual Credit",
+          "width": 139.828125,
+          "height": 44
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 162.609375,
+          "height": 44
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-113",
+    "file": "FC02-scrolled-phone-dark.png",
+    "errors": [],
+    "copy": "Payment Advances / Snoozes\nClose\nCases · 2\nTimesheet snoozes · 1\nTIMESHEET SNOOZES\n1\nEXPENSE SNOOZES\n0\nHide completed\nLast loaded 12/10/2026 01:59:06\nFilters\nRefresh\nRows\n5\n10\n20\n50\nSort by\nCandidate · ascending\nCandidate · descending\nTimesheet · ascending\nTimesheet · descending\nWhat is snoozed · ascending\nWhat is snoozed · descending\nSnoozed until · ascending\nSnoozed until · descending\nNote · ascending\nNote · descending\nCreated · ascending\nCreated · descending\nJane Doe\nJD0001 · Client X\nw/e 11/10/2026\nTS-0042\nShift\n06/10/2026 · 08:00–16:00\nIndefinitely\nFamily request\n11/10/2026\nAmend\nUnsnooze\nOpen\n\n1 snooze · Sorted by Created, descending\n\nMore\nNew Manual Credit\nNew Payment Advance",
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Cases · 2",
+          "width": 71.765625,
+          "height": 44
+        },
+        {
+          "text": "Timesheet snoozes · 1",
+          "width": 151.328125,
+          "height": 44
+        },
+        {
+          "text": "",
+          "width": 18,
+          "height": 18
+        },
+        {
+          "text": "Filters",
+          "width": 59.140625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        },
+        {
+          "text": "5102050",
+          "width": 59,
+          "height": 44
+        },
+        {
+          "text": "Candidate · ascendingCandidate · descendingTimesheet · ascendingTimesheet · descendingWhat is snoozed · ascendingWhat is snoozed · descendingSnoozed until · ascendingSnoozed until · descendingNote · ascendingNote · descendingCreated · ascendingCreated · descending",
+          "width": 227.609375,
+          "height": 44
+        },
+        {
+          "text": "Amend",
+          "width": 64,
+          "height": 44
+        },
+        {
+          "text": "Unsnooze",
+          "width": 80.015625,
+          "height": 44
+        },
+        {
+          "text": "Open",
+          "width": 54.828125,
+          "height": 44
+        },
+        {
+          "text": "New Manual Credit",
+          "width": 139.828125,
+          "height": 44
+        },
+        {
+          "text": "New Payment Advance",
+          "width": 162.609375,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

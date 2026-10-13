@@ -1,0 +1,17 @@
+# DR-23 seq150 current implementation receipt
+
+Backend code `36142afbe81004023bfe6f5402c9958f22d64db8`; Office code `413cea9b35975c6ccac0b084327ef109b05c1c48`. Local commits only. Current first-install candidate remains the previously published exact candidate; no promotion, installation or activation is performed by these commits.
+
+Completed and independently reviewed scoped leaves: D05 rules, D06 conditional audit, D07 closed preview contract, D09 existing Worker maps/read kind, D11 actual thin Office preview/consent/journal hook, D13 simple-transfer busy successor, D14 Case-transfer busy successor. D10 and the whole ITEM remain PARTLY_DONE until the next DR22 shared entry/worksheet-edit host genuinely joins them. Six CONTEXT children stay reference-only. EX02's execution helper call and EX13's issued-CSV lock remain their named future owners.
+
+The exact16 final routine definitions and actual latest parents are recorded in DR-23-parent-provenance.json and the final registry. New locked audit1626 and preview-version1706 migrations add four private fields and six private economic attachments without changing a public producer/trigger or adding a public routine. BD182's narrowly required capacity revision detects distribution changes even at unchanged recovery/cash totals; accepted inputs are never repriced. Native0290 row calculation, E/H/order, pure capacity/cash, original lock order and precommit fence remain authoritative. Exact request replay precedes fresh admission, and terminal retained fences do not block later previews.
+
+Checks passed: db:check389 migrations/1018 repeatables; final sole local PG17 CHANGED compilation;16 exact installed bodies/config/owner/ACL; four fields/six attachments/audit CHECK catalogue; unchanged general browser839/76/0/hash338226c4e9b878c5aa92fc8e319dd7bf; Source writer census31 inventory/2644 routines/93 sites/29 writers/5 removals/0 unclassified; existing source/legacy/final-definer32/32; affected Worker/Office node syntax; generated contract `1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26` sealed; coupling passed before and after code commit; source credential scan6899 files passed.
+
+Independent SQL SOURCE PASS: reviews/DR-23-sql-review.md; design/scope/control inheritance: DR-23-preview-design-review.md; Worker/Office scoped SOURCE PASS: reviews/DR-23-office-review.md. S01/S02 and O23-01/O23-02 are closed. Exact source and catalogue pins remain in those receipts.
+
+SCR59 has six real native screenshots: question and Keep-return in dark/device-light/phone. Small fixed read replies only, zero captured JavaScript errors, no database data/financial dispatch. Full42-row scoped A4 approval and visible differences/control necessity are in screen-designs/SCR-59/review.md and BUILD_LOG. Current accepted£884.20 / repayment£150 / cash£734.20 stays after Keep. The unbuilt wider DR22 entry host was not fabricated; its later integration remains required.
+
+All financial first-use/example, concurrent-capacity, queue, timing, hosted-installation and joined in-app checks are AUTHORED_NOT_RUN. The authored future checklist is DR-23-future-joined-TEST-checklist.md. This receipt does not turn compilation or fixed screen replies into business acceptance.
+
+Continue DR22 seq151 from the complete current1626 parents and shared original preview/consent helper. Keep every actual clear/import/resave/count deliverable; use original ordered per-worker commands and the existing commit fence. No parked F25 resolver/protocol or Source producer is reopened.

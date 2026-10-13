@@ -1,0 +1,7 @@
+# PF-05 exact scope before implementation
+
+10 October 2026, sequence20. Full card06:1764–1778 and current two checklist rows read. DependencyF09 is source-built/reviewed. Exact objects: D01 targeted semantic DB/Worker source check; D02 future joined in-app TEST checklist. Nothing visible or financial is changed.
+
+Reuse the existing finite source-gate module and ordinary source-unit file; existing workflows already run that gate. Inspect actual NEXT RPC/call/DDL/request argument semantics, including shared Worker dispatch, rather than banning ordinary words. Forbidden mechanisms are theoretical admission allowances/tariffs/processing-step pricing, fee-payer ancestor graphs and explicit abandoned G01/C1 processing architecture. Legitimate money valuers, rates, Source C1 publication, page/byte/lease/time bounds and scheduling budgetProfile remain allowed. No new command, RPC, public trigger, money owner, scenario or proof framework is required. D02 records the future joined receipt clauses honestly NOT_RUN.
+
+BUILDER DECISION BD024: use the narrow semantic source boundary attached to real NEXT declarations/calls/request fields and the current actual fixed transport contracts. Vocabulary alone is not authority; short field/dimension names are refused only in an admission/processing-price mechanism. Independent source-path inventory/review verifies the current path. No pre-pricing call or source/protocol rewrite is introduced.

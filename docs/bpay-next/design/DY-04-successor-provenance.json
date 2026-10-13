@@ -1,0 +1,55 @@
+{
+  "item": "DY-04",
+  "sequence": 90,
+  "status": "BUILT_REVIEWED",
+  "decision": "BD100",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "sha256": "4a21ab611b90ed39fed312a5d8aaa0754e72f980da9c621ee815ec1f611c6c1a"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+      "sha256": "3a7fb9b31fd418a16cb56a3a9980233a96ddd2ee66af64f59cadd1f807e02977"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "8decf8f784118c153e4e5d2db0848050812b8adab72e5b8b4a53a2e48f2358c0"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "85876d22eda817b7c5ef797926275c5c221e18b9401af081fb9f72d7496e12e7"
+    }
+  ],
+  "parentsAndRetained": [
+    {
+      "path": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "sha256": "9212749c48615fac296a1af071ad1b7bb187bfc19c92bcba5021bf4fdc602391"
+    },
+    {
+      "path": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+      "sha256": "d29decd59c88c2620fe658b5d96f0deace19063cd0eaddf150ea7cf09c7b60af"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "sha256": "7fdddc57b5f1ca6aff196567a10dd09b393185b17efdfe9b58bb766aea7e847b"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+      "sha256": "39c1a1f69fc5c9a5152aa08ca037e295e6e08b64bbd0651177556fa6fe52c99a"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
+      "sha256": "2a7a8cb0d64c8e56404b1889b8e5f5bbb6bae7ac49700342fa3e81b315a8a7f3"
+    }
+  ],
+  "contractHash": "dba304bfa025e45219f450beb6c2d183bed38d1e2449e642a88087602fa04ba3",
+  "checks": "343/897; source12/12 beforeload; solelocalPG17changedcompile/catalogue; syntax; export/seal/coupling; browserverifierDO PASS",
+  "publicMembershipDelta": 0,
+  "joinedApp": "AUTHORED_NOT_RUN",
+  "implementationCommit": "1552e0c97051b48becf4aeb58cd026f15d7792fc"
+}

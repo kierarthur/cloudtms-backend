@@ -1,0 +1,139 @@
+{
+  "schema_version": "E_ONLY_DESTINATION_REPRICE_PATCH_V2",
+  "sourceRoot": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003",
+  "files": [
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "rawPreimageSha256": "92194591ccdc5ccc47e4f5b9137244c35e2f4e8ea852e763e85f3cd2b503e7b1",
+      "lfPreimageSha256": "92194591ccdc5ccc47e4f5b9137244c35e2f4e8ea852e763e85f3cd2b503e7b1",
+      "lfCandidateSha256": "219e6c1ca1865eb2732a9375d796755d162d726d2bfaa16f978a998e8c785cad",
+      "inverseExact": true
+    },
+    {
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "rawPreimageSha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "lfPreimageSha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "lfCandidateSha256": "b487a830628c9336ae7efa9206f791cec759cf34809316ee05325cf5e662eb74",
+      "inverseExact": true
+    },
+    {
+      "file": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "rawPreimageSha256": "64ef7e6d04e1b652af722cb9dd050310fcd8e1cd249f59b9359428a310b70933",
+      "lfPreimageSha256": "64ef7e6d04e1b652af722cb9dd050310fcd8e1cd249f59b9359428a310b70933",
+      "lfCandidateSha256": "d8bb27cbaaac443aff2a17bd42f4bb874caa8849ee6df958efa92b5c6589054e",
+      "inverseExact": true
+    },
+    {
+      "file": "supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql",
+      "rawPreimageSha256": "c8b8c83d183eb392d7339f8d9cce92a8adadc401d8469fa74082ad1e9921a819",
+      "lfPreimageSha256": "c8b8c83d183eb392d7339f8d9cce92a8adadc401d8469fa74082ad1e9921a819",
+      "lfCandidateSha256": "8361a4ca5ab5bf324566a905081ce7eec86133c16ee08f77eb33053d14378b00",
+      "inverseExact": true
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "rawPreimageSha256": "5388ce61af1cbd27acfdd4eeb69cc9654247d818e18745200bdd9557e83584b2",
+      "lfPreimageSha256": "5388ce61af1cbd27acfdd4eeb69cc9654247d818e18745200bdd9557e83584b2",
+      "lfCandidateSha256": "086eae85d529b3fdc835e3a6cc2150e3a3d7ff425d3030bb428d94275b10f796",
+      "inverseExact": true
+    }
+  ],
+  "edits": [
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "before": "function calculationFor(row, contract) {\n",
+      "after": "export function calculateWeeklySourceContractRowForServer(row, contract) {\n",
+      "purpose": "Export the actual existing server row/Contract calculation, without copying its logic."
+    },
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "before": "function selectionFor(body, ordinal) {\n",
+      "after": "const calculationFor = calculateWeeklySourceContractRowForServer;\n\nfunction selectionFor(body, ordinal) {\n",
+      "purpose": "Preserve every original upload calculation consumer."
+    },
+    {
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "before": "      array['root_ordinal','contract_id','week_ending_date','selection_method'],\n",
+      "after": "      array['root_ordinal','contract_id','week_ending_date','selection_method']\n        ||case when v_index=2 and v_member_count=2 and v_entry ? 'destination_reprice'\n          then array['destination_reprice'] else array[]::text[] end,\n",
+      "purpose": "V1 keeps exact old keys; only destination choice in a two-root pair may carry the closed witnessed extension."
+    },
+    {
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "before": "    v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(\n",
+      "after": "    if v_entry ? 'destination_reprice' then\n      perform private.weekly_source_publication_require_keys_v1(v_entry->'destination_reprice',\n        array['schema_version','witness_id','review_sha256'],'contract_choice.destination_reprice');\n      if v_entry#>>'{destination_reprice,schema_version}' is distinct from 'WEEKLY_SOURCE_DESTINATION_REPRICE_V1' then\n        raise exception 'WEEKLY_SOURCE_DESTINATION_REPRICE_SCHEMA_INVALID' using errcode='22023'; end if;\n    end if;\n    v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(\n",
+      "purpose": "Exact witnessed schema, UUID and digest are normalised into the real Contract-choice and publication hash domains."
+    },
+    {
+      "file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "before": "        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT')));\n",
+      "after": "        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT'))\n      ||case when v_entry ? 'destination_reprice' then pg_catalog.jsonb_build_object('destination_reprice',\n        pg_catalog.jsonb_build_object('schema_version','WEEKLY_SOURCE_DESTINATION_REPRICE_V1',\n          'witness_id',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,witness_id}','destination_reprice.witness_id','UUID'),\n          'review_sha256',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,review_sha256}','destination_reprice.review_sha256','HEX32')))\n        else '{}'::jsonb end);\n",
+      "purpose": "No unhashed rate parameter and no change to any V1 receipt without this explicit destination certificate."
+    },
+    {
+      "file": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "before": "  v_source_component_hashes jsonb:='{}'::jsonb;\n",
+      "after": "  v_source_component_hashes jsonb:='{}'::jsonb;\n  v_destination_reprice jsonb;\n",
+      "purpose": "One verified immutable destination witness inside the winning real publication owner."
+    },
+    {
+      "file": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "before": "    v_offending:=(\n      select pg_catalog.jsonb_build_object(\n               'component_id',component_element.value->'component_id',\n               'source_authority',v_before_source[1],\n",
+      "after": "    v_destination_reprice:=private.weekly_source_destination_reprice_verify_v1(v_canonical,v_control);\n    v_offending:=(\n      select pg_catalog.jsonb_build_object(\n               'component_id',component_element.value->'component_id',\n               'source_authority',v_before_source[1],\n",
+      "purpose": "Verify genuine actor, before state, actual rates, exact accepted request/control and replay before content exception."
+    },
+    {
+      "file": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "before": "                   component_element.value)),'hex')\n       limit 1);\n    if v_offending is not null then\n      return pg_catalog.jsonb_build_object(\n        'ok',false,'published',false,'replayed',false,\n        'code','WEEKLY_SOURCE_PUBLICATION_MOVED_COMPONENT_CHANGED','retryable',false,\n",
+      "after": "                   component_element.value)),'hex')\n         and not exists (select 1 from pg_catalog.jsonb_array_elements(\n           coalesce(v_destination_reprice->'components','[]'::jsonb)) witness(value)\n           where witness.value->>'component_id'=component_element.value->>'component_id'\n             and pg_catalog.encode(private.weekly_source_publication_request_digest_v1(\n               private.weekly_source_publication_component_content_v1(witness.value->'before_component')),'hex')\n                 is not distinct from v_source_component_hashes->>(component_element.value->>'component_id')\n             and witness.value->'after_content' is not distinct from\n               private.weekly_source_publication_component_content_v1(component_element.value))\n       limit 1);\n    if v_offending is not null then\n      return pg_catalog.jsonb_build_object(\n        'ok',false,'published',false,'replayed',false,\n        'code','WEEKLY_SOURCE_PUBLICATION_MOVED_COMPONENT_CHANGED','retryable',false,\n",
+      "purpose": "Preserve old moved-content refusal; allow only the complete server-qualified pay-field replacement over exact original content."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql",
+      "before": "  v_blank jsonb;\nbegin\n",
+      "after": "  v_blank jsonb;\n  v_reprice_detail jsonb;\nbegin\n",
+      "purpose": "Use the existing pair chosen-detail owner, not a second detail writer."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql",
+      "before": "    v_i:=v_origin;\n    if v_before_heads[v_i] is not null then\n",
+      "after": "    v_i:=v_origin;\n    v_reprice_detail:=private.weekly_source_destination_reprice_detail_v1(\n      p_decision_bundle_id,p_bundle_revision,v_canonical,v_i);\n    if v_reprice_detail is not null then\n      v_detail:=v_reprice_detail;\n    elsif v_before_heads[v_i] is not null then\n",
+      "purpose": "Retain exact old-copy branch; witnessed moved work captures genuine new rates plus immutable witness references."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "  v_source_rate numeric;\nbegin\n",
+      "after": "  v_source_rate numeric;\n  v_destination_stage_snapshot jsonb;\n  v_stage_financial_id uuid;\n  v_job_title text;\n  v_band_label text;\n  v_timesheet_reference text;\nbegin\n",
+      "purpose": "A frozen stage certificate branch inside the actual1550 owner; no alternative approval writer."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "  v_source_pay_method:=upper(coalesce(\n    case when v_first_snapshot then v_tf.pay_method end,\n    v_contract.pay_method_snapshot,''));\n",
+      "after": "  v_destination_stage_snapshot:=private.weekly_source_destination_reprice_stage_snapshot_v1(\n    p_root_timesheet_id,p_expected_head_id);\n  if v_destination_stage_snapshot is not null then\n    if v_first_snapshot or (v_destination_stage_snapshot->>'client_id')::uuid is distinct from v_contract.client_id then\n      raise exception using errcode='23514', message='BPAY_NEXT_SOURCE_STAGE_CERTIFICATE_IDENTITY_MISMATCH';\n    end if;\n    v_source_pay_method:=v_destination_stage_snapshot->>'destination_pay_channel';\n  else\n  v_source_pay_method:=upper(coalesce(\n    case when v_first_snapshot then v_tf.pay_method end,\n    v_contract.pay_method_snapshot,''));\n  end if;\n",
+      "purpose": "Only the exact accepted destination HEAD can freeze channel; ordinary channel authority is unchanged."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "  select coalesce(nullif(btrim(c.display_name),''),\n                  nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),\n                  c.id::text),c.tms_ref,c.mileage_pay_rate\n    into strict v_candidate_name,v_candidate_ref,v_candidate_mileage_rate\n    from public.candidates c where c.id=v_contract.candidate_id;\n  select cl.name,cl.mileage_charge_rate\n    into strict v_client_name,v_client_mileage_rate\n    from public.clients cl where cl.id=v_contract.client_id;\n  select count(*) into v_schedule_count\n    from private.bpay_next_contract_rate_rows_v1(\n      v_contract.rates_json,v_contract.bucket_labels_json,\n      v_contract.additional_rates_json,\n      coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,\n               v_candidate_mileage_rate),\n      coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,\n               v_client_mileage_rate));\n",
+      "after": "  if v_destination_stage_snapshot is not null then\n    v_candidate_name:=v_destination_stage_snapshot#>>'{metadata,candidate_display_name}';\n    v_candidate_ref:=v_destination_stage_snapshot#>>'{metadata,candidate_reference}';\n    v_client_name:=v_destination_stage_snapshot#>>'{metadata,client_display_name}';\n    v_job_title:=v_destination_stage_snapshot#>>'{metadata,job_title}';\n    v_band_label:=v_destination_stage_snapshot#>>'{metadata,band_label}';\n    v_timesheet_reference:=v_destination_stage_snapshot#>>'{metadata,timesheet_reference}';\n    v_stage_financial_id:=(v_destination_stage_snapshot->>'financial_snapshot_id')::uuid;\n    v_schedule_count:=pg_catalog.jsonb_array_length(v_destination_stage_snapshot->'rate_schedule');\n  else\n  select coalesce(nullif(btrim(c.display_name),''),\n                  nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),\n                  c.id::text),c.tms_ref,c.mileage_pay_rate\n    into strict v_candidate_name,v_candidate_ref,v_candidate_mileage_rate\n    from public.candidates c where c.id=v_contract.candidate_id;\n  select cl.name,cl.mileage_charge_rate\n    into strict v_client_name,v_client_mileage_rate\n    from public.clients cl where cl.id=v_contract.client_id;\n  select count(*) into v_schedule_count\n    from private.bpay_next_contract_rate_rows_v1(\n      v_contract.rates_json,v_contract.bucket_labels_json,\n      v_contract.additional_rates_json,\n      coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,\n               v_candidate_mileage_rate),\n      coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,\n               v_client_mileage_rate));\n    v_stage_financial_id:=v_tf.id;\n    v_job_title:=v_contract.role; v_band_label:=v_contract.band; v_timesheet_reference:=v_ts.reference_number;\n  end if;\n",
+      "purpose": "Freeze all actual approved metadata and complete available schedule; unwitnessed helper count/fallbacks remain verbatim."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_tf.id,v_ts.version,\n",
+      "after": "      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_stage_financial_id,v_ts.version,\n",
+      "purpose": "Retain the genuine accepted optional TSFIN evidence rather than a later fallback row."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "      v_contract.role,v_contract.band,v_ts.reference_number,v_inventory_digest)\n",
+      "after": "      v_job_title,v_band_label,v_timesheet_reference,v_inventory_digest)\n",
+      "purpose": "Witnessed job/band/reference labels are frozen; ordinary labels still originate from the original owner."
+    },
+    {
+      "file": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+      "before": "  insert into private.bpay_next_rate_schedule\n    (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)\n    select v_revision_id,r.rate_family,r.rate_code,r.unit_label,\n           r.paye_rate,r.umbrella_rate,r.charge_rate\n      from private.bpay_next_contract_rate_rows_v1(\n        v_contract.rates_json,v_contract.bucket_labels_json,\n        v_contract.additional_rates_json,\n        coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,\n                 v_candidate_mileage_rate),\n        coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,\n                 v_client_mileage_rate)) r;\n",
+      "after": "  if v_destination_stage_snapshot is not null then\n    insert into private.bpay_next_rate_schedule\n      (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)\n      select v_revision_id,r.rate_family,r.rate_code,r.unit_label,r.paye_rate,r.umbrella_rate,r.charge_rate\n        from pg_catalog.jsonb_to_recordset(v_destination_stage_snapshot->'rate_schedule')\n          as r(rate_family text,rate_code text,unit_label text,paye_rate numeric,umbrella_rate numeric,charge_rate numeric);\n  else\n  insert into private.bpay_next_rate_schedule\n    (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)\n    select v_revision_id,r.rate_family,r.rate_code,r.unit_label,\n           r.paye_rate,r.umbrella_rate,r.charge_rate\n      from private.bpay_next_contract_rate_rows_v1(\n        v_contract.rates_json,v_contract.bucket_labels_json,\n        v_contract.additional_rates_json,\n        coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,\n                 v_candidate_mileage_rate),\n        coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,\n                 v_client_mileage_rate)) r;\n  end if;\n",
+      "purpose": "Insert complete frozen typed rows only on certified destination; original live-helper insert is unchanged on every unwitnessed path."
+    }
+  ]
+}

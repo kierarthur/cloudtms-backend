@@ -1,0 +1,17 @@
+# Financial intake and preparation successor ownership
+
+04102026_0270 financial intake and 04102026_0575 preparation service evolve in each card's Depends-on order. Each successor keeps all existing command/page kinds, exact validation, owner/epoch admission, sealed request identity and queue contract. Never replace an earlier kind while adding a new one. Record added kinds, owning card and exact successor in this note and the final-definer registry.
+
+Branches added: none (foundation census only).
+
+EX-01 sequence98: financial_intake2150 ->11102026_1306 adds no money action. Its six installed protected branches gain only the closed proof UUID and native locked scope/atomic consume before unchanged money dispatch. The current fifteen-action registration, actual six consumption seams and later owning cards are explicit in EX-01-proof-consumption-registry.md. Public fixed preview/record and private finite scope/consume are1302. Later DR-10 and execution owners merge these current definitions; never replay2150 over1306 or infer a future action from its enum. Worker and Office retain2048-byte command, original journal identity and ENROLL wake.
+
+WB-19: financial_intake2018 ->2150 adds only RETRY_WORK_JOB before original12-action dispatcher. New workbench_command2150 is service/admin/NEXT, exact immutable request receipt/readback; later WB29/WB36/WB28 merge its current definition. W1 page2128 ->2150 adds only HEADER bounded native status/age and its own separate progress continuation; nonCURRENT financial pages remain refused. No economic command kind or current-input recomputation.
+
+WB-23: preparation_intake1832 ->2232 adds only EXCLUSION_PAGE/MATCHING_PAGE and preserves every original action. WB-22 must merge2232. Preparation_page2026 ->2232 adds only the closed WORK_CHOICES accepted_inputs variant; original ordinary and WB16 detail branches are retained. Four-argument native ACK1832 ->2232 delegates its unchanged signature to bounded atomic receipt support; original SUBSET prefix/count/member immutability remain. Seal1832 ->2232 requires one genuine empty exclusion receipt. Private receipt guard2232 ->2240 preserves PF04 terminal cleanup. Private retained-input reader2232 ->2245 adds genuine nullable subset upload counts for original short/reordered-page resume. No monetary, producer, pin, enroller or parked accepted-record authority changed.
+
+FC09seq107: financialIntake1536, enrollOne0847 andfinancialJob0814 ->11102026_1939 add only the named CASE_EDIT ordered immutable request/job/apply branch and retain every earlier kind. PreparationPage1738 ->1939 extends originalCASE_PREVIEW with closed editCase/revision operands and originalCASE_COMPONENTS with optional exact edit_command_id/readback; no new page kind/route. Current1910component/list metadata and0204plan/0904prepare are1939; laterFC10 merges these17registry owners.
+
+FC10seq108:financialIntake/enrollOne/financialJob1939->11102026_2041 addonlytwo namedorderedstatusactions andoriginaljobreceipt; preparationPage/componentPage1939->2041 nullablepause_state/pause_receipt andoptionalexactpause_command_id. No newreaderroute/pagekind/protocol; allcomplete1939parentsretained.
+
+FC14seq109 BD121: original publicpreparationPage2041->2129 CASE_AUDIT/CANDIDATE_CASE_REPORT read-only branches, identical service/admin/NEXT gates. No financialIntake/enroller/financialJob/Worker route/command addition. Existing helper permissions remain owner-only; publicSECDEFmembershipdelta0.

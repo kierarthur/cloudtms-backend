@@ -1,0 +1,71 @@
+[
+  {
+    "id": "SCR-122b",
+    "file": "FC09-credit-committed-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nPayment activity\nCredit\nPayment committed\nAmount\n£35.00\nTax\nNot taxable\nComment\nMissed travel claim\nNote\nAgreed with Sarah Lewis\n\nThis Case has payment activity and cannot be changed.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122b",
+    "file": "FC09-credit-committed-device-light.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nPayment activity\nCredit\nPayment committed\nAmount\n£35.00\nTax\nNot taxable\nComment\nMissed travel claim\nNote\nAgreed with Sarah Lewis\n\nThis Case has payment activity and cannot be changed.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122b",
+    "file": "FC09-credit-committed-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nPayment activity\nCredit\nPayment committed\nAmount\n£35.00\nTax\nNot taxable\nComment\nMissed travel claim\nNote\nAgreed with Sarah Lewis\n\nThis Case has payment activity and cannot be changed.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  }
+]

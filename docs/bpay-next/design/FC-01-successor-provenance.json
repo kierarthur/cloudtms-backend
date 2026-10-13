@@ -1,0 +1,79 @@
+{
+  "item": "FC-01",
+  "sequence": 103,
+  "decision": "BD115",
+  "status": "BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS",
+  "builtDeliverables": [
+    "FC-01-D01",
+    "FC-01-D02",
+    "FC-01-D03",
+    "FC-01-D04",
+    "FC-01-D05",
+    "FC-01-D07",
+    "FC-01-D08"
+  ],
+  "openDeliverables": [],
+  "itemOpen": false,
+  "screenOwner": "FC-02 sequence117",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1738_banking_pay_next_case_list_indexes.sql",
+      "sha256": "3b1cb7e77fb2e271dd5e4b28cfcc4bca15cf5c9d413c19085cee578af6efae30"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "sha256": "ab912386daf210e25a2d5b6f37038b00aac8081ca0ba27e059deffdb17f47231"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "94f7889d6f2927573bff174d0738c284fe5354b1b1830193b4f2ebb1ecb3de85"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "518ea3b2ffc1c66d6eccdd0b082267f4710ed6d8d8f859c785905cefe3b5f40f"
+    },
+    {
+      "path": "docs/bpay-next/design/FC-01-page-contract.json",
+      "sha256": "1b3adcbacd8ab65cad0355262b06b6409b188da22415fe73c88bb456476d3434"
+    }
+  ],
+  "reviews": [
+    "design/FC-01-design-review.md",
+    "reviews/FC-01-sql-source-review.md",
+    "reviews/FC-01-worker-review.md"
+  ],
+  "checks": {
+    "integrity": "351 migrations /913 repeatables PASS",
+    "sourceGates": "12/12 before corrected final local load",
+    "nodeSyntax": "PASS",
+    "catalogue": "Seven current/retained owner-body/config/ACL matches",
+    "metadata": "10 indices/7 deferred private guards/forced owner RLS/no browser-service table grants",
+    "general": "839|76|0|338226c4e9b878c5aa92fc8e319dd7bf",
+    "publicDefinerMembershipDelta": 0,
+    "isolation": "General/Candidate DO PASS",
+    "contractHash": "ac7310eff30094b09bb6bfc2786c07eb54d523b4f770df36477f78b029df2cef",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "compileCorrection": "42601 CASE operand in IF: parentheses-only repeatable correction; locked additive migration unchanged"
+  },
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "2b802c1f3386610b2adbac89b4757fd833e76894",
+  "consumerCompletion": {
+    "item": "FC-02",
+    "implementationCommit": "f773f0d74cb463eb85ec51aa0e465fa94d743951",
+    "frontendImplementationCommit": "5bbd042e3e9895ef307d4fbc04d3443b0bff1e71",
+    "evidence": "design/FC-02-completion.md; design/FC-02-successor-provenance.json; design/FC-02-current-owner-catalogue.json; FE 5bbd042e3e9895ef307d4fbc04d3443b0bff1e71",
+    "reviews": [
+      "reviews/FC-02-office-source-review.md",
+      "reviews/FC-02-case-sort-review.md",
+      "reviews/FC-02-snooze-sort-review.md",
+      "screen-designs/SCR-112/review.md",
+      "screen-designs/SCR-112b/review.md",
+      "screen-designs/SCR-112c/review.md",
+      "screen-designs/SCR-113/review.md",
+      "screen-designs/SCR-114/review.md",
+      "screen-designs/SCR-115/review.md"
+    ]
+  }
+}

@@ -458,8 +458,48 @@ begin
   -- 824/76/0/2cb2ef197993c05bb0c1566b04c601dd; removing ONLY these two rows
   -- reproduces the complete NEW7 822/76/0/3303d05b216d5527b559b76f9c7949b0.
   -- No removed/changed earlier ACL row, new omission or browser exposure.
-  if v_count<>824 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'2cb2ef197993c05bb0c1566b04c601dd' then
+  -- The Banking Pay NEXT foundation baseline added two service-only jsonb readers:
+  -- public.bpay_next_cutover_readiness_page_v1(pg_catalog.jsonb) and
+  -- public.bpay_next_payment_history_page_v1(pg_catalog.jsonb).
+  -- Sole local PG17 catalogue:826/76/0/10128c0eb0ada910eea370f487d5f214.
+  -- Excluding ONLY these exact two signatures from this same query reproduces
+  -- 824/76/0/2cb2ef197993c05bb0c1566b04c601dd; no previous ACL row changed.
+  -- Both actual routines are SECURITY DEFINER with fixed search_path and
+  -- owner/service_role execution only. The Candidate inventory is unchanged.
+  -- 10 October owner-assessment correction: PF-04 adds service-only public
+  -- bpay_next_operational_health_service_v1() and
+  -- bpay_next_terminal_cleanup_service_v1(integer); SP-02 adds service-only
+  -- bpay_next_source_legacy_finance_admit_v1(). Verbatim inventory query
+  -- on the sole local PG17 catalogue:829/76/0/55bbf326922f59d683823d40f5f3544a.
+  -- Excluding ONLY these three reproduces826/76/0/10128c0eb0ada910eea370f487d5f214.
+  -- No membership removal, prior ACL change or browser exposure is forgiven.
+  -- Every future public SECURITY DEFINER addition/removal must remeasure and
+  -- update this verifier in the same implementation commit.
+  -- WB-44 adds only service-only public.bpay_next_workbench_runtime_service_v1
+  -- (text,uuid,jsonb), with fixed search_path and no direct private table access.
+  -- Fresh sole PG17 catalogue:830/76/0/9ca786a0b905925c3b6c7e5d52bccb4f.
+  -- Excluding only that identity reproduces the preceding829/76/0 seal.
+  -- WB-09 adds only service-only STABLE public.bpay_next_workbench_page_v1(jsonb).
+  -- Fresh sole PG17 catalogue:831/76/0/ffcd8688816814f70392fd43a6c91c83.
+  -- Excluding only this identity reproduces830/76/0/9ca786a0b905925c3b6c7e5d52bccb4f.
+  -- WB-19 adds two service-only SECURITY DEFINER entry points: exact
+  -- workbench_command_v1(jsonb) and work_job_failure_service_v1(uuid,uuid,
+  -- bigint,text,text,text). Fresh sole local PG17 catalogue:
+  -- 833/76/0/01ac3d90c572327934daabf869623c85. Browser execution stays zero;
+  -- the pre-existing 76 service omissions remain unchanged.
+  -- WB-37 adds the exact service-only snooze_due_page_v1(jsonb) and
+  -- workbench_week_rollover_page_v1(jsonb) entry points. Fresh sole local
+  -- EX-01 adds exactly two service-only proof record/finite preview entrypoints.
+  -- Fresh local PG17 catalogue:839/76/0/338226c4e9b878c5aa92fc8e319dd7bf; EX-08 adds exactly two service-only readers/writers.
+  -- DR-10 rederived the same catalogue after its existing public intake/page
+  -- successors: no public definer added/removed and no browser grant changed.
+  -- Browser executable identities are empty; existing 76 omissions unchanged.
+  -- 13 October first-install integration: clean PG17 rederived the same
+  -- 839/76/0/338226c4e9b878c5aa92fc8e319dd7bf inventory. The two new
+  -- Candidate notification entry points are covered by the separate exact
+  -- Candidate-named verifier; neither belongs to this general inventory.
+  if v_count<>839 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'338226c4e9b878c5aa92fc8e319dd7bf' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

@@ -1,0 +1,57 @@
+{
+  "item": "PF-07",
+  "sequence": 111,
+  "decision": "BD123",
+  "status": "BUILT_REVIEWED",
+  "productDelta": false,
+  "existingOwners": [
+    {
+      "path": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "path": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+      "sha256": "be3c7dd17ecea6cbff631ed0b39c9b09947e6284b93db04ecdf517e320fed3e1"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql",
+      "sha256": "2854fd9f5f51d9654193c59d74258620afa8bdf020f45dfa8bfd78c3f47fc4b8"
+    },
+    {
+      "path": "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
+      "sha256": "03daf223a8b572b37605f1ddc15fb777a3a543ff89140b8cff40238ec9a139fa"
+    },
+    {
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "19f08cbdd3ba40b9439b99cc274d7fa48b98daed82bbd31207ca58c5c638cd68"
+    },
+    {
+      "path": "broker/src/bpay-next-background.js",
+      "sha256": "0524712d1bf52209eea3a7f8846491bac4fc452b2ea593978c85162476049514"
+    },
+    {
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "55e682eb8421314ab603c13d5913d365cfe90dcb0399a83167d01dd7a7aa232c"
+    },
+    {
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "d1a1349423ff00c7ed2713ea053e7d334c2015eeb250e8f2a33aa8aa42b07608"
+    },
+    {
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "sha256": "65454073073b13c740db5557a9a84a3cd6f64ef71f8493b2ef8a1fbfae7f5b26"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "96e6692e52fc85ceb6fb60646bd5e369865dd6e6975d15dd002ac77574c4f3b0"
+    }
+  ],
+  "registrySha256": "a482c107d56b32b2bac71027ad933327463e9838d42f2d04228821bd9b70527e",
+  "review": {
+    "path": "reviews/PF-07-current-source-review.md",
+    "sha256": "3db2636170afe7b45400ffcc7eac32a8d08adb26f3c91ea430ac6cb5d8c0ae87"
+  },
+  "normalChecks": "PASS db356/918; source12/12; fourWorkerSyntax; solePG17load0/0; seal-coupling98ea49ac",
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "8dd70fc0ebb5b3816e53250934562e1ffda7da21"
+}

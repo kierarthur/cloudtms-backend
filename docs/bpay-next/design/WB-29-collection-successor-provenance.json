@@ -1,0 +1,48 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "batch": "Five native collection identity owners; W2/accepted/quote joins remain pending",
+  "builderDecision": "BD155",
+  "signatures": [
+    "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)",
+    "private.bpay_next_case_allocation_plan_v1(jsonb)",
+    "private.bpay_next_work_collection_guard_v1()",
+    "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+    "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+      "sha256": "9fa243c98655e950e670bcb65eb73ef554883cf00cb2e1824982a5ed407c8eee"
+    }
+  ],
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sha256": "b9650e9da89a3dca3b59bc33f73efc8acf132038dae163df826d1f18730990fd"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+      "sha256": "de67314666b76892ef6b4ac25554fa44e7f7a89a96068eabe6b7ea9a3b79a830"
+    },
+    {
+      "path": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
+      "sha256": "c52b03c259630bfed375cd3e21e6e25ee0668b5a1a64e73b42979198787c3020"
+    }
+  ],
+  "designReview": "docs/bpay-next/reviews/WB-29-collection-design-review.md: DESIGN PASS",
+  "sourceReview": "docs/bpay-next/reviews/WB-29-collection-source-review.md: SOURCE PASS",
+  "checks": {
+    "dbCheck": "PASS:380 migrations/978 repeatables",
+    "sourceGates": "PASS:1534 SQL /30 public roots /154 work signatures /37 typed transport",
+    "nodeCheck": "PASS: changed source gate",
+    "localPG17": "PASS:1 new successor /5 exact body/config/owner/ACL/volatility matches",
+    "isolation": "PASS:839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both existing DO verifiers",
+    "contract": "c1099249f109433272c9203b960aed2a38798b0d789227c73ef1ea7a9978d575",
+    "seal": "PASS",
+    "coupling": "PASS"
+  },
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "9bf482207a0b033498172b596147f27562cc6f8d"
+}

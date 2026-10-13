@@ -295,7 +295,7 @@ test('cron requests existing bounded continuation only for safe progress with mo
   assert.equal(classify({ ok: false, more_due: true, made_progress: true }), false);
   assert.equal(classify({ ok: true, more_due: true, made_progress: true, stop_reason: 'RPC_ERROR' }), false);
 
-  assert.match(worker, /shouldContinueBankingPayWorkbenchAfterCron\(workbenchCronRes\)/);
-  assert.match(worker, /origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_CONTINUATION'/);
-  assert.match(worker, /budgetProfile: 'NUDGE'/);
+  assert.match(worker, /runBpayNextRecoveryTick\(bpayNextBackgroundDependencies\(env\)\)/);
+  assert.match(worker, /bpayNextEnrollmentWake\(env\)/);
+  assert.doesNotMatch(functionBody('handleBankingPayContinuationQueue'), /bankingPayWorkbenchCronTick|recoverStrandedBankingPayContinuations/);
 });

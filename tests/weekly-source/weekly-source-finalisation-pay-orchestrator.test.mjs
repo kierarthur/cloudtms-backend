@@ -160,6 +160,7 @@ function harness(options = {}) {
     },
     dataRpc: async (name, args) => {
       calls.push([name, clone(args)]);
+      if (name === 'bpay_next_source_legacy_finance_admit_v1') { if(options.admissionError)throw options.admissionError;return true; }
       if (name === 'weekly_source_finalise_atomic_v1') {
         if (options.finaliseError) throw options.finaliseError;
         return {
@@ -520,4 +521,19 @@ test('published contract explicitly preserves the ordinary lifecycle and forbids
   assert.equal(WEEKLY_SOURCE_FINALISATION_PAY_ORCHESTRATION_CONTRACT.bypassesWorkbench, false);
   assert.equal(WEEKLY_SOURCE_FINALISATION_PAY_ORCHESTRATION_CONTRACT.mutatesWorkbenchOrBankingPay, false);
   assert.equal(WEEKLY_SOURCE_FINALISATION_PAY_ORCHESTRATION_CONTRACT.mutatesInvoices, false);
+});
+
+test('NEXT Recover DB refusal precedes OPEN and every original write',async()=>{
+  const dependencies=harness({admissionError:Object.assign(Error('DB refusal'),{json:{code:'PT410',message:'BPAY_NEXT_LEGACY_WRITER_RETIRED'}})});
+  await assert.rejects(()=>recoverWeeklySourceFinalisationPayProjection({request:{actor_user_id:ID.actor,final_revision_id:ID.revision,run_id:ID.run,task_id:ID.taskA,expected_task_version:1,confirm_retry:false},actor:{id:ID.actor},dependencies}),e=>e.code==='BPAY_NEXT_LEGACY_WRITER_RETIRED'&&e.status===410);
+  assert.deepEqual(dependencies.calls.map(([name])=>name),['bpay_next_source_legacy_finance_admit_v1']);
+});
+test('definite downstream retirement preserves finalisation without an UNKNOWN checkpoint',async()=>{
+  const error=Object.assign(Error('DB refusal'),{json:{code:'PT410',message:'BPAY_NEXT_LEGACY_WRITER_RETIRED'}});
+  for(const options of [{openError:error},{projectionError:error},{buildError:error}]){
+    const dependencies=harness(options);const result=await execute(dependencies);
+    assert.equal(result.source_finalised,true);assert.equal(result.invoice_authority_committed,true);
+    assert.equal(result.status,'FINALISED_PAY_ACTION_REQUIRED');assert.equal(result.pay_projection_error_code,'BPAY_NEXT_LEGACY_WRITER_RETIRED');
+    assert.equal(dependencies.calls.some(([name])=>name==='weekly_source_finalisation_pay_task_unknown_atomic_v1'),false);
+  }
 });

@@ -1,0 +1,164 @@
+{
+  "source": "Sole local PG17 schema catalogue and isolation DO only; no business calls/data",
+  "rows": [
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql",
+      "sourceMd5": "d5fb701c4ff8f4484a805c2bfa9cba40",
+      "installed": {
+        "bodyMd5": "d5fb701c4ff8f4484a805c2bfa9cba40",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public",
+          "statement_timeout=5s"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "sourceMd5": "1f4266129e5eaa3e4506a2b295c269e9",
+      "installed": {
+        "bodyMd5": "1f4266129e5eaa3e4506a2b295c269e9",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_workbench_week_rollover_page_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_0118_banking_pay_next_chosen_display_date_repair_v1.sql",
+      "sourceMd5": "251fc084ccb2f26ec38901b275b65abd",
+      "installed": {
+        "bodyMd5": "251fc084ccb2f26ec38901b275b65abd",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private",
+          "statement_timeout=5s"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text)",
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "sourceMd5": "dc89b29affbda5bc13704d7bdae97f97",
+      "installed": {
+        "bodyMd5": "dc89b29affbda5bc13704d7bdae97f97",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_current_component_resolution_quote_v1(uuid,uuid,uuid,date,text[],text,boolean)",
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "sourceMd5": "c17586c25b3f5a882853b08afd075a99",
+      "installed": {
+        "bodyMd5": "c17586c25b3f5a882853b08afd075a99",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    }
+  ],
+  "schema": {
+    "serverVersion": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "database": "banking_modal_v2_test",
+    "attributes": [
+      {
+        "relation": "bpay_next_workbench_group",
+        "name": "chosen_display_date_sensitive",
+        "type": "boolean",
+        "not_null": true,
+        "default_value": "true"
+      },
+      {
+        "relation": "bpay_next_workbench_group",
+        "name": "chosen_display_pay_date",
+        "type": "date",
+        "not_null": false,
+        "default_value": null
+      },
+      {
+        "relation": "bpay_next_workbench_revision",
+        "name": "chosen_rollover_seek_date",
+        "type": "date",
+        "not_null": false,
+        "default_value": null
+      },
+      {
+        "relation": "bpay_next_workbench_revision",
+        "name": "chosen_rollover_seek_work_id",
+        "type": "uuid",
+        "not_null": false,
+        "default_value": null
+      }
+    ],
+    "index": "CREATE INDEX bpay_next_wb_chosen_display_due_idx ON private.bpay_next_workbench_group USING btree (chosen_display_pay_date NULLS FIRST, work_id) WHERE ((group_kind = 'WORK'::text) AND chosen_display_date_sensitive AND complete AND (NOT dirty) AND (progress_state = 'CURRENT'::text) AND ((ready_count > 0) OR (action_count > 0)))",
+    "constraints": [
+      {
+        "name": "bpay_next_wb_chosen_display_date_finite",
+        "definition": "CHECK (((chosen_display_pay_date IS NULL) OR isfinite(chosen_display_pay_date)))"
+      },
+      {
+        "name": "bpay_next_wb_chosen_rollover_seek",
+        "definition": "CHECK ((((chosen_rollover_seek_work_id IS NOT NULL) OR (chosen_rollover_seek_date IS NULL)) AND ((chosen_rollover_seek_date IS NULL) OR isfinite(chosen_rollover_seek_date))))"
+      }
+    ]
+  },
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

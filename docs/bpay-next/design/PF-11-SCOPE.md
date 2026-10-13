@@ -1,0 +1,7 @@
+# PF-11 exact scope before implementation
+
+Sequence24,10 October2026. Full06card1899–1918, exact D01–D03 current rows, file08 order and F16 dependency read. F16 reconciled active Office source lives in BUILD-FE js/bpay-next-office.js and js/bpay-next-payment-history.js; historical card banking-pay-reset-office path is the already-reconciled source. PF09 localcommita8089ee7 complete.
+
+Exact objects: D01 London timestamp routing in Office/history/exports; D02 raw ISO and TS_DAY consumer formatting check; D03 future joined in-app TEST checklist. Required small support: one shared date/timestamp module loaded before both callers and used by their rendering/export consumers. Reuse main.js formatUkDate for date-only presentation; a single Intl Europe/London hourCycleh23 formatter serves timestamps including PG history text. No DB/Worker change is named.
+
+BUILDER DECISION BD028: keep formatting at Office presentation, including the existing streamed original advice window's exact date/timestamp fields. Preserve frozen bank CSV bytes (an existing execution artifact, not a new human export), wire/cursor/TS_DAY identities, UTC storage, local duration-only clocks and all money. Static checks enumerate actual consumers; future winter/BST/DST/browser/CSV/print clauses remain NOT_RUN until joined acceptance. No Source/pay-query/history owner rewrite, new command, temporal protocol or test programme.

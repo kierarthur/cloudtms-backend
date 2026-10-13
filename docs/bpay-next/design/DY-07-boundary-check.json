@@ -1,0 +1,53 @@
+{
+  "item": "DY-07",
+  "checkedBeforeProductEdits": true,
+  "checkedAtUtc": "2026-10-11T10:20:24.420Z",
+  "lockPath": "supabase/release/protected-boundary-lock.json",
+  "lockSha256": "60d2d3d8a74535cf52c5213803d19b0654af48955b6096726e2b7a882545f30c",
+  "planned": [
+    "supabase/repeatable/11102026_1119_banking_pay_next_daily_single_flight_adapter_v1.sql",
+    "broker/src/index.js",
+    "broker/src/candidate-app-backend.js"
+  ],
+  "objects": [
+    "public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamp with time zone)",
+    "public.candidate_submission_finalize_single_flight_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)"
+  ],
+  "format": "file-only lock; no separate object lock array",
+  "files": [
+    {
+      "path": "supabase/migrations/22082026_0951_candidate_mytms_browser_isolation.sql",
+      "sha256": "98b2ed33447cf3c659a81f2772b5f097516158415d6fbcf95faa873ae601a9a4",
+      "actualSha256": "98b2ed33447cf3c659a81f2772b5f097516158415d6fbcf95faa873ae601a9a4",
+      "touched": false
+    },
+    {
+      "path": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02",
+      "actualSha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02",
+      "touched": false
+    },
+    {
+      "path": "supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql",
+      "sha256": "c5bbd78e2a2b4880bd41df421ef7ed93aae4e8de818a493767c81fbd4bd98db0",
+      "actualSha256": "c5bbd78e2a2b4880bd41df421ef7ed93aae4e8de818a493767c81fbd4bd98db0",
+      "touched": false
+    },
+    {
+      "path": "supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql",
+      "sha256": "48a585617017a518316fea11e15e502aa603ffe98b872838ca9abfda0157b080",
+      "actualSha256": "48a585617017a518316fea11e15e502aa603ffe98b872838ca9abfda0157b080",
+      "touched": false
+    },
+    {
+      "path": "supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql",
+      "sha256": "b013a4b81152d4461c6c8410e2466064ad200b3cf47ecb6279fa4ed7fe1e23ba",
+      "actualSha256": "b013a4b81152d4461c6c8410e2466064ad200b3cf47ecb6279fa4ed7fe1e23ba",
+      "touched": false
+    }
+  ],
+  "parentMd5": "84c784dcdfe30875c5fa4a55059b6654",
+  "wrapperMd5": "9deae738310ab8f9f78153b347e2e891",
+  "localCatalogueBodiesMatch": true,
+  "publicSignatureMembershipDelta": 0
+}

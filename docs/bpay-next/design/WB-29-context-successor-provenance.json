@@ -1,0 +1,56 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "builderDecision": "BD159",
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
+      "sha256": "098ef7ee8e20b889b85d9702a374cb381a172d07cb47692e56fe20f7cd9d650e"
+    },
+    {
+      "path": "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+      "sha256": "dd3a2bb6d0e0a262a65cdcb96c0620e6b5a0a84e0a518191da1d6d15b6075b7b"
+    },
+    {
+      "path": "supabase/migrations/12102026_2303_banking_pay_next_resolution_independent_audit_keys.sql",
+      "sha256": "720ad72e771f21ab5263f9c0ddc198781a2f88315d968582460260978d54905b"
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "e0a063d9865ac23f8336825d0b69f0b18658ea738ae3218b3716004389686be6"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "44b22bcb1aa4a9787944f2943ab5c821ce54c752bbbcec8c9ae2ad14e3533341"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_resolution_scope_validate_v1(jsonb,text)",
+    "private.bpay_next_resolution_offer_context_v1(uuid,uuid)",
+    "private.bpay_next_resolution_context_v1(uuid,jsonb)",
+    "public.bpay_next_workbench_page_v1(jsonb)",
+    "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)",
+    "private.bpay_next_component_resolution_quote_v1(uuid,bigint,uuid,uuid)"
+  ],
+  "predecessor": "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+  "designReview": "docs/bpay-next/reviews/WB-29-context-native-request-design-review.md: C29-D01/D02 incorporated",
+  "sourceReview": "SOURCE PASS: context-source-review, resolution-transport-source-review, independent-audit-keys-review",
+  "transport": "Existing W1 GET RESOLUTION_CONTEXT, exact native closed decimal-text DTO; no screen or new route",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedAppAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "70f1a25865463857a54acaba8f8b1517de102ee0",
+  "builderDecisions": [
+    "BD159",
+    "BD160",
+    "BD161"
+  ],
+  "checks": {
+    "dbCheck": "383 migrations / 983 repeatables",
+    "sourceGate": "1542 SQL / 30 RPC roots / 161 routine signatures / 37 typed transport signatures",
+    "localCatalogue": "6 exact routine bodies/configurations/ACL/owners and 4 exact replacement indexes",
+    "isolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both isolation DO PASS",
+    "nodeCheck": "4 changed BE/FE modules PASS",
+    "contractSealAndCoupling": "4b117684b6a92094c6862b5bf2fc727d457a4a9170fff8cd42ff9a7f014a2bfc PASS"
+  },
+  "frontendImplementationCommit": "7b8e9f90385ac6970d249e8fc7456631fab4ce32"
+}

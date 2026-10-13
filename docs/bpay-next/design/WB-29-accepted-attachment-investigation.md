@@ -1,0 +1,55 @@
+# WB-29 accepted decision attachment investigation
+
+12 October 2026. Source-only investigation for seq140, WB-29 D02/D03/D09/D17/D21/D24 and R2-F03. Read full card02:1073–1137, checklist D01–D24, R2-F03, current BD154 design, WB45 migrations2044/2100 and final-definer registry. No product, SQL execution, business data, test, screen or deployment action. This is an integration finding, not item/runtime approval.
+
+## Finding
+
+The existing descriptor Create already supplies the required accepted boundary. Decision identity/version must be written there, under its original parent locks and before the first accepted return. A delayed ACTIVE lookup is unnecessary and would be wrong. WB45 supplies immutable decision/quote authority; current accepted choices do not yet attach it.
+
+Two conditions are essential: attachment must cover the descriptor variant without actor-memory capture, and treatment-publication provenance must retain the current pin/capture/hold revision guards. Latest owner E2/BD019 means a Work revision changed after the click is held back and the Candidate is system-released, never repriced. An attachment freezes inputs; it does not keep a changed-revision first offer executable.
+
+## Current final owners and proof
+
+| Object | Current physical owner | Exact seam |
+|---|---|---|
+| Six-argument `bpay_next_create_preparation_v1` | `11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql` | Exact replay167–188 precedes fresh parents. Candidate/Work/revision/Case parent locks precede command clock; final scope check358–367. Memory capture368–371, member construction372–420, eligible Work selection/choice532–538, Candidate settings563–571, accepted descriptor/command582–585, first return593–597. |
+| `bpay_next_selection_memory_leaves_v1(jsonb)` | `11102026_0121_banking_pay_next_case_choice_control_point_v1.sql` | Existing native revision/line/segment/component, source/target, control, Case and Candidate/Umbrella/floor basis. No decision ID/version. |
+| `bpay_next_selection_memory_capture_v1(uuid,jsonb)` | `10102026_2306_banking_pay_next_actor_selection_memory_v1.sql` | 139–143 insert original HEADER and every actual scoped LEAF, including leaf basis; no browser monetary field. |
+| `bpay_next_selection_memory_guard_v1()` | same2306 | 1815–1826 forbid LEAF update/delete/truncate. Only HEADER command/ack progression is mutable. LEAF row has exact run/Candidate/Work/approved-line identity and an 8192-byte JSON basis. |
+| `bpay_next_work_choice_guard_v1()` | `11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql` | INSERT23–32 captures live hold tuple under exact Work SHARE; later updates34–53 retain it and expected revision. This is the universal original choice insertion point. |
+| Append selection/work choices and component append/seal | `11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql` | Descriptor branches dispatch to accepted manifest acknowledgements26/126. No fresh membership/settings admission. Component upload verifies the original choice/revision. |
+| `bpay_next_seal_selection_v1` | current2223 | Descriptor707–726 checks original upload completeness. The live Candidate/query refresh731–751 belongs only to non-descriptor ELSE727. Exact sealed replay does not refill accepted facts. |
+| `bpay_next_claim_prepare_job_v1` | `11102026_2259_banking_pay_next_prepare_retry_v1.sql` | 1114–1128 obtains target channel/Umbrella/VAT from selection_candidate, not current Candidate. Existing earlier-command guard1101–1106 remains. |
+| `bpay_next_pin_selected_work_v1` | `11102026_0559_banking_pay_next_worker_reprepare_v1.sql` | 846–873 reads original work_choice/expected sealed revision; inserts run_work1059–1062. Current/newer-pointer refusal852–870 is still present. |
+| Position capture/fresh hold | `12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql` | Capture1072–1096 retains source residual and native Source-book identity. Hold1284–1293 uses captured revision policy/line; target quotation1410–1416, original line/hold/Position/Worker equality1419–1454. |
+| Segment origin-share writer | `10102026_1236_banking_pay_next_segment_authority_final_v1.sql` | 2692–2743 takes actual run_line/hold/captured parent; cumulative native resolver2718–2735 currently recalculates targets independently of a saved manual decision. Exact parent totals checked2741–2743. |
+
+## Minimal attachment requirements
+
+1. At Create's original accepted cut, enumerate the genuine taxable approved line identities and actual independent STANDARD buckets / arbitrary ADDITIONAL codes. Resolve only compatible ACTIVE decisions using WB45 active2100:189–228, with exact accepted revision/line, Candidate target channel/Umbrella/VAT, immutable policy and official pay date. Record exact decision `id,decision_version`, family/code and mapped boundary line. Record an explicit no-decision result too: absence must not permit adopting a later save.
+2. The current memory path can retain these closed native references in the existing LEAF basis through0121/2306, with guard validation against exact2044 decision/FK identity and the existing 8192-byte bound. Do not copy a previous Draft's decision from the exclusion-memory baseline: that baseline is remembered untick intent; the new run's attachment is established anew at its own accepted cut.
+3. Do not make attachment conditional on `v_memory`. The current Worker/Office descriptor schemas allow `memory_baseline_run_id` to be absent;2223:369 and393 then skip HEADER/LEAF capture. Pin the native attachment directly under the2223 accepted owner for both branches, for example as bounded immutable typed JSON/reference support on the existing per-Work accepted choice, validated at original INSERT. LEAF basis may retain the same reference where memory exists; it cannot be the sole attachment authority. Preserve original choice/member/page APIs. No new resolution table, accepted-input materialiser, command, route or freeze protocol. This storage choice must explicitly cover ALL and SUBSET without waiting for component upload.
+4. First Create replay must read the already accepted association before ACTIVE/currentness checks. Append, seal, first worker creation, retry and delayed capture consume it by exact run/Work/revision/line/family/code; no refill on NULL or clear. Historical accepted rows without this evidence remain honestly unavailable for decision treatment, rather than manufacturing a baseline.
+5. Future CM11 precedence is a named handoff. Current investigation explicitly records CM11/CM19 not built. Pin an exact CM11 receipt/version only when its actual later owner supplies one; do not manufacture it or add a current prerequisite that blocks native resolver-valued ordinary work.
+6. Retain captured source channel/Umbrella/physical origin, accepted Candidate target settings, immutable policy/date, query snapshot, holds, snoozes, selection membership and original command order. Target treatment never rewrites approved SOURCE earnings, recovery principal or source events.
+
+## Later quote and aggregation seams
+
+WB45 quote2100:231–325 accepts explicit immutable decision ID/version and based-on/published boundary; it deliberately does not require ACTIVE state. With run_position it checks exact run Candidate/target/Umbrella/VAT/date and complete segment attribution, uses native residual/included source, and calls the unchanged shared1157 `pay_finance_selected_quote_v1`. Its manual-amount save-time residual-basis equality and manual-rate partial ambiguity refusals are required. No old full quote, percentage scaling or guessed remaining units may substitute.
+
+Current1419 fresh hold replaces only the target quotation at1410–1416. Original included source at1303–1304, capture/source-book qualification, fixed NON_TAXABLE reimbursement1375–1408, and all line/hold/Position/Worker target equalities remain authoritative.
+
+A STANDARD approved parent may own several real buckets (`rate_detail.approved_hours/source_pay_rate`), while its source component total belongs to the one approved_line/Position. WB45 basis2100:25–31 supplies the exact independent bucket. Full multi-bucket MANUAL_REPLACEMENT_RATE can quote that bucket; it is not a licence to duplicate the parent's source amount for every bucket. The complete accepted set must compose exact shared-owner target quotations for each real bucket once, retaining the parent's single native source residual. Unresolved sibling buckets must retain original resolver authority, never silently disappear. A segment needs its actual native bucket membership/units, not the whole parent's hours. Realised/held partial components without exact bucket attribution refuse the existing typed ambiguity; no pro-rata.
+
+Origin-share1236 presently values cumulative source using the original resolver and subtracts successive quoted targets. That is correct for the existing resolver but will disagree with a manual parent target. Its named WB29 successor must use the same accepted decision/quote operands and exact native segment bucket facts (including penny conservation), or return a typed unsupported attribution. Existing origin-share source amounts, parent sum checks and downstream effect membership2752–2782 remain unchanged. Merely overriding the parent's target while leaving2718–2735 intact will fail the current native equality guard.
+
+Estimate, hold and frozen advice must consume the same accepted/native quote contract. Advice displays the frozen decision/version and accepted target; it does not call ACTIVE on opening. No additional financial calculator or money owner is needed.
+
+## Publication/currentness integration condition
+
+The accepted decision attachment does not bypass existing proof. Pin0559:852–870 rejects when expected revision differs from current/applied Work. Capture1419:879 checks applied identity, and hold1315–1340 compares captured Position against current native Position. Under latest owner E2/BD019, retain these guards: a later W2 publication that changes the revision follows existing held-back/system-release behavior. Save/clear affects the next Draft; the accepted attachment forbids substituting its new values into this Draft.
+
+The BD154 same-Work original-approval→treatment-publication bridge qualifies original Source canonical authority for a treatment revision legitimately based on that root. It must preserve, rather than bypass, accepted expected/current revision checks and native Source/query/publication/book proof. Do not drop unique Source-event identity, clone approval, reprice accepted work or admit a newer live pointer. Retain original realised/held/residual equality and lease/fence checks. This is narrow provenance support in the named publication/capture owners; it is not permission for F25 parked objects or a broad producer rewrite.
+
+Source-only conclusion: existing Rule B provides the early accepted seam and target-setting authority. The attachment and quote/share integration remain actual WB29 work; no runtime, installation, joined app or financial acceptance is claimed.
+

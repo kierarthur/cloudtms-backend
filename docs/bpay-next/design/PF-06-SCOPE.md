@@ -1,0 +1,9 @@
+# PF-06 exact scope before implementation
+
+Sequence21,10 October2026. Full card06:1782–1803 and three checklist rows re-read. DependenciesF05/F06/F11 complete. Exact objects: D01 existing job/step lifecycle clocks and row counts, only missing columns; D02 broker/src/index.js structured step measurement hooks; D03 future joined in-app checklist.
+
+Census confirms private.bpay_next_job lacks created/started/finished UTC; existing applied_line_count/attempt_count and existing owner progress counters remain. Add three lifecycle columns and one small private-table lifecycle trigger so every current writer records real transitions in its transaction without replacing existing enrollers, money owners or RuleB successors. Old rows retain unknown NULL clocks; do not backfill invented historical times. New creation/first LEASED start/first terminal DONE or FAILED finish use clock_timestamp; BLOCKED remains resumable. No public trigger.
+
+Worker reuse existing validated one-call step and bounded response reader; one optional observer injected by index logs only job_id,kind,attempted step, validated rows_visited when present (otherwise null), actual response bytes read and complete RPC/read/validation elapsed milliseconds. Exact PayQuery busy SQLSTATE/message is classified before existing public error translation; log code is finite, no payload. Logging cannot change success/ACK/retry, and no additional RPC is introduced. Existing attempted input phase, not returned next phase, identifies the measurement.
+
+BUILDER DECISION BD025: missing lifecycle clocks use a private job-only supporting trigger, preserving every existing owner implementation and replay semantics. Existing business counts are kept; unknown/not-applicable visited rows remain null. Worker ms is whole bounded dependency wall time, not a claim of isolated DB execution; DB/browser separation belongs to the future joined receipt. No new metric ledger, command, protocol or harness.

@@ -1,0 +1,90 @@
+{
+  "item": "WB-22",
+  "sequence": 69,
+  "state": "BUILT_REVIEWED; source/local compile and actual local screens; joined application acceptance NOT_RUN",
+  "builderDecision": "BD077",
+  "exactDeliverables": [
+    "WB-22-D02",
+    "WB-22-D03",
+    "WB-22-D04"
+  ],
+  "contextOwners": "D01 references WB21 intake; D05 is retained card provenance",
+  "sourceFiles": {
+    "supabase/migrations/10102026_2306_banking_pay_next_actor_selection_memory.sql": "51cdfb58b668afb18bfa83083d2a14ac3c33b701a6d635feb2b4e592db8c49bc",
+    "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql": "3f77bbb57500f1320d3873935c8504264a46e50287be9740267f838f8d1dc750",
+    "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql": "545ab73faec8f1331f33986b91ee743340f96be7bcecfb36b8a9c4ed12b38b14"
+  },
+  "successors": [
+    {
+      "object": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid)",
+      "chain": [
+        "1832",
+        "2306"
+      ],
+      "change": "Exact two-table actor memory capture and original native positive membership/subset owners; no repricing"
+    },
+    {
+      "object": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+      "chain": [
+        "2232",
+        "2306"
+      ],
+      "change": "Acknowledge only the original captured memory after original checks; replay never refreshes inputs"
+    },
+    {
+      "object": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "chain": [
+        "2128",
+        "2306",
+        "2340"
+      ],
+      "change": "Own bounded native defaults/counts and one own-Candidate export selected-pay fact"
+    },
+    {
+      "object": "public.bpay_next_workbench_page_v1(jsonb)",
+      "chain": [
+        "2150",
+        "2306",
+        "2340"
+      ],
+      "change": "Closed optional original memory reference and exact count/Create native identity parity"
+    }
+  ],
+  "support": "Five finite read-only helpers, captured two-table memory and private guards only; original Create/seal/own-reader successors are indispensable to the three named deliverables. No public triggers/producers/version writers/commands/routes/money-owner replacement.",
+  "checks": {
+    "dbCheck": "332 migrations/863 repeatables PASS",
+    "localPg17": "Sole PG17 compile only 1 migration/4 final closures, then 0/4; zero business rows or financial invocation",
+    "changedJsSyntax": "PASS",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "0d067f76312a8358606e9708ee6bd259fe05fe34c776093fc2f4c844857c99f1",
+    "coupling": "PASS",
+    "diffCheck": "PASS"
+  },
+  "publicCatalogue": {
+    "count": 833,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "hash": "01ac3d90c572327934daabf869623c85",
+    "delta": "Fresh local catalogue unchanged; no public SECURITY DEFINER signature addition/removal"
+  },
+  "reviews": [
+    "reviews/WB-22-design-review.md",
+    "reviews/WB-22-memory-design-review.md",
+    "reviews/WB-22-sql-review.md",
+    "reviews/WB-22-reader-review.md",
+    "reviews/WB-22-office-review.md"
+  ],
+  "screens": {
+    "id": "SCR-04",
+    "screenshots": 18,
+    "policyReview": "39 PASS / 0 FAIL / 3 N/A",
+    "review": "screen-designs/SCR-04/WB22-review.md",
+    "sample": "screen-designs/SCR-04/WB22-fixed-read-responses.json",
+    "method": "Actual Office with smallest local fixed responses; dark/device-light/390px; no database fixtures"
+  },
+  "joinedAppAcceptance": "NOT_RUN; named300/3page/revision/NONE/Keep/next-date app journeys are authored acceptance only",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED",
+  "backendCommit": "019367de264e68732ce77972463d13006609bb98",
+  "frontendCommit": "f41d279d1a47ee3a2efab3624e3002a4c678b854"
+}

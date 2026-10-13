@@ -1,0 +1,1118 @@
+[
+  {
+    "file": "FC06-unselected-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-first-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-non-taxable-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-weekly-zero-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£\n£0.00 is allowed.\nTake-home floor\n£\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\n£0.00\nTake-home floor\n£0.00\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-wednesday-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\n\nStart week must be a Monday.\n\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-reference-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\n\nEnter the original reference before Preview.\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-comment-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\n\nEnter a comment before Preview.\n\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-channel-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-changed-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-error-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-checking-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-pending-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-old-pending-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-foreign-pending-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Debt.",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC06-accepted-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-refresh-error-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-umbrella-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-unselected-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-first-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-non-taxable-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-weekly-zero-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£\n£0.00 is allowed.\nTake-home floor\n£\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\n£0.00\nTake-home floor\n£0.00\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-wednesday-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\n\nStart week must be a Monday.\n\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-reference-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\n\nEnter the original reference before Preview.\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-comment-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\n\nEnter a comment before Preview.\n\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-channel-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-changed-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-error-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-checking-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-pending-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-old-pending-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-foreign-pending-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Debt.",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC06-accepted-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-refresh-error-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-umbrella-device-light.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-unselected-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-first-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-non-taxable-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-weekly-zero-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nWeekly amount\n£\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£\n£0.00 is allowed.\nTake-home floor\n£\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\n£0.00\nTake-home floor\n£0.00\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-wednesday-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\n\nStart week must be a Monday.\n\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-reference-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\n\nEnter the original reference before Preview.\n\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-comment-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\n\nEnter a comment before Preview.\n\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-missing-channel-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-changed-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-preview-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-checking-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nWeekly repayment\n—\nLast due\n—\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-old-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-foreign-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Debt.",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC06-accepted-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-refresh-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC06-umbrella-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Debt\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "fieldStyles": {
+      "pad": "22px",
+      "style": "",
+      "parent": "bpay-next-advance-currency"
+    },
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  }
+]

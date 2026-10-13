@@ -1,0 +1,93 @@
+{
+  "item": "FC-03",
+  "sequence": 101,
+  "decision": "BD113",
+  "status": "BUILT_REVIEWED",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1536_banking_pay_next_case_notes.sql",
+      "sha256": "a4feb96c06df1a436378384fb504dec67ef80a33e963a7c5d4d223829adb3211"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "sha256": "853ddce45455defed9f715a2593267794f3b224e469a9eaccde2aeca6e44a470"
+    },
+    {
+      "path": "broker/src/bpay-next-case-contract.js",
+      "sha256": "91d2bc7499d1b786ef743e5ae1a9997446d90d4fe1fe84647e84d0892b3fc135"
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "8a5048b81bdaae4a6569df185e6c77a5a8cffe809b9cc5528b30222e96ae91b8"
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "8fd79b23ed2b783d2e2459ec08cf17ecd88d7fd6aa1d4198483fa44399b00423"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "10ae24bc8b65f95a7821c55d014768ad63ef79faf676c11a831bf935a3bb357e"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "b606a7513eed581ec907922bd4c0cc6a75c4ea9bb421b9d2d82baf0940bc2b50"
+    }
+  ],
+  "currentOwners": "design/FC-03-current-owner-catalogue.json",
+  "metadata": "design/FC-03-local-metadata.json",
+  "reviews": [
+    "design/FC-03-design-review.md",
+    "reviews/FC-03-core-source-review.md",
+    "reviews/FC-03-office-source-review.md",
+    "screen-designs/SCR-116/review.md"
+  ],
+  "checks": {
+    "integrity": "349 migrations /911 repeatables",
+    "sourceGates": "12/12 PASS before final changed-only reload",
+    "localPG": "one locked migration/four repeatable closures then four-closure final reload; eight exact body/signature/configuration/volatile/ACL matches",
+    "processCorrection": "Initial local compile was launched while a source-gate failure remained open; final corrected reload followed 12/12 PASS. Locked additive migration retained unchanged.",
+    "contractHash": "de29e6852248dc1aa8e02d44d4edd9704c479c9faacc8bc3b3200b6512d2d6fe",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "general": "837/76/0/d695f2f10d6576d8a3b69f1fe263b297",
+    "verifiers": "General/Candidate DO PASS",
+    "publicMembershipDelta": 0,
+    "nodeSyntax": "seven affected JS modules PASS"
+  },
+  "screen": "A4 PASS:21 actual native variants;42 policy rows32PASS/0FAIL/10N/A; every visible difference/control purpose recorded",
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "8ba9b7c49f7a3ec03d4f5c53c4836e81251b2286",
+  "implementationCommit": "48effbb31f1530488c2c7327d4bf8e399ae805c7",
+  "corrections": [
+    {
+      "id": "FC04-source-channel-refusal",
+      "owner": "FC-03",
+      "foundBy": "FC-04 actual source/A4 integration",
+      "decision": "BD116",
+      "change": "Preserve existing CASE_CREATE SOURCE_CHANNEL_UNBOUND as known nonretryable 409 in both existing Worker command/preparation decoders. CASE_PREVIEW only maps the exact same raw code if emitted; its generic CONTEXT_UNAVAILABLE remains generic. No SQL/route/schema change.",
+      "sources": [
+        {
+          "repository": "BE",
+          "path": "broker/src/bpay-next-command.js",
+          "sha256": "91bdfd79d1da7cf62214ee743284aafd471f527308fa995cd0b86c5ce4ebdb94"
+        },
+        {
+          "repository": "BE",
+          "path": "broker/src/bpay-next-preparation.js",
+          "sha256": "40c02030afe7fbf15366d2ea9cfbfd19745a9a8e5c399b85b6bc04156025c646"
+        }
+      ],
+      "checks": {
+        "integrity": "351 migrations/913 repeatables PASS",
+        "sourceGates": "12/12 PASS",
+        "nodeSyntax": "affected Worker and Office modules PASS",
+        "sqlDelta": "NONE; local PG17 remains FC01 current catalogue",
+        "seal": "PASS",
+        "coupling": "PASS",
+        "contractHash": "ac7310eff30094b09bb6bfc2786c07eb54d523b4f770df36477f78b029df2cef",
+        "futureJoined": "AUTHORED_NOT_RUN"
+      },
+      "implementationCommit": "f51a40c33674716799c50f4f6c72429831faa7ec"
+    }
+  ]
+}

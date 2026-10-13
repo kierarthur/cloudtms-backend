@@ -1,0 +1,68 @@
+[
+  {
+    "signature": "private.bpay_next_workbench_require_next_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_ensure_metadata_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_group_contribution_v1(text)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_apply_delta_v1(private.bpay_next_workbench_delta[],private.bpay_next_workbench_delta[])",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_set_bank_warning_v1(uuid,text)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_candidate_name_trigger_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)",
+    "predecessor": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+    "final": "supabase/repeatable/10102026_1309_banking_pay_next_workbench_source_seed_refresh_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1321_banking_pay_next_workbench_removed_source_classification_v1.sql",
+    "reason": "Independent review: genuine removed WORK and reimbursement classes remain distinct"
+  }
+]

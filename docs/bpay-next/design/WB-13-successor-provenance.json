@@ -1,0 +1,20 @@
+{
+  "item": "WB-13",
+  "sequence": 56,
+  "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+  "predecessor": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+  "finalRoot": "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+  "sourceSha256": "793b332a210575c3b0e938735fe6787a8a5f62698546d63630f5ddad796f834d",
+  "delta": "Three explicit issue constructors append eight existing named typed fields; full1520 helper otherwise unchanged",
+  "publicSecurityDefinerCatalogue": {
+    "count": 831,
+    "serviceExcluded": 76,
+    "browserExecutable": 0,
+    "hash": "ffcd8688816814f70392fd43a6c91c83",
+    "publicIdentityChanged": false
+  },
+  "localContractSha256": "51cb1734b45270ebdc850d48380d5285f24936d4bda0d617c6f393981dfb481c",
+  "installed": "LOCAL_PG17_ONLY",
+  "inApp": "NOT_RUN",
+  "join": "WB14 exact issue window and parent-return; later named WB11/WB19/WB34 consumers remain ordered"
+}

@@ -1,0 +1,3 @@
+# SP-03 joined acceptance — NOT_RUN
+
+Source code and local compilation are separate from future joined observations: initial genuine7.5h WORK/revision/position/source-book binding without Final; selected/nonselected click cutoff; Candidate busy and explicit retry; OPEN manual/unqualified hours refusal versus exact accepted-receipt WAIT and missing signed Timesheet alone; true payment permission negatives; genuine unmapped Additional; single/ContractWeek/two-row bulk with paid read unavailable. All are NOT_RUN. No fixture, queue action, rehearsal, hosted agency, financial/provider/email action.

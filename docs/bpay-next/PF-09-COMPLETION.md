@@ -1,0 +1,9 @@
+# PF-09 completion
+
+Sequence23,10 October2026. D01 finite typed financial projection/exact-decimal/reply-key source gate, D02 correct existing command transport/integration, and D03 future joined acceptance checklist complete under BD027. Reused 13 closed financial action contracts, actual trusted actor/fixed RPC routes, UTF-8 byte/deadline caps, decimal strings/BigInt identities and native SQL calculations; no financial owner, SQL, producer, route or screen change.
+
+The existing F23 source gate now checks current final definitions for19 typed transport signatures,14 finite page projections and77 exact named JSON constructor clauses with order/multiplicity. Literal case and final text encoding remain exact; extra/composite fields, opaque records, removed casts, text cast back to numeric and transported SELECT-star refuse. Static NEXT column declarations including executable DO bodies reject real/float/double. Private typed point-key row locks/guards remain valid. This is a finite source check, not a general semantic proof framework.
+
+Independent D01 review reviews/PF-09-source-review.md PASS after PT01–04 corrections; D02/D03 reviews/PF-09-command-review.md PASS. Census and scope notes retain exact existing work. Existing combined command/RPC/preparation/history source checks90/90 PASS; updated source/final-definer checks7/7 PASS including all four review negatives; changed JS syntax, dbcheck310migrations/812repeatables PASS. No changed SQL to load; sole local PG17 contract re-sealed unchanged552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a; coupling PASS.
+
+All joined application/real Worker/queue/minute/timing clauses remain NOT_RUN. No fixtures/rehearsals/new testing tools/business function/hosted installation/external action. Whole counts21/288 BUILT and21/288 REVIEWED; proceed PF11 sequence24.

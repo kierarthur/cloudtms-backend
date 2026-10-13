@@ -10,7 +10,7 @@ import { canonical, digest, exactAtomicBody, managedManifestHash, readManagedClo
 import { BASELINE_MIGRATION_PREFIX, BOOTSTRAP_PIN, MANAGED_EXCEPTIONS, executionPolicy } from '../scripts/cloudtms-managed-execution-policy.mjs';
 import { acquireWriterSql, applyManagedRelease, assertBootstrapPrefix, assertConnectionPreservingException, assertWriterSql,
   compileBootstrap, compileManagedUnit, managedAdmissionSql, managedReleaseContext,
-  OWNER_RLS_ENVELOPE, pendingInventory, prepareManagedSourceReaders, resetWriterSql, unitCheckpointSql } from '../scripts/cloudtms-managed-release.mjs';
+  OWNER_RLS_ENVELOPE, IMMUTABLE_GUARD_DEPENDENCY, pendingInventory, prepareManagedSourceReaders, resetWriterSql, unitCheckpointSql } from '../scripts/cloudtms-managed-release.mjs';
 import { inventory, readJson, repoRoot, executableSqlFile, mapExecutableSqlSource } from '../scripts/cloudtms-db-release-lib.mjs';
 
 test('packaging lexer treats quoted/dollar bodies as opaque, not transaction boundaries',()=>{
@@ -42,7 +42,7 @@ test('session reset is fresh-file equivalent without releasing its advisory guar
 });
 
 test('exact replay policy covers only audited current exceptions and refuses changed closure',()=>{
-  assert.equal(MANAGED_EXCEPTIONS.length,38);
+  assert.equal(MANAGED_EXCEPTIONS.length,39);
   for(const entry of MANAGED_EXCEPTIONS){
     const closure=readManagedClosure(entry.path,repoRoot);
     assert.equal(executionPolicy(closure),entry);
@@ -66,7 +66,7 @@ test('whole current NEW selected inventory classifies with unchanged LF/closure 
       if(unit.exception)replay++;else atomic++;
     }
   }
-  assert.equal(replay,38);assert.ok(atomic>500);
+  assert.equal(replay,39);assert.ok(atomic>500);
 });
 
 function context(mode='UPGRADE') {return {mode,releaseId:'test-managed',gitCommit:'a'.repeat(40),expectedHash:'b'.repeat(64),
@@ -95,6 +95,34 @@ test('unit DDL and checkpoint share one exact transaction; replay preserves orig
   assert.match(replay,/\\ir 'unchanged\/root.sql'/);assert.match(replay,/CLOUDTMS_INVOICE_INSTALL_DEFERRED_ACTIVE_WORK/);
   assert.ok(replay.indexOf('CLOUDTMS_INVOICE_INSTALL_DEFERRED_ACTIVE_WORK')<replay.indexOf('cloudtms_repeatable_ledger'));
   assert.match(replay,/\{\?invoice_presentation_active_work\}/);
+});
+
+test('two exact migrations declare or assert only their native immutable guard before trigger DDL',()=>{
+  assert.equal(Object.keys(IMMUTABLE_GUARD_DEPENDENCY.consumers).length,2);
+  for(const [file,scope]of Object.entries(IMMUTABLE_GUARD_DEPENDENCY.consumers)){
+    const item=inventory().migrations.find(row=>row.path===file);
+    const unit=compileManagedUnit(item,'migration',{root:repoRoot,mapSource:mapExecutableSqlSource});
+    assert.equal(item.sha256,scope.contentSha256);
+    assert.equal(unit.immutableGuardDependency.scope,scope);
+    assert.equal(digest(unit.immutableGuardDependency.statement),IMMUTABLE_GUARD_DEPENDENCY.statementSha256);
+    const sql=unitCheckpointSql(unit,context());
+    assert.equal(scanManagedSql(sql).statements.filter(row=>row.tokens[0]==='BEGIN').length,1);
+    assert.equal(scanManagedSql(sql).statements.at(-1).tokens[0],'COMMIT');
+    assert.ok(sql.indexOf('if v_guard is null then')<sql.indexOf(unit.body));
+    assert.ok(sql.indexOf(unit.body)<sql.indexOf('cloudtms_migration_ledger'));
+    assert.match(sql,/MANAGED_IMMUTABLE_GUARD_PREDECESSOR_MISMATCH/);
+    assert.match(sql,/not p\.prosecdef/);assert.match(sql,/a\.grantee<>p\.proowner/);
+    assert.match(sql,/revoke all on function private\.bpay_next_effect_immutable_v1\(\)/);
+    assert.doesNotMatch(sql,/bpay_next_revision_guard_v1|bpay_next_policy_immutable_v1|cloudtms_repeatable_ledger|grant execute/i);
+    for(const invalid of [{...unit,immutableGuardDependency:null},{...unit,kind:'repeatable'},
+      {...unit,body:unit.body+'\nselect 1;'},
+      {...unit,immutableGuardDependency:{...unit.immutableGuardDependency,scope:{...scope}}},
+      {...unit,immutableGuardDependency:{...unit.immutableGuardDependency,statement:'return new;'}}]){
+      assert.throws(()=>unitCheckpointSql(invalid,context()),/MANAGED_IMMUTABLE_GUARD_SCOPE_INVALID/);
+    }
+  }
+  const unrelated=inventory().migrations.find(row=>row.path==='supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql');
+  assert.equal(compileManagedUnit(unrelated,'migration',{root:repoRoot}).immutableGuardDependency,null);
 });
 
 test('one exact historical FORCE-RLS seed receives only its pinned atomic owner envelope',()=>{

@@ -31,7 +31,7 @@ BEGIN
       -- remittance line is touched.  Part C's stated value e874efb37025... was
       -- withdrawn by WP-09b; every figure in every earlier report is stale and
       -- this one was taken fresh.  Full record: IMPL\reports\WP-15d_REPORT.md.
-      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', 'd05fe8c683bfe6dc5a850d57360a2d1ef303fd184773cafb2a8a6ebbf018f21f'),
+      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', '658e71e3e01090063771ee43109021579a8e701b5a11d0e1df9a9b72ca78d0d7'),
       ('public.pay_workbench_mark_finance_case_dirty()', '50962ed4c2a7acdbf2a9e38d741d5cb017d56bb1501a92b76b8c980837cd7f08'),
       ('public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)', 'afff514075f85f88642783e6b72db24b64e922b4112274473f67e33c92694d79'),
       ('public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)', '09e28665f4fde5fac02310592c53de7b1cf0336c01a7cec5b182d8e1346666d8'),

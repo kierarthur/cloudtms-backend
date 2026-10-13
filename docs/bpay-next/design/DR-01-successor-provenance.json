@@ -1,0 +1,26 @@
+[
+  {
+    "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date)",
+    "predecessor": "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+    "final": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+    "scope": "Exact named owner delta; RuleB seal/claim/PIN and all producers unchanged"
+  },
+  {
+    "signature": "private.bpay_next_append_selection_page_v1(uuid,bigint,jsonb)",
+    "predecessor": "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+    "final": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+    "scope": "Exact named owner delta; RuleB seal/claim/PIN and all producers unchanged"
+  },
+  {
+    "signature": "private.bpay_next_append_work_choices_v1(uuid,bigint,jsonb)",
+    "predecessor": "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
+    "final": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+    "scope": "Exact named owner delta; RuleB seal/claim/PIN and all producers unchanged"
+  },
+  {
+    "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+    "predecessor": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "final": "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+    "scope": "Exact named owner delta; RuleB seal/claim/PIN and all producers unchanged"
+  }
+]

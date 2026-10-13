@@ -10,13 +10,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const worker = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
-test('timesheet lifecycle nudges debounce and execute without waiting for cron', () => {
+test('timesheet lifecycle nudges retain a NEXT enrollment wake without waiting for cron', () => {
   const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
   assert.doesNotMatch(nudge, /BANKING_PAY_WORKBENCH_LIFECYCLE_NUDGE_DEFERRED_TO_CRON/);
   assert.doesNotMatch(nudge, /LIFECYCLE_ORIGIN_DEFERRED_TO_CRON/);
-  assert.match(nudge, /if \(lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0\)/);
-  assert.match(nudge, /await sleepMs\(lifecycleOriginDrainDelayMs\)/);
-  assert.match(nudge, /const firstTick = await bankingPayWorkbenchCronTick\(env, passthroughOptions\)/);
+  assert.match(nudge, /ctx.waitUntil\(wake\)/);
+  assert.match(nudge, /if \(registered\) return bpayNextEnrollmentWake\(env\)/);
+  assert.match(nudge, /BPAY_NEXT_ENROLLMENT_WAKE_SCHEDULED/);
+  assert.doesNotMatch(nudge, /bankingPayWorkbenchCronTick|drainBankingPayWorkbenchJobs/);
 });
 
 function functionBody(name) {
@@ -121,10 +122,11 @@ function loadDurableWakeHelpers() {
     Array,
     Set,
     Error,
-    crypto: { randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }
+    crypto: { randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+    bpayNextOwnerStatusRpc: env => async () => ({active_owner:env.owner}),
   };
   vm.runInNewContext(
-    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('parseBankingPayWorkbenchDrainWakeMessage')}\n${functionBody('enqueueBankingPayWorkbenchDrainWake')}\nthis.helpers = { parseBankingPayWorkbenchDrainWakeMessage, enqueueBankingPayWorkbenchDrainWake };`,
+    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('parseBankingPayWorkbenchDrainWakeMessage')}\n${functionBody('bpayNextEnrollmentWake')}\n${functionBody('enqueueBankingPayWorkbenchDrainWake')}\nthis.helpers = { parseBankingPayWorkbenchDrainWakeMessage, enqueueBankingPayWorkbenchDrainWake };`,
     context
   );
   return { helpers: context.helpers };
@@ -283,10 +285,11 @@ test('four-lane runtime reserves a bounded three-second RPC 1 response window', 
   assert.match(drain, /claimReserveMs: sourceBuildClaimReserveMs/);
 });
 
-test('bounded durable Workbench wakes continue a successful nudge without enabling payment continuations', async () => {
+test('shared wake entry publishes only NEXT enrollment and retains exact legacy schema parsing', async () => {
   const { helpers } = loadDurableWakeHelpers();
   const sent = [];
   const env = {
+    owner:'NEXT',
     BANKING_PAY_CONTINUATION_QUEUE: {
       send: async (body, options) => sent.push({ body, options })
     }
@@ -299,39 +302,43 @@ test('bounded durable Workbench wakes continue a successful nudge without enabli
   });
   assert.equal(enqueued.ok, true);
   assert.equal(enqueued.enqueued, true);
-  assert.equal(enqueued.wake_depth, 1);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].options.delaySeconds, 1);
-  assert.equal(sent[0].body.message_type, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1');
-  assert.equal(sent[0].body.session_id, ids.session.toLowerCase());
-  assert.equal(sent[0].body.candidate_id, ids.candidate.toLowerCase());
+  assert.equal(sent[0].options, undefined);
+  assert.equal(JSON.stringify(sent[0].body),JSON.stringify({version:1,runtime_action:'ENROLL'}));
+  for(const owner of ['LEGACY','DISABLED']){
+    env.owner=owner;
+    assert.equal((await helpers.enqueueBankingPayWorkbenchDrainWake(env,{})).skipped,true);
+    assert.equal(sent.length,1);
+  }
+  const legacy={message_type:'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',contract_version:1,
+    wake_depth:1,wake_id:ids.job,wake_reason:'PRE_ENTRY_COMMITTED_WORK',origin:null,
+    scope_kind:'CANDIDATE',requested_profile:'NUDGE',previous_drain_invocation_id:null,
+    session_id:ids.session.toUpperCase(),candidate_id:ids.candidate.toUpperCase(),actor_user_id:null,
+    enqueued_at_utc:'2026-10-10T12:00:00.000Z'};
+  const parsedLegacy=helpers.parseBankingPayWorkbenchDrainWakeMessage(legacy);
+  assert.equal(parsedLegacy.session_id,ids.session);
+  assert.equal(parsedLegacy.candidate_id,ids.candidate);
 
   assert.throws(() => helpers.parseBankingPayWorkbenchDrainWakeMessage({
-    ...sent[0].body,
+    ...legacy,
     unexpected: true
   }), /BANKING_PAY_WORKBENCH_DRAIN_WAKE_FIELD_INVALID/);
   assert.equal(helpers.parseBankingPayWorkbenchDrainWakeMessage({
-    ...sent[0].body,
+    ...legacy,
     wake_depth: 32
   }).wake_depth, 32);
   assert.throws(() => helpers.parseBankingPayWorkbenchDrainWakeMessage({
-    ...sent[0].body,
+    ...legacy,
     wake_depth: 33
   }), /BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_INVALID/);
 
   const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
   const queue = functionBody('handleBankingPayContinuationQueue');
-  assert.match(nudge, /if \(canAutoContinueFrom\(finalSummary\)\)/);
-  assert.match(nudge, /await enqueueBankingPayWorkbenchDrainWake/);
-  assert.match(nudge, /durableWakeDepth >= 32/);
+  assert.match(nudge, /bpayNextEnrollmentWake\(env\)/);
   assert.match(nudge, /cron_remains_recovery_fallback: true/);
-  assert.ok(
-    queue.indexOf('parseBankingPayWorkbenchDrainWakeMessage') < queue.indexOf('readBankingPayContinuationFlag'),
-    'Workbench wake dispatch must be independent of the disabled payment-continuation flag'
-  );
-  assert.match(queue, /const drainResult = await bankingPayWorkbenchCronTick/);
-  assert.doesNotMatch(queue.slice(queue.indexOf('if \(workbenchWake\)'.replace(/\\/g, '')), queue.indexOf('const flag = readBankingPayContinuationFlag')), /nudgeBankingPayWorkbenchDrain/);
-  assert.match(queue, /successorWake = await enqueueBankingPayWorkbenchDrainWake/);
+  assert.match(queue, /classifyBpayNextContinuation\(message.body/);
+  assert.match(queue, /await handleBpayNextBackgroundMessage\(message/);
+  assert.doesNotMatch(queue, /readBankingPayContinuationFlag|bankingPayWorkbenchCronTick|nudgeBankingPayWorkbenchDrain|enqueueBankingPayWorkbenchDrainWake/);
   assert.match(queue, /message\.ack\(\);\s*return;/);
 });
 
@@ -779,16 +786,8 @@ test('cron and nudge preserve database-owned stable worker and lane identities a
   assert.match(cron, /canonicalBankingPayWorkbenchUuid\(requestedCandidateId\)/);
   assert.match(cron, /bankingPayWorkbenchStableWorkerId\(budgetProfile, sessionId, configuredWorkerId\)/);
   assert.match(cron, /workerId: stableWorkerId/);
-  assert.match(nudge, /canonicalBankingPayWorkbenchUuid\(requestedSessionId\)/);
-  assert.match(nudge, /canonicalBankingPayWorkbenchUuid\(requestedCandidateId\)/);
-  assert.match(nudge, /bankingPayWorkbenchNudgeSingleFlightKey\(requestedSessionIdValue\)/);
-  assert.match(nudge, /const stableNudgeWorkerId/);
-  assert.match(nudge, /workerId: stableNudgeWorkerId/);
-  assert.match(nudge, /passthroughOptions\.workerId = stableNudgeWorkerId/);
-  assert.match(nudge, /origin:.*AUTO_CONTINUATION/);
-  assert.match(nudge, /origin:.*FINAL_CHECK/);
-  assert.match(nudge, /lockContentionRetryOptions\.origin = .*LOCK_CONTENTION_RETRY/);
-  assert.match(nudge, /origin: 'BANKING_PAY_WORKBENCH_SESSION_NUDGE_GLOBAL_TAIL'[\s\S]*?workerId: 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL'/);
+  assert.match(nudge, /if \(registered\) return bpayNextEnrollmentWake\(env\)/);
+  assert.doesNotMatch(nudge, /workerId|SOURCE_BUILD_LANE|GLOBAL_TAIL/);
   assert.match(drain, /const sessionFilterId = canonicalBankingPayWorkbenchUuid/);
   assert.match(drain, /const candidateFilterId = canonicalBankingPayWorkbenchUuid/);
   assert.match(drain, /bankingPayWorkbenchStableWorkerId\(/);

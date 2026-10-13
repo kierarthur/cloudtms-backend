@@ -1,0 +1,48 @@
+{
+  "source": "Sole local PG17 catalogue and existing isolation DO verifiers only; no business rows/RPC or fixtures.",
+  "columns": [
+    {
+      "name": "note",
+      "type": "text",
+      "nullable": true
+    },
+    {
+      "name": "original_liability_reference",
+      "type": "text",
+      "nullable": true
+    },
+    {
+      "name": "preview_token",
+      "type": "jsonb",
+      "nullable": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "bpay_next_case_create_liability_reference_check",
+      "definition": "CHECK (((original_liability_reference IS NULL) OR ((case_kind = 'MANUAL_DEBT'::text) AND ((octet_length(original_liability_reference) >= 1) AND (octet_length(original_liability_reference) <= 2048)) AND (btrim(original_liability_reference) <> ''::text))))"
+    },
+    {
+      "name": "bpay_next_case_create_note_check",
+      "definition": "CHECK (((note IS NULL) OR (octet_length(note) <= 2048)))"
+    },
+    {
+      "name": "bpay_next_case_create_preview_token_check",
+      "definition": "CHECK (((preview_token IS NULL) OR ((jsonb_typeof(preview_token) = 'object'::text) AND (octet_length((preview_token)::text) <= 24576))))"
+    }
+  ],
+  "immutable": "CREATE TRIGGER bpay_next_case_create_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_create_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+  "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

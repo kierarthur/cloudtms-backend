@@ -1,0 +1,32 @@
+{
+  "item": "DY-01",
+  "sequence": 91,
+  "status": "BUILT_REVIEWED",
+  "decision": "BD101",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+      "sha256": "3eee328de610d01b1890bf4fd039001fb01ccf8dc9cb51c8a233e6f4d1406b87"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "sha256": "4a21ab611b90ed39fed312a5d8aaa0754e72f980da9c621ee815ec1f611c6c1a"
+    },
+    {
+      "path": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+    },
+    {
+      "path": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "sha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+    }
+  ],
+  "contractHash": "17b7a3a44efcede6d684fb2eb4fc6fb82616d53a541b4cad54bce28d76bf4e8f",
+  "checks": "343/898; source12/12 beforeload; solelocalPG17compile/catalogue; syntax; export/seal/coupling; browserDO PASS",
+  "publicMembershipDelta": 0,
+  "joinedApp": "AUTHORED_NOT_RUN",
+  "implementationCommit": "ad310e64fb74124e27ca48de57fe43ee4e165337",
+  "screen": "Existing Daily Client Required/Assign Client and NEXT unpublished exclusion retained under explicit card Screen:none; no new screen approval claimed",
+  "retainedFrontendCommit": "5e319b2b1de66473cf4875cf0192de920b23f028",
+  "review": "reviews/DY-01-source-review.md"
+}

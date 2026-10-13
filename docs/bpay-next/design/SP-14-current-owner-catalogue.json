@@ -1,0 +1,211 @@
+{
+  "source": "Fresh sole local PG17 metadata and existing isolation DO checks only; no business invocation/rows.",
+  "rows": [
+    {
+      "signature": "private.bpay_next_source_query_segment_exclusions_v1(uuid,jsonb)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "bb8709efa20ac7c7d67e23699ae8239c",
+      "installed": {
+        "bodyMd5": "bb8709efa20ac7c7d67e23699ae8239c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "d2030a72a67a10224cf295e2e1a894e5",
+      "installed": {
+        "bodyMd5": "d2030a72a67a10224cf295e2e1a894e5",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "9f214351ea4efa7272838272824d7f02",
+      "installed": {
+        "bodyMd5": "9f214351ea4efa7272838272824d7f02",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "4a3555e86002dbe6d90ef541cc84ee23",
+      "installed": {
+        "bodyMd5": "4a3555e86002dbe6d90ef541cc84ee23",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_append_segment_selection_page_v1(uuid,uuid,uuid,bigint,uuid,text[])",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "3a80e68301a9d93bebbdc7650b556ccf",
+      "installed": {
+        "bodyMd5": "3a80e68301a9d93bebbdc7650b556ccf",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_segment_fact_guard_v1()",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "02d470b3d0513fd885c8e42761448551",
+      "installed": {
+        "bodyMd5": "02d470b3d0513fd885c8e42761448551",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_capture_segment_page_v1(uuid,integer)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "d2d234cc7f3580aab4320e318bf44e18",
+      "installed": {
+        "bodyMd5": "d2d234cc7f3580aab4320e318bf44e18",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "15d1a8d3fb19f7ffb6c0bf004083d130",
+      "installed": {
+        "bodyMd5": "15d1a8d3fb19f7ffb6c0bf004083d130",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "48440258223177faf0382de3a7a66043",
+      "installed": {
+        "bodyMd5": "48440258223177faf0382de3a7a66043",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.weekly_source_first_authorise_core_v1(uuid,text,uuid,jsonb)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "e9f4489807882c24b962b589ad3221ae",
+      "installed": {
+        "bodyMd5": "e9f4489807882c24b962b589ad3221ae",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=public, private, extensions, pg_catalog, pg_temp"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sourceMd5": "52e97f5bd9ea4fca77030dee69e942e0",
+      "installed": {
+        "bodyMd5": "52e97f5bd9ea4fca77030dee69e942e0",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "columns": [
+    {
+      "table": "bpay_next_run_work_query_snapshot",
+      "column": "segment_query_exclusions",
+      "type": "jsonb",
+      "rls": true,
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+    },
+    {
+      "table": "bpay_next_selected_segment",
+      "column": "query_hold_reason",
+      "type": "text",
+      "rls": true,
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}"
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

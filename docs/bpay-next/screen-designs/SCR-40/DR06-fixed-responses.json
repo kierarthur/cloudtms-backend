@@ -1,0 +1,22 @@
+{
+  "actor_id": "11111111-1111-4111-8111-111111111111",
+  "agency_id": "22222222-2222-4222-8222-222222222222",
+  "run_id": "33333333-3333-4333-8333-333333333333",
+  "progress": {
+    "run_id": "33333333-3333-4333-8333-333333333333",
+    "status": "PREPARING",
+    "actor_display_name": "Sarah Lewis",
+    "started_at_utc": "2026-10-08T06:20:14.000Z",
+    "expires_at_utc": "2026-10-11T06:20:14.000Z",
+    "selected_candidates": "227",
+    "ready": "190",
+    "review": "1",
+    "pending": "34",
+    "preparing": "33",
+    "removed": "2",
+    "enrolled_candidates": "227",
+    "enrolment_complete": true,
+    "enrolment_failed": false,
+    "safe_to_close": true
+  }
+}

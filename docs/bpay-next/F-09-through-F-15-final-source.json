@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-09",
+  "explanation": "Final aggregate hashes after source-only normalization to baseline LF. Earlier per-card hashes identify actual review checkpoints, not overwritten evidence.",
+  "files": [
+    {
+      "path": "broker/src/index.js",
+      "sha256": "91f6327ed3ba135c1055fd06da94c5f5dec64df9bad8612277e5581ed603af34"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "sha256": "5352ef8bcc66e87b090d5a1d4f40ba872cf7a542d38f60aaf690ec1eea80f3c3"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a"
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "sha256": "afdbdda4ac440ada0a6267523a4a60398ae47feec85fcf8772f0fb2a2c6dfef8"
+    }
+  ],
+  "sourceGates": "345 F09,41 F10,28 F14/F15 PASS; no data fixtures or new harness",
+  "dbCheck": "298 migrations804repeatables PASS",
+  "coupling": "PASS",
+  "review": "F09,F10,F14,F15 product source PASS;F12D01-D04PASS,D05pending"
+}

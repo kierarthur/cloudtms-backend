@@ -1,0 +1,64 @@
+{
+  "item": "WB-24",
+  "sequence": 72,
+  "state": "BUILT_REVIEWED",
+  "exactDeliverables": [
+    "WB-24-D04"
+  ],
+  "contextOwners": {
+    "D01": "WB-21 native CASE_PAGE/SEAL receipts",
+    "D02": "WB-22 exact actor memory and typed intent",
+    "D03": "WB-21 boundary/run exclusions",
+    "D05": "Approved card reference"
+  },
+  "builderDecision": "BD080",
+  "sourceFiles": {
+    "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql": "5f8d2e1cc3ad80460c840aac028cb76a499f3de2a7496b721bd8c7369ed9ba85",
+    "broker/src/bpay-next-workbench.js": "0b2ccd5b47ac95a9268ccefd19d804b670c7679e51bfcae9e147e89e1b16ec67"
+  },
+  "frontendFiles": {
+    "js/bpay-next-workbench.js": "d2220d146db52bfa0d9d1ba55492f27d576784c48504b8a89d6c72a6a0e486ca",
+    "js/bpay-next-office.js": "4b56e7c3dc82fa0601f3efa9745d7f20e5e36171b0cba79a8fb5f8b8748391d2",
+    "css/bpay-next-office.css": "b67f69085905099fdbae2635fda81089eaf77eaa35aa55827cbe41bc5ea41eaa",
+    "index.html": "c965131468db907e97bc0575509d3bb3e92deb1e1ce3d469b04d2d7b15e5c7fd"
+  },
+  "successors": [
+    {
+      "signature": "private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)",
+      "predecessor": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql",
+      "change": "Literal Work/Case split counters from complete original native choices; original selection basis and complete counters unchanged"
+    }
+  ],
+  "support": "Matching closed row schemas/counter consistency; local Ready callback/checkbox style/cache only. No money owner or public function added.",
+  "checks": {
+    "dbCheck": "333 migrations/869 repeatables PASS",
+    "localPg17": "0 migrations/4 repeatable closures; sole local schema compile, no business rows",
+    "syntax": "Changed JS PASS",
+    "sourceGates": "9/9 PASS",
+    "seal": "5a0393b672e59431e46fbd70624b9650dd8b4ca14d30f2ac4d27b573478411a0",
+    "coupling": "PASS",
+    "publicCatalogue": "833|76|0||01ac3d90c572327934daabf869623c85 unchanged"
+  },
+  "reviews": [
+    "reviews/WB-24-native-counts-review.md",
+    "reviews/WB-24-selection-controls-review.md",
+    "screen-designs/SCR-04/WB24-review.md",
+    "screen-designs/SCR-09/WB24-review.md"
+  ],
+  "screens": {
+    "count": 42,
+    "ids": [
+      "SCR-04",
+      "SCR-09"
+    ],
+    "samples": "screen-designs/SCR-09/WB24-fixed-read-responses.json",
+    "method": "Actual saved Office + smallest local fixed reader responses only, dark/device-light/390px; no DB rows or hosted requests",
+    "verdict": "39 PASS / 0 FAIL / 3 N/A"
+  },
+  "joinedAppAcceptance": "AUTHORED / NOT_RUN: 12 groups/page2 untick, Candidate all includes repayments, Candidate none seals no own Works",
+  "deployment": "NOT_INSTALLED",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "backendCommit": "a471f5c9de483ccbc764a53ca8db6b7e68d9de83",
+  "frontendCommit": "b7adf9547fdfe1d06ecc2cf021f515c229f2fdd0"
+}

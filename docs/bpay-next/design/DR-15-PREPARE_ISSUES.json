@@ -1,0 +1,186 @@
+{
+  "item": "DR-15",
+  "sequence": 119,
+  "contract": "PREPARE_ISSUES",
+  "decision": "BD132",
+  "route": "Existing GET /api/banking/pay/next/preparation-page, kind=PREPARE_ISSUES",
+  "mutation": false,
+  "request": {
+    "run_id": "uuid",
+    "view": [
+      "CANDIDATES",
+      "NOT_IN_DRAFT"
+    ],
+    "sort": [
+      "CANDIDATE_ASC",
+      "CANDIDATE_DESC",
+      "PAYMENT_ASC",
+      "PAYMENT_DESC",
+      "REASON_ASC",
+      "REASON_DESC",
+      "GROSS_ASC",
+      "GROSS_DESC",
+      "STATE_ASC",
+      "STATE_DESC"
+    ],
+    "after": "null or exact context plus [null flag, text decimal/label/null, native row key]",
+    "limit": "integer1..100",
+    "row_key": "null or exact native row identity"
+  },
+  "sources": [
+    "RuleB original run_choice_member skip",
+    "Original selection_page skipped_json and choices_request_json",
+    "COMPLETE SYSTEM/OFFICE RELEASE original diagnostic",
+    "Native selection_candidate and exact worker/run command status"
+  ],
+  "labels": "Exact immutable Work revision; Case-only qualified current Candidate metadata under existing Workbench revision; unbound original Work labels stay null",
+  "membership": "Completed omissions never block Confirm; no new diagnosis or economic retry",
+  "unknown": {
+    "typedCode": "Retained; finite syntax only, not rejected by this manifest",
+    "display": "Could not prepare this Candidate; contact support."
+  },
+  "definitions": {
+    "SOURCE_PAY_QUERY_OPEN": {
+      "review": "Pay Query open on this Timesheet — resolve it in Weekly Source Office Checks",
+      "omitted": "Pay query open"
+    },
+    "SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE": {
+      "review": "Pay Query evidence could not be confirmed — check the Timesheet's queries",
+      "omitted": "Could not check the pay query"
+    },
+    "SELECTED_WORK_NOT_APPROVED": {
+      "review": "The Timesheet is no longer authorised.",
+      "omitted": "Changed after Create Draft — next Draft"
+    },
+    "SELECTED_WORK_REVISION_CHANGED": {
+      "review": "The authorised Timesheet changed after Create Draft.",
+      "omitted": "Changed after Create Draft — next Draft"
+    },
+    "SELECTED_WORK_POSITION_PENDING": {
+      "review": "The authorised Timesheet changed after Create Draft.",
+      "omitted": "Changed after Create Draft — next Draft"
+    },
+    "CAPTURE_POSITION_CHANGED": {
+      "review": "The authorised Timesheet could not be prepared; try again.",
+      "omitted": "The authorised Timesheet could not be prepared; try again."
+    },
+    "POSITION_COMPONENT_EVIDENCE_MISSING": {
+      "review": "Part of the authorised Timesheet could not be checked; try again.",
+      "omitted": "Part of the authorised Timesheet could not be checked; try again."
+    },
+    "POSITION_APPROVAL_AMOUNT_MISMATCH": {
+      "review": "The authorised Timesheet amount could not be checked; try again.",
+      "omitted": "The authorised Timesheet amount could not be checked; try again."
+    },
+    "UMBRELLA_WORK_EXECUTION_UNSUPPORTED": {
+      "review": "This Timesheet cannot be paid this way; check the Timesheet.",
+      "omitted": "This Timesheet cannot be paid this way; check the Timesheet."
+    },
+    "SOURCE_BOOK_APPROVAL_UNBOUND": {
+      "review": "The authorised Source Timesheet could not be checked; try again.",
+      "omitted": "The authorised Source Timesheet could not be checked; try again."
+    },
+    "FINANCIAL_RESOLUTION_REQUIRED": {
+      "review": "The payment needs a decision before it can be prepared.",
+      "omitted": "The payment needs a decision before it can be prepared."
+    },
+    "TARGET_UMBRELLA_MISSING": {
+      "review": "Choose the Candidate’s Umbrella before trying again.",
+      "omitted": "Choose the Candidate’s Umbrella before trying again."
+    },
+    "SEGMENT_CREDIT_ATTRIBUTION_UNAVAILABLE": {
+      "review": "The Timesheet correction could not be checked; contact support.",
+      "omitted": "The Timesheet correction could not be checked; contact support."
+    },
+    "CASE_SELECTION_REQUIRED": {
+      "review": "The selected payments could not be checked; contact support.",
+      "omitted": "The selected payments could not be checked; contact support."
+    },
+    "CASE_TARGET_UNSUPPORTED": {
+      "review": "The selected payment cannot be paid this way; contact support.",
+      "omitted": "The selected payment cannot be paid this way; contact support."
+    },
+    "CASE_INPUT_UNBOUND": {
+      "review": "The selected payment details could not be checked; contact support.",
+      "omitted": "The selected payment details could not be checked; contact support."
+    },
+    "CASE_WEEK_BASIS_UNBOUND": {
+      "review": "The payment week could not be checked; contact support.",
+      "omitted": "The payment week could not be checked; contact support."
+    },
+    "CASE_RETURN_FLOOR_UNBOUND": {
+      "review": "The returned payment details could not be checked; contact support.",
+      "omitted": "The returned payment details could not be checked; contact support."
+    },
+    "CASE_NO_PAYABLE_AMOUNT": {
+      "review": "Nothing to pay — deductions stay outstanding.",
+      "omitted": "Nothing to pay — deductions stay outstanding."
+    },
+    "PF08_NEEDS_ATTENTION": {
+      "review": "Could not prepare this Candidate after several tries.",
+      "omitted": "Could not prepare this Candidate after several tries."
+    },
+    "BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE": {
+      "review": "Not yet payable",
+      "omitted": "Not yet payable"
+    },
+    "BPAY_NEXT_SELECTION_ON_HOLD": {
+      "review": "Pay on hold",
+      "omitted": "Pay on hold"
+    },
+    "BPAY_NEXT_SELECTION_SNOOZED": {
+      "review": "Snoozed",
+      "omitted": "Snoozed"
+    },
+    "BPAY_NEXT_SELECTION_WORK_NOT_APPROVED": {
+      "review": "No longer authorised",
+      "omitted": "No longer authorised"
+    },
+    "BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT": {
+      "review": "Changed after Create Draft — next Draft",
+      "omitted": "Changed after Create Draft — next Draft"
+    },
+    "BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE": {
+      "review": "This line cannot be paid in Banking Pay; check the Timesheet.",
+      "omitted": "This line cannot be paid in Banking Pay; check the Timesheet."
+    },
+    "BPAY_NEXT_SIGNED_COMPONENT_NOT_ELIGIBLE": {
+      "review": "This line cannot be paid in Banking Pay; check the Timesheet.",
+      "omitted": "This line cannot be paid in Banking Pay; check the Timesheet."
+    },
+    "PAYE_EXCLUDED_BY_SAME_WEEK_GUARD": {
+      "review": "A PAYE Draft already exists for this pay week",
+      "omitted": "A PAYE Draft already exists for this pay week"
+    },
+    "ORIGIN_UNAUTHORISED_WAIT": {
+      "review": "Recovery paused — waiting for re-authorisation",
+      "omitted": "Recovery paused — waiting for re-authorisation"
+    },
+    "DRAFT_CANDIDATE_REMOVED": {
+      "review": "Removed from Draft — payments are back in Banking Pay.",
+      "omitted": "Removed from Draft — payments are back in Banking Pay."
+    },
+    "PREPARATION_ENROLMENT_FAILED": {
+      "review": "Could not prepare this Candidate; contact support.",
+      "omitted": "Could not prepare this Candidate; contact support."
+    },
+    "PREPARATION_EXPIRED": {
+      "review": "The Draft expired — payments are back in Banking Pay.",
+      "omitted": "The Draft expired — payments are back in Banking Pay."
+    },
+    "DRAFT_DISCARDED": {
+      "review": "The Draft was discarded — payments are back in Banking Pay.",
+      "omitted": "The Draft was discarded — payments are back in Banking Pay."
+    }
+  },
+  "writerSources": [
+    "11102026_0559 pin",
+    "12102026_0005 capture/hold",
+    "11102026_2223 segment",
+    "11102026_2129 Case prepare/net",
+    "11102026_2259 PF08",
+    "11102026_1358 final skip CHECK",
+    "11102026_0426 append skip"
+  ],
+  "acceptance": "AUTHORED_NOT_RUN"
+}

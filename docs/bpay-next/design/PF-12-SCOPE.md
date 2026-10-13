@@ -1,0 +1,5 @@
+# PF-12 scope checkpoint
+
+Exact checklist objects: D01 existing js/bpay-next-office.js responsive/theme/keyboard controls completion; D02 css/bpay-next-office.css narrow-width/theme styles; D03 future joined in-app TEST checklist. Sequence 25 depends on completed F-16. Full card and all rows read before editing.
+
+BUILDER DECISION BD029: complete only the existing Office and payment-history presentation. A small shared NEXT-local focus helper supports these two actual consumers, including native summary/select/textarea controls and stable existing row/action identities; it does not replace the modal framework. Keep existing showModal, Escape/Close, financial journals, requests, Rule-B inputs, and complete table columns. Scope CSS to the NEXT sheet and exact banking-pay-history shell, with theme variables, system light/dark preference, safe-area-aware 375px header and body scrolling. Add no future CM/DY/XD workflow or global theme. Existing unit/source checks cover the finite changed behavior; future joined mouse/keyboard/phone/theme receipt remains NOT_RUN.

@@ -1,0 +1,29 @@
+{
+  "item": "WB-14",
+  "sequence": 61,
+  "state": "PARTLY_BUILT; whole ITEM and D01 remain open",
+  "frontendCommit": "2030016417500563a2699e2fcd842c517e609c3a",
+  "migration": "supabase/migrations/10102026_1806_banking_pay_next_issue_reason_read_indexes_v1.sql",
+  "repeatable": "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+  "successors": [
+    {"object": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)", "predecessor": "10102026_1743"},
+    {"object": "public.bpay_next_workbench_page_v1(jsonb)", "predecessor": "10102026_1743"}
+  ],
+  "builderDecision": "BD069",
+  "checks": {
+    "dbCheck": "326 migrations /850 repeatables PASS",
+    "localPg17": "1 migration /4 final closures PASS",
+    "sourceGates": "9/9 PASS; exact native affected-count literal admitted in the existing closed common-reader gate",
+    "syntaxAndDiff": "PASS",
+    "contractSeal": "495f48c0839726740e13a4257050e804749b48d07069b59071fbb7bb926f8eeb",
+    "coupling": "PASS"
+  },
+  "screens": {"ids": ["SCR-05", "SCR-06", "SCR-08"], "screenshots": 11, "eachReview": "37 PASS /0 FAIL /5 N/A", "method": "Actual local full Office; minimal fixed screen responses; hosted network blocked; no database rows"},
+  "reviews": ["WB-14-issue-sql-review.md", "WB-14-issue-transport-ui-review.md", "WB-14-issue-design-review.md"],
+  "blocked": "No stored shared change/cause linking native WORK/CASE groups across three Candidates. Same reason or current Umbrella is not evidence of one cause. Retry against later genuine decision-owner evidence and at final retry.",
+  "pendingJoins": ["WB-17 Timesheet/Source and WB-16 breakdown", "WB-30 rates and WB-31 gross", "WB-32/FC exact case/channel action family", "WB-33/34 linked clear/exclude/cancel/restore", "WB-38 snooze and WB-40 hold", "SP-15 exact Source query navigation"],
+  "publicCatalogue": "No new/removed public signature or ACL; verifier constants unchanged; no fresh catalogue execution claimed",
+  "joinedAppAcceptance": "NOT_RUN; whole-card completion not claimed",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "COMMITTED_NOT_INSTALLED"
+}

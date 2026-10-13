@@ -1,0 +1,58 @@
+# FC-09 independent SQL source review
+
+Current status: **SQL SOURCE PASS, 11 October 2026**, for the source checkpoint plus the 1952 activity indexes reviewed below. No remaining essential SQL source finding was identified. This is not an item acceptance receipt. Worker/UI are outside this receipt; joined application, queue, business-data and performance checks are **NOT_RUN** by this reviewer. The original OPEN checkpoint and its findings are retained explicitly as history.
+
+Authority: FC-09 owning card (approved plan `03_DRAFT_PAYE_NET_BATCHES_FINANCE_CASES.md:1196–1215`), working FC-09 checklist rows, BD119 `design/FC-09-builder-design.md`, `design/FC-09-parent-provenance.json`, and the current saved 1939 migration/repeatable. Product remains read-only for this reviewer.
+
+## Current source checkpoint
+
+| Source | SHA-256 |
+| --- | --- |
+| `supabase/migrations/11102026_1939_banking_pay_next_case_edit_request.sql` | `CF08A156CA9C01F24477DEB2303287EFE0556571C5AEC249315D196F47CEB713` |
+| `supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql` | `152C665E631AED507DFCFA4B84045E9521ED9D73EB524B5D153EFE5BFEBF53EE` |
+| `design/FC-09-builder-design.md` | `A51F58982A487C35E15841C025E5F6106382B9ED7A66F7983166EBCC8BCDAE63` |
+| `design/FC-09-parent-provenance.json` | `AE5E9A2FBB3D733DD7E9790EC6343743C32AEBEAB16AC50312859E398B7D02FD` |
+
+The current repeatable has 17 definitions, including the newly added exact edit receipt helper. Earlier full-function comparisons covered the seven retained parents before the latest receipt/readback reassembly; those comparisons showed only the named CASE_EDIT additions described below. Latest readback and CASE list additions still require focused closure.
+
+## Historical OPEN findings
+
+1. **The all-Case transfer-activity negative lookup lacks a proved native indexed path.** Current repeatable `:88–89` joins every hold by `h.case_id` to transfer members by `tm.case_hold_id`, then reads transfer status. The saved migration has no supporting transfer-member `case_hold_id` index, and the existing Case hold index on `case_id` is ACTIVE-only. The query also needs non-ACTIVE holds. The smallest source-supported correction is to seek holds by the already validated one/two native component IDs using the existing `(case_component_id,pay_week_start,id)` index, retain exact `h.case_id`, and add a partial native transfer-member `(case_hold_id)` index for nonnull values. Alternatively, retain the query and provide both complete required index prefixes. This preserves actual transfer membership rather than inferring it through a different result relation. No runtime plan or timing is claimed.
+2. **Latest receipt/readback reassembly is under review.** The new helper at `:130–144` and optional `edit_command_id` CASE_COMPONENTS path must distinguish immutable accepted PENDING, durable BLOCKED, and an applied exact new Rule without treating an accepted but failed command as applied. Closed/committed metadata and the additional CASE list current-reference definition are new since the original seven-parent comparison. They are not yet source-passed by this checkpoint.
+
+## Source already checked
+
+- The original CASE_CREATE record is retained. Exact Rule → funding event → immutable payout instruction → approved Rule → unique edit request is used for amendment provenance (`:6–53`); no current-history scan, new Rule binding column, or 0410 funding rewrite is introduced.
+- APPROVED events use the signed principal delta, including zero for a schedule-only edit. This matches the native event schema and permits successive preactivity edits without introducing a different event kind.
+- Admission replays the original immutable request before fresh-state validation. Fresh admission and apply lock Candidate/control, Case and ordered components, then reprove FC16 protection and expected revision. Fresh apply refuses unsupported membership, actual financial activity and protected Draft scope.
+- Period amendments use immutable exact component/week/revision receipts. Original creation anchors and age remain intact; unused later periods are amended at their exact native point through the shared DERIVE plan. Existing financial counters remain live and unchanged by the amendment receipt operation.
+- Prior complete-parent comparisons found only CASE_EDIT intake dispatch, one-member ordered enrollment, a closed financial job branch, typed DERIVE amendment provenance, exact period receipt persistence, edit Preview dispatch and current edit metadata. Existing ALLOCATE formulas, original funding-only branch, reservation/capacity/source logic and preparation money locks were retained.
+- The new tables have native command/member/Case/Rule/period foreign keys, exact revision constraints and byte ceilings. New private functions/tables have no browser or service table/function grants; retained public service entry points keep their established ACL boundaries.
+
+## Historical correction and evidence boundary
+
+The first source checkpoint had an unparenthesized CASE expression in the membership IF. The current `:69–70` contains the required parentheses. Parent reports that local PG17 compilation and managed loading succeeded after that correction, without business RPCs or rows. That is parent-reported compile evidence, not a database action or independent runtime proof by this reviewer.
+
+This review preserves the earlier findings as history. A later current-source amendment will identify closed findings, final source hashes and any remaining essential issue; it will not convert compile-only evidence into application acceptance.
+
+## Current source closure amendment
+
+The complete current 17-definition repeatable remains `152C665E631AED507DFCFA4B84045E9521ED9D73EB524B5D153EFE5BFEBF53EE`; the 1939 migration remains `CF08A156CA9C01F24477DEB2303287EFE0556571C5AEC249315D196F47CEB713`. The additional migration `supabase/migrations/11102026_1952_banking_pay_next_case_edit_activity_indexes.sql` is `3AEBBACD42DF0D409460A329CC9E3A143D8963C66524789043607BF4CB40A27C`. Current provenance contains all 17 exact signatures, and the current final-definer registry (`42D574D1DAD002F82C37A20DCB630D1269129EEDBFA29C4F34324262F94194B5`) maps those same 17 functions to 1939.
+
+1. **Activity lookup finding closed by 1952.** Its `:10–12` adds the complete native hold `(case_id,id)` history index and partial nonnull transfer-member `(case_hold_id,transfer_id)` index. These are the actual predicates and joins of 1939 `:88–89`, including non-ACTIVE holds and original non-CANCELLED transfer identity. The correction adds only native lookup support; it neither rewrites activity semantics nor substitutes a worker aggregate or inferred financial status. Indexed support is established by source; no runtime plan, constant work or timing is claimed.
+2. **Exact receipt readback reviewed.** `:130–144` selects the immutable request by command/Case/Candidate and its native unique `(command_id,candidate_id,job_kind)` job. Missing enrollment, READY and LEASED work return PENDING. DONE/DONE with an error returns BLOCKED; success requires exact immutable new Rule amendment provenance. It does not resolve a nonexistent pending/blocked new Rule. Expected resulting revision and new Rule remain receipt operands; BLOCKED does not certify that they were installed. Apply `:352–360` rolls back the entire amendment subtransaction before writing its bounded known terminal refusal, and service validation `:1601–1606` compares the returned phase, issue and exact request identities.
+3. **Existing page and ACL retained.** Optional `edit_command_id` is a closed UUID operand on CASE_COMPONENTS (`:2741–2746`, `:2786–2797`), admitted through the existing native argument validator and preparation authority. The exact receipt is added to the existing component rows; no page kind, public route or command is added. Component metadata remains native Case/Rule state, with input from exact original creation or current approved amendment. Allowing closed Case metadata is necessary for committed read-only display; it does not admit editing a closed Case. The newly private receipt helper is owner-only (`:3191–3192`).
+4. **Current-reference successor comparison closed.** Complete function comparisons against the current 1910 parent show CASE list row changes only the Manual Debt reference lookup to the exact current edit Rule request (`:3128–3132`). Component page changes only its truthful lifecycle metadata, current reference, volatility needed for the state helper and closed Case metadata admission (`:2947–3015`). All original money columns, period joins, component ordering/cursor and byte admission remain retained.
+5. **Kernel and period integration remain within BD119.** The shared STABLE plan recognizes only an exact approved amendment and an untouched older original/approved opening (`:1979–1994`). Existing original funding-only checks remain in the alternative branch (`:1995–2026`). The writer persists the exact period receipt under the original period lock (`:2437–2457`), then rechecks full prospective period equality. Original creation anchors, economic age, creator policy/source identity, accepted Rule B cut, live balances and ALLOCATE money formula remain intact. No 0410 funding successor or new funding binding column is required by this implementation.
+
+The source verdict covers SQL admission, immutable provenance, native membership, period amendment receipts, ordered job integration, exact readback, required native index support and ACLs. Local compile/install evidence remains parent-reported; this reviewer performed only saved-source reads, static parent comparisons, documentation writes and file hashing. Runtime first use, joined recovery/queue paths, financial behavior on business rows, performance and actual screens remain **NOT_RUN** here.
+
+## Final alias and closed-context amendment
+
+**SQL SOURCE PASS retained** for the latest saved repeatable SHA-256 `7B723A61096AC50853DBC609ACBBA6437B403F11AA796A6F77E39A78B8308F66`. This hash supersedes the earlier 152C665E source checkpoint above. Both migration hashes, provenance and final-definer registry remain those recorded in the closure amendment.
+
+The focused reread covers only the reported source-gate changes. New exact native table point reads now select explicit `case_point.*`, with the same table, identity predicate, STRICT/optional behavior and lock qualifier. The new preparation reselect at `:2447–2448` likewise names `amended_period.*` and retains the exact component/week predicate. No selection, membership, money operation, revision comparison or lease order changes.
+
+Edit Preview `:160–166` now explicitly constructs its ten context fields. The six retained fields exactly match the current creation-context owner 1536 `:110–112`: actor, owner epoch, financial-view revision, pay channel, Candidate default floor and valuation policy. They are copied with JSON `->`, preserving their native string/null types. The other four remain the existing Case ID/revision and exact Rule ID/revision operands. This has the same context value as the previous six-field context plus four edit fields, while making the closed schema visible in source. Original full Preview/input equality and immutable replay comparison remain intact.
+
+The final `notify pgrst,'reload schema'` at `:3205` precedes COMMIT and is the standard schema cache reload notification; it introduces no command, reader or financial branch. Parent reports that the reassembled 17 definitions compiled on local PG17. No reviewer SQL execution or business action was performed, and the original NOT_RUN boundaries remain controlling.

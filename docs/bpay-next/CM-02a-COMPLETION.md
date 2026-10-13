@@ -1,0 +1,5 @@
+# CM-02a completion
+
+BD040 paper selection: chosen0549 equalsPBW0510; full rawhash9e2488857dc7ad0823b172e2c4efbc9eef6687c0300392ed812e7a99e88f027e. F04 registry/editor row record reference choice/capacity0549 superseding0157/0241, actualRuleB0151 remains executable. Chain holds198unique single-owner objects and59individual ALTERhunk routes, exact13link master includingF25. Existing dated9October design/map preserved as dated source evidence. No SQL/Worker/screen/referencepromotion. Genuine comparison dependencies remain exactlatercards; ordinaryDR11/CM13a need noCM01approval.
+
+D03 futurejoined ordinaryPAYE/Umbrella/namedcomparisonrefusal checklist written NOT_RUN. Three independent paperdesign/currentintegration reviews PASS. Existing10source/finaldefinercontrols, nodecheck, db314migrations819repeatables, solelocalPG17 CHANGED0migrations0closures, sealf063d012188467eb8983cc61687e605e9001a0a3440c83a41d1d442d0ffe612d/couplingPASS. Nofixtures/rehearsal/hosted/externalaction. ProtectedverificationPENDING; installed/business/app/fullWorker/queue/minute/timingNOT_RUN.

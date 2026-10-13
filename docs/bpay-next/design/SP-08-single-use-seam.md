@@ -1,0 +1,11 @@
+# SP-08 single-use Local detail seam — final design
+
+BD042 refinement. SRQ304 explicitly requires the Local same-transaction publication seam to refuse a second fresh capture, including after early SET CONSTRAINTS ALL. Original0556 supplies an exact qualified context and current transaction ID after staging the genuine HEAD. Original0302 validates those facts but has no consumption marker. Transaction identity alone cannot prove single use.
+
+Reuse the actual HEAD UUID plus current xid as the seam identity. Keep frozen0556 completely unchanged. In the named0302 fresh detail branch, after all existing receipt, HEAD, component/vector and qualified-context checks, INSERT one private consumed=true row ON CONFLICT(head_id) DO NOTHING. NOT FOUND raises23514/BPAY_NEXT_LOCAL_DETAIL_SEAM_ALREADY_CONSUMED_OR_MISSING. The insertion precedes detail writes and covers zero worked components. No caller token, command, producer, digest or separate mint protocol.
+
+One small supporting private table has head_id UUID PRIMARY KEY/real HEAD FK, transaction_id xid8 and consumed boolean. Locked additive0736 migration retains DEFAULT false; the guard refuses any default/false insert. Only explicit consumed=true/current-xid inserts are valid. All UPDATE/DELETE/TRUNCATE refuse. ENABLE/FORCE RLS owner policy and no API grants protect the immutable marker. Immediate guards cannot be reset by constraint mode or a GUC. Failed publication rolls back the marker with its actual HEAD; successful consumption cannot rearm it.
+
+Retained COMPLETE replay bypasses insertion and keeps its original immutable detail checks. Old history is not backfilled. Two-function successor only: new private marker guard and complete0302 definition with the eight-line consumption block. No public attachment, other origin or genericI1 change. Selected0302 body, security/search path/owner/ACL and chain order preserved outside that block. Local source/compile/seal/coupling only; business journeys NOT_RUN.
+
+Design correction: source F23 rejected the first uncommitted draft because it copied frozen0556. That draft was removed from this successor; no source gate exemption was added. The narrower consumer-only change fully satisfies the card and the frozen boundary. Independent final review binds this saved source.

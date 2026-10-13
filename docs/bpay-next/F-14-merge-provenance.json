@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-09",
+  "orchestratorBefore": "a9eab6b3712c125b459b3b2ca8b62344fee08c23cb5b1e708929c36e7ea5e5dc",
+  "orchestratorAfter": "22ceeab6220ff365f9fb98ef874f1a2d72d78f6b5e38c6eb28f073645c0c1d9b",
+  "donor": "38853e2edd7074170e7d0ffe9317a83b87ce773321b264887835bb53bddbc9c7",
+  "indexBefore": "4ad6c296eb400f71d15258a7362042e9b606a17972b1794eb3ef505181363659",
+  "indexAfter": "69ec514a58d0992d2abf5587f40af8e0a03c5b4aaa518ee0555a59cc28296b9f",
+  "previewExactDonor": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a",
+  "design": "design/F-14-source-local-merge.md",
+  "externalC1RequiredForSave": false,
+  "sqlChanged": false,
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN"
+}

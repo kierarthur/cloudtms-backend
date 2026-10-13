@@ -1,0 +1,570 @@
+{
+  "officePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-office-20261004",
+  "officeHead": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+  "buildFePath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+  "buildFeHead": "aada67455afe5a3b6828a713c7062832c0617782",
+  "sourceBase": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+  "freshBase": "aada67455afe5a3b6828a713c7062832c0617782",
+  "upstreamCommits": [
+    "aada67455afe5a3b6828a713c7062832c0617782 Offer MyTMS invitation after complete clean Contract save",
+    "6950c199b761b1c3de081d516ac80a3d59d29c59 Outrank universal table zebra and hover with source status colours",
+    "06a35c2d797ba45f9a1d9049a7ec54e82c262068 Release the ad hoc-owned readonly lock when schedule is enabled",
+    "e8eee40c2a5dff08fb73e675ce8b8c27222cdecc Prevent hidden legacy ad hoc patterns returning after untick",
+    "5ca04b4dd26adf93dc2e98dd76e33fdc15f85314 Clear and lock ad hoc patterns; preserve source status colours",
+    "350a7bc05094b0dc5e9552b41d1aee20282fd1e7 Use clearable single-selection checkboxes in source contract chooser",
+    "99243cdcab3f77a6fb0b7753727e1bf157bc41b7 Fix authoritative contract authorisers and post-save dirty state",
+    "87b385c849f400c73e711e21fb6b41cb65f77357 Filter duplicate assignments by pay method and preserve vacant copy workflow",
+    "3b5c88ca64a42f6d76833db41c9ee22ee3e9a09b Allow backdated new Contracts from source checks and retain selected labels",
+    "d35c40c57f5edb8a8e7fd205fd05ed85583f95f5 Retain Office checks and retry exact saved source rechecks",
+    "6835c69c6b4e85533773306d713362ed57e28de5 Highlight ready protected-shift reviews in green",
+    "948a9a5ed687e8722a7da18bff29adfb512a6211 Show protected-pay reasons and restrict review to final-source decisions",
+    "21e83df4a25d426e35b0230ab7a7e2763648075a Finish exact pending protected-pay Save with real TEST acceptance",
+    "2a9201e7489faf1e1513b2992fcfaec91fc16b77 Keep candidate status colours clear in read-only headers",
+    "83103d26e48ae73bc9442e49a07de08988e75e22 Complete staged Candidate header and Source decision presentation",
+    "9100bc5b317a2423f27ea7705d7d2a9c6dbe5649 Stage Candidate active status until modal save",
+    "1d6b91c657af6ff799029bb3f7a385f1255a586d Fix protected shift picker selection in Office",
+    "68c4e20e7af23be65dd30b4c3a7e946021f4c608 Refresh weekly source UI asset cache keys",
+    "36d2b7eb5e32b4afd2c1ea24f3b2ef2e1d6c440d Show source references and search candidate by matching name",
+    "14de10cc8165fdd7a2be87fb5921e4bcef6ccfb8 Keep NHSP final report actions inside the visible table",
+    "e091b73ee86ce8386fdd7ddeaff987eb251fad33 Preserve imported shift identity lock in Office modal",
+    "acb11c28ee81cd59ab01b6362c2cce7f476036f6 Refresh weekly source assets and overdue cutoff label",
+    "42f9dd4ff19f054fe9b2fd542be8f1ef1e10f229 Simplify weekly source Office journeys and checks",
+    "1a4c42039f57ca4e6aec3cd50491ec253dc4cc13 Keep Weekly Source child dialogs visible after viewport resize",
+    "a37d89a1ca2ad473afcb992c5850405e9995ea6d Polish combined source screens in real Office shell",
+    "718684241d355136857002e6a726d2ef12d6bdd5 Combine Weekly Source review and guarded client finalisation with protected shift editor",
+    "d85106b02a47f30ee6950e508c4eabdc187914bf Refresh Weekly Source asset versions for the TEST release",
+    "7ae3041eb38878c04cb1c69b9e66acc59f842ede Keep candidate-only source hours out of Finance",
+    "f3c785551ec12beaa1ef6f6128e664348b575098 Show pre-source candidate hours clearly in Office",
+    "a52cf2725f681aa4f6fcff6b74fa734251428425 Show provisional expense claim lifecycle in Office summary",
+    "1b740ff6bb00b416c26ff3abb162561ca327a742 Show final source hours and invoice evidence in Office",
+    "34fbbd04a3427717d6ffe137455984a502dbe38e Review multiple NHSP backing reports by Trust",
+    "c17976a9370cf691bba04e0e59ec2f939c977a66 Fix weekly source query selection and responsive actions",
+    "96f3f011401e10fcd5a10802ed8ac2fb35aaef15 Open the correct weekly source query tab from Office alerts",
+    "618411a6dd18891bff1617f84d6a5d69640971d1 Clarify candidate-submitted hours in weekly source query details",
+    "140ec52439d2b80ca67274e9c8bf2115cb6369ce Keep weekly source history details readable",
+    "2b2101aade8050b3ac3b4c814f5cc502325b3563 Keep import filenames readable in compact rows",
+    "4f7f7c0284b36925e9f1ad42067761090c5f37a8 Keep source import headers flat and filenames readable",
+    "44ca9e80aa5cd8b2a8d35eba6bc548b107380d8a Polish weekly source headings and table sort labels",
+    "e8249590e706a69850ad57197270d39b1ac5b983 Fix source invoice shift detail and Timesheet link",
+    "5ea7eb00f92796713789620cf7218d56acc3b292 Close completed Weekly Source actions cleanly",
+    "8dd3304bff9f9f945a4d635a829b8871912540c7 Allow group-wide NHSP pre-final acceptance",
+    "07afa312dd5d9bd530244c0ff91b792028735484 Show live Weekly Source rows in Bulk Authorise",
+    "46517fa27b9f7dd7ae0e6d9afa10705e6168f473 Restore Bulk Authorise category switching",
+    "5421fc618804d126d8ee5a65576337d99f05d085 Lock weekly source finalisation before cutoff",
+    "2ee583a0b39a2177d290fc92ec140bedb45abd36 Clarify weekly source selection and cutoff",
+    "5764244edace8b83350e965e11f85ca36f5f6509 Load weekly source data when switching tabs",
+    "ec359e3a7c5c9acf4b92b85732d94861f9433f70 Fix NHSP import review and finalise display",
+    "3b09d50a23ac7de1db0cefd470629505b0d00861 Fix weekly source imports presentation and source selection",
+    "8a9bb0977a8b6b805257f799d4da6dfbf3022262 Automate NHSP source group settings",
+    "7f38b4a6a82aa05185d6bc4bbaea38da981144f1 Restore Weekly Source settings requests",
+    "2f7c2483b0bd46b40ca6e65cf9e4c74011126350 Restore Weekly Source Imports entry point",
+    "12ef1cbceeb83e3e3cf36f4f6b4e7f5c5ec1612b Restore Bulk approved-hours action binding",
+    "d00d72e3efd1670c3e780755a37de7e8c68280ac Implement Weekly Source Office journeys"
+  ],
+  "hunks": [
+    {
+      "path": "js/main.js",
+      "hunk": 1,
+      "header": "@@ -5042,10 +5042,17 @@ async function refreshOpenWeeklyImportSummariesAfterContractSave() {",
+      "officeBaseStart": 5042,
+      "officeBaseCount": 10,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        5056
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -5042,10 +5042,17 @@ async function refreshOpenWeeklyImportSummariesAfterContractSave() {\n }\r\n \r\n \r\n-async function authFetch(input, init = {}) {\r\n-  const APILOG =\r\n-    (typeof window !== 'undefined' && !!window.__LOG_API) ||\r\n-    (typeof __LOG_API !== 'undefined' && !!__LOG_API);\r\n+async function authFetch(input, init = {}) {\n+  const url = (typeof input === 'string') ? input : (input?.url || '');\n+  const nextBankingPath = (() => {\n+    try { return new URL(url, 'https://local.invalid').pathname.startsWith('/api/banking/pay/next/'); }\n+    catch { return false; }\n+  })();\n+  // NEXT raw pages/advice must remain streaming even when opt-in API debug\n+  // logging is enabled. Never clone.text() or log their financial payloads.\n+  const APILOG =\n+    !nextBankingPath && ((typeof window !== 'undefined' && !!window.__LOG_API) ||\n+    (typeof __LOG_API !== 'undefined' && !!__LOG_API));\n \r\n   const {\r\n     auth401Mode,\r\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 2,
+      "header": "@@ -5055,8 +5062,7 @@ async function authFetch(input, init = {}) {",
+      "officeBaseStart": 5055,
+      "officeBaseCount": 8,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        5069
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -5055,8 +5062,7 @@ async function authFetch(input, init = {}) {\n   const headers = new Headers(fetchInit.headers || {});\r\n   if (SESSION?.accessToken) headers.set('Authorization', `Bearer ${SESSION.accessToken}`);\r\n \r\n-  const url = (typeof input === 'string') ? input : (input?.url || '');\r\n-  const method = String(fetchInit.method || 'GET').trim().toUpperCase() || 'GET';\r\n+  const method = String(fetchInit.method || 'GET').trim().toUpperCase() || 'GET';\n \r\n   const auth401ModeNorm = String(auth401Mode || '').trim().toLowerCase();\r\n   const isReauthPath = /\\/auth\\/reauth\\/(?:start|verify)(?:\\?|$)/i.test(String(url || ''));\r\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 3,
+      "header": "@@ -6309,6 +6315,10 @@ function initAuthUI() {",
+      "officeBaseStart": 6309,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        6329
+      ],
+      "upstreamHunksOverlappingContext": [
+        [
+          6311,
+          5,
+          6331,
+          5
+        ]
+      ],
+      "patch": "@@ -6309,6 +6315,10 @@ function initAuthUI() {\n \r\n \r\n function clearSession() {\n+  // Close only the isolated NEXT sheet; its actor-namespaced uncertainty\n+  // journal is deliberately retained for an explicit same-request retry.\n+  try { if (typeof window !== 'undefined') window.CloudTMSBpayNextOffice?.close?.(); } catch {}\n+  try { if (typeof window !== 'undefined') window.CloudTMSBpayNextHistory?.close?.(); } catch {}\n   // stop refresh timers\n   try { clearTimeout(refreshTimer); } catch {}\n   refreshTimer = 0;\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 4,
+      "header": "@@ -6962,6 +6972,7 @@ function renderTopNav(){",
+      "officeBaseStart": 6962,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        6982
+      ],
+      "upstreamHunksOverlappingContext": [
+        [
+          6941,
+          64,
+          6961,
+          64
+        ]
+      ],
+      "patch": "@@ -6962,6 +6972,7 @@ function renderTopNav(){\n         menu.setAttribute('role', 'menu');\n         menu.setAttribute('aria-label', 'Banking destinations');\n         menu.innerHTML = `\n+          <button type=\"button\" role=\"menuitem\" data-banking-destination=\"pay_next\">Banking Pay NEXT</button>\n           <button type=\"button\" role=\"menuitem\" data-banking-destination=\"pay\">Banking Pay</button>\n           <button type=\"button\" role=\"menuitem\" data-banking-destination=\"payment_batches\">Payment Batches</button>\n           <button type=\"button\" role=\"menuitem\" data-banking-destination=\"loans_snoozes\">Loans and Snoozes</button>\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 5,
+      "header": "@@ -6985,6 +6996,19 @@ function renderTopNav(){",
+      "officeBaseStart": 6985,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        7005
+      ],
+      "upstreamHunksOverlappingContext": [
+        [
+          6941,
+          64,
+          6961,
+          64
+        ]
+      ],
+      "patch": "@@ -6985,6 +6996,19 @@ function renderTopNav(){\n           }\n \n           try {\n+            if (destination === 'pay_next') {\n+              if (!window.CloudTMSBpayNextOffice || !SESSION?.user?.id) {\n+                alert('Banking Pay NEXT is unavailable. Please sign in again.');\n+                return;\n+              }\n+              window.CloudTMSBpayNextOffice.open({\n+                document, window, api: API, authFetch, actorId: SESSION.user.id,\n+                currentActorId: () => SESSION?.user?.id || null,\n+                pickCandidate: (onPick) => openCandidatePicker(onPick, { ignoreMembership: true }),\n+                openCandidateRecord: (candidateId) => openCandidate({ id: candidateId })\n+              });\n+              return;\n+            }\n             if (typeof openBanking !== 'function') {\n               alert('Banking modal not yet implemented.');\n               return;\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 6,
+      "header": "@@ -325359,7 +325383,8 @@ root.querySelectorAll('input, select, textarea, button').forEach((el) => {",
+      "officeBaseStart": 325359,
+      "officeBaseCount": 7,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        327036
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -325359,7 +325383,8 @@ root.querySelectorAll('input, select, textarea, button').forEach((el) => {\n       'btnDelete',\r\n       'btnEditModal',\r\n       'btnSave',\r\n-      'btnRelated',\r\n+      'btnRelated',\n+      'btnPaymentHistory',\n \r\n       // \u2705 Keep ONLY non-conversion footer actions\r\n       'btnTsDeleteTimesheet',\r\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 7,
+      "header": "@@ -325384,6 +325409,12 @@ root.querySelectorAll('input, select, textarea, button').forEach((el) => {",
+      "officeBaseStart": 325384,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        327061
+      ],
+      "upstreamHunksOverlappingContext": [
+        [
+          325384,
+          28,
+          327061,
+          28
+        ]
+      ],
+      "patch": "@@ -325384,6 +325409,12 @@ root.querySelectorAll('input, select, textarea, button').forEach((el) => {\n       }\n     } catch {}\n \n+    // The history utility has read-only explicit paging controls, never edits.\n+    if (ro && currentFrame()?.kind === 'banking-pay-history' && el.hasAttribute('data-payment-history-action')) {\n+      el.disabled = el.dataset.historyBusy === '1';\n+      return;\n+    }\n+\n     // Candidate Finance Report is a read-only navigation action. It must remain\n     // available while the Candidate itself is in View mode; opening a report\n     // must never require entering Edit mode or changing the parent dirty state.\n"
+    },
+    {
+      "path": "js/main.js",
+      "hunk": 8,
+      "header": "@@ -331667,6 +331698,26 @@ top._updateButtons = ()=> {",
+      "officeBaseStart": 331667,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        333350
+      ],
+      "upstreamHunksOverlappingContext": [
+        [
+          331661,
+          18,
+          333344,
+          18
+        ]
+      ],
+      "patch": "@@ -331667,6 +331698,26 @@ top._updateButtons = ()=> {\n   const ownsPrimaryRecordWorkflow = !!(\n     !isChild || (top.noParentGate === true && isPrimaryRecordFrame(top))\n   );\n+  // Explicit record history entry; no history read on ordinary modal/Banking load.\n+  const paymentHistoryButton = byId('btnPaymentHistory');\n+  if (paymentHistoryButton) {\n+    const data = top._ctxRef?.data || {};\n+    const scopeId = String(top.entity === 'candidates' ? data.id : data.timesheet_id || '').toLowerCase();\n+    const genuineScope = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(scopeId);\n+    const showHistory = SESSION?.user?.role === 'admin' && genuineScope && top.mode === 'view'\n+      && ((top.entity === 'candidates' && ownsPrimaryRecordWorkflow) || (top.entity === 'timesheets' && top.kind === 'timesheets'));\n+    paymentHistoryButton.style.display = showHistory ? '' : 'none';\n+    paymentHistoryButton.disabled = !showHistory || !!top._saving;\n+    paymentHistoryButton.onclick = showHistory ? () => {\n+      if (currentFrame() !== top || paymentHistoryButton.disabled || !window.CloudTMSBpayNextHistory) return;\n+      window.CloudTMSBpayNextHistory.open({\n+        document, window, showModal, api: API, authFetch, actorId: SESSION.user.id,\n+        currentActorId: () => SESSION?.user?.id || null,\n+        scope: {candidate_id: top.entity === 'candidates' ? scopeId : null,\n+          timesheet_id: top.entity === 'timesheets' ? scopeId : null}\n+      });\n+    } : null;\n+  }\n   const isExistingContractFrame = !!(\n     ownsPrimaryRecordWorkflow && top.kind === 'contracts' && top.entity === 'contracts' && top.hasId\n   );\n"
+    },
+    {
+      "path": "index.html",
+      "hunk": 1,
+      "header": "@@ -10,6 +10,7 @@",
+      "officeBaseStart": 10,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 0,
+      "freshSavedMatchLines": [],
+      "upstreamHunksOverlappingContext": [
+        [
+          11,
+          1,
+          13,
+          1
+        ]
+      ],
+      "patch": "@@ -10,6 +10,7 @@\n   <link rel=\"stylesheet\" href=\"./css/invoice-batch-modal.css?v=20260729-invoice-v8-flat-table-r5\"/>\r\n   <link rel=\"stylesheet\" href=\"./css/candidate-office-v1.css?v=20260907-timesheet-layout-r2\"/>\n   <link rel=\"stylesheet\" href=\"./css/banking-pay-modal-v2.css?v=20260901-r13\"/>\n+  <link rel=\"stylesheet\" href=\"./css/bpay-next-office.css?v=20261004-next-r1\"/>\n   <style>\r\n        :root{\r\n       --bg:#020617;\r\n"
+    },
+    {
+      "path": "index.html",
+      "hunk": 2,
+      "header": "@@ -2869,7 +2870,8 @@ body{",
+      "officeBaseStart": 2869,
+      "officeBaseCount": 7,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        2871
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -2869,7 +2870,8 @@ body{\n       <div class=\"ttl\" id=\"modalTitle\" data-testid=\"modal-title\">Details</div>\r\n       <div class=\"spacer\"></div>\r\n       <!-- Related moved up next to Close -->\r\n-      <button id=\"btnRelated\" style=\"display:none\">Related</button>\r\n+      <button id=\"btnRelated\" style=\"display:none\">Related</button>\n+      <button id=\"btnPaymentHistory\" type=\"button\" style=\"display:none\">Payment history</button>\n       <button id=\"btnCloseModal\" data-testid=\"modal-close\">Close</button>\r\n     </div>\r\n     <div class=\"modal-b\">\r\n"
+    },
+    {
+      "path": "index.html",
+      "hunk": 3,
+      "header": "@@ -3015,6 +3017,8 @@ body{",
+      "officeBaseStart": 3015,
+      "officeBaseCount": 6,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        3017
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -3015,6 +3017,8 @@ body{\n  <script src=\"./js/candidate-office-surface-v1.js?v=20260907-timesheet-layout-r2\"></script>\n \r\n  <!-- Banking Pay v2 is capability-gated and retains the existing main.js owners. -->\r\n+ <script src=\"./js/bpay-next-office.js?v=20261007-next-cold-resume-r2\"></script>\n+ <script src=\"./js/bpay-next-payment-history.js?v=20261006-history-r1\"></script>\n  <script src=\"./js/banking-pay-modal-v2-copy.js?v=20260901-r13\"></script>\n  <script src=\"./js/banking-pay-modal-v2-details-legacy.js?v=20260901-r13\"></script>\n  <script src=\"./js/banking-pay-modal-v2-table.js?v=20260901-r13\"></script>\n"
+    },
+    {
+      "path": "BANKING_PAY_BIBLE.md",
+      "hunk": 1,
+      "header": "@@ -776,3 +776,30 @@ Future entries must include the date, approved rule change or clarification, aff",
+      "officeBaseStart": 776,
+      "officeBaseCount": 3,
+      "exactOldContextMatchesInFreshSaved": 1,
+      "freshSavedMatchLines": [
+        776
+      ],
+      "upstreamHunksOverlappingContext": [],
+      "patch": "@@ -776,3 +776,30 @@ Future entries must include the date, approved rule change or clarification, aff\n - Local evidence passed JavaScript syntax, 27/27 focused Banking/modal/cache tests and the new exact source/CSS regression. The complete non-browser frontend suite passed 1,410/1,412; the same two unrelated failures reproduced on the untouched `e58e567f66ed8108a40e3c3e8388dbe33e0b0361` baseline at 1,409/1,411, proving this change added one passing test and no failure. Publication and a real new-session browser lifecycle remain required before this entry is release-complete.\n - Policy X assessment: compliant. The correction exposes an already-existing pre-Draft user action and changes no selection authority, selected identity, amount, tax/VAT, PAYE/Umbrella rule, recovery/headroom, Draft input, frozen artifact, provider, payment, settlement, remittance or cancellation behaviour.\n \n+### 4 October 2026 \u2014 isolated thin NEXT Office caller (local source evidence)\n+\n+- This isolated frontend worktree adds a separate Banking Pay NEXT menu entry and a thin caller for explicit ALL-Work pages, server-owned preparation/review/confirmation, PAYE net intake, original transfer/CSV retrieval and streamed original-instruction advice. It does not boot the retired financial Workbench, claim/drain jobs, calculate money or replace frozen facts with current Timesheet/settings data. Current approval/position rows are factual inputs, not a browser eligibility ruling; a later approval flag remains informational after Draft.\n+- Before each mutation, an actor-namespaced session journal saves the exact action bytes and UUIDs. An unknown or malformed receipt pauses conflicting controls; only an explicit identical-request retry is offered. Close and session clear remove the sheet/poller without deleting that journal. Actor changes refuse before network, and NEXT response payloads are neither cloned nor logged even when existing API debug logging is enabled. The existing authentication/session owners otherwise remain unchanged.\n+- Local source evidence passed 25/25 focused unit tests and JavaScript syntax checks. Four local Chromium tests used the actual new module with explicitly synthetic closed-contract responses, zero external HTTP requests, hostile labels, bounded factual pages, lost-reply close/resume, actor-session close and reachable mobile Close. The 300-row test proves only factual pagination (100/100/100), not selection/preparation of 300 genuine Timesheets or whole-application performance. Synthetic gross/net/recovery/cash displays do not prove their financial owners.\n+- Actual authenticated API/browser joining, normal login, hosted publication, complete Stage 4/5 screens, current-week/future eligibility policy and full Stage 7 remittance configuration/delivery remain separate acceptance. No database, provider, email, deployment, commit or push was performed for this frontend source proof. This entry records the thin caller only and changes no business rule or Policy X authority.\n+\n+### 5 October 2026 \u2014 Candidate-only bank navigation and batch returned-cash facts (local)\n+\n+- Bank details remain editable only in the existing Candidate owner. The thin NEXT batch-status caller delegates only the exact Candidate UUID, closes its top-layer sheet and preserves its actor journal/frozen run. Reopening retains accepted state. Still-valid exact account/beneficiary/rail verification and confirmation must be reused; changed details require their own approval. This navigation does not itself implement or certify the bank review/issue bridge.\n+- A separate closed RETURN_CASH page displays only this run/worker's original returned transfers and maintained cash balances; existing STATUS is unchanged. Posting-incomplete balances remain NULL, not zero or spendable. The caller accepts empty advancing raw windows and follows the server cursor over skipped legs, never accumulates all Candidate history or computes repayment amounts. Status refresh clears the prior return display. Available cash is not bank/payment approval, and no repay/issue control or account-entry form is added before its genuine bank-safety join exists.\n+- E136 records actual 38/38 local unit PASS and two actual-module/synthetic-response Chromium PASS with no external HTTP. The latter prove navigation/journal retention/paging/pending copy only, not native money, generic Candidate hydration/edit/save, complete batch-tab UX, return alerts, bank checks, provider execution, hosted installation or full programme closure. No business economics or Policy X changed; returned money stays separate from main earnings and the next ordinary Draft.\n+\n+### 5 October 2026 \u2014 bounded multi-Candidate thin selection and captured detail (local)\n+\n+- The thin NEXT view can choose another Candidate in the same unsealed run. Accepted global Work page/count receipts remain attached to that run; only the current factual page, unsubmitted choices and Candidate-scoped Case journal are replaced. Any uncertain request or unsealed accepted Case page blocks switching. An exact accepted Case seal is retained before changing Candidate; one decimal-text prior-selected-Case count preserves case-only preparation without fabricating Work or keeping a Candidate-wide history array. Reopening uses the same actor journal and exact unknown bytes.\n+- Journal version 2 distinguishes that new scalar from a damaged journal. Only complete older version-1 metadata may adopt an exact zero prior-Candidate count, because that caller could not switch Candidates after creating the run. Existing current-Candidate Case-only counts, sealed state and pending request bytes are unchanged. A version-2 missing/malformed scalar refuses; prior sealed Case choices cannot migrate to another run. The existing public owner still controls initial per-Candidate revision/page, exact replay and sealed-manifest refusal; the browser never invents a later Case revision.\n+- Before CSV, each frozen payment line can open paged captured shifts, its exact shift-scoped breaks and used bucket rates. Available contract/channel rates use the captured run-Work ID supplied by the existing revision-comparison reader; a newer-approval flag is informational only. Decimal text, zero, NULL, local/UTC clocks, overnight facts, duration-only breaks and exclusions are retained. Approved quantities/segment amounts are labelled separately from the selected payment difference; no hours-times-rate calculation, blended rate or mutable Timesheet/settings enrichment is introduced. Failed scope changes clear old detail controls even if the previous status read already failed.\n+- Local verification passed 50/50 focused unit/caller checks and 15/15 actual-module Chromium tests using controlled contract responses and no external HTTP. The new transport tests call the actual saved frozen-detail and preparation handlers with controlled RAW rows. This proves the caller/presentation boundary, not native SQL money or a DB-to-browser join, whole-application performance, first-300 preparation, login, hosted publication, payment/provider execution or full screens. Existing financial writers, original advice printing, Candidate-only bank editing and returned-cash separation are unchanged. No DB, Docker, deployment, commit or push was performed; Policy X is preserved.\n+\n+### 6 October 2026 \u2014 explicit Office NEXT history caller (local controlled evidence)\n+\n+- Existing Candidate and genuine Timesheet view modals expose an admin-only `Payment history` action. It opens a read-only child in the existing modal framework; normal record and Banking loads do not fetch history. The backend's existing authenticated admin broker supplies the actual actor, not a browser actor, to the service-only permission-checked history reader on every bounded page. No NEXT activation, preparation, mutation or worker drain is invoked by the history caller.\n+- All 52 declared sections remain visible in the manifest. Captured parent/FK links expose their child sections; `Next page` follows the complete scope/parent/context/upper-bound cursor until explicit `End`. Only the current page is retained; there is no automatic all-history scan, aggregate or first-page-only claim. Live keyset pages require an explicit refresh for late commits. Current caches/status, immutable source amounts, frozen target ex/VAT, whole-worker NET and whole-transfer cash stay separately labelled; transfer membership does not invent a Timesheet cash allocation. Exact decimal text and NULL survive; dates retain the established day/month/year presentation and UTC clocks.\n+- Local evidence passed seven backend controlled handler/transport checks, seven Office controller/source checks and one actual-asset Chromium test at 390 x 844 with zero external requests. They prove closed field allowlists, authenticated-actor injection, byte limits, cursor/scope binding, two revision pages and nested detail, hostile-label escaping, reachable Close and actor-change/close cleanup. The browser uses explicitly controlled responses and a modal-framework fixture; it does not prove real login, installed SQL execution/query plans, authenticated API-to-SQL joining, the complete production modal framework, deployed UI or complete moved-root financial continuity.\n+- Policy X: no financial writer, conversion, price, selected membership, residual/headroom, frozen Draft, provider, settlement, recovery, cancellation or remittance authority changes. Not-yet-implemented moved-root/vector/comparison/general approval attribution is stated as unavailable rather than reconstructed. No database, network, deployment, commit or push was performed for this caller implementation.\n+\n"
+    }
+  ],
+  "files": [
+    {
+      "path": "js/bpay-next-office.js",
+      "office": {
+        "exists": true,
+        "rawSha256": "c19f87424e7022528c41d58a444af112b1ae4e0b76b22e95b759728ce0913c51",
+        "rawBytes": 79775,
+        "lineCount": 540,
+        "lfSha256": "c19f87424e7022528c41d58a444af112b1ae4e0b76b22e95b759728ce0913c51"
+      },
+      "buildFe": {
+        "exists": false
+      }
+    },
+    {
+      "path": "js/bpay-next-payment-history.js",
+      "office": {
+        "exists": true,
+        "rawSha256": "d8af52c1402b1c700dc0170ed9e1c61edecb75f32f966a6ec2980a820d87addf",
+        "rawBytes": 43700,
+        "lineCount": 378,
+        "lfSha256": "d8af52c1402b1c700dc0170ed9e1c61edecb75f32f966a6ec2980a820d87addf"
+      },
+      "buildFe": {
+        "exists": false
+      }
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "office": {
+        "exists": true,
+        "rawSha256": "5fa3e52ab734f0fee7071d364f57c44e7130478648fe797d98bf3b6804b50b1f",
+        "rawBytes": 1997,
+        "lineCount": 10,
+        "lfSha256": "5fa3e52ab734f0fee7071d364f57c44e7130478648fe797d98bf3b6804b50b1f"
+      },
+      "buildFe": {
+        "exists": false
+      }
+    },
+    {
+      "path": "js/main.js",
+      "office": {
+        "exists": true,
+        "rawSha256": "abdfd5208f0849af97dca165af6a00ef0ad4c46f6078f12f57b8cb147e1dad55",
+        "rawBytes": 17620016,
+        "lineCount": 385889,
+        "lfSha256": "1103572505238145faf24b00566528456215e1bd630c43c89fa760941de6475f"
+      },
+      "buildFe": {
+        "exists": true,
+        "rawSha256": "8f36a37810b61552359aa2762181ab045865566389c1f2888265682a8c2b28d0",
+        "rawBytes": 17748010,
+        "lineCount": 387645,
+        "lfSha256": "83f09169fbd454220ae26a847cf09bf0367e1f11c958c7fdfa73ea0f895a7d0b"
+      }
+    },
+    {
+      "path": "index.html",
+      "office": {
+        "exists": true,
+        "rawSha256": "371222f5750583419185aeec9dbf7089fe2e1317262f45533696af4effdc52f5",
+        "rawBytes": 98666,
+        "lineCount": 3053,
+        "lfSha256": "f4bdb998ab0c29280ce3c5a4abc75caa6880be0a6af398357eaf4dc28535d93f"
+      },
+      "buildFe": {
+        "exists": true,
+        "rawSha256": "588ca10ba04a55d1d455932f719f1ab12e81809862ea8370beccda203cca3722",
+        "rawBytes": 99657,
+        "lineCount": 3060,
+        "lfSha256": "c89e542ea61aa2ef07cf17f749312ab8b73d6fe99ee0b4edc75fbf39489bc766"
+      }
+    },
+    {
+      "path": "BANKING_PAY_BIBLE.md",
+      "office": {
+        "exists": true,
+        "rawSha256": "b0fdfedf11b20dbcadd2f187aa7519a7ef32d2e7d93e0c37100604b4c62e91f4",
+        "rawBytes": 147494,
+        "lineCount": 805,
+        "lfSha256": "9cce98d19eefbfada577bfc165cb82e91cdd0b36021b25d5d58f6c8270abbf0c"
+      },
+      "buildFe": {
+        "exists": true,
+        "rawSha256": "84435631b0211f058128d0cf9a1801aa194f2061f8bc1f2d0f906654b17bc2f2",
+        "rawBytes": 138718,
+        "lineCount": 778,
+        "lfSha256": "b2e3e6b110df7f48fc036019b4e2e772179e14c535d4d740a9f7efcf51fac11c"
+      }
+    }
+  ],
+  "preserveFreshUpstreamFiles": [
+    {
+      "path": "css/candidate-office-v1.css",
+      "rawBytes": 31931,
+      "rawSha256": "3c6496c94a2667552b76ccc4539702f72d0f62aa148fc7edbd5506cf6459fc4b",
+      "lfSha256": "cfa19f68520a496b58761ba2fdcf78a264de11aa78993dad10ca2c72963f41c8"
+    },
+    {
+      "path": "css/invoice-batch-modal.css",
+      "rawBytes": 13242,
+      "rawSha256": "531289a33e680e3bba3799b51721e5cb8e2f853f587f1c9f2bc0df73e7e1989c",
+      "lfSha256": "52adde7a819244ef2b6e369cb5eba16f725c44fc0edb3fa7d80828d47730d5f5"
+    },
+    {
+      "path": "css/modal-modernisation.css",
+      "rawBytes": 165899,
+      "rawSha256": "266e62f9d4ebf9b3e1d4bfb99b0ac63af0eda67f34afacc97230e0c7579ddd57",
+      "lfSha256": "832ad21775c5e6cce2e3031da9f34f39f1d1b96506d26953b3bd32db6b280ffe"
+    },
+    {
+      "path": "css/summary-modernisation.css",
+      "rawBytes": 47643,
+      "rawSha256": "263ca2842777d3aa5abf7419c61c2a93cb0b5735628091f2dcb77a1c992db6dd",
+      "lfSha256": "5f6682a43254b0a4df46a2b3a18c4c05ec9c157314b9f0cdaed85d2d8cbd353e"
+    },
+    {
+      "path": "css/weekly-source-presentation-v1.css",
+      "rawBytes": 22003,
+      "rawSha256": "db065bfdfe41514273b0b7da448621a697db559f31f45ee9cfe039b641f683b9",
+      "lfSha256": "a851bd60e5f0603078ae4b5a3e8b9d11fd0a555be759eecc763589958fea5b82"
+    },
+    {
+      "path": "css/weekly-source.css",
+      "rawBytes": 47159,
+      "rawSha256": "0fdaa03c67663c8ac442283ca64fc2acbaf4537d3d44abdcc24ce2399ca66b24",
+      "lfSha256": "0cca29432022eabc3fa7e5e6d87cda5f4b7c83d981ef7a5dcffff0475a8a7e71"
+    },
+    {
+      "path": "js/bulk-authorise-lifecycle-v2.js",
+      "rawBytes": 73656,
+      "rawSha256": "cccef0842ed3234059bdb2cf63e64ceae0b28f1118a3aed969e282d149d2dce8",
+      "lfSha256": "eb07760a11097159ae0f6a7ee393fad5fb44033df6a3ea02b1e9f053f3c7b80c"
+    },
+    {
+      "path": "js/import-review-v1.js",
+      "rawBytes": 157816,
+      "rawSha256": "684a1e38eacb3d7a745b1687ac6411ef06096a09611a0e67cc6a318192212593",
+      "lfSha256": "ee5a48574f2bce4d23293f092cc3027f83778b9a67d0683e5986de1a394ce57b"
+    },
+    {
+      "path": "js/invoice-batch-modal.js",
+      "rawBytes": 128349,
+      "rawSha256": "dbcbe229ce2995c35b032db679b78547c9b447927c2e55987e05fc85669c5f7a",
+      "lfSha256": "af5754e71b2a749ad1a1c63277d8322bbba9b24a882cf719edc3e096479c7b34"
+    },
+    {
+      "path": "js/main.js",
+      "rawBytes": 17748010,
+      "rawSha256": "8f36a37810b61552359aa2762181ab045865566389c1f2888265682a8c2b28d0",
+      "lfSha256": "83f09169fbd454220ae26a847cf09bf0367e1f11c958c7fdfa73ea0f895a7d0b"
+    },
+    {
+      "path": "js/manager-authorisers.js",
+      "rawBytes": 21542,
+      "rawSha256": "ba4161223fd67163a7b3164499718b408eb3c7f59df7667fd33929643ba09b09",
+      "lfSha256": "ed3dafdb893a440eadb409e3b44bc783b0c8b7733cca9154023c4ffe6f8615c3"
+    },
+    {
+      "path": "js/modal-modernisation.js",
+      "rawBytes": 85033,
+      "rawSha256": "7c3ac05d122089765d9ba6bcadd1138ccf7f7deed32e6a22d1fccfe5d3e3be4e",
+      "lfSha256": "dec6c25526f4ea272efecd0cfa947095f587521f5451bc104b35979710458d72"
+    },
+    {
+      "path": "js/mytms-office-v1.js",
+      "rawBytes": 74508,
+      "rawSha256": "cff7c52e994510dd5c6aed7366c29b0172acb1dbb68420fae02af6b776f14867",
+      "lfSha256": "dd600bca1f94194974927090627adeda6c0b1c17e2cc0b692b7870df3521ff4e"
+    },
+    {
+      "path": "js/record-modal-layout.js",
+      "rawBytes": 12717,
+      "rawSha256": "c9901cdefdb18f6de6206373c252de3b60e5f1473d31ba73ba2850124fffe54c",
+      "lfSha256": "0475bd6bd7e5ef7652c9dc7d3bc20cff2d258b1a7b35ef847dd9b4e31c4ee9d2"
+    },
+    {
+      "path": "js/weekly-source-presentation-v1.js",
+      "rawBytes": 131150,
+      "rawSha256": "fbf280c1f01c5b1f1363226142256b11db51c4d9d30a41132e6a24d728911713",
+      "lfSha256": "48c70019636a8e53009095695d4ca811d2cfa78b411f43a6ba8c3200f0304e48"
+    },
+    {
+      "path": "js/weekly-source/combined-finalise.js",
+      "rawBytes": 9240,
+      "rawSha256": "da0fa4532a4a5c0282f8eee5ad8dae2b9fa2cb53739052304166e91a52ac11ba",
+      "lfSha256": "1771154216369375588ee7ca7da7f34746c52e6e3cffa89c5c900811cd6eec43"
+    },
+    {
+      "path": "js/weekly-source/combined-review.js",
+      "rawBytes": 22041,
+      "rawSha256": "f950a841aa7b54adbdf0591ef378453bff3e8f01287e45afe8449196f5c6b99e",
+      "lfSha256": "23e67324c1541e6816abb0bd37b864ed6db7d8ed11ffa8755df61208e40d48f5"
+    },
+    {
+      "path": "js/weekly-source/finalise-batch.js",
+      "rawBytes": 5659,
+      "rawSha256": "f099aba88dec4007347069b6021e9db73048579194bd4ff7b910d59bf8320231",
+      "lfSha256": "2dbd5bda7892618db45bf0ffc1723bbf62afb4c09a79b531430aae8eb07d84fe"
+    },
+    {
+      "path": "js/weekly-source/import-workspace.js",
+      "rawBytes": 140570,
+      "rawSha256": "ad0952f73c3cb06ad1cb079f9858329948694ff72968b89243eee0128b491a27",
+      "lfSha256": "ebca59853780e49eb59c3e7aaeb00b52eff3201c5c01d23311e24a4152399641"
+    },
+    {
+      "path": "js/weekly-source/office-notifications.js",
+      "rawBytes": 9135,
+      "rawSha256": "9a2e0979e9604f9c1412e42c79af3451ab8395aae8b774e19f15ff7cebdd6bdf",
+      "lfSha256": "368067553053597c45189bf82c7326d9047e5c7034e146f90b126a8225739a7d"
+    },
+    {
+      "path": "js/weekly-source/protected-shift-editor.js",
+      "rawBytes": 19063,
+      "rawSha256": "b2cf7f2775608588c5f9dc6137f271ecda89d7154ec26bbbe9f875792de68f46",
+      "lfSha256": "6a3d6acc6a627db6a193e0d71aed26b4c72fa6ac5d74454e62bc7421ac4403ae"
+    },
+    {
+      "path": "js/weekly-source/settings.js",
+      "rawBytes": 39839,
+      "rawSha256": "879059bdb212cfd4bb333470ee3bf029b62fccfab397a2237c2b573513a578b8",
+      "lfSha256": "6064f330773122467ef547de7620ba1351f6de132987331dab75ae8ef377fa81"
+    },
+    {
+      "path": "js/weekly-source/workspace-actions.js",
+      "rawBytes": 99546,
+      "rawSha256": "35c53fd6f78e11f73bd68383e347b6ad464cb3960113b9592746a9d60af08b22",
+      "lfSha256": "ceba75c8e689c7feb8ba691f5621840a4c3802e3373005846577ab37caff554a"
+    }
+  ],
+  "criticalUpstreamHunkContexts": {
+    "aada674": [
+      "@@ -115308,10 +115308,3 @@ async function upsertContract(payload, id /* optional */) {",
+      "@@ -141171,0 +141165,15 @@ function restoreModalDirtyAfterRender(fr, previousDirty, contractSaveRevision) {",
+      "@@ -143144,3 +143152,4 @@ async function openUiConfirmModal(opts = {}) {",
+      "@@ -337071,2 +337080,4 @@ const resumeParentAfterChildReturn = (closing) => {",
+      "@@ -337365,3 +337376,4 @@ async function saveForFrame(fr) {"
+    ],
+    "87b385c": [
+      "@@ -140918 +140918,2 @@ function getContractLifecycleLocks(contractLike = null) {",
+      "@@ -140932 +140933 @@ function getContractLifecycleLocks(contractLike = null) {",
+      "@@ -333203,2 +333204,2 @@ top._updateButtons = ()=> {",
+      "@@ -335687 +335688 @@ Operation ID: ${operationId}` : ''}`);",
+      "@@ -335721,3 +335722,3 @@ Operation ID: ${operationId}` : ''}`);",
+      "@@ -335739 +335740 @@ Operation ID: ${operationId}` : ''}`);",
+      "@@ -358359,2 +358360,5 @@ async function commitContractCalendarStage(contractId) {",
+      "@@ -358418 +358422 @@ function openContractDuplicateStudio(contractId) {",
+      "@@ -358455,2 +358459,3 @@ function openContractDuplicateStudio(contractId) {",
+      "@@ -358463 +358468 @@ function openContractDuplicateStudio(contractId) {"
+    ],
+    "99243cd": [
+      "@@ -141073 +141073,44 @@ async function runContractModifyAction(action) {",
+      "@@ -298163,4 +298206,5 @@ function openContract(row, openOptions = {}) {",
+      "@@ -298172,6 +298216,7 @@ function openContract(row, openOptions = {}) {",
+      "@@ -328549 +328594,2 @@ async setTab(k) {",
+      "@@ -328557 +328603 @@ async setTab(k) {",
+      "@@ -328560 +328606 @@ async setTab(k) {",
+      "@@ -332088,3 +332134,3 @@ try {",
+      "@@ -337103,5 +337149,7 @@ async function saveForFrame(fr) {"
+    ],
+    "21e83df": [],
+    "83103d2": [
+      "@@ -114522,4 +114522,9 @@ function populateSearchFormFromFilters(filters={}, formSel='#searchForm'){",
+      "@@ -116524 +116529,2 @@ const TIMESHEET_PROCESSING_STATUS_BADGE_TONES = Object.freeze({",
+      "@@ -116562 +116568,2 @@ const TIMESHEET_PROCESSING_STATUS_FRIENDLY_LABELS = Object.freeze({",
+      "@@ -116592,2 +116599,4 @@ function timesheetProcessingStatusBadgeTone(row, displayText) {",
+      "@@ -116634,0 +116644,2 @@ function paintTimesheetProcessingStatusCell(td, row, displayText) {",
+      "@@ -116639 +116650 @@ function paintTimesheetProcessingStatusCell(td, row, displayText) {",
+      "@@ -116647,0 +116659,2 @@ function paintTimesheetProcessingStatusCell(td, row, displayText) {",
+      "@@ -116663 +116676,4 @@ function paintTimesheetProcessingStatusCell(td, row, displayText) {",
+      "@@ -146692 +146708 @@ async function openSearchModal(opts = {}) {",
+      "@@ -167762 +167778 @@ function renderTools(){",
+      "@@ -167767 +167783,2 @@ function renderTools(){",
+      "@@ -173303 +173320,4 @@ async function fetchBulkAuthoriseDataset(filters, options = {}) {",
+      "@@ -173624 +173644 @@ async function fetchBulkAuthoriseDataset(filters, options = {}) {",
+      "@@ -177419 +177439 @@ async function fetchBulkProcessDataset(filters, options = {}) {",
+      "@@ -276791,14 +276811 @@ function renderCandidateTab(key, row = {}) {",
+      "@@ -279956 +279963,2 @@ async function openCandidate(row) {",
+      "@@ -280255 +280263,6 @@ async function openCandidate(row) {",
+      "@@ -325186 +325199,51 @@ function hasTrustedTimesheetLifecycleSignature(modalCtxInput, options) {",
+      "@@ -332340,2 +332403,3 @@ function renderTop() {",
+      "@@ -333125,2 +333189,3 @@ top._updateButtons = ()=> {",
+      "@@ -334059 +334124 @@ try {",
+      "@@ -335964 +336029 @@ if (ownsPrimaryRecordWorkflow && top.entity === 'contracts') {",
+      "@@ -336005 +336070 @@ if (ownsPrimaryRecordWorkflow && top.entity === 'contracts') {",
+      "@@ -336439 +336504 @@ if (ownsPrimaryRecordWorkflow && top.entity === 'contracts') {",
+      "@@ -336508 +336573 @@ if (ownsPrimaryRecordWorkflow && top.entity === 'contracts') {",
+      "@@ -336952 +337017 @@ async function saveForFrame(fr) {",
+      "@@ -338420,3 +338485,8 @@ function applyTimesheetLifecyclePatchToModal(modalCtxInput, lifecyclePatchInput,",
+      "@@ -339187 +339257 @@ function refreshSimpleTimesheetOverviewLifecycleBadgesIfVisible(options = {}) {",
+      "@@ -351895,24 +351964,0 @@ function bindCandidateMainFormEvents(container, model) {",
+      "@@ -358745,3 +358791,5 @@ async function fetchTimesheetDetails(timesheetId) {",
+      "@@ -364058 +364106 @@ function renderTimesheetOverviewTab(ctx) {",
+      "@@ -364075 +364123 @@ function renderTimesheetOverviewTab(ctx) {",
+      "@@ -364080 +364128 @@ function renderTimesheetOverviewTab(ctx) {"
+    ],
+    "9100bc5": [
+      "@@ -276658,2 +276658,3 @@ function renderCandidateTab(key, row = {}) {",
+      "@@ -276788 +276789,16 @@ function renderCandidateTab(key, row = {}) {",
+      "@@ -280273 +280289 @@ async function openCandidate(row) {",
+      "@@ -280279 +280295,5 @@ async function openCandidate(row) {",
+      "@@ -351858 +351878 @@ function applySelectedJobTitleToCandidate(candidateModel, selection) {",
+      "@@ -351864 +351884 @@ function bindCandidateMainFormEvents(container, model) {",
+      "@@ -351873 +351893,25 @@ function bindCandidateMainFormEvents(container, model) {"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+# SP-16 certified absence completion — sequence114 / BD126
+
+Exact objects D01: retained0645 selected witness; D02: retained0512 category,0650 accepted-removal evidence and current0853 C1 selected-witness callers. Nine current sole localPG17 body/configuration/owner/ACL observations are recorded in SP-16-current-owner-catalogue.json. No product SQL/Worker/screen change is required or made.
+
+BUILDER DECISION BD126: the narrow verify-and-record card is fully met by the existing positive absence union and NULL-as-unavailable callers; retain0645 unchanged and do not invent the critic named-code change or advance SP17/SP34. Current SP15 Local/resolve owners are2337, not historical1257/0428.
+
+Required exact branches:0645:388 returns NULL for more than one covering current roster Final;0645:75 separately returns NULL for ambiguous current rows.0512:326–333 permits only positive CERTIFIED_ABSENCE; SQL NULL cannot enter that branch.0650:79–82 refuses NULL as SOURCE_UNAVAILABLE,89–101 retains CURRENT_ROW/CERTIFIED_ABSENCE closed union.0853:1342–1354 refuses NULL/unknown/bad current-row or absence evidence.2337:3272 completes native Local action before3281–3285 resolves the actual open review atomically; replay169–191 uses original retained result.1534 no-shifts attestation remains distinct. See independent source review for each retained qualification, removal/replay/zero-paid-facts branch.
+
+Normal localPG17 unchanged load (0 migrations/0 closures), db:check358/920, source12/12, seal/coupling30b4121d3e8ce535ca074943eb686fb00aec217b151986811c65fdb536e3a04d PASS. Public SECURITY DEFINER membership unchanged839; no verifier constant change. Existing SP15 compiled source syntax receipts reused because no source changed. No business SQL/RPC/rows, hosted journey, fixture, rehearsal, rollback or timing. All numerical removal, two-Finals, atomic resolution/replay, certified zero and NOT_WORKED app acceptance AUTHORED_NOT_RUN. Timing moved to TEST after installation (owner10Oct).
+
+SP16 ITEM/D01–D02 BUILT/REVIEWED with exact verify-only implementation 36ada9a5cbd0b2e20e5b0b6e32927edfa993a520; design/SP-16-completion.md; design/SP-16-successor-provenance.json; design/SP-16-current-owner-catalogue.json; reviews/SP-16-source-review.md. Whole 95/288 BUILT/REVIEWED; nextSP20seq115. All joined acceptance AUTHORED_NOT_RUN.

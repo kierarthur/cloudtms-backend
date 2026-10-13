@@ -1,11 +1,12 @@
-// Banking Pay Stage 2 (H3): the one shared recogniser for the two fail-fast
+// Banking Pay Stage 2 (H3): the one shared recogniser for the closed fail-fast
 // Banking Pay busy refusals.
 //
-// The database raises exactly two busy refusals, both with SQLSTATE 55P03:
+// The database raises three named busy refusals, each with SQLSTATE 55P03:
 //   RAISE EXCEPTION 'BPAY_SOURCE_FAMILY_BUSY'     USING ERRCODE = '55P03';
 //   RAISE EXCEPTION 'BPAY_APPROVAL_EVIDENCE_BUSY' USING ERRCODE = '55P03';
-// PostgREST has no mapping for SQLSTATE class 55, so both arrive as HTTP 500
-// with the structured body {"code":"55P03","message":"<one of the two>"}.
+//   RAISE EXCEPTION 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY' USING ERRCODE = '55P03';
+// PostgREST has no mapping for SQLSTATE class 55, so they arrive as HTTP 500
+// with the structured body {"code":"55P03","message":"<one of the named refusals>"}.
 //
 // Recognition uses ONLY that structured body (`error.json.code` and
 // `error.json.message`, exact match), never free text, and does not depend on
@@ -20,6 +21,8 @@
 export const BPAY_BUSY_SQLSTATE = '55P03';
 
 const BPAY_BUSY_MESSAGES = Object.freeze({
+  WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY:
+    'Another Source update is in progress. Try again in a moment.',
   BPAY_SOURCE_FAMILY_BUSY:
     'Another operation is changing this Timesheet. This request was not completed.',
   BPAY_APPROVAL_EVIDENCE_BUSY:
@@ -29,7 +32,7 @@ const BPAY_BUSY_MESSAGES = Object.freeze({
 const RPC_NAME_PATTERN = /^[a-z][a-z0-9_]{0,100}$/;
 
 /**
- * Returns 'BPAY_SOURCE_FAMILY_BUSY' or 'BPAY_APPROVAL_EVIDENCE_BUSY' when the
+ * Returns a named busy code when the
  * error carries a PostgREST 4xx/5xx status and the exact structured busy
  * signature; otherwise null.
  */
@@ -76,7 +79,7 @@ export function bpayBusyErrorFromResponseText(functionName, status, responseText
 /**
  * The single busy response contract: HTTP 409, a clean message, no automatic
  * retry, and no claim about the wider workflow. Returns null when the error is
- * not one of the two busy refusals.
+ * not one of the named busy refusals.
  */
 export function bpayBusyEnvelope(error) {
   const code = bpayBusyCode(error);
@@ -87,6 +90,7 @@ export function bpayBusyEnvelope(error) {
     body: {
       ok: false,
       error_code: code,
+      ...(code === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY' ? { retryable: true } : {}),
       message: BPAY_BUSY_MESSAGES[code],
       failed_rpc: RPC_NAME_PATTERN.test(functionName) ? functionName : null,
       failed_rpc_outcome: 'ROLLED_BACK',

@@ -1,0 +1,62 @@
+# WB-10 current scope investigation
+
+Read-only investigation, 10 October 2026. No product edits, SQL, tests, fixtures, runtime, network or timing execution. All latency and actual page walks remain NOT_RUN.
+
+## Exact scope and current reuse
+
+Read full WB10 card `02_WORKBENCH.md:422–462`, all six checklist rows (ITEM,D01–D05), master seq58/dependencies WB08/WB09/F16, and controlling `review/R2.md:180–182`. R2 explicitly replaces the illustrative index list with indexes for the **actual maintained identities and every declared keyset/filter**, a bounded indexed seed before enrichment, and real PostgREST session/top-level timeout; a function-level SET alone is not proof. The owner start sheet/B11 authorize measurement hooks, not a new harness or data programme. Rule B and parked F25 are unaffected.
+
+| Checklist object | Actual current authority / finite remaining work |
+| --- | --- |
+| D01 factual current work page | `private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)`, final `04102026_0580_banking_pay_next_office_status_v1.sql`. Retain as factual detail; do not turn it into a payable summary. |
+| D02 candidate summary | Maintained `private.bpay_next_workbench_candidate_summary`, core `10102026_1252_banking_pay_next_workbench_summary.sql:183–220`; incremental ALL/client/channel/section rollups already built by WB08. Add exact sort/search index support, not another money/headroom calculator. |
+| D03 workbench page | `public.bpay_next_workbench_page_v1(jsonb)` and ten kind wrappers final1520; common `private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)` now final1601 after WB13. Preserve current1601 issue amount provenance, typed cursor/refusal/byte contract and security. Add narrow read performance support. |
+| D04 old owner local300/30/twoDraft evidence | Historical DB-only claim ~1.1s Draft/~1.8s detail is not an actual browser/Worker/network proof; R2 says receipt was not located. Do not invent receipt or rerun it. |
+| D05/ITEM | Future joined acceptance must distinguish built source/index/hook from unrun actual2s/5s targets. |
+
+The public reader and current kind implementation are STABLE read-only, service/active-admin/NEXT authorized, maintained-projection/adoption checked, and return at most100 rows (Candidate groups at most10 parents). Successful pages carry native unique cursor identity, context and page receipt; stale identity is typed. WB44 already supplies indexed finite seed/metadata/task continuation: no new financial command, enroller or producer is required here.
+
+## Actual index gaps and exact query orders
+
+Current1252 indexes: item Candidate `(candidate_id,section,group_key,component_key,member_kind,member_key,portion_kind)`; work/component/segment; case/component; FUTURE_WEEK `(eligible_from_date,id)` partial; item scope `(client_id,target_pay_channel,section,candidate_id,id)`; group Candidate `(candidate_id,group_key)` and client/channel/Candidate/group; candidate summary `(section,client_scope,pay_channel,candidate_sort_name,candidate_id)`. Existing1429 seed/task/metadata/due indexes and1100 snooze due/history/event indexes should be reused.
+
+These do not fully match the current declared orders. Use a follow-on migration because1252 is sealed. Do not copy card column names literally where the actual schema uses different names: item channel is `target_pay_channel`; item name/reference are `candidate_display_name` and `candidate_reference`; summary uses `client_scope` (native client UUID text or ALL), with genuine natural ALL rollups. Avoid duplicate columns or publisher rewrites merely to match older plan nomenclature.
+
+| Kind / sort | Current exact ordering and relevant support |
+| --- | --- |
+| HEADER | Exact scope-summary natural PK; optional Candidate exact summary PK. Already a point read, no aggregate/history scan. |
+| CANDIDATES/PICK_CANDIDATES NAME | Equality section/client_scope/pay_channel, then `candidate_sort_name COLLATE C`, `tms_ref IS NULL`, `coalesce(tms_ref,'') COLLATE C`, CandidateUUID. Existing sort index lacks C/null/reference keys. |
+| CANDIDATES AMOUNT | Same scope equalities, then `unknown_amount_count>0`, `CASE WHEN unknown_amount_count=0 THEN amount ELSE0 END`, CandidateUUID. Index actual expressions; an amount-only index does not match the unknown-key order. Keep visible unknown money NULL. |
+| CANDIDATES DEDUCTIONS | Same equalities, then `deduction_item_count>0` followed by full NAME tuple. Index the actual expression/full tie-break. |
+| Candidate prefix search | Current summary name OR tms_ref prefix, escaped bind value; add corresponding scope/prefix indexes. Search value never interpolates SQL. |
+| ACTION_REQUIRED/BLOCKED/ISSUE_DETAIL NAME | Optional Candidate/client/target channel plus section/reason/group/item filters; `coalesce(candidate_display_name,'') COLLATE C`, CandidateUUID, **itemUUID**. Do not end in nullable work_id; CASE rows have real item identity. |
+| Issue PAYMENT | `coalesce(timesheet_reference,'') COLLATE C`, itemUUID; issue AMOUNT uses `nominal_source_ex_vat IS NULL`, `coalesce(nominal_source_ex_vat,0)`, itemUUID. Add matching finite order indexes including section and actual common scope variants. |
+| Issue prefix search | Item name/reference/Timesheet-reference OR prefixes; match actual columns and text_pattern_ops/expressions. Current filters bind prefix with escaped !/%/_. |
+| GROUP_LINES/EXPORT_ROWS | Native itemUUID order, with actual group/Candidate/client/channel/section scope. Current unique tuple protects identity but is not an `(group_key,id)` ordering index; exact child group point seed needs that support. |
+| ISSUE_DETAIL | Actual itemUUID point filter; PK already supports the row, preserve affected Candidate membership qualification. |
+| PICK_CLIENTS | Maintained scope summary, channel/section and actualClient notnull; `client_scope COLLATE C`; optional Candidate cross-check through exact summary PK. Index channel/section/client_scope order rather than relying on the PK with client_scope first. One name point lookup occurs after bounded client seed. |
+| CANDIDATE_GROUPS | Candidate equal, optional client/channel/section, then null-week flag, coalesced week text COLLATE C, group_kind COLLATE C, native coalesced Work/CaseUUID. Full nonnull key already transported; group_key index alone is not this order. |
+
+The current reader uses uniform ascending or descending direction for each full tuple, so a matching B-tree can scan backwards; no need to double every index for ASC/DESC. Scope variants must actually serve both ALL and specific client/channel reads: putting an optional filter ahead of the sort does not prove ALL is indexed. Write the exact kind/sort/index mapping into the named successor header and preserve fixed EXECUTE USING caller values. This is finite current query-shape support, not an arbitrary query builder.
+
+**Date-expression caveat:** Candidate-group tuple currently sorts `coalesce(g.week_ending_date::text,'')`. A direct date-to-text expression is DateStyle-dependent and is not a safe immutable index expression. A narrowly equivalent native date order/seek with the same outward canonical date/empty cursor representation is preferable if this prevents index creation. Do not invent a new stored financial sort snapshot. Preserve null-week ordering, group-kind C comparison and actual native Work/Case identity. SQL/Worker/FE key parity must be reviewed if the private seek expression changes.
+
+**Group enrichment caveat:** current1601:427–440 limits the parent seed to at most10 and then performs a lateral aggregate over all current item rows of each selected group, plus the indexed reason lookup. It does not touch history and is scoped by real group key, but parent limit alone does not bound a heavy group's child count. Index `(group_key,...)` helps; it does not make this child aggregate a100-row operation. Do not claim the strongest bounded-enrichment or heavy-Candidate performance acceptance from the seed limit alone. Any required maintained group-rollup support needs a concrete scope decision tied to these existing current facts; do not add another headroom/money owner or silently truncate the aggregate. Source-only review cannot prove2s by assumption.
+
+## Timeout and measurement seams
+
+Current1520/1601 readers have no local5s statement setting. Card requests each kind's local5s limit; R2 additionally requires a real PostgREST session/top-level limit before the top-level statement begins. Adding `SET statement_timeout='5s'` to these function definitions is scoped source support, **not proof** that the already-started RPC is canceled after5s. Existing normal gateway READ classification/header, managed session/request hook or route-scoped compatibility configuration is the appropriate real session seam to investigate separately using source only. Do not silently change the global120s financial API profile or read secrets. Current public wrapper catches query errors into closed refusal; retain finite UNAVAILABLE/retry semantics.
+
+Worker `broker/src/bpay-next-workbench.js:3,474–491` currently has8s deadline and a literal8000 in the timer. WB10 explicitly changes it to4000ms with existing typed `BPAY_NEXT_WORKBENCH_UNAVAILABLE` retryable=true. Reuse the existing cancellation of pending stream reads, abort checks after each read, late-response body cancellation, one RPC call and closed response parse. Update the actual deadline and shared constant consistently; avoid a timer for only headers while body parse runs outside it.
+
+Add `x-bpay-next-step` on the **actual Workbench response**, carrying only fixed validated kind, factual validated row count and actual serialized response byte count. Obtain bytes from the actual UTF8 output serialization, not content-length or characters. If measuring dependency bytes too, keep them distinct from final response bytes; current streamed reader counts actual bytes internally but discards the count on return. No IDs, payload, search, cursor, bank details, request bodies or nonce belong in metadata. Expose this one header for the actual cross-origin Office caller if it is read client-side; current source census found no existing x-bpay-next-step exposure. Do not change closed JSON envelopes for observability.
+
+FE `js/bpay-next-workbench.js:476–506` already provides one actor-bound `loadWorkbenchPage` with exact read request, streamed response, refusal validation and8s deadline. It is the real shared measurement seam, including mounted WB13 issue lists. Surround each read with performance.now(), record elapsed time and only kind/count/bytes/status in the existing NEXT local debug area; never send it elsewhere or put it in the financial retry packet. Timing must include full bounded body read/validation, not just fetch headers. Actor changes/late response must not append debug data for another user; observer failure must not change normal returned result/refusal. Align the FE read deadline with the Worker4000ms if adopting a common limit.
+
+Source search found no explicit journal `debug` field in the current `bpay-next-office.js` state or existing Workbench client. Do not claim a discovered reusable debug object by name. A tiny bounded local debug attachment to the existing NEXT controller/client is genuinely supporting instrumentation; preserve financial journal exact pending bytes and version. No tracing/telemetry framework or per-page payload collection is needed. The current Office/Workbench API permits callback-style support without a new screen or route.
+
+## Acceptance and source receipts
+
+Keep eventual real TEST Ready/Action/Candidate/rate-save refresh, heaviest Candidate and limits1/17/100 timing separate from source and local schema compilation. No fixture, EXPLAIN programme,300-row rehearsal or new performance harness is authorized now. PF01 (seq284) later depends on WB10; it is not evidence this item's actual2s targets have run. Preserve old local DB-only D04 claim as unverified provenance unless its exact original receipt is located.
+
+Reviewed SHA256: current1601 common reader `793b332a210575c3b0e938735fe6787a8a5f62698546d63630f5ddad796f834d`;1520 wrapper/kinds `eebe1a463cac604165a8b9e460ba2a5e82c95d45edd118806d96ae3d03736409`;1252 schema `aa9a42864893856c9ae02479edb1172cdf39c764a6ca2e9e77f2fd11253affab`; Worker `5b9dd1520bcdc4a8983dddd24e5458a37461a85d677a0ab70c2a1945808cc199`; FE Workbench `aa3215c714152310ccd26f8430353ccafa4ed6c3e6adebe2ce72e61bd58f6563`.

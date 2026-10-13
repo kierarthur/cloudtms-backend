@@ -1,0 +1,21 @@
+{
+  "source": "Sole local PG17 metadata only; no business calls",
+  "indexes": [
+    {
+      "name": "bpay_next_component_resolution_active_idx",
+      "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_active_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE (state = 'ACTIVE'::text)"
+    },
+    {
+      "name": "bpay_next_component_resolution_event_request_idx",
+      "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_event_request_idx ON private.bpay_next_component_resolution_event USING btree (command_id, event_kind, approved_line_id, rate_family, rate_code) WHERE (command_id IS NOT NULL)"
+    },
+    {
+      "name": "bpay_next_component_resolution_published_active_idx",
+      "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_published_active_idx ON private.bpay_next_component_resolution USING btree (published_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date) NULLS NOT DISTINCT WHERE ((state = 'ACTIVE'::text) AND (published_line_id IS NOT NULL))"
+    },
+    {
+      "name": "bpay_next_component_resolution_version_idx",
+      "definition": "CREATE UNIQUE INDEX bpay_next_component_resolution_version_idx ON private.bpay_next_component_resolution USING btree (approved_line_id, rate_family, rate_code, target_pay_channel, target_umbrella_id, valuation_policy_id, valuation_date, decision_version) NULLS NOT DISTINCT"
+    }
+  ]
+}

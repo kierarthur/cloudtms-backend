@@ -456,9 +456,9 @@ insert into public.settings_defaults(
 -- give the whole-root review, so "the request quotes a different reviewer from
 -- the one the accepted decision carries" can be staged against a reviewer that
 -- really exists rather than one the foreign key would have rejected anyway.
-insert into public.tms_users(id,email,role,is_active,password_hash)
-values ('c0000000-0000-4000-8000-000000000001','publication@example.test','admin',true,'not-a-login'),
-       ('c0000000-0000-4000-8000-000000000051','other-reviewer@example.test','admin',true,'not-a-login');
+insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key)
+values ('c0000000-0000-4000-8000-000000000001','publication@example.test','admin',true,'not-a-login',true,false),
+       ('c0000000-0000-4000-8000-000000000051','other-reviewer@example.test','admin',true,'not-a-login',false,false);
 insert into public.clients(id,name)
 values ('c0000000-0000-4000-8000-000000000002','Publication Client');
 insert into public.client_settings(client_id,vat_rate_pct,effective_from)
@@ -3522,7 +3522,7 @@ do $verify_publication_d10$
 declare
   v_request jsonb;
   v_result jsonb;
-  v_pending_id uuid;
+  v_pending_id uuid;v_current_head uuid;v_saved jsonb;
   v_heads_before bigint;
   v_failed boolean;
 begin
@@ -3535,21 +3535,29 @@ begin
     return;
   end if;
 
-  -- ---- D10, point one: SAVE time -------------------------------------
-  -- Section 12b already drove the FROZEN branch through the real I-1, the real
-  -- I-2 and interface I-5, and the entry point verified what was stored before
-  -- returning.  A pending bundle exists and its stored request digests to its
-  -- stored digest.
-  select pending_row.id into v_pending_id
-    from public.weekly_source_pending_entitlement_bundles as pending_row
-   where pending_row.state in ('PENDING','RELEASING')
-     and pending_row.candidate_id='c0000000-0000-4000-8000-000000000003'
-   order by pending_row.created_at_utc desc
-   limit 1;
-  if v_pending_id is null then
-    raise notice 'SKIPPED D10: no pending bundle was saved in this run';
-    return;
-  end if;
+  -- D10 owns a fresh pending decision. Earlier successful I6/r6 decisions
+  -- change A, so selecting an older pending bundle cannot be a positive control.
+  select head_row.id into strict v_current_head
+   from public.weekly_source_entitlement_heads head_row
+   where head_row.root_family_booking_id='WSPUB-0001' and head_row.state='COMMITTED_CURRENT';
+  perform pg_temp.assert_true(
+   exists(select 1 from public.weekly_source_entitlement_heads head_row
+    where head_row.id=v_current_head and head_row.certified_zero and head_row.component_count=0)
+   and not exists(select 1 from public.weekly_source_entitlement_head_components component_row
+    where component_row.head_id=v_current_head),
+   'D10 setup: the successful earlier move leaves A with its real empty current inventory');
+  v_request:=pg_temp.single_root_request(
+   'c0000000-0000-4000-8000-00000000d10b',1,'c0000000-0000-4000-8000-00000000d10c',
+   'c0000000-0000-4000-8000-00000000d10d',v_current_head,'[]'::jsonb,
+   pg_catalog.jsonb_build_array(pg_temp.component(1,'c0000000-0000-4000-8000-00000000d10e','1.0','10.00')));
+  perform pg_temp.mk_bundle(v_request);
+  v_saved:=private.weekly_source_pending_entitlement_bundle_save_v1(
+   v_request,pg_temp.lock_result_a(),'{"result":"FROZEN","reason":"ACTIVE_DRAFT_ITEM"}'::jsonb);
+  perform pg_temp.assert_true(
+   (v_saved->>'ok')::boolean is true and (v_saved->>'created')::boolean is true
+   and v_saved->>'state'='PENDING' and v_saved->>'pending_bundle_id' is not null,
+   'D10 setup: the real Save owner must create this fresh pending decision');
+  v_pending_id:=(v_saved->>'pending_bundle_id')::uuid;
   perform pg_temp.assert_true(
     (select private.weekly_source_publication_request_digest_v1(
               private.weekly_source_publication_request_canonical_v1(
@@ -3564,13 +3572,45 @@ begin
   select pending_row.request_json into v_request
     from public.weekly_source_pending_entitlement_bundles as pending_row
    where pending_row.id=v_pending_id;
-  v_result:=private.weekly_source_entitlement_publish_core_v1(
-    v_request,'DEFERRED',pg_temp.lock_result_a(),v_pending_id,'worker-d10',
-    'c0000000-0000-4000-8000-00000000d10a',
-    '{"result":"RELEASABLE"}'::jsonb,'{"settlement":[]}'::jsonb);
+  -- Prove publication, then roll this control back so the tampered request
+  -- remains genuinely pending rather than replaying a committed revision.
+  begin
+    v_result:=private.weekly_source_entitlement_publish_core_v1(
+      v_request,'DEFERRED',pg_temp.lock_result_a(),v_pending_id,'worker-d10',
+      'c0000000-0000-4000-8000-00000000d10a',
+      '{"result":"RELEASABLE"}'::jsonb,'{"settlement":[]}'::jsonb);
+    perform pg_temp.assert_true(
+      (v_result->>'ok')::boolean is true and (v_result->>'published')::boolean is true
+      and (v_result->>'replayed')::boolean is false
+      and (v_result->'receipt'->>'decision_bundle_id')::uuid=(v_request->>'decision_bundle_id')::uuid
+      and (v_result->'receipt'->>'pending_bundle_id')::uuid=v_pending_id
+      and (v_result->'receipt'->>'bundle_revision')::bigint=(v_request->>'bundle_revision')::bigint,
+      'D10 control: untampered publication must return its exact successful receipt');
+    perform pg_temp.assert_true(
+      exists(select 1 from private.weekly_source_entitlement_publication_receipts receipt_row
+       where receipt_row.id=(v_result->'receipt'->>'id')::uuid
+         and receipt_row.pending_bundle_id=v_pending_id
+         and receipt_row.decision_bundle_id=(v_request->>'decision_bundle_id')::uuid
+         and receipt_row.bundle_revision=(v_request->>'bundle_revision')::bigint)
+      and exists(select 1 from public.weekly_source_entitlement_decision_bundles bundle_row
+       where bundle_row.decision_bundle_id=(v_request->>'decision_bundle_id')::uuid
+         and bundle_row.bundle_revision=(v_request->>'bundle_revision')::bigint and bundle_row.state='COMMITTED')
+      and jsonb_array_length(v_result->'heads')>0
+      and not exists(select 1 from jsonb_array_elements(v_result->'heads') member
+        where not exists(select 1 from public.weekly_source_entitlement_heads head_row
+          where head_row.id=(member->>'head_id')::uuid and head_row.state='COMMITTED_CURRENT'
+            and head_row.decision_bundle_id=(v_request->>'decision_bundle_id')::uuid
+            and head_row.bundle_revision=(v_request->>'bundle_revision')::bigint)),
+      'D10 control: the receipt, committed decision and current heads must exist');
+    raise exception using errcode='P0001',message='D10_UNTAMPERED_CONTROL_ROLLBACK';
+  exception when raise_exception then
+    if sqlerrm<>'D10_UNTAMPERED_CONTROL_ROLLBACK' then raise;end if;
+  end;
   perform pg_temp.assert_true(
-    v_result->>'code' is distinct from 'WEEKLY_SOURCE_PUBLICATION_PENDING_BUNDLE_INVALID',
-    'D10 release: an untampered pending bundle passes the paired check, got '||v_result::text);
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
+    and not exists(select 1 from private.weekly_source_entitlement_publication_receipts receipt_row
+     where receipt_row.pending_bundle_id=v_pending_id),
+    'D10 control: the successful control is rolled back before the tamper case');
 
   -- ---- D10, point three: a TAMPERED stored request refuses the release ----
   -- First, the schema's own defence: `request_json` is an identity column, so

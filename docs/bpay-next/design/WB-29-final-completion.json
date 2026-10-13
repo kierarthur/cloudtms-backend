@@ -1,0 +1,40 @@
+{
+  "items": [
+    "WB-29",
+    "WB-45"
+  ],
+  "backendImplementationCommit": "d23544f600187821ca24195a09a78648bdcc9c4e",
+  "frontendImplementationCommit": "f0d71fa73b038a95f81086ba84a3e55fb98c6f4e",
+  "decision": "BD170",
+  "reconciliation": {
+    "path": "docs/bpay-next/design/WB-29-final-deliverable-reconciliation.md",
+    "sha256": "ba62d3ad5daf3bb535aac4c218f1a3683ffd6be2724c2da072f5203c238426a9"
+  },
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-29-ready-screen-policy-review.md",
+      "sha256": "f4ebb9414af3cf2c3ac5d39dbf5f88bfc72e4fd08a4627b00f439a8a9d8efd3d"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-29-ready-final-Office-source-review.md",
+      "sha256": "d2b41b7c48eaa2bc46fe667994abf6435b14c55742bbda6e049e5aefb198b9e2"
+    }
+  ],
+  "checks": {
+    "dbCheck": "384 migrations/997 repeatables PASS",
+    "sourceGates": "1557 SQL/31 RPC roots/171 routine-work signatures/37 typed transports PASS",
+    "localPG17": "0 migrations/4 repeatable closures; schema compile only PASS",
+    "catalogue": "exact private kind body/config/owner/ACL/volatility PASS; public membership unchanged 839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both isolation DO PASS",
+    "nodeCheck": "changed Worker/source gate/Office syntax PASS",
+    "contractSealAndCoupling": "25717a10a932938360964678518334267dc439159585720ed77536bc8e712dc2 PASS"
+  },
+  "whole": "BUILT_REVIEWED",
+  "businessAcceptance": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "next": {
+    "sequence": 141,
+    "item": "WB-30"
+  },
+  "scope": "Complete WB29 card and assigned WB45 consumer joins; later WB30–34/CM owners untouched; F25 parked files untouched",
+  "documentationCompletionCommit": "6196b66b42c9be115b797a168923fb58a6894a34"
+}

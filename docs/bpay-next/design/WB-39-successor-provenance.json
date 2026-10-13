@@ -1,0 +1,31 @@
+{
+  "item": "WB-39",
+  "decision": "BD129",
+  "parent": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+  "parentSha256": "d40cc95cb6675f09b1fe06a87801e42a6a28ca1f02a563534ae5e1a65263b5cb",
+  "destination": "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+  "publicSecurityDefinerDelta": 0,
+  "retainedMoneyOwners": true,
+  "screenSortOwner": "FC-02 immediately next",
+  "signatures": [
+    "private.bpay_next_snooze_management_row_v1(uuid)",
+    "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
+    "public.bpay_next_workbench_page_v1(jsonb)"
+  ],
+  "reviewSuccessor": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+  "reviewCorrection": "S02 literal created-time paths, outer merge bounded to <=limit+1 per branch",
+  "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+  "sourceSha256": "58d05480da8e138d89233044e985b34782035e86d0cc16e271d237afd0a8a599",
+  "frontendImplementationCommit": "e8c0fe8afdb46788f2ca9325a5fad9d3243f7472",
+  "migrationSha256": "6128edf48b34bb490712050528bcf9f6cefe1b2529bd110362ac4bb3f77a2d09",
+  "localContractSha256": "340c7825e81fcca0abec4dea5e9f6be96952b65f1f76939a2fd275df835d5ac9",
+  "reviews": {
+    "reader": "reviews/WB-39-reader-review.md",
+    "transport": "reviews/WB-39-transport-review.md",
+    "design": "design/WB-39-sort-design-review.md",
+    "screen": "screen-designs/SCR-34/review.md"
+  },
+  "acceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "906740cf5387af56a924fe60195832b443c4a75b",
+  "status": "BUILT_REVIEWED"
+}

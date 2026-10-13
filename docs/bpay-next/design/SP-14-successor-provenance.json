@@ -1,0 +1,120 @@
+{
+  "item": "SP-14",
+  "decision": "BD122",
+  "destination": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+  "signatures": [
+    "private.bpay_next_source_query_segment_exclusions_v1(uuid,jsonb)",
+    "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+    "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+    "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+    "private.bpay_next_append_segment_selection_page_v1(uuid,uuid,uuid,bigint,uuid,text[])",
+    "private.bpay_next_segment_fact_guard_v1()",
+    "private.bpay_next_capture_segment_page_v1(uuid,integer)",
+    "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+    "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+    "private.weekly_source_first_authorise_core_v1(uuid,text,uuid,jsonb)",
+    "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)"
+  ],
+  "successors": [
+    {
+      "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid,jsonb)",
+      "parent": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "parentSha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6",
+      "originalBodySha256": "f769f91b4b7d9affbdf96cf5f41a7c88f1830da3f5dca97979fe459a27e11d2d",
+      "successorBodySha256": "0dfedcdc595187b4b1a6ecdae79868f35b262b29f38d5fe35c3c16d8bb28e0cc"
+    },
+    {
+      "signature": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
+      "parent": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "parentSha256": "aec4c904cee22e748ea1ab3006e8cfdbf50bcdb9dd567b1fb1b2bc9da7391b92",
+      "originalBodySha256": "4d53446c2087a7490f5393792a6699d53d9856a68810a15de2a613c9f70edcf8",
+      "successorBodySha256": "d868380268b9a78b226c5c353a0bc45b9c8567d2f20aa1dfc86de5e1dfccd8d2"
+    },
+    {
+      "signature": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+      "parent": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "parentSha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6",
+      "originalBodySha256": "239cc481bd5a037f730fad4cae173616e7e0e876d3706357cbbf25d81ace9298",
+      "successorBodySha256": "859d3e693c288f3d601b58ea2ca112bd0c7aaaa8ac0ab98c09980613cfc8889e"
+    },
+    {
+      "signature": "private.bpay_next_append_segment_selection_page_v1(uuid,uuid,uuid,bigint,uuid,text[])",
+      "parent": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "parentSha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "originalBodySha256": "33368bb67333aa7af6735f9444de0421298681fe8973b1006f681fab6bf619f0",
+      "successorBodySha256": "e0058fda094addfd86859926952f20c62b5448ef95a78224c37f1ca77a1f7ac4"
+    },
+    {
+      "signature": "private.bpay_next_segment_fact_guard_v1()",
+      "parent": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "parentSha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "originalBodySha256": "1b23398cb12251a82f50cca70fa577614ae76fee9ffb511c8ca569dc8c028525",
+      "successorBodySha256": "869bf4cdd97883510413c81886220d76aff992bf7d42edcff60e9fd646e43ba7"
+    },
+    {
+      "signature": "private.bpay_next_capture_segment_page_v1(uuid,integer)",
+      "parent": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "parentSha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "originalBodySha256": "e0d99d1435874039cf83d42db238e3d983dc1aa352ec3d13630e3ce9e01113c2",
+      "successorBodySha256": "4e41223c951fe90b0707d1f02dbe367cada11f6729aa61b6330564466c0a706c"
+    },
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "parent": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "parentSha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "originalBodySha256": "f16b269596c944a914e688225c236f9a2a409fee56bd29972652e763fcf1c71c",
+      "successorBodySha256": "a090cf1a6d6b0950ec3827eb8d7b48aafbcf77eb3963fb6f1d2f2873f71b5566"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+      "parent": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
+      "parentSha256": "055b9c2fe70b085e7122dde2ef205da89cc0c2e96ffe6f2a48044b410f84f663",
+      "originalBodySha256": "fb06c7be6cc6bee5f9843172fa27ee4e37547413efb4a8ed6f0281a6f5c1580a",
+      "successorBodySha256": "7ecf394437159a09af95a923442d26cffbe1d72bf07c09f6375ff0a2d748e223"
+    },
+    {
+      "signature": "private.weekly_source_first_authorise_core_v1(uuid,text,uuid,jsonb)",
+      "parent": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
+      "parentSha256": "8024efb3a366ed6b2247df94c910a5176a5c9721a75d5688997b07b1c845bfe5",
+      "originalBodySha256": "f62f5e99e41fd2eb851851c18f65a498e5a1934e1d2cbddd0f03adec0c17c556",
+      "successorBodySha256": "2a991225c83ac0de80b4084b0fb3aa201ba198015aa3620d98cf13c280beadd8"
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "parent": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+      "parentSha256": "3a7fb9b31fd418a16cb56a3a9980233a96ddd2ee66af64f59cadd1f807e02977",
+      "originalBodySha256": "fe9a52cebc527868b1086e393b2f4e088b009901e81c8be7d842b4b90da74a9e",
+      "successorBodySha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3"
+    }
+  ],
+  "status": "BUILT_REVIEWED",
+  "sourceSha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+  "migrationSha256": "939cfaf247eabcbcdb54495f18f08d86beaaaeed607147a25a8e202ff4db89aa",
+  "checks": {
+    "db": "356/918 PASS",
+    "source": "Existing12gates PASS",
+    "syntax": "Four current Worker files PASS; unchanged",
+    "local": "Sole PG17 load;11 exact body/config/owner/ACL matches;2 private fields/RLS/owner; General83976zero/publicSECDEFmembershipdelta0/bothisolationDO PASS",
+    "contract": "98ea49ac3a52bc2194b6140534410a47ffe8779f9e4ef592dc2fbfa1d4d39e14 export/seal/coupling PASS",
+    "joined": "AUTHORED_NOT_RUN"
+  },
+  "reviews": [
+    {
+      "path": "reviews/SP-14-scope-review.md",
+      "sha256": "1a964f8b603e546ee87e6f681aae4c2dd9690fb47d2fdc5a083986f9702756b5"
+    },
+    {
+      "path": "reviews/SP-14-shift-source-review.md",
+      "sha256": "c617c429987932c4e0583d49cb9ed8df0ee89de5497e4b22197e754a4c4212d3"
+    },
+    {
+      "path": "reviews/SP-14-authorise-source-review.md",
+      "sha256": "28010ed0fb74d33a85b783f1f9b79bb92a0cf02762830bee451dcab700243eef"
+    },
+    {
+      "path": "reviews/SP-14-worker-retry-review.md",
+      "sha256": "f905112711c75bcd5483e8d9fde16c8ef159782c5225177cbd0c7ac99929d135"
+    }
+  ],
+  "implementationCommit": "0436e69fc6a479116c71a53d6047780b9c92f28e"
+}

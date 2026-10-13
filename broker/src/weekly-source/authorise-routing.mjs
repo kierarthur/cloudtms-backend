@@ -122,3 +122,28 @@ export const WEEKLY_SOURCE_AUTHORISE_ROUTING_CONTRACT = Object.freeze({
   ordinaryOwnerUnchanged: true,
   failsClosedWhenUndetermined: true,
 });
+
+// SP-03: preserve only these actual, definite Source admission refusals.
+// Unknown/timeout failures stay with the existing lifecycle reconciliation.
+export function weeklySourceAuthoriseKnownRefusal(rawCode, detail = {}) {
+  const known = {
+    WEEKLY_SOURCE_CANDIDATE_BUSY: [409, true],
+    BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED: [409, false],
+    WEEKLY_SOURCE_FIRST_AUTHORISE_QUERY_OPEN: [409, false],
+    WEEKLY_SOURCE_PAY_QUERY_SCOPE_UNAVAILABLE: [503, false],
+    WEEKLY_SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE: [503, false],
+    WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE: [403, false],
+    WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED: [403, false],
+    WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED: [403, false]
+  };
+  const code = [detail?.error_code, detail?.code, detail?.error, rawCode]
+    .map(value => String(value || '').trim()).find(value => Object.hasOwn(known, value));
+  if (!code) return null;
+  const [status, retryable] = known[code];
+  const message = code === 'WEEKLY_SOURCE_FIRST_AUTHORISE_QUERY_OPEN'
+    ? 'Resolve the open query before authorising this Timesheet.'
+    : code === 'WEEKLY_SOURCE_PAY_QUERY_SCOPE_UNAVAILABLE' || code === 'WEEKLY_SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'
+      ? 'The query evidence for this Timesheet is unavailable. Refresh and try again.'
+      : status === 403 ? 'Payment-authoriser permission is required to authorise this Timesheet.' : code;
+  return {status, error_code: code, retryable, message};
+}

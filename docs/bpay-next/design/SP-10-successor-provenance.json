@@ -1,0 +1,88 @@
+{
+  "item": "SP-10",
+  "sequence": 136,
+  "builderDecision": "BD150",
+  "status": "PARTLY_DONE",
+  "files": [
+    {
+      "path": "supabase/repeatable/12102026_1934_banking_pay_next_removed_source_collection_observation_v1.sql",
+      "sha256": "c52b03c259630bfed375cd3e21e6e25ee0668b5a1a64e73b42979198787c3020"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "0b50987a43f2b76c069eb1e08c68c44cb87f4a073b8a6667de9b74ccfca21729"
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "sha256": "ec1a819336daeb552791af5170433d3925c9ff48e7d8c422dd3b0d92d14e6805"
+    }
+  ],
+  "frontend": [
+    {
+      "path": "js/main.js",
+      "sha256": "87c66ac085c0a7c73413923c5fb853b841ad7fd4e777bcca3bddcf37ca30dd25"
+    },
+    {
+      "path": "js/weekly-source-presentation-v1.js",
+      "sha256": "76caed36345211c316b1f3cdb420e49f5f0c3fc829ffb62cb5d2ee34998de74d"
+    },
+    {
+      "path": "css/weekly-source-presentation-v1.css",
+      "sha256": "0cda5dde5e515e679ee8ae4f8d87a3d0b76f4ee1547732bbe172e5430b31bc99"
+    },
+    {
+      "path": "index.html",
+      "sha256": "4410ed2d0dd2f903b0a06bea2cf65010378179fcd2c6f9676ab7e0f3c398e602"
+    }
+  ],
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/SP-10-sql-reuse-review.md",
+      "sha256": "fb58bd53df398945e588a567b7f84b9c39e219a6f15cd0415d60a03dc7311fcc"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-10-removed-component-design-review.md",
+      "sha256": "1f2e602ed2a1b72b74719810acc23cfc34a331be7daf3dadd7f111d30bfb4139"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-10-removed-component-sql-review.md",
+      "sha256": "0eb2b0ff65b386576127a0300aa09ba1a0d3ef2cacb9642bdb7b7dde1c65a0b4"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-10-transport-review.md",
+      "sha256": "9bf41b0f696c3e719ac43745d84e42411b90dc16c1b31b3d1d12f297d53b0f57"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-10-screen-source-review.md",
+      "sha256": "f44b2d042ba91b5ecfa657fb614f446fd1ca33b05a9d59274adba5a072c0d173"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-SP10/review.md",
+      "sha256": "6bf19f689d8185b011406ac4f6dd00bb5e088bd33209f1457f3633f476856228"
+    }
+  ],
+  "observationParent": {
+    "path": "supabase/repeatable/12102026_1849_banking_pay_next_manual_collection_retained_approval_v1.sql",
+    "sha256": "de67314666b76892ef6b4ac25554fa44e7f7a89a96068eabe6b7ea9a3b79a830"
+  },
+  "finalDefinition": "private.bpay_next_work_collection_observation_v1(uuid,text,uuid)",
+  "checks": {
+    "dbCheck": "376 migrations/959 repeatables PASS",
+    "sourceGates": "1511 SQL sources/28 roots/154 work signatures/37 typed transport signatures PASS",
+    "nodeCheck": "changed Worker/Office files PASS",
+    "localCompile": "sole local PG17 changed-only PASS; no business calls/data",
+    "catalogue": "exact helper body/owner/ACL/config/STABLE INVOKER; unchanged839/76/0/hash338226c4; both browser isolation DO PASS",
+    "contractHash": "81ead2decd33c7a5f8dacfc4ba9cab304538f06a36f7c0e1ed12a9696d9482b0",
+    "sealCoupling": "PASS",
+    "screen": "A4 12 PNGs/42 policy scoped33PASS/0FAIL/9N/A"
+  },
+  "ownerRuling12Oct": "APPLIED: explicit accepted singleton removed Source component retains native net difference on original manual collection; qualified current reductions across native FC15 origins preserved; no frozen repricing, full-debt replacement or future correction netting",
+  "blocked": [
+    "Literal S3 factual-hook financial enqueue conflicts acceptance-before-publication SRQ003/card05:385; not rewritten.",
+    "FC15 separate immutable D06 CHECK discovery and genuine moved/two-book/unbound representation authority remain open."
+  ],
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "9bbcbfa53c4f53813f83ba36e32ebf7fed1f0345",
+  "frontendCommit": "fc38de32657d7d4a208fc1f809fcce9b39538254"
+}

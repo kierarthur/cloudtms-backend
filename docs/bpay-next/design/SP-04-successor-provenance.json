@@ -1,0 +1,80 @@
+{
+  "item": "SP-04",
+  "sequence": 138,
+  "builderDecision": "BD152",
+  "files": [
+    {
+      "path": "broker/src/index.js",
+      "sha256": "f1121d3ba4fa70fd246de85a99617cee98581b231e940c4cc68c994c26400cf7"
+    },
+    {
+      "path": "broker/src/weekly-source/unauthorise-routing.mjs",
+      "sha256": "64cb2495467daf7166d294f98bb6e4ee2e652d45380568081a55e70f5d07e0f7"
+    }
+  ],
+  "retainedOwners": [
+    {
+      "signature": "public.weekly_source_first_authorisation_withdraw_v1(uuid,uuid,text,uuid)",
+      "path": "supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql",
+      "bodyMd5": "11fe20659616e2a40887157973c84ff0",
+      "ownerAclConfigurationVerified": true
+    },
+    {
+      "signature": "private.bpay_next_source_withdrawal_guard_v1()",
+      "path": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "bodyMd5": "73c075a99afc80860cd290ff7cb70f77",
+      "ownerAclConfigurationVerified": true
+    },
+    {
+      "signature": "private.bpay_next_source_current_retract_origin_v1(text,uuid,uuid)",
+      "path": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "bodyMd5": "914bdc1cdc2722621707dbc26fa8c8b5",
+      "ownerAclConfigurationVerified": true
+    },
+    {
+      "signature": "public.weekly_source_first_authorisation_withdraw_request_v1(jsonb)",
+      "path": "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "bodyMd5": "ee3bec0bdc5ccaf1c65ad779386a3ed4",
+      "ownerAclConfigurationVerified": true
+    },
+    {
+      "signature": "public.weekly_source_first_authorisation_withdraw_available_v1(uuid)",
+      "path": "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "bodyMd5": "ea3726d83fdd938ff28ce9ea24fdadf7",
+      "ownerAclConfigurationVerified": true
+    }
+  ],
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/SP-04-design-review.md",
+      "sha256": "11855177fdeb68c644dfa6cef0c4935e2efcb96070ad9fa002b5c0dabbd5fb54"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-04-routing-source-review.md",
+      "sha256": "e0caf3ad8075025dc6a6d82d7f0e572250480a73f1929b0c938a9051a03e77f6"
+    },
+    {
+      "path": "docs/bpay-next/reviews/SP-04-worker-source-review.md",
+      "sha256": "1a352a3435504b5d99f83589c4bc426bac248f8056a5ce39b7c0683037710cdf"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-139/review.md",
+      "sha256": "8132d22487d0c7d287379bdc313834beb3089ced94254ad549f3d655c5beb0f1"
+    }
+  ],
+  "frontendCommit": "80bb4f4363cd34e5645bd6d8bb325c6fb1c5a437",
+  "checks": {
+    "dbCheck": "376 migrations/960repeatables PASS",
+    "source": "1512 SQL/29roots/154work/37transport PASS",
+    "syntax": "Worker index/router/Office main PASS",
+    "localCompile": "Sole PG17 changed0/0 PASS",
+    "catalogue": "5 exact owners/config/ACL and both isolationDO PASS;839/76/0/hash338226c4e9b878c5aa92fc8e319dd7bf",
+    "contract": "d736d45cd9b3ba2d52bec569619ee3d72f725281549b4bbf82cebd16a3078095",
+    "sealCoupling": "PASS",
+    "screens": "SCR13913 local captures;34PASS/0FAIL/8applicableN/A"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "blocked": [],
+  "implementationCommit": "236393ebf36308c1ae3a22cda79b19471f61125d"
+}

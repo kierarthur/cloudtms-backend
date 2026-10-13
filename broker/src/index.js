@@ -1,3 +1,4 @@
+import { handleBpayNextPayMethodChange, createBpayNextPayMethodChangeRpc } from './bpay-next-pay-method-change.js';
 /**
  * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets) HELLO WORLD
  *
@@ -37,15 +38,35 @@ import {
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
 import { dispatchBankingPayModalV2Request } from './banking-pay-modal-v2.js';
+import { handleBpayNextFrozenRead } from './bpay-next-frozen-read.js';
+import { handleBpayNextHistoryRead, createBpayNextHistoryRpc } from './bpay-next-history.js';
+import { createBpayNextFrozenPageRpc } from './bpay-next-frozen-rpc.js';
+import { renderBpayNextFrozenAdvice } from './bpay-next-frozen-advice.js';
+import { createBpayNextFrozenAdvicePageRpc } from './bpay-next-frozen-advice-rpc.js';
+import { handleBpayNextCommand, handleBpayNextReauthPreview, BPAY_NEXT_PROTECTED_ACTIONS, qualifyBpayNextReauthIntent, qualifyBpayNextReauthPreview, readBpayNextReauthJson } from './bpay-next-command.js';
+import { createBpayNextFinancialCommandRpc, createBpayNextReauthRpc } from './bpay-next-command-rpc.js';
+import { handleBpayNextPreparationCommand, handleBpayNextPreparationPage } from './bpay-next-preparation.js';
+import { handleBpayNextWorkbenchPage, handleBpayNextWorkbenchExport, createBpayNextWorkbenchRpc, handleBpayNextWorkbenchCommand, createBpayNextWorkbenchCommandRpc, createBpayNextWorkJobFailureRpc } from './bpay-next-workbench.js';
+import { createBpayNextPreparationRpc, createBpayNextPreparationPageRpc } from './bpay-next-preparation-rpc.js';
+import { createBpayNextOwnerStatusRpc, createBpayNextLegacyFence, isBpayNextLegacyFinancialRoute } from './bpay-next-legacy-fence.js';
+import { isBpayNextLegacyFinancialEmail } from './bpay-next-legacy-email.js';
+import { bpayNextCapabilities, bpayNextEnvironmentFailure } from './bpay-next-environment.js';
+import { createBpayNextRuntimeRpc } from './bpay-next-runtime-rpc.js';
+import { createBpayNextPreparationExpiryRpc } from './bpay-next-preparation-expiry-rpc.js';
+import { createBpayNextFinancialJobRpc, recordBpayNextPrepareFailure } from './bpay-next-job-rpc.js';
+import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick, runBpayNextAcceptedPreparationTurn } from './bpay-next-background.js';
+import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './bpay-next-legacy-retirement.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
+import { weeklySourceUnauthoriseRouting, weeklySourceUnauthoriseResultFields, weeklySourceUnauthorisePairPreflight } from './weekly-source/unauthorise-routing.mjs';
 // WP-23 / Gate 13 hostile finance review F2: the Weekly Source first-authorisation
 // routing decision for the real Office Authorise route (and, through it, Bulk
 // Authorise).  The decision is the database's; this import is the transport's
 // half of it.
 import {
   weeklySourceAuthoriseRouting,
+  weeklySourceAuthoriseKnownRefusal,
   weeklySourceUnwrapRpc,
   WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
   WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
@@ -66,6 +87,7 @@ import {
 import { adaptWeeklyCorrectFinalServiceSnapshot } from './weekly-source/correct-final-source-snapshot-adapter.mjs';
 import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';
 import { projectWeeklyProtectedComponentIdentity } from './weekly-source/protected-component-identity.mjs';
+import { retainWeeklyProtectedPreviewFacts } from './weekly-source/protected-next-preview.mjs';
 import { applyNextPaidEvidence } from './weekly-source/next-paid-evidence.mjs';
 import {
   orchestrateWeeklySourceFinalisation,
@@ -3052,7 +3074,8 @@ async function calculateWeeklyProtectedSnapshot(env, input = {}) {
     {
       write_now: false,
       policy_override: context.policy,
-      ignore_locked_segments_for_preview: true
+      ignore_locked_segments_for_preview: true,
+      retain_protected_next_preview_facts: input.retainNextPreviewFacts === true
     }
   );
   // The generic calculator remains unchanged for ordinary/non-import flows.
@@ -16935,6 +16958,8 @@ async function advanceReadyBankingPayWorkbenchCertificatesV8(env, options = {}) 
 }
 
 async function bankingPayWorkbenchCronTick(env, options = {}) {
+  const wake = await bpayNextEnrollmentWake(env);
+  if (wake.enqueued || wake.skipped) return wake;
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const clampInt = (value, fallback, min, max) => {
@@ -18007,1512 +18032,25 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
 }
 
 function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
-  const trimStr = (value) => String(value == null ? '' : value).trim();
-  const upperTrim = (value) => trimStr(value).toUpperCase();
-  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const numberFrom = (sourceObject, keys, fallback = 0) => {
-    const sourceValue = isPlainObject(sourceObject) ? sourceObject : {};
-    for (const key of keys) {
-      const n = Number(sourceValue[key]);
-      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
-    }
-    return fallback;
-  };
-  const numberInRange = (value, fallback, min, max) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.trunc(n)));
-  };
-  const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
-  const sumMetric = (first, second, keys) => numberFrom(first, keys, 0) + numberFrom(second, keys, 0);
-  const combineTickResults = (firstLike, secondLike, startedAtMs) => {
-    const first = isPlainObject(firstLike) ? firstLike : {};
-    const second = isPlainObject(secondLike) ? secondLike : {};
-    const firstSegments = Array.isArray(first.burst_segments) ? first.burst_segments : [first];
-    const secondSegments = Array.isArray(second.burst_segments) ? second.burst_segments : [second];
-    const passCount = sumMetric(first, second, ['pass_count']);
-    const claimed = sumMetric(first, second, ['claimed', 'claimed_count']);
-    const processed = sumMetric(first, second, ['processed', 'processed_count']);
-    const succeeded = sumMetric(first, second, ['succeeded', 'succeeded_count']);
-    const failed = sumMetric(first, second, ['failed', 'failed_count']);
-    const dead = sumMetric(first, second, ['dead', 'dead_count']);
-    const obsoleteSkipped = sumMetric(first, second, ['obsolete_skipped', 'obsolete_skipped_count']);
-    const continuationsCreated = sumMetric(first, second, ['continuations_created', 'continuation_created_count']);
-    const continuationsReused = sumMetric(first, second, ['continuations_reused', 'continuation_reused_count']);
-    const recoveredStaleCount = sumMetric(first, second, ['recovered_stale_count']);
-    const deadStaleCount = sumMetric(first, second, ['dead_stale_count']);
-    const rowUnitsProcessed = sumMetric(first, second, ['row_units_processed', 'work_units_processed']);
-    const cloneRebaseJobsProcessed = sumMetric(first, second, ['clone_rebase_jobs_processed']);
-    const cloneCopiedCandidateCount = sumMetric(first, second, ['clone_copied_candidate_count']);
-    const cloneCopiedPreviewRowCount = sumMetric(first, second, ['clone_copied_preview_row_count']);
-    const cloneLegacyRefreshEnqueuedCount = sumMetric(first, second, ['clone_legacy_refresh_enqueued_count']);
-    const cloneMoreDueCount = sumMetric(first, second, ['clone_more_due_count']);
-    return {
-      ...first,
-      ...second,
-      ok: first.ok !== false && second.ok !== false,
-      started_at_utc: first.started_at_utc || second.started_at_utc || new Date(startedAtMs).toISOString(),
-      completed_at_utc: second.completed_at_utc || first.completed_at_utc || new Date().toISOString(),
-      elapsed_ms: Math.max(0, Date.now() - startedAtMs),
-      tick_elapsed_ms: Math.max(0, Date.now() - startedAtMs),
-      claimed,
-      claimed_count: claimed,
-      processed,
-      processed_count: processed,
-      succeeded,
-      succeeded_count: succeeded,
-      failed,
-      failed_count: failed,
-      dead,
-      dead_count: dead,
-      obsolete_skipped: obsoleteSkipped,
-      obsolete_skipped_count: obsoleteSkipped,
-      continuations_created: continuationsCreated,
-      continuation_created_count: continuationsCreated,
-      continuations_reused: continuationsReused,
-      continuation_reused_count: continuationsReused,
-      continuation_count: continuationsCreated + continuationsReused,
-      recovered_stale_count: recoveredStaleCount,
-      dead_stale_count: deadStaleCount,
-      row_units_processed: rowUnitsProcessed,
-      work_units_processed: rowUnitsProcessed,
-      clone_rebase_jobs_processed: cloneRebaseJobsProcessed,
-      clone_jobs_processed: cloneRebaseJobsProcessed,
-      clone_copied_candidate_count: cloneCopiedCandidateCount,
-      clone_copied_preview_row_count: cloneCopiedPreviewRowCount,
-      clone_legacy_refresh_enqueued_count: cloneLegacyRefreshEnqueuedCount,
-      clone_more_due_count: cloneMoreDueCount,
-      pass_count: passCount,
-      continuation_pass_count: Math.max(0, passCount - 1),
-      rpc_call_count: sumMetric(first, second, ['rpc_call_count']),
-      more_due: booleanFrom(second.more_due),
-      stop_reason: trimStr(second.stop_reason || first.stop_reason || 'NO_MORE_DUE') || 'NO_MORE_DUE',
-      budget_exhausted: booleanFrom(second.budget_exhausted) || booleanFrom(first.budget_exhausted),
-      made_progress: booleanFrom(first.made_progress) || booleanFrom(second.made_progress) || claimed > 0 || processed > 0,
-      aggregate_db_worker: true,
-      per_job_rpc_fanout: false,
-      coalesced_final_check_performed: booleanFrom(first.coalesced_final_check_performed)
-        || booleanFrom(second.coalesced_final_check_performed)
-        || upperTrim(second.origin || '').includes('COALESCED_FINAL_CHECK'),
-      auto_continuation_performed: booleanFrom(first.auto_continuation_performed) || booleanFrom(second.auto_continuation_performed),
-      auto_continuation_count: sumMetric(first, second, ['auto_continuation_count']),
-      burst_segments: firstSegments.concat(secondSegments).filter((segment) => isPlainObject(segment))
-    };
-  };
-
-  const source = isPlainObject(options) ? options : {};
-  const cachedSettingsDefaults = (typeof __SETTINGS_DEFAULTS_CACHE !== 'undefined'
-    && __SETTINGS_DEFAULTS_CACHE
-    && isPlainObject(__SETTINGS_DEFAULTS_CACHE.value))
-    ? __SETTINGS_DEFAULTS_CACHE.value
-    : {};
-  const cachedImportConfig = isPlainObject(cachedSettingsDefaults.importConfig) ? cachedSettingsDefaults.importConfig : {};
-  const cachedWorkbenchSettings = isPlainObject(cachedSettingsDefaults.banking_pay_workbench_effective)
-    ? cachedSettingsDefaults.banking_pay_workbench_effective
-    : (isPlainObject(cachedImportConfig.banking_pay_workbench_effective)
-        ? cachedImportConfig.banking_pay_workbench_effective
-        : (isPlainObject(cachedImportConfig.bankingPayWorkbenchEffective) ? cachedImportConfig.bankingPayWorkbenchEffective : {}));
-  const cachedDrainSettings = isPlainObject(cachedWorkbenchSettings.drain) ? cachedWorkbenchSettings.drain : {};
-  const cachedAutoContinuationSettings = isPlainObject(cachedWorkbenchSettings.auto_continuation)
-    ? cachedWorkbenchSettings.auto_continuation
-    : (isPlainObject(cachedWorkbenchSettings.autoContinuation) ? cachedWorkbenchSettings.autoContinuation : {});
-  const firstConfiguredValue = (...values) => {
-    for (const value of values) {
-      if (value === undefined || value === null) continue;
-      if (typeof value === 'string' && value.trim() === '') continue;
-      return value;
-    }
-    return undefined;
-  };
-  const cachedSetting = (camelName, snakeName, fallback = undefined) => firstConfiguredValue(
-    source[camelName],
-    snakeName ? source[snakeName] : undefined,
-    cachedDrainSettings[snakeName],
-    cachedDrainSettings[camelName],
-    fallback
-  );
-  const cachedAutoSetting = (camelName, snakeName, fallback = undefined) => firstConfiguredValue(
-    source[camelName],
-    snakeName ? source[snakeName] : undefined,
-    cachedAutoContinuationSettings[snakeName],
-    cachedAutoContinuationSettings[camelName],
-    fallback
-  );
-  let maxStageWorkUnitsPerJob = numberInRange(
-    firstConfiguredValue(
-      source.stageWorkUnitsPerJob,
-      source.stage_work_units_per_job,
-      source.workbenchStageWorkUnitsPerJob,
-      source.workbench_stage_work_units_per_job,
-      cachedDrainSettings.stage_work_units_per_job,
-      cachedDrainSettings.stageWorkUnitsPerJob,
-      cachedDrainSettings.workbench_stage_work_units_per_job
-    ),
-    25,
-    1,
-    100
-  );
-  const safeAutoContinuationStopReasons = new Set([
-    'MORE_DUE',
-    'MAX_RUNTIME_NEAR_EXHAUSTED',
-    'MAX_RUNTIME',
-    'MAX_PASSES',
-    'MAX_JOBS',
-    'MAX_ROWS',
-    'SOURCE_BUILD_PARALLEL_BURSTS',
-    'DELTA_PHASE_BUDGET_EXHAUSTED',
-    'DELTA_ROWS_REMAINING',
-    'DELTA_MORE_DUE',
-    'DELTA_PHASE_COMPLETE_MORE_DUE',
-    'CLONE_REBASE_MORE_DUE',
-    'CLONE_REBASE_BUDGET_EXHAUSTED',
-    'CLONE_REBASE_PHASE_BUDGET_EXHAUSTED',
-    'CLONE_REBASE_ROWS_REMAINING',
-    'CLONE_REBASE_CHUNK_MORE_DUE',
-    'CLONE_REBASE_PHASE_COMPLETE_MORE_DUE',
-    'WORKBENCH_SESSION_CLONE_REBASE_MORE_DUE',
-    'WORKBENCH_STAGE_BUDGET_EXHAUSTED',
-    'BUDGET_EXHAUSTED'
-  ]);
-  const unsafeAutoContinuationStopReasons = new Set([
-    'RPC_ERROR',
-    'NO_PROGRESS',
-    'DRAIN_UNAVAILABLE',
-    'DISABLED',
-    'BANKING_PAY_WORKBENCH_DRAIN_RPC_INVALID_RESPONSE',
-    'UNHANDLED_EXCEPTION',
-    'PERMISSION_ERROR',
-    'LOCK_CONTENTION_STALE'
-  ]);
-  const lockContentionStopReasons = new Set([
-    'LOCKED_BY_CONCURRENT_WORKER',
-    'CLAIM_LOCK_CONTENTION',
-    'CONCURRENT_WORKER_LOCK_CONTENTION'
-  ]);
-  let maxAutoContinuationBursts = numberInRange(
-    cachedAutoSetting('maxAutoContinuationBursts', 'max_auto_continuation_bursts', cachedAutoContinuationSettings.max_bursts),
-    3,
-    0,
-    8
-  );
-  let maxAutoContinuationRuntimeMs = numberInRange(
-    cachedAutoSetting('maxAutoContinuationRuntimeMs', 'max_auto_continuation_runtime_ms', cachedAutoContinuationSettings.max_runtime_ms),
-    28000,
-    5000,
-    60000
-  );
-  let autoContinuationPerBurstMaxRuntimeMs = numberInRange(
-    cachedAutoSetting('autoContinuationPerBurstMaxRuntimeMs', 'auto_continuation_per_burst_max_runtime_ms', cachedAutoContinuationSettings.per_burst_max_runtime_ms),
-    10000,
-    1000,
-    15000
-  );
-  let autoContinuationMinRuntimeMs = numberInRange(
-    cachedAutoSetting('autoContinuationMinRuntimeMs', 'auto_continuation_min_runtime_ms', cachedAutoContinuationSettings.min_runtime_ms),
-    10000,
-    1000,
-    15000
-  );
-  let autoContinuationMaxPasses = numberInRange(
-    cachedAutoSetting('autoContinuationMaxPasses', 'auto_continuation_max_passes', cachedAutoContinuationSettings.max_passes),
-    1,
-    1,
-    2
-  );
-  let autoContinuationClaimLimitMax = numberInRange(
-    cachedAutoSetting('autoContinuationClaimLimitMax', 'auto_continuation_claim_limit_max', cachedAutoContinuationSettings.claim_limit_max),
-    10,
-    1,
-    50
-  );
-  let autoContinuationMaxJobs = numberInRange(
-    cachedAutoSetting('autoContinuationMaxJobs', 'auto_continuation_max_jobs', cachedAutoContinuationSettings.max_jobs),
-    50,
-    1,
-    150
-  );
-  let autoContinuationMaxRows = numberInRange(
-    cachedAutoSetting('autoContinuationMaxRows', 'auto_continuation_max_rows', cachedAutoContinuationSettings.max_rows),
-    500,
-    Math.max(1, maxStageWorkUnitsPerJob),
-    5000
-  );
-  const autoContinuationDelayMs = numberInRange(
-    source.autoContinuationDelayMs ?? source.auto_continuation_delay_ms,
-    0,
-    0,
-    1000
-  );
-  const lockContentionRetryDelayMs = numberInRange(
-    cachedAutoSetting('lockContentionRetryDelayMs', 'lock_contention_retry_delay_ms', cachedAutoContinuationSettings.lock_contention_retry_delay_ms),
-    1250,
-    250,
-    3000
-  );
-  const activeEntryMaxAgeMs = numberInRange(
-    cachedAutoSetting('activeEntryMaxAgeMs', 'active_entry_max_age_ms', cachedAutoContinuationSettings.active_entry_max_age_ms),
-    Math.max(30000, maxAutoContinuationRuntimeMs + 15000),
-    5000,
-    120000
-  );
-  const activeEntryNoProgressMaxAgeMs = numberInRange(
-    cachedAutoSetting('activeEntryNoProgressMaxAgeMs', 'active_entry_no_progress_max_age_ms', cachedAutoContinuationSettings.active_entry_no_progress_max_age_ms),
-    Math.max(15000, autoContinuationMinRuntimeMs * 2),
-    5000,
-    60000
-  );
-  const cachedSettingsResolved = isPlainObject(cachedWorkbenchSettings)
-    && Object.keys(cachedWorkbenchSettings).length > 0
-    && !!trimStr(
-      cachedWorkbenchSettings.settings_source
-      || cachedWorkbenchSettings.settingsSource
-      || cachedWorkbenchSettings.settings_hash
-      || cachedWorkbenchSettings.settingsHash
-      || cachedWorkbenchSettings.settings_defaults_updated_at
-      || cachedWorkbenchSettings.settingsDefaultsUpdatedAt
-      || cachedSettingsDefaults.settings_defaults_updated_at
-      || ''
-    );
-  const settingsSource = cachedSettingsResolved
-    ? (trimStr(cachedWorkbenchSettings.settings_source || cachedWorkbenchSettings.settingsSource || '') || 'settings_defaults:id=1')
-    : 'settings_not_resolved_until_drain';
-  const settingsDefaultsUpdatedAt = cachedSettingsResolved
-    ? (trimStr(cachedWorkbenchSettings.settings_defaults_updated_at || cachedWorkbenchSettings.settingsDefaultsUpdatedAt || cachedSettingsDefaults.settings_defaults_updated_at || '') || null)
-    : null;
-  const settingsDefaultsVersion = cachedSettingsResolved
-    ? (trimStr(cachedWorkbenchSettings.settings_defaults_version || cachedWorkbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null)
-    : null;
-  const settingsHash = cachedSettingsResolved
-    ? (trimStr(cachedWorkbenchSettings.settings_hash || cachedWorkbenchSettings.settingsHash || '') || null)
-    : null;
-  const settingsDeferredToDrain = !cachedSettingsResolved;
-  const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
-  const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
-  const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
-  const requestedSessionIdValue = canonicalBankingPayWorkbenchUuid(requestedSessionId);
-  const requestedCandidateIdValue = canonicalBankingPayWorkbenchUuid(requestedCandidateId);
-  const requestedActorUserIdValue = canonicalBankingPayWorkbenchUuid(requestedActorUserId);
-  const durableWakeDepth = numberInRange(
-    source.durableWakeDepth ?? source.durable_wake_depth,
-    0,
-    0,
-    32
-  );
-  const requestedProfile = upperTrim(source.budgetProfile || source.budget_profile || source.profile || '') || null;
-  const budgetProfile = 'NUDGE';
-  const requestedOrigin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
-  const lifecycleOriginNudge = ['TIMESHEET_AUTHORISE', 'TIMESHEET_UNAUTHORISE'].includes(upperTrim(requestedOrigin));
-  const lifecycleOriginDrainDelayMs = lifecycleOriginNudge
-    ? numberInRange(
-        firstConfiguredValue(
-          source.lifecycleOriginDrainDelayMs,
-          source.lifecycle_origin_drain_delay_ms,
-          cachedDrainSettings.lifecycle_origin_drain_delay_ms,
-          cachedDrainSettings.lifecycleOriginDrainDelayMs
-        ),
-        1500,
-        250,
-        2000
-      )
-    : 0;
-  const sessionScopedNudge = !!requestedSessionIdValue;
-  const origin = sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE';
-  const configuredWorkerId = trimStr(source.workerId || source.worker_id || '');
-  const stableNudgeWorkerId = bankingPayWorkbenchStableWorkerId('NUDGE', requestedSessionIdValue, configuredWorkerId);
-  const singleFlightKey = bankingPayWorkbenchNudgeSingleFlightKey(requestedSessionIdValue);
-
-  const commonMetadata = {
-    origin,
-    requested_origin: requestedOrigin,
-    requested_budget_profile: requestedProfile,
-    budget_profile: budgetProfile,
-    worker_scope: sessionScopedNudge ? 'SESSION' : 'GLOBAL',
-    global_worker_lane: !sessionScopedNudge,
-    session_scoped_worker_lane: sessionScopedNudge,
-    single_flight_key: singleFlightKey,
-    requested_session_id: requestedSessionIdValue,
-    requested_candidate_id: requestedCandidateIdValue,
-    requested_actor_user_id: requestedActorUserIdValue,
-    worker_session_filter: requestedSessionIdValue,
-    worker_candidate_filter: requestedCandidateIdValue,
-    worker_actor_filter: requestedActorUserIdValue,
-    bounded_continuation: true,
-    durable_wake_depth: durableWakeDepth,
-    durable_wake_max_depth: 32,
-    durable_cron_fallback: true,
-    cron_remains_recovery_fallback: true,
-    scheduled_worker_is_durable_fallback: false,
-    auto_continuation_enabled: maxAutoContinuationBursts > 0,
-    auto_continuation_requires_wait_until: true,
-    max_auto_continuation_bursts: maxAutoContinuationBursts,
-    max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
-    auto_continuation_per_burst_max_runtime_ms: autoContinuationPerBurstMaxRuntimeMs,
-    auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
-    lock_contention_retry_delay_ms: lockContentionRetryDelayMs,
-    auto_continuation_max_passes: autoContinuationMaxPasses,
-    auto_continuation_claim_limit_max: autoContinuationClaimLimitMax,
-    auto_continuation_max_jobs: autoContinuationMaxJobs,
-    auto_continuation_max_rows: autoContinuationMaxRows,
-    active_entry_max_age_ms: activeEntryMaxAgeMs,
-    active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
-    settings_source: settingsSource,
-    settings_defaults_updated_at: settingsDefaultsUpdatedAt,
-    settings_defaults_version: settingsDefaultsVersion,
-    settings_hash: settingsHash,
-    settings_deferred_to_drain: settingsDeferredToDrain,
-    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-    lifecycle_origin_nudge: lifecycleOriginNudge,
-    lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
-    lifecycle_origin_debounce_non_blocking: lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0
-  };
-
-  const logNudgeDiag = (eventName, payload = {}, severity = 'info') => {
-    try {
-      if (typeof logBankingPayWorkbenchDiag === 'function') {
-        logBankingPayWorkbenchDiag(env, eventName, {
-          ...commonMetadata,
-          ...payload,
-          origin: payload.origin || requestedOrigin || origin,
-          session_id: requestedSessionIdValue,
-          candidate_id: requestedCandidateIdValue,
-          reason: trimStr(source.reason || source.nudge_reason || source.mutation_type || source.source || requestedOrigin || '') || null,
-          ctx_present: !!ctx,
-          wait_until_available: !!(ctx && typeof ctx.waitUntil === 'function')
-        }, { severity });
-      }
-    } catch {}
-  };
-  const applyEffectiveControlsFromSummary = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    const applyTextMetadata = (summaryKey, camelKey, metadataKey, passthroughCamelKey, passthroughSnakeKey = null) => {
-      const value = trimStr(summary[summaryKey] ?? summary[camelKey] ?? '');
-      if (!value) return;
-      commonMetadata[metadataKey] = value;
-      try {
-        if (typeof passthroughOptions === 'object' && passthroughOptions) {
-          if (passthroughCamelKey) passthroughOptions[passthroughCamelKey] = value;
-          if (passthroughSnakeKey) passthroughOptions[passthroughSnakeKey] = value;
-        }
-      } catch {}
-    };
-    const applyNumericPassthrough = (summaryKey, camelKey, passthroughCamelKey, min = 0, max = Number.MAX_SAFE_INTEGER) => {
-      if (!Object.prototype.hasOwnProperty.call(summary, summaryKey) && !Object.prototype.hasOwnProperty.call(summary, camelKey)) return;
-      const n = Number(summary[summaryKey] ?? summary[camelKey]);
-      if (!Number.isFinite(n)) return;
-      const value = Math.max(min, Math.min(max, Math.trunc(n)));
-      try {
-        if (typeof passthroughOptions === 'object' && passthroughOptions && passthroughCamelKey) {
-          passthroughOptions[passthroughCamelKey] = value;
-        }
-      } catch {}
-    };
-
-    maxStageWorkUnitsPerJob = numberInRange(summary.stage_work_units_per_job ?? summary.workbench_stage_work_units_per_job, maxStageWorkUnitsPerJob, 1, 100);
-    maxAutoContinuationBursts = numberInRange(summary.max_auto_continuation_bursts, maxAutoContinuationBursts, 0, 8);
-    maxAutoContinuationRuntimeMs = numberInRange(summary.max_auto_continuation_runtime_ms, maxAutoContinuationRuntimeMs, 5000, 60000);
-    autoContinuationPerBurstMaxRuntimeMs = numberInRange(summary.auto_continuation_per_burst_max_runtime_ms, autoContinuationPerBurstMaxRuntimeMs, 1000, 15000);
-    autoContinuationMinRuntimeMs = numberInRange(summary.auto_continuation_min_runtime_ms, autoContinuationMinRuntimeMs, 1000, 15000);
-    autoContinuationMaxPasses = numberInRange(summary.auto_continuation_max_passes, autoContinuationMaxPasses, 1, 2);
-    autoContinuationClaimLimitMax = numberInRange(summary.auto_continuation_claim_limit_max, autoContinuationClaimLimitMax, 1, 50);
-    autoContinuationMaxJobs = numberInRange(summary.auto_continuation_max_jobs, autoContinuationMaxJobs, 1, 150);
-    autoContinuationMaxRows = numberInRange(summary.auto_continuation_max_rows, autoContinuationMaxRows, Math.max(1, maxStageWorkUnitsPerJob), 5000);
-
-    commonMetadata.auto_continuation_enabled = maxAutoContinuationBursts > 0;
-    commonMetadata.max_auto_continuation_bursts = maxAutoContinuationBursts;
-    commonMetadata.max_auto_continuation_runtime_ms = maxAutoContinuationRuntimeMs;
-    commonMetadata.auto_continuation_per_burst_max_runtime_ms = autoContinuationPerBurstMaxRuntimeMs;
-    commonMetadata.auto_continuation_min_runtime_ms = autoContinuationMinRuntimeMs;
-    commonMetadata.auto_continuation_max_passes = autoContinuationMaxPasses;
-    commonMetadata.auto_continuation_claim_limit_max = autoContinuationClaimLimitMax;
-    commonMetadata.auto_continuation_max_jobs = autoContinuationMaxJobs;
-    commonMetadata.auto_continuation_max_rows = autoContinuationMaxRows;
-    commonMetadata.active_entry_max_age_ms = activeEntryMaxAgeMs;
-    commonMetadata.active_entry_no_progress_max_age_ms = activeEntryNoProgressMaxAgeMs;
-    commonMetadata.workbench_stage_work_units_per_job = maxStageWorkUnitsPerJob;
-
-    applyTextMetadata('settings_source', 'settingsSource', 'settings_source', 'settingsSource', 'settings_source');
-    applyTextMetadata('settings_defaults_updated_at', 'settingsDefaultsUpdatedAt', 'settings_defaults_updated_at', 'settingsDefaultsUpdatedAt', 'settings_defaults_updated_at');
-    applyTextMetadata('settings_defaults_version', 'settingsDefaultsVersion', 'settings_defaults_version', 'settingsDefaultsVersion', 'settings_defaults_version');
-    applyTextMetadata('settings_hash', 'settingsHash', 'settings_hash', 'settingsHash', 'settings_hash');
-
-    applyNumericPassthrough('stage_work_units_per_job', 'workbench_stage_work_units_per_job', 'stageWorkUnitsPerJob', 1, 100);
-    applyNumericPassthrough('db_worker_lease_seconds', 'dbWorkerLeaseSeconds', 'dbWorkerLeaseSeconds', 1, 3600);
-    applyNumericPassthrough('db_worker_max_runtime_ms', 'dbWorkerMaxRuntimeMs', 'dbWorkerMaxRuntimeMs', 1000, 30000);
-    applyNumericPassthrough('db_worker_min_phase_budget_ms', 'dbWorkerMinPhaseBudgetMs', 'dbWorkerMinPhaseBudgetMs', 250, 15000);
-    applyNumericPassthrough('job_retry_base_seconds', 'jobRetryBaseSeconds', 'jobRetryBaseSeconds', 5, 3600);
-    applyNumericPassthrough('job_retry_max_seconds', 'jobRetryMaxSeconds', 'jobRetryMaxSeconds', 5, 86400);
-    applyNumericPassthrough('db_statement_timeout_ms', 'dbStatementTimeoutMs', 'dbStatementTimeoutMs', 1000, 30000);
-    applyNumericPassthrough('db_lock_timeout_ms', 'dbLockTimeoutMs', 'dbLockTimeoutMs', 100, 5000);
-    applyNumericPassthrough('db_idle_tx_timeout_ms', 'dbIdleTxTimeoutMs', 'dbIdleTxTimeoutMs', 5000, 60000);
-    applyNumericPassthrough('source_build_parallel_bursts', 'sourceBuildParallelBursts', 'sourceBuildParallelBursts', 0, 16);
-    applyNumericPassthrough('source_build_units_per_job', 'sourceBuildWorkUnitsPerJob', 'sourceBuildWorkUnitsPerJob', 1, 100);
-  };
-
-  const returnNudgeResult = (result, eventName = 'WORKBENCH_DRAIN_NUDGE_SCHEDULED', severity = 'info') => {
-    const safeResult = isPlainObject(result) ? result : {};
-    logNudgeDiag(eventName, {
-      ...safeResult,
-      scheduled: safeResult.scheduled === true,
-      wait_until_used: safeResult.wait_until_used === true,
-      fire_and_forget: safeResult.scheduled === true && safeResult.wait_until_used !== true,
-      immediate: safeResult.immediate === false ? false : true
-    }, severity);
-    return result;
-  };
-
-  logNudgeDiag('WORKBENCH_DRAIN_NUDGE_REQUESTED', {
-    requested_origin: requestedOrigin,
-    requested_budget_profile: requestedProfile,
-    session_id: requestedSessionIdValue,
-    candidate_id: requestedCandidateIdValue,
-    actor_user_id: requestedActorUserIdValue
+  if (!ctx || typeof ctx.waitUntil !== 'function') {
+    return { ok: false, skipped: true, scheduled: false, already_running: false,
+      code: 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_UNAVAILABLE', cron_remains_recovery_fallback: true };
+  }
+  let registered = false;
+  const wake = Promise.resolve().then(() => {
+    if (registered) return bpayNextEnrollmentWake(env);
+  }).catch(() => {
+    console.warn('[banking-pay-next] enrollment wake missed', { code: 'BPAY_NEXT_ENROLLMENT_WAKE_UNAVAILABLE' });
   });
-
-  if (Object.prototype.hasOwnProperty.call(source, 'enabled')) {
-    const enabledText = String(source.enabled).trim().toLowerCase();
-    if (source.enabled === false || enabledText === 'false' || enabledText === '0') {
-      return returnNudgeResult({
-        ...commonMetadata,
-        ok: true,
-        scheduled: false,
-        already_running: false,
-        skipped: true,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_DISABLED',
-        wait_until_used: false,
-        continuation_scheduled: false
-      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
-    }
-  }
-
-  if (typeof bankingPayWorkbenchCronTick !== 'function') {
-    return returnNudgeResult({
-      ...commonMetadata,
-      ok: false,
-      scheduled: false,
-      already_running: false,
-      skipped: true,
-      code: 'BANKING_PAY_WORKBENCH_CRON_TICK_UNAVAILABLE',
-      wait_until_used: false,
-      continuation_scheduled: false
-    }, 'WORKBENCH_DRAIN_NUDGE_FAILED', 'warn');
-  }
-
-  const root = globalThis || {};
-  if (!root.__bankingPayWorkbenchDrainNudges || typeof root.__bankingPayWorkbenchDrainNudges.get !== 'function') {
-    try {
-      root.__bankingPayWorkbenchDrainNudges = new Map();
-    } catch {
-      root.__bankingPayWorkbenchDrainNudges = null;
-    }
-  }
-  const map = root.__bankingPayWorkbenchDrainNudges;
-
-  if (map && map.has(singleFlightKey)) {
-    const rawActiveEntry = map.get(singleFlightKey);
-    if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
-      try { map.delete(singleFlightKey); } catch {}
-      return returnNudgeResult({
-        ...commonMetadata,
-        ok: false,
-        scheduled: false,
-        already_running: false,
-        coalesced_into_active_drain: false,
-        coalesced_wake_deferred_to_cron: false,
-        coalesced_wake_count: null,
-        active_started_at_utc: null,
-        active_budget_profile: budgetProfile,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_LEGACY_ENTRY_UNPROVEN',
-        wait_until_used: false,
-        continuation_scheduled: false
-      }, 'WORKBENCH_DRAIN_NUDGE_FAILED', 'warn');
-    }
-
-    let activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
-      ? rawActiveEntry
-      : null;
-
-    if (activeEntry) {
-      const nowMs = Date.now();
-      const activeStartedAtMs = Number(activeEntry.started_at_ms) || Date.parse(activeEntry.started_at_utc || '') || nowMs;
-      const activeAgeMs = Math.max(0, nowMs - activeStartedAtMs);
-      const activeLastProgressAtMs = Number(activeEntry.last_progress_at_ms) || activeStartedAtMs;
-      const activeNoProgressAgeMs = Math.max(0, nowMs - activeLastProgressAtMs);
-      const activeFinalSummary = isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null;
-      const activeMadeProgress = booleanFrom(activeEntry.last_made_progress) || booleanFrom(activeFinalSummary?.made_progress);
-      const activeEntryStale = activeAgeMs > activeEntryMaxAgeMs || (!activeMadeProgress && activeNoProgressAgeMs > activeEntryNoProgressMaxAgeMs);
-      if (activeEntryStale) {
-        try { map.delete(singleFlightKey); } catch {}
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_ENTRY_EVICTED', {
-          active_started_at_utc: activeEntry.started_at_utc || null,
-          active_age_ms: activeAgeMs,
-          active_no_progress_age_ms: activeNoProgressAgeMs,
-          active_entry_max_age_ms: activeEntryMaxAgeMs,
-          active_entry_no_progress_max_age_ms: activeEntryNoProgressMaxAgeMs,
-          active_made_progress: activeMadeProgress,
-          final_burst_summary: activeFinalSummary
-        }, 'warn');
-        activeEntry = null;
-      }
-    }
-
-    const activeState = upperTrim(activeEntry?.state || '');
-    const activeEntryHasEntered = activeState === 'ENTERED' || activeState === 'PROGRESS';
-    if (activeEntry && activeEntryHasEntered && activeEntry.accepting_coalesced_wakes !== false) {
-      let activeWaitUntilUpgradeAttempted = false;
-      let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
-      let activeWaitUntilUpgradeErrorMessage = null;
-
-      if (!activeWaitUntilUpgradeSucceeded
-          && activeEntry.promise
-          && typeof activeEntry.promise.then === 'function'
-          && ctx
-          && typeof ctx.waitUntil === 'function') {
-        activeWaitUntilUpgradeAttempted = true;
-        try {
-          ctx.waitUntil(activeEntry.promise);
-          activeEntry.wait_until_used = true;
-          activeEntry.wait_until_upgraded_at_utc = new Date().toISOString();
-          activeEntry.wait_until_upgraded_origin = requestedOrigin;
-          activeWaitUntilUpgradeSucceeded = true;
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADED', {
-            active_started_at_utc: activeEntry.started_at_utc || null,
-            active_budget_profile: activeEntry.budget_profile || budgetProfile,
-            coalesced_wake_count: Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1,
-            wait_until_used: true,
-            requested_origin: requestedOrigin
-          });
-        } catch (waitUntilError) {
-          activeEntry.wait_until_upgrade_failed = true;
-          activeEntry.wait_until_upgrade_failed_at_utc = new Date().toISOString();
-          activeEntry.wait_until_upgrade_error_message = String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil upgrade failed');
-          activeWaitUntilUpgradeSucceeded = false;
-          activeWaitUntilUpgradeErrorMessage = activeEntry.wait_until_upgrade_error_message;
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_ACTIVE_WAIT_UNTIL_UPGRADE_FAILED', {
-            active_started_at_utc: activeEntry.started_at_utc || null,
-            active_budget_profile: activeEntry.budget_profile || budgetProfile,
-            wait_until_used: false,
-            requested_origin: requestedOrigin,
-            error_message: activeWaitUntilUpgradeErrorMessage
-          }, 'warn');
-          try { activeEntry.promise.catch(() => {}); } catch {}
-        }
-      }
-
-      activeEntry.coalesced_wake_requested = true;
-      activeEntry.coalesced_wake_count = Math.max(0, Number(activeEntry.coalesced_wake_count) || 0) + 1;
-      activeEntry.last_coalesced_at_utc = new Date().toISOString();
-      activeEntry.last_requested_origin = requestedOrigin;
-      try { map.set(singleFlightKey, activeEntry); } catch {}
-      return returnNudgeResult({
-        ...commonMetadata,
-        ok: true,
-        scheduled: false,
-        already_running: true,
-        coalesced_into_active_drain: true,
-        coalesced_wake_count: activeEntry.coalesced_wake_count,
-        active_started_at_utc: activeEntry.started_at_utc || null,
-        active_budget_profile: activeEntry.budget_profile || budgetProfile,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
-        wait_until_used: activeEntry.wait_until_used === true,
-        active_wait_until_upgrade_attempted: activeWaitUntilUpgradeAttempted,
-        active_wait_until_upgraded: activeWaitUntilUpgradeAttempted && activeWaitUntilUpgradeSucceeded,
-        active_wait_until_upgrade_error_message: activeWaitUntilUpgradeErrorMessage,
-        continuation_scheduled: true,
-        final_burst_summary: isPlainObject(activeEntry.final_summary) ? activeEntry.final_summary : null
-      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
-    }
-
-    try { map.delete(singleFlightKey); } catch {}
-  }
-
-  const passthroughOptions = {
-    origin,
-    budgetProfile,
-    profile: budgetProfile,
-    workerId: stableNudgeWorkerId,
-    sessionId: requestedSessionIdValue || undefined,
-    candidateId: requestedCandidateIdValue || undefined,
-    actorUserId: requestedActorUserIdValue || undefined
-  };
-
-  for (const key of [
-    'claimLimit',
-    'claim_limit',
-    'maxPasses',
-    'max_passes',
-    'maxJobs',
-    'max_jobs',
-    'maxRows',
-    'max_rows',
-    'maxRuntimeMs',
-    'max_runtime_ms',
-    'allowedJobTypes',
-    'allowed_job_types',
-    'workerId',
-    'worker_id',
-    'leaseSeconds',
-    'lease_seconds',
-    'minimumRpcBudgetMs',
-    'minimum_rpc_budget_ms',
-    'rpcSafetyBufferMs',
-    'rpc_safety_buffer_ms',
-    'stageWorkUnitsPerJob',
-    'stage_work_units_per_job',
-    'dbWorkerLeaseSeconds',
-    'db_worker_lease_seconds',
-    'dbWorkerMaxRuntimeMs',
-    'db_worker_max_runtime_ms',
-    'dbWorkerMinPhaseBudgetMs',
-    'db_worker_min_phase_budget_ms',
-    'jobRetryBaseSeconds',
-    'job_retry_base_seconds',
-    'jobRetryMaxSeconds',
-    'job_retry_max_seconds',
-    'dbStatementTimeoutMs',
-    'db_statement_timeout_ms',
-    'dbLockTimeoutMs',
-    'db_lock_timeout_ms',
-    'dbIdleTxTimeoutMs',
-    'db_idle_tx_timeout_ms',
-    'enabled'
-  ]) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) passthroughOptions[key] = source[key];
-  }
-  passthroughOptions.workerId = stableNudgeWorkerId;
-  delete passthroughOptions.worker_id;
-
-  const copyCachedDrainSetting = (camelName, snakeName) => {
-    if (Object.prototype.hasOwnProperty.call(passthroughOptions, camelName)
-        || (snakeName && Object.prototype.hasOwnProperty.call(passthroughOptions, snakeName))) {
-      return;
-    }
-    const configured = firstConfiguredValue(cachedDrainSettings[snakeName], cachedDrainSettings[camelName]);
-    if (configured !== undefined) passthroughOptions[camelName] = configured;
-  };
-  copyCachedDrainSetting('minimumRpcBudgetMs', 'minimum_rpc_budget_ms');
-  copyCachedDrainSetting('rpcSafetyBufferMs', 'rpc_safety_buffer_ms');
-  copyCachedDrainSetting('stageWorkUnitsPerJob', 'stage_work_units_per_job');
-  copyCachedDrainSetting('dbWorkerLeaseSeconds', 'db_worker_lease_seconds');
-  copyCachedDrainSetting('dbWorkerMaxRuntimeMs', 'db_worker_max_runtime_ms');
-  copyCachedDrainSetting('dbWorkerMinPhaseBudgetMs', 'db_worker_min_phase_budget_ms');
-  copyCachedDrainSetting('jobRetryBaseSeconds', 'job_retry_base_seconds');
-  copyCachedDrainSetting('jobRetryMaxSeconds', 'job_retry_max_seconds');
-  copyCachedDrainSetting('dbStatementTimeoutMs', 'db_statement_timeout_ms');
-  copyCachedDrainSetting('dbLockTimeoutMs', 'db_lock_timeout_ms');
-  copyCachedDrainSetting('dbIdleTxTimeoutMs', 'db_idle_tx_timeout_ms');
-  if (!Object.prototype.hasOwnProperty.call(passthroughOptions, 'stageWorkUnitsPerJob')) {
-    passthroughOptions.stageWorkUnitsPerJob = maxStageWorkUnitsPerJob;
-  }
-  const cachedStageLimits = isPlainObject(cachedWorkbenchSettings.nudge_stage_limits)
-    ? cachedWorkbenchSettings.nudge_stage_limits
-    : (isPlainObject(cachedWorkbenchSettings.nudge?.stage_limits)
-        ? cachedWorkbenchSettings.nudge.stage_limits
-        : (isPlainObject(cachedWorkbenchSettings.stage_limits) ? cachedWorkbenchSettings.stage_limits : {}));
-  if (isPlainObject(cachedStageLimits) && Object.keys(cachedStageLimits).length > 0 && !Object.prototype.hasOwnProperty.call(passthroughOptions, 'stageLimits')) {
-    passthroughOptions.stageLimits = cachedStageLimits;
-  }
-  if (!settingsDeferredToDrain) {
-    passthroughOptions.settingsSource = settingsSource;
-    passthroughOptions.settingsDefaultsUpdatedAt = settingsDefaultsUpdatedAt;
-    passthroughOptions.settingsDefaultsVersion = settingsDefaultsVersion;
-    passthroughOptions.settingsHash = settingsHash;
-  }
-  passthroughOptions.settingsDeferredToDrain = settingsDeferredToDrain;
-
-  const isLockContentionSummary = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    const drain = isPlainObject(summary.drain_result) ? summary.drain_result : {};
-    const claimResult = isPlainObject(drain.claim_result) ? drain.claim_result : {};
-    const stopReason = upperTrim(summary.stop_reason || drain.stop_reason || claimResult.stop_reason || '');
-    const failedCount = Math.max(
-      numberFrom(summary, ['failed', 'failed_count'], 0),
-      numberFrom(drain, ['failed', 'failed_count'], 0),
-      numberFrom(claimResult, ['failed', 'failed_count'], 0)
-    );
-    const deadCount = Math.max(
-      numberFrom(summary, ['dead', 'dead_count'], 0),
-      numberFrom(drain, ['dead', 'dead_count'], 0),
-      numberFrom(claimResult, ['dead', 'dead_count'], 0)
-    );
-    const staleRecoveryErrorCount = Math.max(
-      numberFrom(summary, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0),
-      numberFrom(drain, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0),
-      numberFrom(claimResult, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0)
-    );
-    const lockContentionCount = Math.max(
-      numberFrom(summary, ['claim_lock_contention_count', 'lock_contention_count'], 0),
-      numberFrom(drain, ['claim_lock_contention_count', 'lock_contention_count'], 0),
-      numberFrom(claimResult, ['claim_lock_contention_count', 'lock_contention_count'], 0)
-    );
-
-    return failedCount === 0
-      && deadCount === 0
-      && staleRecoveryErrorCount === 0
-      && (
-        lockContentionStopReasons.has(stopReason)
-        || booleanFrom(summary.claim_lock_contention_detected)
-        || booleanFrom(summary.lock_contention_detected)
-        || booleanFrom(summary.concurrent_worker_progress_expected)
-        || booleanFrom(drain.claim_lock_contention_detected)
-        || booleanFrom(drain.lock_contention_detected)
-        || booleanFrom(drain.concurrent_worker_progress_expected)
-        || booleanFrom(claimResult.claim_lock_contention_detected)
-        || booleanFrom(claimResult.lock_contention_detected)
-        || booleanFrom(claimResult.concurrent_worker_progress_expected)
-        || lockContentionCount > 0
-      );
-  };
-
-  const canAutoContinueFrom = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    const stopReason = upperTrim(summary.stop_reason || '');
-    const failedCount = numberFrom(summary, ['failed', 'failed_count'], 0);
-    const deadCount = numberFrom(summary, ['dead', 'dead_count'], 0);
-    const staleRecoveryErrorCount = numberFrom(summary, ['supplemental_stale_recovery_error_count', 'stale_recovery_error_count'], 0);
-    const madeProgress = booleanFrom(summary.made_progress)
-      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
-      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
-      || numberFrom(summary, ['recovered_stale_count'], 0) > 0
-      || numberFrom(summary, ['dead_stale_count'], 0) > 0
-      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
-      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
-
-    return booleanFrom(summary.more_due)
-      && summary.ok !== false
-      && madeProgress
-      && failedCount === 0
-      && deadCount === 0
-      && staleRecoveryErrorCount === 0
-      && !unsafeAutoContinuationStopReasons.has(stopReason)
-      && (stopReason === '' || safeAutoContinuationStopReasons.has(stopReason || 'MORE_DUE'));
-  };
-
-  const buildAutoContinuationOptions = (previousSummaryLike, continuationIndex, remainingRuntimeMs) => {
-    const previousSummary = isPlainObject(previousSummaryLike) ? previousSummaryLike : {};
-    const previousClaimLimit = numberFrom(
-      previousSummary,
-      ['claim_limit', 'requested_claim_limit'],
-      numberFrom(passthroughOptions, ['claimLimit', 'claim_limit'], 5)
-    );
-    const previousMaxJobs = numberFrom(previousSummary, ['max_jobs'], autoContinuationMaxJobs);
-    const previousMaxRows = numberFrom(previousSummary, ['max_rows'], autoContinuationMaxRows);
-    const continuationClaimLimit = Math.max(1, Math.min(autoContinuationClaimLimitMax, Math.max(1, previousClaimLimit)));
-    const continuationMaxJobs = Math.max(1, Math.min(autoContinuationMaxJobs, Math.max(1, previousMaxJobs)));
-    const continuationMaxRows = Math.max(
-      maxStageWorkUnitsPerJob,
-      Math.min(autoContinuationMaxRows, Math.max(maxStageWorkUnitsPerJob, previousMaxRows))
-    );
-    const continuationRuntimeMs = Math.max(
-      autoContinuationMinRuntimeMs,
-      Math.min(autoContinuationPerBurstMaxRuntimeMs, Math.max(autoContinuationMinRuntimeMs, remainingRuntimeMs))
-    );
-    const continuationOptions = {
-      ...passthroughOptions,
-      origin: `${sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE'}_AUTO_CONTINUATION_${continuationIndex}`,
-      budgetProfile: 'NUDGE',
-      profile: 'NUDGE',
-      claimLimit: continuationClaimLimit,
-      maxPasses: autoContinuationMaxPasses,
-      maxJobs: continuationMaxJobs,
-      maxRows: continuationMaxRows,
-      maxRuntimeMs: continuationRuntimeMs
-    };
-    delete continuationOptions.claim_limit;
-    delete continuationOptions.max_passes;
-    delete continuationOptions.max_jobs;
-    delete continuationOptions.max_rows;
-    delete continuationOptions.max_runtime_ms;
-    return continuationOptions;
-  };
-
-  const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
-
-  const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
-  let waitUntilUsed = false;
-  const entry = {
-    promise: null,
-    started_at_utc: new Date().toISOString(),
-    started_at_ms: Date.now(),
-    budget_profile: budgetProfile,
-    budget_options: { ...passthroughOptions },
-    coalesced_wake_requested: false,
-    coalesced_wake_count: 0,
-    accepting_coalesced_wakes: true,
-    first_tick_summary: null,
-    coalesced_final_check_summary: null,
-    final_summary: null,
-    wait_until_used: false,
-    requested_origin: requestedOrigin,
-    lifecycle_origin_nudge: lifecycleOriginNudge,
-    lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
-    last_progress_at_ms: Date.now(),
-    last_made_progress: false,
-    state: 'CREATED',
-    created_at_utc: new Date().toISOString(),
-    entered_at_utc: null,
-    completed_at_utc: null,
-    failed_at_utc: null
-  };
-
-  const recordEntryProgress = (summaryLike) => {
-    const summary = isPlainObject(summaryLike) ? summaryLike : {};
-    const madeProgress = booleanFrom(summary.made_progress)
-      || numberFrom(summary, ['claimed', 'claimed_count'], 0) > 0
-      || numberFrom(summary, ['processed', 'processed_count'], 0) > 0
-      || numberFrom(summary, ['succeeded', 'succeeded_count'], 0) > 0
-      || numberFrom(summary, ['source_build_jobs_processed'], 0) > 0
-      || numberFrom(summary, ['source_rows_written'], 0) > 0
-      || numberFrom(summary, ['clone_rebase_jobs_processed', 'clone_jobs_processed'], 0) > 0
-      || numberFrom(summary, ['clone_copied_candidate_count'], 0) > 0
-      || numberFrom(summary, ['clone_copied_preview_row_count'], 0) > 0
-      || numberFrom(summary, ['clone_legacy_refresh_enqueued_count'], 0) > 0
-      || numberFrom(summary, ['continuations_created', 'continuation_created_count'], 0) > 0
-      || numberFrom(summary, ['continuations_reused', 'continuation_reused_count'], 0) > 0;
-    if (!madeProgress) return false;
-    entry.last_progress_at_ms = Date.now();
-    entry.last_made_progress = true;
-    entry.state = 'PROGRESS';
-    return true;
-  };
-
-  let promise = null;
-  promise = Promise.resolve()
-    .then(async () => {
-      if (lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0) {
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LIFECYCLE_DEBOUNCE_START', {
-          non_blocking_lifecycle_origin_debounce: true,
-          lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
-          requested_origin: requestedOrigin,
-          mutation_type: trimStr(source.mutation_type || source.mutationType || '') || null
-        });
-        await sleepMs(lifecycleOriginDrainDelayMs);
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LIFECYCLE_DEBOUNCE_END', {
-          non_blocking_lifecycle_origin_debounce: true,
-          lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
-          requested_origin: requestedOrigin,
-          mutation_type: trimStr(source.mutation_type || source.mutationType || '') || null
-        });
-      }
-      entry.state = 'ENTERED';
-      entry.entered_at_utc = new Date().toISOString();
-      entry.last_progress_at_ms = Date.now();
-      const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
-      entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
-      applyEffectiveControlsFromSummary(entry.first_tick_summary);
-      recordEntryProgress(entry.first_tick_summary);
-      let finalSummary = {
-        ...entry.first_tick_summary,
-        coalesced_final_check_performed: false,
-        coalesced_final_check_skipped: false,
-        workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
-      };
-      let autoContinuationCount = 0;
-      let autoContinuationSkipReason = null;
-      let lockContentionRetryPerformed = false;
-      let lockContentionRetrySummary = null;
-      let lockContentionRetryActualDelayMs = null;
-      const autoContinuationSummaries = [];
-      const coalescedFinalCheckSummaries = [];
-      let coalescedWakeCountHandled = 0;
-
-      const runCoalescedFinalCheck = async (baseSummaryLike, triggerReason = 'COALESCED_WAKE') => {
-        const baseSummary = isPlainObject(baseSummaryLike) ? baseSummaryLike : {};
-        const wakeCountToHandle = Math.max(
-          coalescedWakeCountHandled,
-          Math.max(0, Number(entry.coalesced_wake_count) || 0)
-        );
-        const elapsedForCoalescedMs = Math.max(0, Date.now() - entry.started_at_ms);
-        const remainingCoalescedRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForCoalescedMs);
-        const baseStopReason = upperTrim(baseSummary.stop_reason || '');
-        const baseClaimLimit = Math.max(1, numberFrom(
-          baseSummary,
-          ['claim_limit', 'requested_claim_limit'],
-          numberFrom(passthroughOptions, ['claimLimit', 'claim_limit'], 5)
-        ));
-        const rowBoundedClaimLimit = Math.floor(autoContinuationMaxRows / maxStageWorkUnitsPerJob);
-        const finalCheckClaimLimit = Math.min(
-          50,
-          autoContinuationClaimLimitMax,
-          baseClaimLimit,
-          autoContinuationMaxJobs,
-          rowBoundedClaimLimit
-        );
-        const safeTriggerReason = upperTrim(triggerReason).replace(/[^A-Z0-9_]/g, '_') || 'COALESCED_WAKE';
-        const finalCheckSkipReason = !hasWaitUntil
-          ? 'WAIT_UNTIL_UNAVAILABLE'
-          : (entry.wait_until_used !== true
-              ? 'WAIT_UNTIL_NOT_ACCEPTED'
-              : (remainingCoalescedRuntimeMs < autoContinuationMinRuntimeMs
-                  ? 'MAX_AUTO_CONTINUATION_RUNTIME'
-                  : (finalCheckClaimLimit <= 0
-                      ? 'NO_SAFE_CLAIM_BUDGET'
-                      : (unsafeAutoContinuationStopReasons.has(baseStopReason)
-                          ? baseStopReason || 'NOT_ALLOWED'
-                          : null))));
-
-        if (finalCheckSkipReason) {
-          coalescedWakeCountHandled = wakeCountToHandle;
-          return {
-            ...baseSummary,
-            coalesced_final_check_performed: booleanFrom(baseSummary.coalesced_final_check_performed),
-            coalesced_final_check_skipped: true,
-            coalesced_final_check_skip_reason: finalCheckSkipReason,
-            coalesced_wake_count_handled: coalescedWakeCountHandled,
-            coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
-            latest_coalesced_wake_trigger_reason: safeTriggerReason,
-            workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-            elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
-          };
-        }
-
-        const finalCheckOptions = {
-          ...passthroughOptions,
-          origin: `${sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE'}_${safeTriggerReason}_FINAL_CHECK`,
-          budgetProfile: 'NUDGE',
-          profile: 'NUDGE',
-          claimLimit: finalCheckClaimLimit,
-          maxPasses: 1,
-          maxJobs: autoContinuationMaxJobs,
-          maxRows: autoContinuationMaxRows,
-          maxRuntimeMs: Math.max(
-            autoContinuationMinRuntimeMs,
-            Math.min(autoContinuationPerBurstMaxRuntimeMs, remainingCoalescedRuntimeMs)
-          )
-        };
-        delete finalCheckOptions.claim_limit;
-        delete finalCheckOptions.max_passes;
-        delete finalCheckOptions.max_jobs;
-        delete finalCheckOptions.max_rows;
-        delete finalCheckOptions.max_runtime_ms;
-
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_COALESCED_FINAL_CHECK_START', {
-          coalesced_wake_trigger_reason: safeTriggerReason,
-          coalesced_wake_count_to_handle: wakeCountToHandle,
-          coalesced_wake_count_current: Math.max(0, Number(entry.coalesced_wake_count) || 0),
-          previous_stop_reason: baseStopReason,
-          final_check_claim_limit: finalCheckOptions.claimLimit,
-          final_check_max_jobs: finalCheckOptions.maxJobs,
-          final_check_max_rows: finalCheckOptions.maxRows,
-          final_check_max_runtime_ms: finalCheckOptions.maxRuntimeMs,
-          remaining_coalesced_runtime_ms: remainingCoalescedRuntimeMs
-        });
-
-        const finalCheck = await bankingPayWorkbenchCronTick(env, finalCheckOptions);
-        const finalCheckSummary = isPlainObject(finalCheck) ? finalCheck : {};
-        entry.coalesced_final_check_summary = finalCheckSummary;
-        coalescedFinalCheckSummaries.push(finalCheckSummary);
-        coalescedWakeCountHandled = Math.max(coalescedWakeCountHandled, wakeCountToHandle);
-
-        const combinedSummary = {
-          ...combineTickResults(baseSummary, finalCheckSummary, entry.started_at_ms),
-          coalesced_final_check_performed: true,
-          coalesced_final_check_skipped: false,
-          coalesced_final_check_summaries: coalescedFinalCheckSummaries.slice(),
-          coalesced_wake_count_handled: coalescedWakeCountHandled,
-          coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
-          latest_coalesced_wake_trigger_reason: safeTriggerReason,
-          workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
-        };
-        recordEntryProgress(combinedSummary);
-
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_COALESCED_FINAL_CHECK_RESULT', {
-          coalesced_wake_trigger_reason: safeTriggerReason,
-          coalesced_wake_count_handled: coalescedWakeCountHandled,
-          stop_reason: combinedSummary.stop_reason,
-          more_due: booleanFrom(combinedSummary.more_due),
-          made_progress: booleanFrom(combinedSummary.made_progress),
-          claimed: numberFrom(finalCheckSummary, ['claimed', 'claimed_count'], 0),
-          processed: numberFrom(finalCheckSummary, ['processed', 'processed_count'], 0),
-          failed: numberFrom(finalCheckSummary, ['failed', 'failed_count'], 0),
-          row_units_processed: numberFrom(finalCheckSummary, ['row_units_processed', 'work_units_processed'], 0)
-        });
-
-        return combinedSummary;
-      };
-
-      let controlLoopSafetyCount = 0;
-      while (controlLoopSafetyCount < (maxAutoContinuationBursts + 8)) {
-        controlLoopSafetyCount += 1;
-
-        if (entry.coalesced_wake_count > coalescedWakeCountHandled) {
-          finalSummary = await runCoalescedFinalCheck(
-            finalSummary,
-            coalescedWakeCountHandled === 0 ? 'INITIAL_COALESCED_WAKE' : 'LATE_COALESCED_WAKE'
-          );
-          continue;
-        }
-
-        if (isLockContentionSummary(finalSummary)) {
-          if (!lockContentionRetryPerformed
-              && maxAutoContinuationBursts > 0
-              && hasWaitUntil
-              && entry.wait_until_used === true
-              && autoContinuationCount < maxAutoContinuationBursts) {
-            const elapsedForLockContentionRetryMs = Math.max(0, Date.now() - entry.started_at_ms);
-            const remainingBeforeLockContentionDelayMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForLockContentionRetryMs);
-            if (remainingBeforeLockContentionDelayMs < autoContinuationMinRuntimeMs) {
-              autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
-              break;
-            }
-
-            const lockContentionDelayMs = Math.min(
-              lockContentionRetryDelayMs,
-              Math.max(0, remainingBeforeLockContentionDelayMs - autoContinuationMinRuntimeMs)
-            );
-            lockContentionRetryActualDelayMs = lockContentionDelayMs;
-            if (lockContentionDelayMs > 0) await sleepMs(lockContentionDelayMs);
-
-            const remainingLockContentionRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - Math.max(0, Date.now() - entry.started_at_ms));
-            if (remainingLockContentionRuntimeMs < autoContinuationMinRuntimeMs) {
-              autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
-              break;
-            }
-
-            const continuationIndex = autoContinuationCount + 1;
-            const lockContentionRetryOptions = buildAutoContinuationOptions(
-              finalSummary,
-              continuationIndex,
-              remainingLockContentionRuntimeMs
-            );
-            lockContentionRetryOptions.origin = `${sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE'}_LOCK_CONTENTION_RETRY_${continuationIndex}`;
-            lockContentionRetryOptions.claimLimit = Math.max(
-              1,
-              Math.min(
-                autoContinuationClaimLimitMax,
-                numberFrom(finalSummary, ['claim_lock_contention_count', 'lock_contention_count', 'due_queued_count', 'claimable_count'], lockContentionRetryOptions.claimLimit)
-              )
-            );
-
-            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LOCK_CONTENTION_RETRY_START', {
-              auto_continuation_index: continuationIndex,
-              previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-              previous_more_due: booleanFrom(finalSummary.more_due),
-              previous_claim_lock_contention_count: numberFrom(finalSummary, ['claim_lock_contention_count', 'lock_contention_count'], 0),
-              lock_contention_retry_delay_ms: lockContentionDelayMs,
-              remaining_auto_continuation_runtime_ms: remainingLockContentionRuntimeMs,
-              continuation_claim_limit: lockContentionRetryOptions.claimLimit,
-              continuation_max_passes: lockContentionRetryOptions.maxPasses,
-              continuation_max_jobs: lockContentionRetryOptions.maxJobs,
-              continuation_max_rows: lockContentionRetryOptions.maxRows,
-              continuation_max_runtime_ms: lockContentionRetryOptions.maxRuntimeMs
-            });
-
-            const lockContentionTick = await bankingPayWorkbenchCronTick(env, lockContentionRetryOptions);
-            const lockContentionSummary = isPlainObject(lockContentionTick) ? lockContentionTick : {};
-            lockContentionRetryPerformed = true;
-            lockContentionRetrySummary = lockContentionSummary;
-            autoContinuationCount += 1;
-            autoContinuationSummaries.push(lockContentionSummary);
-            finalSummary = {
-              ...combineTickResults(finalSummary, lockContentionSummary, entry.started_at_ms),
-              lock_contention_retry_performed: true,
-              lock_contention_retry_summary: lockContentionSummary,
-              lock_contention_retry_delay_ms: lockContentionDelayMs,
-              auto_continuation_performed: true,
-              auto_continuation_skipped: false,
-              auto_continuation_count: autoContinuationCount,
-              auto_continuation_summaries: autoContinuationSummaries.slice(),
-              latest_auto_continuation_stop_reason: upperTrim(lockContentionSummary.stop_reason || ''),
-              workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-              cron_remains_recovery_fallback: true
-            };
-            recordEntryProgress(finalSummary);
-
-            logNudgeDiag('WORKBENCH_DRAIN_NUDGE_LOCK_CONTENTION_RETRY_RESULT', {
-              auto_continuation_index: autoContinuationCount,
-              stop_reason: finalSummary.stop_reason,
-              more_due: booleanFrom(finalSummary.more_due),
-              made_progress: booleanFrom(finalSummary.made_progress),
-              claimed: numberFrom(lockContentionSummary, ['claimed', 'claimed_count'], 0),
-              processed: numberFrom(lockContentionSummary, ['processed', 'processed_count'], 0),
-              failed: numberFrom(lockContentionSummary, ['failed', 'failed_count'], 0),
-              row_units_processed: numberFrom(lockContentionSummary, ['row_units_processed', 'work_units_processed'], 0),
-              claim_lock_contention_detected: isLockContentionSummary(lockContentionSummary),
-              claim_lock_contention_count: numberFrom(lockContentionSummary, ['claim_lock_contention_count', 'lock_contention_count'], 0)
-            });
-            continue;
-          }
-
-          autoContinuationSkipReason = 'LOCKED_BY_CONCURRENT_WORKER';
-          break;
-        }
-
-        if (!canAutoContinueFrom(finalSummary)) break;
-
-        if (maxAutoContinuationBursts <= 0) {
-          autoContinuationSkipReason = 'AUTO_CONTINUATION_DISABLED';
-          break;
-        }
-        if (!hasWaitUntil) {
-          autoContinuationSkipReason = 'WAIT_UNTIL_UNAVAILABLE';
-          break;
-        }
-        if (entry.wait_until_used !== true) {
-          autoContinuationSkipReason = 'WAIT_UNTIL_NOT_ACCEPTED';
-          break;
-        }
-        if (autoContinuationCount >= maxAutoContinuationBursts) {
-          autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_BURSTS';
-          break;
-        }
-
-        const elapsedForAutoContinuationMs = Math.max(0, Date.now() - entry.started_at_ms);
-        const remainingAutoContinuationRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForAutoContinuationMs);
-        if (remainingAutoContinuationRuntimeMs < autoContinuationMinRuntimeMs) {
-          autoContinuationSkipReason = 'MAX_AUTO_CONTINUATION_RUNTIME';
-          break;
-        }
-
-        if (autoContinuationDelayMs > 0) await sleepMs(autoContinuationDelayMs);
-
-        const continuationIndex = autoContinuationCount + 1;
-        const autoContinuationOptions = buildAutoContinuationOptions(
-          finalSummary,
-          continuationIndex,
-          remainingAutoContinuationRuntimeMs
-        );
-
-        logNudgeDiag('WORKBENCH_DRAIN_CONTINUATION_DECISION', {
-          previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-          previous_more_due: booleanFrom(finalSummary.more_due),
-          previous_made_progress: booleanFrom(finalSummary.made_progress),
-          remaining_auto_continuation_runtime_ms: remainingAutoContinuationRuntimeMs,
-          auto_continuation_index: continuationIndex,
-          max_auto_continuation_bursts: maxAutoContinuationBursts,
-          auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
-          will_continue: true,
-          reason: upperTrim(finalSummary.stop_reason || '') === 'SOURCE_BUILD_PARALLEL_BURSTS' ? 'SAFE_BOUNDED_SOURCE_BUILD_MORE_DUE' : 'SAFE_MORE_DUE',
-          reason_if_false: null,
-          continuation_claim_limit: autoContinuationOptions.claimLimit,
-          continuation_max_passes: autoContinuationOptions.maxPasses,
-          continuation_max_jobs: autoContinuationOptions.maxJobs,
-          continuation_max_rows: autoContinuationOptions.maxRows,
-          continuation_max_runtime_ms: autoContinuationOptions.maxRuntimeMs
-        });
-
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_START', {
-          auto_continuation_index: continuationIndex,
-          max_auto_continuation_bursts: maxAutoContinuationBursts,
-          remaining_auto_continuation_runtime_ms: remainingAutoContinuationRuntimeMs,
-          previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-          previous_more_due: booleanFrom(finalSummary.more_due),
-          previous_made_progress: booleanFrom(finalSummary.made_progress),
-          continuation_claim_limit: autoContinuationOptions.claimLimit,
-          continuation_max_passes: autoContinuationOptions.maxPasses,
-          continuation_max_jobs: autoContinuationOptions.maxJobs,
-          continuation_max_rows: autoContinuationOptions.maxRows,
-          continuation_max_runtime_ms: autoContinuationOptions.maxRuntimeMs
-        });
-
-        const autoContinuationTick = await bankingPayWorkbenchCronTick(env, autoContinuationOptions);
-        const autoContinuationSummary = isPlainObject(autoContinuationTick) ? autoContinuationTick : {};
-        autoContinuationCount += 1;
-        autoContinuationSummaries.push(autoContinuationSummary);
-        finalSummary = {
-          ...combineTickResults(finalSummary, autoContinuationSummary, entry.started_at_ms),
-          auto_continuation_performed: true,
-          auto_continuation_skipped: false,
-          auto_continuation_count: autoContinuationCount,
-          auto_continuation_summaries: autoContinuationSummaries.slice(),
-          latest_auto_continuation_stop_reason: upperTrim(autoContinuationSummary.stop_reason || ''),
-          workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-          cron_remains_recovery_fallback: true
-        };
-        recordEntryProgress(finalSummary);
-
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_RESULT', {
-          auto_continuation_index: autoContinuationCount,
-          stop_reason: finalSummary.stop_reason,
-          more_due: booleanFrom(finalSummary.more_due),
-          made_progress: booleanFrom(finalSummary.made_progress),
-          claimed: numberFrom(autoContinuationSummary, ['claimed', 'claimed_count'], 0),
-          processed: numberFrom(autoContinuationSummary, ['processed', 'processed_count'], 0),
-          failed: numberFrom(autoContinuationSummary, ['failed', 'failed_count'], 0),
-          row_units_processed: numberFrom(autoContinuationSummary, ['row_units_processed', 'work_units_processed'], 0)
-        });
-      }
-
-      if (controlLoopSafetyCount >= (maxAutoContinuationBursts + 8)
-          && booleanFrom(finalSummary.more_due)
-          && !autoContinuationSkipReason) {
-        autoContinuationSkipReason = 'CONTROL_LOOP_GUARD';
-      }
-
-      if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && isLockContentionSummary(finalSummary)) {
-        autoContinuationSkipReason = 'LOCKED_BY_CONCURRENT_WORKER';
-      }
-
-      if (!autoContinuationSkipReason && booleanFrom(finalSummary.more_due) && !canAutoContinueFrom(finalSummary)) {
-        const stopReasonForSkip = upperTrim(finalSummary.stop_reason || '');
-        const madeProgressForSkip = booleanFrom(finalSummary.made_progress)
-          || numberFrom(finalSummary, ['claimed', 'claimed_count'], 0) > 0
-          || numberFrom(finalSummary, ['processed', 'processed_count'], 0) > 0
-          || numberFrom(finalSummary, ['succeeded', 'succeeded_count'], 0) > 0;
-        autoContinuationSkipReason = madeProgressForSkip && stopReasonForSkip === 'SOURCE_BUILD_PARALLEL_BURSTS'
-          ? 'BOUNDED_SOURCE_BUILD_SLICE_AWAITING_NEXT_NUDGE'
-          : 'UNSAFE_OR_NO_PROGRESS';
-      }
-
-      if (sessionScopedNudge
-          && source.globalTailPass !== false
-          && entry.wait_until_used === true
-          && !isLockContentionSummary(finalSummary)
-          && unsafeAutoContinuationStopReasons.has(upperTrim(finalSummary.stop_reason || '')) !== true) {
-        const elapsedForGlobalTailMs = Math.max(0, Date.now() - entry.started_at_ms);
-        const remainingGlobalTailRuntimeMs = Math.max(0, maxAutoContinuationRuntimeMs - elapsedForGlobalTailMs);
-        if (remainingGlobalTailRuntimeMs >= autoContinuationMinRuntimeMs
-            && typeof bankingPayWorkbenchCronTick === 'function') {
-          const globalTailOptions = {
-            ...passthroughOptions,
-            origin: 'BANKING_PAY_WORKBENCH_SESSION_NUDGE_GLOBAL_TAIL',
-            budgetProfile: 'NUDGE',
-            profile: 'NUDGE',
-            workerId: 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL',
-            sessionId: undefined,
-            session_id: undefined,
-            candidateId: undefined,
-            candidate_id: undefined,
-            claimLimit: Math.max(1, Math.min(autoContinuationClaimLimitMax, 5)),
-            maxPasses: 1,
-            maxJobs: Math.max(1, Math.min(autoContinuationMaxJobs, 10)),
-            maxRows: Math.max(maxStageWorkUnitsPerJob, Math.min(autoContinuationMaxRows, maxStageWorkUnitsPerJob * 10)),
-            maxRuntimeMs: Math.max(autoContinuationMinRuntimeMs, Math.min(autoContinuationPerBurstMaxRuntimeMs, remainingGlobalTailRuntimeMs))
-          };
-          delete globalTailOptions.claim_limit;
-          delete globalTailOptions.max_passes;
-          delete globalTailOptions.max_jobs;
-          delete globalTailOptions.max_rows;
-          delete globalTailOptions.max_runtime_ms;
-
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_GLOBAL_TAIL_START', {
-            session_scoped_worker_lane: true,
-            prior_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-            remaining_global_tail_runtime_ms: remainingGlobalTailRuntimeMs,
-            global_tail_claim_limit: globalTailOptions.claimLimit,
-            global_tail_max_runtime_ms: globalTailOptions.maxRuntimeMs
-          });
-          const globalTailTick = await bankingPayWorkbenchCronTick(env, globalTailOptions);
-          const globalTailSummary = isPlainObject(globalTailTick) ? globalTailTick : {};
-          finalSummary = {
-            ...combineTickResults(finalSummary, globalTailSummary, entry.started_at_ms),
-            session_scoped_global_tail_performed: true,
-            session_scoped_global_tail_summary: globalTailSummary,
-            workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob
-          };
-          recordEntryProgress(finalSummary);
-          logNudgeDiag('WORKBENCH_DRAIN_NUDGE_GLOBAL_TAIL_RESULT', {
-            stop_reason: finalSummary.stop_reason,
-            more_due: booleanFrom(finalSummary.more_due),
-            made_progress: booleanFrom(finalSummary.made_progress),
-            claimed: numberFrom(globalTailSummary, ['claimed', 'claimed_count'], 0),
-            processed: numberFrom(globalTailSummary, ['processed', 'processed_count'], 0),
-            failed: numberFrom(globalTailSummary, ['failed', 'failed_count'], 0),
-            row_units_processed: numberFrom(globalTailSummary, ['row_units_processed', 'work_units_processed'], 0)
-          });
-        }
-      }
-
-      finalSummary = {
-        ...finalSummary,
-        auto_continuation_performed: autoContinuationCount > 0,
-        auto_continuation_count: autoContinuationCount,
-        auto_continuation_summaries: autoContinuationSummaries,
-        lock_contention_retry_performed: lockContentionRetryPerformed,
-        lock_contention_retry_summary: lockContentionRetrySummary,
-        lock_contention_retry_delay_ms: lockContentionRetryPerformed ? lockContentionRetryActualDelayMs : null,
-        auto_continuation_skipped: autoContinuationSkipReason != null,
-        auto_continuation_skip_reason: autoContinuationSkipReason,
-        max_auto_continuation_bursts: maxAutoContinuationBursts,
-        max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
-        auto_continuation_requires_wait_until: true,
-        auto_continuation_wait_until_available: hasWaitUntil,
-        auto_continuation_wait_until_used: entry.wait_until_used === true,
-        coalesced_final_check_summaries: coalescedFinalCheckSummaries,
-        coalesced_wake_count_handled: coalescedWakeCountHandled,
-        coalesced_wake_count_observed: Math.max(0, Number(entry.coalesced_wake_count) || 0),
-        cron_remains_recovery_fallback: true,
-        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
-      };
-
-      if (autoContinuationSkipReason) {
-        logNudgeDiag('WORKBENCH_DRAIN_CONTINUATION_DECISION', {
-          previous_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-          previous_more_due: booleanFrom(finalSummary.more_due),
-          previous_made_progress: booleanFrom(finalSummary.made_progress),
-          remaining_auto_continuation_runtime_ms: Math.max(0, maxAutoContinuationRuntimeMs - Math.max(0, Date.now() - entry.started_at_ms)),
-          auto_continuation_index: autoContinuationCount + 1,
-          max_auto_continuation_bursts: maxAutoContinuationBursts,
-          auto_continuation_min_runtime_ms: autoContinuationMinRuntimeMs,
-          will_continue: false,
-          reason_if_false: autoContinuationSkipReason,
-          continuation_claim_limit: null,
-          continuation_max_passes: autoContinuationMaxPasses,
-          continuation_max_jobs: autoContinuationMaxJobs,
-          continuation_max_rows: autoContinuationMaxRows,
-          continuation_max_runtime_ms: null
-        }, autoContinuationSkipReason === 'UNSAFE_OR_NO_PROGRESS' ? 'warn' : 'info');
-
-        logNudgeDiag('WORKBENCH_DRAIN_NUDGE_AUTO_CONTINUATION_SKIPPED', {
-          auto_continuation_count: autoContinuationCount,
-          auto_continuation_skip_reason: autoContinuationSkipReason,
-          final_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-          final_more_due: booleanFrom(finalSummary.more_due),
-          final_made_progress: booleanFrom(finalSummary.made_progress),
-          elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
-        }, autoContinuationSkipReason === 'UNSAFE_OR_NO_PROGRESS' ? 'warn' : 'info');
-      }
-
-      let durableWakeResult = {
-        ok: true,
-        enqueued: false,
-        wake_depth: durableWakeDepth,
-        reason: 'NO_MORE_DUE'
-      };
-      if (canAutoContinueFrom(finalSummary)) {
-        if (durableWakeDepth >= 32) {
-          durableWakeResult = {
-            ok: true,
-            enqueued: false,
-            wake_depth: durableWakeDepth,
-            reason: 'MAX_DURABLE_WAKE_DEPTH',
-            cron_fallback_required: true
-          };
-        } else {
-          try {
-            durableWakeResult = await enqueueBankingPayWorkbenchDrainWake(env, {
-              session_id: requestedSessionIdValue,
-              candidate_id: requestedCandidateIdValue,
-              actor_user_id: requestedActorUserIdValue,
-              wake_depth: durableWakeDepth + 1
-            });
-          } catch (durableWakeError) {
-            durableWakeResult = {
-              ok: false,
-              enqueued: false,
-              wake_depth: durableWakeDepth,
-              reason: 'DURABLE_WAKE_ENQUEUE_FAILED',
-              cron_fallback_required: true,
-              error_code: String(durableWakeError?.code || durableWakeError?.name || 'DURABLE_WAKE_ENQUEUE_FAILED').slice(0, 160)
-            };
-          }
-        }
-      }
-      finalSummary = {
-        ...finalSummary,
-        durable_wake_enqueued: durableWakeResult.enqueued === true,
-        durable_wake_depth: Number(durableWakeResult.wake_depth) || durableWakeDepth,
-        durable_wake_max_depth: 32,
-        durable_wake_result: durableWakeResult,
-        cron_remains_recovery_fallback: true
-      };
-      logNudgeDiag(
-        durableWakeResult.enqueued === true
-          ? 'WORKBENCH_DRAIN_DURABLE_WAKE_ENQUEUED'
-          : 'WORKBENCH_DRAIN_DURABLE_WAKE_NOT_ENQUEUED',
-        {
-          enqueued: durableWakeResult.enqueued === true,
-          wake_depth: Number(durableWakeResult.wake_depth) || durableWakeDepth,
-          max_wake_depth: 32,
-          reason: durableWakeResult.reason || null,
-          final_more_due: booleanFrom(finalSummary.more_due),
-          final_made_progress: booleanFrom(finalSummary.made_progress),
-          final_stop_reason: upperTrim(finalSummary.stop_reason || ''),
-          cron_fallback_required: durableWakeResult.cron_fallback_required === true
-        },
-        durableWakeResult.ok === false ? 'warn' : 'info'
-      );
-
-      entry.accepting_coalesced_wakes = false;
-      entry.final_summary = finalSummary;
-      entry.completed_at_utc = new Date().toISOString();
-      entry.state = 'COMPLETED';
-      return finalSummary;
-    })
-    .catch((error) => {
-      const failureSummary = {
-        ok: false,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
-        error_code: 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
-        origin,
-        requested_origin: requestedOrigin,
-        budget_profile: budgetProfile,
-        worker_scope: sessionScopedNudge ? 'SESSION' : 'GLOBAL',
-        more_due: true,
-        stop_reason: 'RPC_ERROR',
-        budget_exhausted: false,
-        made_progress: false,
-        aggregate_db_worker: true,
-        per_job_rpc_fanout: false,
-        elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms),
-        message: String(error?.message || error || 'Workbench drain nudge failed')
-      };
-      entry.accepting_coalesced_wakes = false;
-      entry.final_summary = failureSummary;
-      entry.completed_at_utc = new Date().toISOString();
-      entry.failed_at_utc = entry.completed_at_utc;
-      entry.state = 'FAILED';
-      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
-        ...failureSummary,
-        error_message: failureSummary.message
-      }, 'warn');
-      try {
-        console.warn('[nudgeBankingPayWorkbenchDrain] Global workbench drain nudge failed:', failureSummary.message);
-      } catch {}
-      return failureSummary;
-    })
-    .finally(() => {
-      entry.accepting_coalesced_wakes = false;
-      try {
-        if (map && map.get(singleFlightKey) === entry) map.delete(singleFlightKey);
-      } catch {}
-    });
-
-  entry.promise = promise;
   try {
-    if (map) map.set(singleFlightKey, entry);
-  } catch {}
-
-  if (hasWaitUntil) {
-    try {
-      ctx.waitUntil(promise);
-      waitUntilUsed = true;
-      entry.wait_until_used = true;
-      entry.state = 'WAIT_UNTIL_ATTACHED';
-      entry.wait_until_attached_at_utc = new Date().toISOString();
-    } catch (waitUntilError) {
-      waitUntilUsed = false;
-      entry.wait_until_used = false;
-      entry.state = 'WAIT_UNTIL_ATTACH_FAILED';
-      entry.wait_until_failed_at_utc = new Date().toISOString();
-      logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
-        code: 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_FAILED',
-        scheduled: false,
-        wait_until_used: false,
-        error_message: String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil failed')
-      }, 'warn');
-      promise.catch(() => {});
-    }
-  } else {
-    promise.catch(() => {});
+    ctx.waitUntil(wake);
+    registered = true;
+  } catch {
+    return { ok: false, skipped: true, scheduled: false, already_running: false,
+      code: 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_UNAVAILABLE', cron_remains_recovery_fallback: true };
   }
-
-  return returnNudgeResult({
-    ...commonMetadata,
-    ok: waitUntilUsed,
-    scheduled: waitUntilUsed,
-    already_running: false,
-    wait_until_used: waitUntilUsed,
-    continuation_scheduled: true,
-    auto_continuation_scheduled: maxAutoContinuationBursts > 0 && waitUntilUsed,
-    max_auto_continuation_bursts: maxAutoContinuationBursts,
-    max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
-    workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-    code: waitUntilUsed ? 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED' : 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_UNAVAILABLE',
-    active_started_at_utc: entry.started_at_utc,
-    coalesced_wake_count: 0,
-    budget_resolved_by: 'bankingPayWorkbenchCronTick'
-  }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
+  return { ok: true, scheduled: true, already_running: false, wait_until_used: true,
+    code: 'BPAY_NEXT_ENROLLMENT_WAKE_SCHEDULED', cron_remains_recovery_fallback: true };
 }
 
 function shouldContinueBankingPayWorkbenchAfterCron(summary) {
@@ -29354,6 +27892,11 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
 
 async function handleBankingCapabilities(env, req, user) {
   try {
+    // NEXT diagnostics never enter the legacy adapter/token probe. Default
+    // capabilities retain the separate Invoice Discounting contract.
+    if (new URL(req.url).searchParams.get('scope') === 'NEXT') {
+      return withCORS(env, req, ok(bpayNextCapabilities(env, req)));
+    }
     const select = [
       'rail_provider_default',
       'rail_env_default',
@@ -29640,8 +28183,8 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
         payload: {}
       },
       p_now_utc: nowUtc
-    })
-    : await sbRpcRecordingGuardRefusal(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
+    }, { timeoutMs: 20000 })
+    : await sbRpcRecordingGuardRefusal(env, 'candidate_workflow_transition_atomic_v1', beginPayload, { timeoutMs: 20000 });
   if (begin?.receipt_mode === 'DAILY_FACTUAL') {
     const receiptTimesheetId = String(begin.timesheet_id || '').trim();
     const inputHash = String(begin.canonical_save_input_sha256_hex || '');
@@ -29779,8 +28322,8 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
         daily_materialisation_json: dailyMaterialisation
       },
       p_now_utc: nowUtc
-    })
-    : sbRpcRecordingGuardRefusal(env, 'candidate_submission_finalize_atomic_v1', finalisationPayload);
+    }, { timeoutMs: 20000 })
+    : sbRpcRecordingGuardRefusal(env, 'candidate_submission_finalize_single_flight_v1', finalisationPayload, { timeoutMs: 20000 });
 }
 
 async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {
@@ -42205,6 +40748,8 @@ function parseBankingPayWorkbenchDrainWakeMessage(value) {
 }
 
 async function enqueueBankingPayWorkbenchDrainWake(env, options = {}) {
+  const wake = await bpayNextEnrollmentWake(env);
+  if (wake.enqueued || wake.skipped) return wake;
   if (!env || !env.BANKING_PAY_CONTINUATION_QUEUE || typeof env.BANKING_PAY_CONTINUATION_QUEUE.send !== 'function') {
     throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_QUEUE_MISSING'), {
       code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_QUEUE_MISSING'
@@ -42447,167 +40992,110 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
   return { ok: workerResult && workerResult.ok !== false, operation: current, worker_result: workerResult, successor };
 }
 
+// Fresh database authority at every entry. An unavailable owner is not LEGACY.
+function bpayNextOwnerStatusRpc(env) {
+  return createBpayNextOwnerStatusRpc({ baseUrl: env.SUPABASE_URL, headers: sbHeaders(env) });
+}
+
+function bpayNextBackgroundDependencies(env) {
+  const config = { baseUrl: env.SUPABASE_URL, headers: sbHeaders(env) };
+  return {
+    runtimeRpc: createBpayNextRuntimeRpc(config),
+    preparationExpiryRpc: createBpayNextPreparationExpiryRpc(config),
+    financialJobRpc: createBpayNextFinancialJobRpc(config),
+    onStepMeasurement: (measurement, payQueryBusy) => {
+      console.info(payQueryBusy ? '[banking-pay-next] pay query admission busy step' : '[banking-pay-next] step', measurement);
+    },
+    queue: env.BANKING_PAY_CONTINUATION_QUEUE,
+    onFailure: async (failure, evidence) => {
+      if(evidence?.job_kind==='PREPARE')return await recordBpayNextPrepareFailure(createBpayNextFinancialJobRpc(config),evidence)?'ACK_RECORDED':'RETRY';
+      if (evidence && await createBpayNextWorkJobFailureRpc(config)(evidence)) return 'ACK_RECORDED';
+      console.warn('[banking-pay-next] recoverable delivery refusal', {
+        code: failure.error_code, recovery: failure.recovery
+      });
+      return 'RETRY';
+    }
+  };
+}
+
+async function bpayNextEnrollmentWake(env) {
+  const owner = await bpayNextOwnerStatusRpc(env)();
+  if (owner.active_owner !== 'NEXT') {
+    return { ok: true, skipped: true, enqueued: false, entered: false,
+      code: owner.active_owner === 'DISABLED' ? 'BPAY_NEXT_MODULE_PAUSED' : 'BPAY_NEXT_LEGACY_RUNTIME_RETIRED',
+      wake_state: 'INACTIVE', made_progress: false, more_due: false, claimed: 0, processed: 0 };
+  }
+  if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+    throw Object.assign(new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE'),
+      { code: 'BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE' });
+  }
+  await env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
+  return { ok: true, skipped: false, enqueued: true, entered: false,
+    code: 'BPAY_NEXT_ENROLLMENT_WAKE_QUEUED', wake_state: 'DURABLY_QUEUED',
+    made_progress: false, more_due: false, claimed: 0, processed: 0 };
+}
+
+async function bpayNextLegacyRefusalResponse(env, req) {
+  try {
+    await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
+    return null;
+  } catch (error) {
+    const code = ['BPAY_NEXT_LEGACY_WRITER_RETIRED', 'BPAY_NEXT_LEGACY_WRITER_DISABLED']
+      .includes(error?.code) ? error.code : 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE';
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false, error_code: code, retryable: code !== 'BPAY_NEXT_LEGACY_WRITER_RETIRED'
+    }), { status: code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED' ? 410 : 503,
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+  }
+}
+
 async function handleBankingPayContinuationQueue(batch, env, ctx) {
   const messages = batch && Array.isArray(batch.messages) ? batch.messages : [];
   if (messages.length !== 1) {
-    console.error('[banking-pay-continuation] queue batch-size contract drift', { code: 'BANKING_PAY_CONTINUATION_BATCH_SIZE_INVALID', message_count: Math.min(messages.length, 100) });
-    for (const message of messages.slice(0, 100)) message.retry({ delaySeconds: 5 });
+    console.error('[banking-pay-continuation] queue batch-size contract drift', {
+      code: 'BANKING_PAY_CONTINUATION_BATCH_SIZE_INVALID', message_count: messages.length
+    });
+    // Reject the batch if its interface is damaged; do not implicitly ACK a tail.
+    if (messages.some(message => typeof message?.retry !== 'function')) {
+      throw new TypeError('BPAY_NEXT_QUEUE_MESSAGE_INTERFACE_INVALID');
+    }
+    for (const message of messages) message.retry({ delaySeconds: 30 });
     return;
   }
   const message = messages[0];
+  if (typeof message?.retry !== 'function' || typeof message?.ack !== 'function') {
+    throw new TypeError('BPAY_NEXT_QUEUE_MESSAGE_INTERFACE_INVALID');
+  }
   try {
-    const certificateWake = parseBankingPayWorkbenchCertificateContinuationV8(message.body);
-    if (certificateWake) {
-      const certificateResult = await advanceBankingPayWorkbenchSettledCertificateV8(env, {
-        sessionId: certificateWake.session_id,
-        actorUserId: certificateWake.actor_user_id,
-        leaseOwner: certificateWake.lease_owner,
-        continuationSequence: certificateWake.continuation_sequence,
-        maxAppendPages: 8,
-        maxSealSteps: 4,
-        maxRuntimeMs: 20000
-      });
-      if (!certificateResult || certificateResult.ok === false) {
-        const terminalFailure = String(certificateResult?.lifecycle || '').trim().toUpperCase() === 'BUILD_FAILED';
-        if (terminalFailure) {
-          console.warn('[banking-pay-workbench] certificate continuation terminal failure retained', {
-            event: 'WORKBENCH_CERTIFICATE_CONTINUATION_TERMINAL_FAILURE',
-            session_id: certificateWake.session_id,
-            certificate_uuid: certificateWake.certificate_uuid,
-            continuation_sequence: certificateWake.continuation_sequence,
-            code: String(certificateResult?.code || 'WORKBENCH_CERTIFICATE_BUILD_FAILED').slice(0, 160)
-          });
+    const owner = await bpayNextOwnerStatusRpc(env)();
+    if (owner.active_owner !== 'NEXT') {
+      message.retry({ delaySeconds: 30 });
+      return;
+    }
+    const family = classifyBpayNextContinuation(message.body, bankingPayContinuationSourcePolicy);
+    if (family.startsWith('LEGACY_')) {
+      const retirement = await createBpayNextLegacyRetirement({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })(message, family, owner.owner_epoch);
+      if (retirement.retired) {
+        const current = await bpayNextOwnerStatusRpc(env)();
+        if (current.active_owner === 'NEXT' && current.owner_epoch === owner.owner_epoch) {
+          // The unique verified audit row is the once-only durable ID/reason log.
           message.ack();
           return;
         }
-        throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_ADVANCE_FAILED'), {
-          code: 'WORKBENCH_CERTIFICATE_CONTINUATION_ADVANCE_FAILED'
-        });
       }
-      if (certificateResult.certificate_uuid !== certificateWake.certificate_uuid) {
-        throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_IDENTITY_CHANGED'), {
-          code: 'WORKBENCH_CERTIFICATE_CONTINUATION_IDENTITY_CHANGED'
-        });
-      }
-      console.log('[banking-pay-workbench] durable certificate continuation completed', {
-        event: 'WORKBENCH_CERTIFICATE_CONTINUATION_COMPLETED',
-        session_id: certificateWake.session_id,
-        certificate_uuid: certificateWake.certificate_uuid,
-        continuation_sequence: certificateWake.continuation_sequence,
-        append_pages_processed: certificateResult.append_pages_processed,
-        completed: certificateResult.completed === true,
-        successor_enqueued: certificateResult.durable_continuation?.enqueued === true
+      console.warn('[banking-pay-next] legacy delivery retained', {
+        code: 'BPAY_NEXT_LEGACY_DISPOSITION_UNPROVEN'
       });
-      message.ack();
+      message.retry({ delaySeconds: 30 });
       return;
     }
-    const workbenchWake = parseBankingPayWorkbenchDrainWakeMessage(message.body);
-    if (workbenchWake) {
-      const drainInvocationId = workbenchWake.wake_id
-        || (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' ? globalThis.crypto.randomUUID() : null);
-      if (!drainInvocationId) {
-        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_INVOCATION_ID_UNAVAILABLE'), {
-          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_INVOCATION_ID_UNAVAILABLE'
-        });
-      }
-      const drainResult = await bankingPayWorkbenchCronTick(env, {
-        origin: workbenchWake.origin || `BANKING_PAY_WORKBENCH_DURABLE_WAKE_${workbenchWake.wake_depth}`,
-        reason: workbenchWake.wake_reason,
-        budgetProfile: 'NUDGE',
-        profile: 'NUDGE',
-        sessionId: workbenchWake.session_id || undefined,
-        candidateId: workbenchWake.candidate_id || undefined,
-        actorUserId: workbenchWake.actor_user_id || undefined,
-        durableWakeDepth: workbenchWake.wake_depth,
-        globalTailPass: true,
-        drainInvocationId
-      });
-      const drainResultCode = String(drainResult?.code || drainResult?.error_code || '').trim().toUpperCase();
-      if (!drainResult
-          || drainResult.entered !== true
-          || drainResult.ok === false
-          || (drainResult.skipped === true && drainResultCode === 'DISABLED')) {
-        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_DRAIN_FAILED'), {
-          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_DRAIN_FAILED'
-        });
-      }
-
-      const drainSummary = drainResult && typeof drainResult.drain_result === 'object' && drainResult.drain_result
-        ? drainResult.drain_result
-        : drainResult;
-      const boolish = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value ?? '').trim().toLowerCase());
-      const progressCount = ['claimed', 'claimed_count', 'processed', 'processed_count', 'succeeded', 'succeeded_count', 'recovered_stale_count']
-        .reduce((total, key) => {
-          const value = Number(drainSummary?.[key]);
-          return total + (Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
-        }, 0);
-      const madeProgress = boolish(drainSummary?.made_progress) || progressCount > 0;
-      const moreDue = boolish(drainSummary?.more_due) || boolish(drainResult.more_due);
-      let successorWake = null;
-      if (moreDue) {
-        if (!madeProgress) {
-          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_NO_PROGRESS'), {
-            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_NO_PROGRESS'
-          });
-        }
-        if (workbenchWake.wake_depth >= 32) {
-          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_EXHAUSTED'), {
-            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_EXHAUSTED'
-          });
-        }
-        successorWake = await enqueueBankingPayWorkbenchDrainWake(env, {
-          wake_depth: workbenchWake.wake_depth + 1,
-          wake_reason: 'POST_PASS_MORE_DUE',
-          origin: 'BANKING_PAY_WORKBENCH_QUEUE_CONSUMER_SUCCESSOR',
-          scope_kind: workbenchWake.scope_kind,
-          requested_profile: 'NUDGE',
-          previous_drain_invocation_id: drainInvocationId,
-          session_id: workbenchWake.session_id,
-          candidate_id: workbenchWake.candidate_id,
-          actor_user_id: workbenchWake.actor_user_id
-        });
-        if (!successorWake || successorWake.enqueued !== true) {
-          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_SUCCESSOR_FAILED'), {
-            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SUCCESSOR_FAILED'
-          });
-        }
-      }
-
-      console.log('[banking-pay-workbench] durable drain wake completed', {
-        event: 'WORKBENCH_DRAIN_DURABLE_WAKE_COMPLETED',
-        wake_id: workbenchWake.wake_id,
-        wake_reason: workbenchWake.wake_reason,
-        wake_depth: workbenchWake.wake_depth,
-        drain_invocation_id: drainInvocationId,
-        drain_entered: drainResult.entered === true,
-        made_progress: madeProgress,
-        more_due: moreDue,
-        successor_wake_enqueued: successorWake?.enqueued === true,
-        session_scoped: !!workbenchWake.session_id,
-        cron_remains_recovery_fallback: true
-      });
-      message.ack();
-      return;
-    }
-
-    const flag = readBankingPayContinuationFlag(env);
-    buildBankingPayContinuationMessage(message.body, 'QUEUE_DELIVERY_VALIDATION');
-    if (flag === false) {
-      message.ack();
-      return;
-    }
-    if (flag !== true) {
-      message.retry({ delaySeconds: 5 });
-      return;
-    }
-    const processed = await processBankingPayContinuationMessage(env, message, { executionContext: ctx });
-    if (processed.successor && processed.successor.required !== false) {
-      await enqueueBankingPayOperationContinuations(env, [processed.successor], { source: 'QUEUE_SUCCESSOR' });
-    }
-    message.ack();
-  } catch (error) {
-    console.warn('[banking-pay-continuation] delivery failed', { code: String(error && (error.code || error.message) || 'CONTINUATION_DELIVERY_FAILED').slice(0, 160), attempts: Number(message && message.attempts) || null });
-    message.retry({ delaySeconds: 5 });
+    // The actual message retains its exact nonce/epoch/cursor and disposition closures.
+    await handleBpayNextBackgroundMessage(message, bpayNextBackgroundDependencies(env));
+  } catch {
+    console.warn('[banking-pay-next] delivery retained', { code: 'BPAY_NEXT_BACKGROUND_UNAVAILABLE' });
+    message.retry({ delaySeconds: 30 });
   }
 }
 
@@ -42626,6 +41114,7 @@ async function recoverStrandedBankingPayContinuations(env, options = {}) {
 }
 
 async function bankingPayOperationsCronTick(env, opts = {}) {
+  await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
     for (let i = 0; i < arguments.length; i += 1) {
@@ -46314,6 +44803,47 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
 
 
+
+async function bpayNextSecondFactorRequired(env) {
+  const settings=await loadSettingsDefaults(env);
+  const required=settings?.importConfig?.auth_effective?.tfa_enabled;
+  if(typeof required!=='boolean')throw Object.assign(new Error('BPAY_NEXT_REAUTH_REQUIRED'),{code:'BPAY_NEXT_REAUTH_REQUIRED'});
+  return required;
+}
+
+async function loadBpayNextReauthScope(env,user,intent) {
+  if(user?.role!=='admin')throw Object.assign(new Error('BPAY_NEXT_REAUTH_REQUIRED'),{code:'BPAY_NEXT_REAUTH_REQUIRED'});
+  const call=qualifyBpayNextReauthIntent(intent),controller=new AbortController();
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('BPAY_NEXT_REAUTH_REQUIRED'));},8000);});
+  try {
+    const rpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    const read=async()=>qualifyBpayNextReauthPreview(await readBpayNextReauthJson(await rpc.preview(call.action,call.args,
+      {actorUserId:user.id,signal:controller.signal}),controller.signal),call.action);
+    return await Promise.race([read(),timeout]);
+  } finally {clearTimeout(timer);}
+}
+
+async function verifyBpayNextActionReauth(env,token,user,action) {
+  // Signature and exact claim shape are checked here. Expired first use is
+  // refused by SQL; only a consumed exact native receipt may survive expiry.
+  try {
+    if(typeof token!=='string' || new TextEncoder().encode(token).byteLength>1536) return null;
+    const parts=token.split('.');
+    if(parts.length!==2 || parts.some(p=>!p || !/^[A-Za-z0-9_-]+$/.test(p)))return null;
+    if(!await hmacVerify(sessionSecret(env),parts[0],parts[1]))return null;
+    const c=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(base64UrlToUint8(parts[0])));
+    const keys=['typ','sub','purpose','action_kind','scope_sha256','second_factor_used','iat','exp'];
+    if(!c || typeof c!=='object' || Array.isArray(c) || Object.keys(c).length!==keys.length || keys.some(k=>!Object.hasOwn(c,k))
+      || c.typ!=='reauth' || c.purpose!=='BPAY_NEXT_ACTION' || c.sub!==user.id || c.action_kind!==action
+      || !BPAY_NEXT_PROTECTED_ACTIONS.includes(action) || typeof c.scope_sha256!=='string' || !/^[0-9a-f]{64}$/.test(c.scope_sha256)
+      || typeof c.second_factor_used!=='boolean' || !Number.isSafeInteger(c.iat) || !Number.isSafeInteger(c.exp)
+      || c.iat<0 || c.exp<=c.iat || c.exp-c.iat>300 || c.iat>Math.floor(Date.now()/1000)+5)return null;
+    const tokenHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+    return {actor_user_id:user.id,action_kind:action,scope_sha256:c.scope_sha256,token_sha256:tokenHash,
+      second_factor_used:c.second_factor_used,verified_at_utc:new Date(c.iat*1000).toISOString(),expires_at_utc:new Date(c.exp*1000).toISOString()};
+  } catch {return null;}
+}
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken, options = {}) {
   const token = String(reauthToken || '').trim();
@@ -76140,6 +74670,34 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       supportsElectronicSubmission &&
       !isAdjustment;
 
+    // DY-10: original current-Daily processing evidence, also before NEXT Work exists.
+    // Seven unique native reasons plus one sentinel; no raw error leaves this reader.
+    let dailyProcessing = null;
+    if (String(ts.sheet_scope || '').toUpperCase() === 'DAILY') {
+      dailyProcessing = { timesheet_id: currentTimesheetId, current_version: ts.version, status: 'UNAVAILABLE' };
+      try {
+        if (ts.is_current !== true || String(ts.timesheet_id).toLowerCase() !== String(currentTimesheetId).toLowerCase()
+            || !Number.isSafeInteger(ts.version) || ts.version < 1 || Number(resolved.current_version) !== ts.version) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+        const { rows: pendingRows } = await sbFetch(env, env.SUPABASE_URL + '/rest/v1/ts_financials_outbox?timesheet_id=eq.' + enc(currentTimesheetId) + '&select=reason,attempt_count,next_attempt_at,last_error&order=reason.asc&limit=8');
+        const reasons = new Set(['NEW_AUTHORISED','VERSION_ROTATED','REVOKED','RATE_CHANGED','POLICY_CHANGED','CONTEXT_CHANGED','MANUAL']), seen = new Set();
+        if (!Array.isArray(pendingRows) || pendingRows.length > reasons.size) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+        let failed = false;
+        for (const pending of pendingRows) {
+          if (!pending || !reasons.has(pending.reason) || seen.has(pending.reason)
+              || !Number.isSafeInteger(pending.attempt_count) || pending.attempt_count < 0
+              || pending.next_attempt_at !== null && (typeof pending.next_attempt_at !== 'string' || !Number.isFinite(Date.parse(pending.next_attempt_at)))
+              || pending.last_error !== null && typeof pending.last_error !== 'string') throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+          seen.add(pending.reason);
+          const hasError = typeof pending.last_error === 'string' && pending.last_error.trim().length > 0;
+          if (hasError && pending.attempt_count === 0) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+          if (hasError) failed = true;
+        }
+        dailyProcessing.status = failed ? 'FAILED' : pendingRows.length ? 'PENDING' : 'NONE';
+      } catch {
+        // Unavailable evidence cannot become no work, approval or zero pay.
+      }
+    }
+
     // Shape TS + TSFIN for FE
     const timesheetOut = {
       ...ts,
@@ -76334,6 +74892,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
       timesheet: timesheetOut,
       tsfin: tsfinOut,
+      daily_processing: dailyProcessing,
 
       invoiceBreakdown,
       isSegmentsMode,
@@ -77879,6 +76438,20 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
       row_signature: Object.prototype.hasOwnProperty.call(body, 'row_signature'),
       rowSignature: Object.prototype.hasOwnProperty.call(body, 'rowSignature')
     }
+  });
+
+  // SP-04: native Source receipt replay precedes ordinary currentness/pair writes.
+  const sourceWithdrawal = await weeklySourceUnauthoriseRouting({
+    rpc: (name, args, options) => sbRpc(env, name, args, options),
+    ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+    readPhysicalTimesheet: (id) => sbGetOne(env,
+      env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id,booking_id'),
+    timesheetId: requestedTimesheetId,
+    expectedTimesheetId, expectedRowSignature, actorUserId: user.id
+  });
+  if (!sourceWithdrawal.ordinary) return withJson(sourceWithdrawal.status, {
+    ...sourceWithdrawal.body, timesheet_id: requestedTimesheetId,
+    expected_timesheet_id: expectedTimesheetId
   });
 
   const guard = await guardCurrentTimesheetWrite(env, req, requestedTimesheetId, expectedTimesheetId);
@@ -87483,16 +86056,30 @@ async function readCandidateTimesheetSummaryCursor(env) {
 
 async function readWeeklySourceOfficeSummaryRows(env, actorUserId, filters, rpc = sbRpc) {
   const functionName = 'weekly_source_office_summary_rows_v1';
-  const raw = await rpc(env, functionName,
-    { p_request: { actor_user_id: actorUserId, p_filters: filters } });
-  const payload = unwrapWeeklySourceOfficePresentation(raw, functionName);
-  if (!payload || payload.contract !== 'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1'
-      || !Array.isArray(payload.rows) || payload.rows.length > 200) {
+  const requestedLimit = Number(filters?.limit);
+  const originalOffset = Number(filters?.offset ?? 0);
+  if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200
+      || !Number.isSafeInteger(originalOffset) || originalOffset < 0) {
     throw new Error('WEEKLY_SOURCE_SUMMARY_CONTRACT_INVALID');
   }
-  // The SQL wrapper pairs canonical paged rows with category evidence in one
-  // statement. Never repair membership or financial/action facts in JavaScript.
-  return payload.rows;
+  const rows = [];
+  // Preserve the caller's page identity; each native statement pairs its own
+  // canonical rows and category facts. There is no cross-page snapshot claim.
+  for (let readOffset = 0; readOffset < requestedLimit; readOffset += 100) {
+    const limit = Math.min(100, requestedLimit - readOffset);
+    const raw = await rpc(env, functionName, { p_request: {
+      actor_user_id: actorUserId,
+      p_filters: { ...filters, limit, offset: originalOffset + readOffset }
+    } });
+    const payload = unwrapWeeklySourceOfficePresentation(raw, functionName);
+    if (!payload || payload.contract !== 'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1'
+        || !Array.isArray(payload.rows) || payload.rows.length > limit) {
+      throw new Error('WEEKLY_SOURCE_SUMMARY_CONTRACT_INVALID');
+    }
+    rows.push(...payload.rows);
+    if (payload.rows.length < limit) break;
+  }
+  return rows;
 }
 
 function candidateTimesheetSummaryCompactPatch(row) {
@@ -87627,8 +86214,14 @@ async function handleCandidateTimesheetSummaryPatches(env, req) {
   if (!ids.length) return withCORS(env, req, badRequest('Candidate Timesheet Summary identities were invalid.'));
 
   try {
-    const rows = await readWeeklySourceOfficeSummaryRows(env, user.id,
-      { ids,limit: Math.min(ids.length,200),offset: 0 });
+    const rows = [];
+    // The existing bounded identity union can contain several UUIDs per row.
+    // Keep every requested identity, with no per-root service fan-out.
+    for (let start = 0; start < ids.length; start += 100) {
+      const pageIds = ids.slice(start, start + 100);
+      rows.push(...await readWeeklySourceOfficeSummaryRows(env, user.id,
+        { ids: pageIds, limit: pageIds.length, offset: 0 }));
+    }
     const presentedRows = await attachCandidateDailyOfficePresentation(env,rows);
     const projectedRows = attachTimesheetExpensePresentation(
       await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
@@ -95441,6 +94034,17 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
   if (!preview?.valid || !group?.action_ready) {
     return { is_pair: true, blocked: true, preview, group };
   }
+  if (action === 'UNAUTHORISE') {
+    const members = Array.isArray(preview.groups)
+      ? preview.groups.flatMap(value => Array.isArray(value.members) ? value.members.map(member => member.timesheet_id) : [null]) : [null];
+    const sourceScope = await weeklySourceUnauthorisePairPreflight({
+      rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+      actorUserId: user.id, readPhysicalTimesheet: id => sbGetOne(env,
+        env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),
+      timesheetIds: [...new Set([timesheetId, ...members])]
+    });
+    if (!sourceScope.ordinary) return { is_pair: true, blocked: true, preview, group, mutation: sourceScope.body };
+  }
   const rpcName = action === 'AUTHORISE'
     ? 'timesheet_authorise_bulk_atomic'
     : 'timesheet_unauthorise_bulk_atomic';
@@ -95450,6 +94054,68 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
     p_now_utc: nowIso()
   }, { timeoutMs: 20000 });
   return { is_pair: true, preview, group, mutation };
+}
+
+// DY-08: preserve the exact definite integrity refusal; no substring or uncertain-outcome match.
+function bpayNextDailyHoursOnlyRefusal(rawCode, original, originalMessage = '') {
+  const expected = 'BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION';
+  const object = value => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string' || value.length > 4096) return null;
+    try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; }
+  };
+  const outer = object(original) || {};
+  const payload = object(outer.json) || object(outer.body) || outer;
+  const sanitised = [rawCode, payload.error_code, payload.error, payload.code].includes(expected);
+  const database = [rawCode, payload.code].includes('23514')
+    && [originalMessage, payload.message].includes(expected);
+  if (!sanitised && !database) return null;
+  return { code: expected, error: expected, error_code: expected,
+    message: 'This Daily Timesheet must contain hours only; correct it before authorising.',
+    refresh_required: false, retryable: false };
+}
+function bpayNextAuthoriseKnownRefusal(rawCode, original, originalMessage = '') {
+  return bpayNextDailyHoursOnlyRefusal(rawCode, original, originalMessage)
+    || bpayNextOrdinaryMissingRateRefusal(rawCode, original, originalMessage);
+}
+
+// WB-01: recognize only the original definite NEXT missing-rate refusal.
+function bpayNextOrdinaryMissingRateRefusal(rawCode, original, originalMessage = '') {
+  const expected = 'BPAY_NEXT_ORDINARY_USED_RATE_MISSING';
+  const object = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string' || value.length > 4096) return null;
+    try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; }
+  };
+  const outer = object(original) || {};
+  const payload = object(outer.json) || object(outer.body) || outer;
+  const detail = object(payload.details) || object(payload.detail) || payload;
+  if (![rawCode, originalMessage, payload.code, payload.error_code, payload.error, payload.message]
+      .some(value => value === expected)) return null;
+  const bucket = detail.bucket ?? payload.bucket;
+  const contractId = detail.contract_id ?? payload.contract_id;
+  if (typeof bucket !== 'string' || !bucket.length || bucket.length > 245) return null;
+  const labels = { DAY: 'Day', NIGHT: 'Night', SAT: 'Saturday', SUN: 'Sunday', BH: 'Bank Holiday', MILE: 'Mileage' };
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  if (detail.rate_authority === 'DAILY_DATED' && detail.sheet_scope === 'DAILY'
+      && detail.line_type === 'HOURS' && ['DAY', 'NIGHT', 'SAT', 'SUN', 'BH'].includes(bucket)
+      && uuid(detail.timesheet_id) && uuid(detail.candidate_id) && uuid(detail.client_id)
+      && (detail.contract_id === null || uuid(detail.contract_id))
+      && typeof detail.work_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(detail.work_date)
+      && ['PAYE', 'UMBRELLA'].includes(detail.pay_channel) && ['PAY', 'CHARGE'].includes(detail.rate_field)) {
+    return { code: expected, error: expected, error_code: expected, bucket,
+      contract_id: detail.contract_id, timesheet_id: detail.timesheet_id,
+      rate_authority: 'DAILY_DATED', sheet_scope: 'DAILY', line_type: 'HOURS',
+      candidate_id: detail.candidate_id, client_id: detail.client_id,
+      work_date: detail.work_date, pay_channel: detail.pay_channel, rate_field: detail.rate_field,
+      message: (detail.rate_field === 'PAY' ? 'Pay' : 'Charge') + ' rate missing for ' + labels[bucket]
+        + '; set the Candidate override or Client default, then authorise again.',
+      refresh_required: false, retryable: false };
+  }
+  if (!uuid(contractId)) return null;
+  return { code: expected, error: expected, error_code: expected, bucket, contract_id: contractId,
+    message: 'Pay rate missing for ' + (Object.prototype.hasOwnProperty.call(labels, bucket) ? labels[bucket] : bucket) + '; set the rate on the Contract, then authorise again.',
+    refresh_required: false, retryable: false };
 }
 
 async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser, internalOptions = null) {
@@ -95587,14 +94253,17 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
     requested_timesheet_id: item.requested_timesheet_id || timesheetId,
     expected_timesheet_id: expectedTimesheetId,
     row_key: item.row_key || `timesheet:${timesheetId}`,
-    stale: success ? false : lifecycleBulkIsStaleError(payload),
+    stale: success ? false : payload?.source_outcome ? payload.stale === true : lifecycleBulkIsStaleError(payload),
     error_code: success ? null : lifecycleBulkErrorCode(payload),
+    ...(!success && action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(payload?.error_code, payload) ? {retryable: payload.retryable === true} : {}),
+    ...(!success && action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(payload?.error_code, payload) || {} : {}),
     message: success ? null : (payload?.message || payload?.error || 'Lifecycle action failed for this row.'),
     affected_rows: affectedRows,
     lifecycle_patch: payload?.lifecycle_patch || null,
     row_signature: lifecycleBulkReadFirst(payload?.lifecycle_patch || {}, ['row_signature', 'backend_row_signature']) ||
       lifecycleBulkReadFirst(affectedRows[0] || {}, ['row_signature', 'backend_row_signature']) ||
       null,
+    ...(action === 'UNAUTHORISE' ? weeklySourceUnauthoriseResultFields(payload) : {}),
     raw_status: status,
     lifecycle_changed: success && !explicitNoChange,
   };
@@ -95804,6 +94473,10 @@ function summarizeTimesheetLifecycleBulkOperation(operation, items) {
       stale: result?.stale === true || item.error_json?.stale === true,
       error_code: result?.error_code || item.error_json?.error_code || null,
       message: result?.message || item.error_json?.message || null,
+      ...(operation.action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(result?.error_code, result) ? {retryable: result.retryable === true} : {}),
+      ...(operation.action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(result?.error_code, result) ||
+        bpayNextAuthoriseKnownRefusal(item.error_json?.error_code, item.error_json) || {} : {}),
+      ...(operation.action === 'UNAUTHORISE' ? weeklySourceUnauthoriseResultFields(result) : {}),
       affected_rows: itemAffected,
       row_signature: result?.row_signature || null,
     });
@@ -95989,14 +94662,35 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
         pair_lifecycle: pairPreview
       }));
     }
+    if (action === 'UNAUTHORISE') {
+      const members = Array.isArray(pairPreview.groups)
+        ? pairPreview.groups.flatMap(group => Array.isArray(group.members) ? group.members.map(member => member.timesheet_id) : [null]) : [null];
+      const sourceScope = await weeklySourceUnauthorisePairPreflight({
+        rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+        actorUserId: user.id, readPhysicalTimesheet: id => sbGetOne(env,
+          env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),
+        timesheetIds: [...new Set([...selected.map(item => item.timesheet_id), ...members])]
+      });
+      if (!sourceScope.ordinary) return withCORS(env, req, lifecycleBulkJson(sourceScope.status,
+        { ...sourceScope.body, pair_lifecycle: pairPreview, atomic_pair_lifecycle: true }));
+    }
     const rpcName = action === 'AUTHORISE'
       ? 'timesheet_authorise_bulk_atomic'
       : 'timesheet_unauthorise_bulk_atomic';
-    const mutation = await sbRpc(env, rpcName, {
-      p_items: selected,
-      p_actor_user_id: user?.id || null,
-      p_now_utc: nowIso()
-    }, { timeoutMs: 20000 });
+    let mutation;
+    try {
+      mutation = await sbRpc(env, rpcName, {
+        p_items: selected,
+        p_actor_user_id: user?.id || null,
+        p_now_utc: nowIso()
+      }, { timeoutMs: 20000 });
+    } catch (error) {
+      const missingRate = action === 'AUTHORISE'
+        ? bpayNextAuthoriseKnownRefusal(error?.code, error, error?.message) : null;
+      if (!missingRate) throw error;
+      return withCORS(env, req, lifecycleBulkJson(409, { ok: false, ...missingRate,
+        atomic_pair_lifecycle: true, pair_lifecycle: pairPreview }));
+    }
     requestTimesheetLifecycleWorkbenchWake(env, ctx, {
       action,
       sourceRoute: 'TIMESHEET_LIFECYCLE_SELECTED_CORRECTION_PAIR',
@@ -96682,6 +95376,8 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     'TIMESHEET_LOCKED_BY_INVOICE',
     'AUTHORISE_NOT_ALLOWED',
     'CONTRACT_WEEK_NOT_AUTHORISABLE',
+    'BPAY_NEXT_ORDINARY_USED_RATE_MISSING',
+    'BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION',
     'ALREADY_AUTHORISED',
     'ALREADY_UNAUTHORISED',
     'AWAITING_SIGNED_QR',
@@ -97452,6 +96148,7 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row, factsMap)
     contract_week_id: rowContractWeekId || null,
     ok: false,
     status: 'FAILED',
+    ...(bpayNextAuthoriseKnownRefusal(payload.json?.error_code, payload.json) || {}),
     reason: buildFailureReason(payload.json, payload.text || 'Authorise failed'),
     warnings: Array.isArray(payload.json?.warnings) ? payload.json.warnings : []
   };
@@ -97535,7 +96232,8 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
   const subReq = new Request(req.url, {
     method: 'POST',
     headers: req.headers,
-    body: JSON.stringify({ expected_timesheet_id: rowTimesheetId })
+    body: JSON.stringify({ expected_timesheet_id: selection?.expected_timesheet_id || rowTimesheetId,
+      expected_row_signature: lifecycleBulkReadFirst(selection, ['expected_row_signature', 'backend_row_signature', 'mutation_row_signature', 'row_signature']) || null })
   });
 
   const res = await handleTimesheetUnauthorise(env, subReq, rowTimesheetId);
@@ -97547,7 +96245,8 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
       timesheet_id: rowTimesheetId,
       contract_week_id: rowContractWeekId || null,
       ok: true,
-      status: 'UNAUTHORISED',
+      ...weeklySourceUnauthoriseResultFields(payload.json),
+      status: payload.json?.source_outcome === 'WITHDRAWN' ? 'WITHDRAWN' : 'UNAUTHORISED',
       reason: null,
       warnings: []
     };
@@ -131807,6 +130506,14 @@ async function handleMailshotEnqueue(env, req) {
 
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
+  // This is a shared factual-email drain, not an old Banking Pay owner. An
+  // unavailable owner holds financial mail only; ordinary mail still proceeds.
+  const legacyMailAllowed = async () => {
+    try {
+      return (await bpayNextOwnerStatusRpc(env)()).active_owner === 'LEGACY';
+    } catch { return false; }
+  };
+  const legacyMailAtClaim = await legacyMailAllowed();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
 
   const toPositiveInt = (value) => {
@@ -131846,6 +130553,11 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   // per email or delaying the cancellation request itself.
   const finishDrainReport = async (report) => {
     let cancellationNoticeRecovery;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) {
+      return { ...report, payment_cancellation_notice_recovery: {
+        ok: true, skipped: true, code: 'BPAY_NEXT_LEGACY_MAIL_HELD', calls: 0
+      } };
+    }
     try {
       cancellationNoticeRecovery = await reconcilePaymentCancellationNoticesBounded(env);
     } catch {
@@ -131935,6 +130647,17 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       }
     );
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const holdLegacyFinancialMail = async (rowId) => {
+    try {
+      await clearClaimedLease(rowId, attemptLeaseToken);
+    } catch {
+      // A failed lease-only release is not a failed email. Leave the original
+      // lease to expire; do not stamp delivery, move its date or audit a send.
+      errors.push({ id: rowId, error: 'BPAY_NEXT_LEGACY_MAIL_HOLD_RELEASE_UNCERTAIN',
+        financial_mail_held: true });
+    }
   };
 
   const patchClaimedRowFailed = async (
@@ -132033,6 +130756,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   const fetchSentRemittanceRowsForStateRetry = async () => {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return [];
     const retryLimitRaw =
       toPositiveInt(env.EMAIL_SENT_REMITTANCE_STATE_RETRY_LIMIT) ||
       toPositiveInt(env.EMAIL_SENT_REMITTANCE_MARK_RETRY_LIMIT) ||
@@ -132119,6 +130843,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     } catch {}
   }
 
+  // Defence in depth for an older installed claim RPC during ordered rollout.
+  // Release only OUR lease; do not mark held mail failed or reschedule it.
+  if (!legacyMailAtClaim) {
+    for (let i = picked.length - 1; i >= 0; i--) {
+      if (!isBpayNextLegacyFinancialEmail(picked[i])) continue;
+      await holdLegacyFinancialMail(picked[i].id);
+      picked.splice(i, 1);
+    }
+  }
+
   const noPickedRows = picked.length === 0;
 
   const claimedRowsById = new Map();
@@ -132181,6 +130915,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const markRemittanceDrainResult = async (rowId, updatedRow, outcome, details = {}) => {
     const row = claimedRowsById.get(String(rowId || '').trim()) || updatedRow || null;
     if (!isRemittancePayBatchRow(row)) return;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return;
 
     const payBatchId = String((updatedRow && updatedRow.context_id) || row.context_id || '').trim();
     if (!payBatchId) return;
@@ -132266,25 +131001,28 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
           });
         } catch {}
       }
+      return true;
     } catch (e) {
       errors.push({
         id: rowId,
         error: String(e?.message || e || 'pay_remittance_mark_sent failed'),
         remittance_state_update_failed: true
       });
+      return false;
     }
   };
 
   let sentStateRetryCount = 0;
   const sentRowsForRetry = await fetchSentRemittanceRowsForStateRetry().catch(() => []);
   for (const sentRow of sentRowsForRetry) {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) break;
     try {
       if (await sentRemittanceRowNeedsStateRetry(sentRow)) {
-        await markRemittanceDrainResult(sentRow.id, sentRow, 'SUCCESS', {
+        const recorded = await markRemittanceDrainResult(sentRow.id, sentRow, 'SUCCESS', {
           provider_message_id: sentRow.provider_message_id || null,
           provider_status: sentRow.provider_status || 'ACCEPTED'
         });
-        sentStateRetryCount += 1;
+        if (recorded === true) sentStateRetryCount += 1;
       }
     } catch (e) {
       errors.push({
@@ -132473,6 +131211,10 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   for (const row of picked) {
+    if (isBpayNextLegacyFinancialEmail(row) && !(await legacyMailAllowed())) {
+      await holdLegacyFinancialMail(row.id);
+      continue;
+    }
     try {
       if (isRemittancePayBatchRow(row) && String(row.status || '').trim().toUpperCase() === 'SENT') {
         await markRemittanceDrainResult(row.id, row, 'SUCCESS', { provider_message_id: row.provider_message_id || null, provider_status: row.provider_status || 'ACCEPTED' });
@@ -132556,9 +131298,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
       const batchJobs = [];
       const batchRowIds = [];
+      const financialMailInBatch = candidateRowIds.some((id) =>
+        isBpayNextLegacyFinancialEmail(claimedRowsById.get(String(id || '').trim())));
+      const legacyMailAtSend = financialMailInBatch ? await legacyMailAllowed() : false;
       for (let itemIndex = 0; itemIndex < candidateJobs.length; itemIndex += 1) {
         const rowId = candidateRowIds[itemIndex];
         const claimedRow = claimedRowsById.get(String(rowId || '').trim()) || null;
+        if (isBpayNextLegacyFinancialEmail(claimedRow) && !legacyMailAtSend) {
+          await holdLegacyFinancialMail(rowId);
+          continue;
+        }
         let authority = null;
         try {
           authority = await candidatePaperProviderAuthorityCurrent({
@@ -135853,6 +134602,12 @@ async function handleEmailSend(env, req) {
   const err = validateEmailPayload({ ...normalized, importance });
   if (err) return withCORS(env, req, badRequest(err));
 
+  if (isBpayNextLegacyFinancialEmail({ type: body?.type || 'BROADCAST',
+    reference: body?.reference ?? null, context_kind: body?.context_kind ?? null })) {
+    const refusal = await bpayNextLegacyRefusalResponse(env, req);
+    if (refusal) return refusal;
+  }
+
   const normalizeDeliveryTimingJson = async (raw) => {
     const timingRaw = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { mode: 'NOW' };
 
@@ -137057,7 +135812,7 @@ function buildCORSHeaders(env, reqOrigin) {
   const allowed = splitCsv(env.ALLOWED_ORIGINS || "");
   const h = {
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Headers": "authorization,content-type,content-md5,x-requested-with,idempotency-key,x-idempotency-key",
+    "Access-Control-Allow-Headers": "authorization,content-type,content-md5,x-requested-with,idempotency-key,x-idempotency-key,x-cloudtms-banking-environment",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Vary": "Origin",
   };
@@ -139858,7 +138613,7 @@ async function handleAuthReauthVerify(env, req) {
   }
   if (!/^\d{6}$/.test(code)) return badRequest('invalid_code_format');
 
-  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL','BPAY_NEXT_ACTION']);
   const requestedPurposeRaw = (body.purpose !== undefined && body.purpose !== null)
     ? body.purpose
     : ((body.reauth_purpose !== undefined && body.reauth_purpose !== null) ? body.reauth_purpose : null);
@@ -139890,7 +138645,7 @@ async function handleAuthReauthVerify(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
         `?id=eq.${encodeURIComponent(challengeId)}` +
-        `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,purpose` +
+        `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,purpose,action_kind,scope_sha256` +
         `&limit=1`
     );
     ch = (rows && rows[0]) ? rows[0] : null;
@@ -139907,6 +138662,13 @@ async function handleAuthReauthVerify(env, req) {
 
   if (requestedPurpose && requestedPurpose !== challengePurpose) {
     return unauthorized('Invalid code');
+  }
+
+  if(challengePurpose==='BPAY_NEXT_ACTION') {
+    if(u.role!=='admin' || !BPAY_NEXT_PROTECTED_ACTIONS.includes(ch.action_kind) || !/^[0-9a-f]{64}$/.test(ch.scope_sha256 || '')
+      || Object.keys(body).some(k=>!['challenge_id','code','purpose'].includes(k)) || body.purpose!=='BPAY_NEXT_ACTION')return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');
+    try {const owner=await bpayNextOwnerStatusRpc(env)();if(owner.active_owner!=='NEXT')return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
+    catch {return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
   }
 
   // Must match current logged-in user
@@ -139941,7 +138703,25 @@ async function handleAuthReauthVerify(env, req) {
   if (!match) {
     // increment attempt_count
     try {
-      await sbPatch2faChallengeById(env, challengeId, { attempt_count: attempts + 1 });
+      if(challengePurpose==='BPAY_NEXT_ACTION') {
+        // Compare-and-set retains every recorded count rather than overwriting
+        // another verifier. Excess contention closes this challenge safely.
+        let count=attempts,recorded=false;
+        for(let retry=0;retry<10 && count<tfaMaxAttempts;retry++) {
+          const url=env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)
+            +'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null&attempt_count=eq.'+count;
+          const res=await fetch(url,{method:'PATCH',headers:{...sbAuthHeaders(env),Prefer:'return=representation'},body:JSON.stringify({attempt_count:count+1})});
+          if(!res.ok)return unauthorized('invalid_or_expired_code');
+          const changed=await res.json();
+          if(Array.isArray(changed)&&changed.length===1){recorded=true;break;}
+          const fresh=await sbFetch(env,env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&select=attempt_count,used_at_utc&limit=1');
+          const latest=fresh.rows?.[0];
+          if(!latest||latest.used_at_utc||!Number.isSafeInteger(latest.attempt_count))return unauthorized('invalid_or_expired_code');
+          count=latest.attempt_count;
+        }
+        if(!recorded && count<tfaMaxAttempts)await fetch(env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null',
+          {method:'PATCH',headers:sbAuthHeaders(env),body:JSON.stringify({used_at_utc:new Date().toISOString()})});
+      } else await sbPatch2faChallengeById(env, challengeId, { attempt_count: attempts + 1 });
     } catch (e) {
       return serverError(e?.message || String(e));
     }
@@ -139952,7 +138732,14 @@ async function handleAuthReauthVerify(env, req) {
 
   // Mark challenge used
   try {
-    await sbPatch2faChallengeById(env, challengeId, { used_at_utc: nowIso });
+    if(challengePurpose==='BPAY_NEXT_ACTION') {
+      // Conditional claim: two concurrent correct verifies cannot both mint.
+      const res=await fetch(env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&user_id=eq.'+encodeURIComponent(u.id)+'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null&expires_at_utc=gt.'+encodeURIComponent(nowIso)+'&and='+encodeURIComponent('(attempt_count.eq.'+attempts+',attempt_count.lt.'+tfaMaxAttempts+')'),
+        {method:'PATCH',headers:{...sbAuthHeaders(env),Prefer:'return=representation'},body:JSON.stringify({used_at_utc:nowIso})});
+      if(!res.ok)return unauthorized('invalid_or_expired_code');
+      const claimed=await res.json();
+      if(!Array.isArray(claimed) || claimed.length!==1 || String(claimed[0]?.id||'').toLowerCase()!==challengeId.toLowerCase())return unauthorized('invalid_or_expired_code');
+    } else await sbPatch2faChallengeById(env, challengeId, { used_at_utc: nowIso });
   } catch (e) {
     return serverError(e?.message || String(e));
   }
@@ -139970,6 +138757,7 @@ async function handleAuthReauthVerify(env, req) {
     typ: 'reauth',
     sub: String(u.id),
     purpose: challengePurpose,
+    ...(challengePurpose==='BPAY_NEXT_ACTION' ? {action_kind:ch.action_kind,scope_sha256:ch.scope_sha256,second_factor_used:true} : {}),
     iat,
     exp
   };
@@ -140125,7 +138913,7 @@ async function handleAuthReauthStart(env, req) {
   if (!password) return badRequest('password_required');
 
   const requestedPurpose = String(body.purpose || 'PAYMENT_SCHEDULE').trim().toUpperCase();
-  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL','BPAY_NEXT_ACTION']);
   if (!allowedPurposes.has(requestedPurpose)) return badRequest('invalid_reauth_purpose');
   const requestedExecutionMode = String(body.execution_mode || body.executionMode || '').trim().toUpperCase();
   const requestedScheduleKind = String(body.schedule_kind || body.scheduleKind || '').trim().toUpperCase();
@@ -140138,6 +138926,28 @@ async function handleAuthReauthStart(env, req) {
   const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
   if (!okPw) return unauthorized('Invalid credentials');
 
+  let nextScope=null;
+  if(requestedPurpose==='BPAY_NEXT_ACTION') {
+    if(Object.keys(body).length!==4 || !Object.hasOwn(body,'intent') || !Object.hasOwn(body,'purpose') || !Object.hasOwn(body,'password')
+      || typeof body.expected_scope_sha256!=='string' || !/^[0-9a-f]{64}$/.test(body.expected_scope_sha256))return badRequest('BPAY_NEXT_REAUTH_REQUEST_INVALID');
+    try {
+      nextScope=await loadBpayNextReauthScope(env,u,body.intent);
+      // Display concurrency check only: the browser never supplies the hash
+      // that is signed; the native resolver independently computes it.
+      if(nextScope.scope_sha256!==body.expected_scope_sha256)return unauthorized('BPAY_NEXT_REAUTH_STALE');
+      if(nextScope.accepted || !nextScope.scope_sha256)return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');
+      const required=await bpayNextSecondFactorRequired(env);
+      if(!required) {
+        const iat=Math.floor(Date.now()/1000),ttlSec=300;
+        const token=await createToken(sessionSecret(env),{typ:'reauth',sub:String(u.id),purpose:'BPAY_NEXT_ACTION',
+          action_kind:nextScope.action_kind,scope_sha256:nextScope.scope_sha256,second_factor_used:false,iat,exp:iat+ttlSec});
+        return new Response(JSON.stringify({ok:true,tfa_required:false,purpose:'BPAY_NEXT_ACTION',reauth_token:token,expires_in:ttlSec}),{status:200,headers:JSON_HEADERS});
+      }
+    } catch {return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
+  }
+
+  // NEXT never enters any old TEST second-factor override.
+  if(requestedPurpose!=='BPAY_NEXT_ACTION') {
   const testCsvBypass = evaluateTestCsvExecutionBypass({
     env,
     user: userRow,
@@ -140287,6 +139097,8 @@ async function handleAuthReauthStart(env, req) {
     }), { status: 200, headers: JSON_HEADERS });
   }
 
+  }
+
   // Load auth policy (reuse same policy source as login 2FA)
   let authEffective = null;
   try {
@@ -140322,7 +139134,8 @@ async function handleAuthReauthStart(env, req) {
         code_salt: String(salt),
         code_hash: String(codeHash),
         expires_at_utc: String(expiresAtIso),
-        purpose: requestedPurpose
+        purpose: requestedPurpose,
+        ...(nextScope ? {action_kind:nextScope.action_kind,scope_sha256:nextScope.scope_sha256} : {})
       })
     });
 
@@ -140467,7 +139280,7 @@ async function sbGet2faChallengeById(env, challengeId) {
   const url =
     `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
     `?id=eq.${enc(challengeId)}` +
-    `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,resend_count,last_sent_at_utc`;
+    `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,resend_count,last_sent_at_utc,purpose`;
   const res = await fetch(url, { headers: sbAuthHeaders(env) });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
@@ -140735,6 +139548,14 @@ async function handleAuth2faResend(env, req) {
   }
 
   if (ch.used_at_utc) return badRequest('invalid_challenge');
+
+  // Login resend is shared with retained payment challenges. Gate only those
+  // exact stored payment purposes before changing a code or sending anything.
+  if (['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL'].includes(
+    String(ch.purpose || '').trim().toUpperCase())) {
+    const refusal = await bpayNextLegacyRefusalResponse(env, req);
+    if (refusal) return refusal;
+  }
 
   const resendCount = Number(ch.resend_count ?? 0) || 0;
   if (resendCount >= maxResends) return badRequest('max_resends_exceeded');
@@ -160583,6 +159404,21 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 // ─────────────────────────────────────────────────────────────────────────────
 
 
+async function bpayNextPayMethodChangeRoute(env, req, user, candidateId) {
+  try {
+    const owner = await bpayNextOwnerStatusRpc(env)();
+    if (owner.active_owner === 'LEGACY') return null;
+    if (owner.active_owner !== 'NEXT') return new Response(JSON.stringify({ok:false,error_code:'BPAY_NEXT_MODULE_NOT_ACTIVE',operation_id:null,unknown_outcome:false}),{status:409,headers:{'content-type':'application/json','cache-control':'no-store'}});
+    return await handleBpayNextPayMethodChange(req, {
+      actor: String(user.id).toLowerCase(), candidate: String(candidateId).toLowerCase(),
+      rpc: createBpayNextPayMethodChangeRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)}),
+      wake: async body => { await env.BANKING_PAY_CONTINUATION_QUEUE.send(body); }
+    });
+  } catch {
+    return new Response(JSON.stringify({ok:false,error_code:'BPAY_NEXT_PAY_METHOD_UNAVAILABLE',operation_id:null,unknown_outcome:false}),{status:503,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }
+}
+
 async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -160619,6 +159455,9 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     return parsed;
   };
   if (!uuidRe.test(String(candidateId))) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  // EX-08: fresh exact ownership; NEXT never enters the legacy history refresh.
+  const nextResponse = await bpayNextPayMethodChangeRoute(env, req, user, candidateId);
+  if (nextResponse) return withCORS(env, req, nextResponse);
   const urlObj = new URL(req.url);
   const rawNewMethod = String(urlObj.searchParams.get('new_method') || '').trim().toUpperCase();
   const newMethod = (rawNewMethod === 'PAYE' || rawNewMethod === 'UMBRELLA') ? rawNewMethod : null;
@@ -160891,6 +159730,9 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(String(candidateId))) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  // EX-08: fresh exact ownership; NEXT never enters the legacy history refresh.
+  const nextResponse = await bpayNextPayMethodChangeRoute(env, req, user, candidateId);
+  if (nextResponse) return withCORS(env, req, nextResponse);
   const jsonResponse = (status, payload) => withCORS(
     env,
     req,
@@ -166949,7 +165791,8 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
     try {
       for (const idsChunk of chunk(noopOutboxIds, 200)) {
         const cleared = await sbRpc(env, 'tsfin_work_success_bulk', { p_ids: idsChunk });
-        noopCleared += Number(cleared || 0) || 0;
+        if (!Number.isSafeInteger(cleared) || cleared !== idsChunk.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+        noopCleared += cleared;
       }
       _tsfinRpcLog('tsfin_write_snapshots_and_complete -> noop-cleared', { count: noopCleared });
     } catch (e) {
@@ -166984,11 +165827,26 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
   try {
     const res = await sbRpcRecordingGuardRefusal(env, 'tsfin_write_snapshots_and_complete', args);
     // PostgREST returns table results as an array of rows (usually 1 row here).
-    const out = Array.isArray(res) ? (res[0] || null) : res;
-
-    const ok_count = (Number(out?.ok_count || 0) || 0) + noopCleared;
-    const fail_count = Number(out?.fail_count || 0) || 0;
-    const errors = out?.errors ?? [];
+    if (Array.isArray(res) && res.length !== 1) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const out = Array.isArray(res) ? res[0] : res;
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value :
+      typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    const writtenOk = count(out?.ok_count), fail_count = count(out?.fail_count);
+    let errors = out?.errors;
+    if (typeof errors === 'string') { try { errors = JSON.parse(errors); } catch { errors = null; } }
+    if (!isPlainObject(out) || writtenOk === null || fail_count === null || writtenOk + fail_count !== rowsToWrite.length
+        || !Array.isArray(errors) || errors.length !== fail_count) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const written = new Map(rowsToWrite.map(row => [String(row.outbox_id).toLowerCase(), String(row.timesheet_id).toLowerCase()])), failed = new Set();
+    if (written.size !== rowsToWrite.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    for (const error of errors) {
+      if (!isPlainObject(error) || Object.keys(error).sort().join(',') !== 'error,outbox_id,timesheet_id'
+          || typeof error.outbox_id !== 'string' || typeof error.timesheet_id !== 'string' || typeof error.error !== 'string' || !error.error.trim()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      const id = error.outbox_id.toLowerCase();
+      if (failed.has(id) || !written.has(id) || written.get(id) !== error.timesheet_id.toLowerCase()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      failed.add(id);
+    }
+    const ok_count = writtenOk + noopCleared;
+    if (ok_count + fail_count !== rows.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
 
     _tsfinRpcLog('tsfin_write_snapshots_and_complete -> ok', { ok_count, fail_count, noop_cleared: noopCleared });
     return { ok_count, fail_count, errors };
@@ -168356,9 +167214,12 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
 
   let ok = 0, fail = 0;
   const completedTimesheetIds = new Set();
+  const completedPrimaryOutboxSet = new Set();
   const markTimesheetComplete = (effectiveId) => {
     const eff = String(effectiveId || '').trim().toLowerCase();
     if (!eff) return;
+    const primary = effToPrimary.get(effectiveId) || effToPrimary.get(String(effectiveId));
+    if (primary) completedPrimaryOutboxSet.add(String(primary).toLowerCase());
     completedTimesheetIds.add(eff);
     for (const originalId of (effToOriginalIds.get(effectiveId) || effToOriginalIds.get(String(effectiveId)) || [])) {
       const original = String(originalId || '').trim().toLowerCase();
@@ -168490,6 +167351,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
         isCorrectionTs: dailyContext.isCorrectionTimesheet,
       });
     } catch (e) {
+      if (primaryOutboxId) preFailPrimaryOutboxSet.add(String(primaryOutboxId));
       for (const ob of outboxIds) {
         await sbRpc(env, "tsfin_work_fail", { p_id: ob, p_error: String(e?.message || e) });
         fail++;
@@ -169109,6 +167971,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
           ok++;
           markTimesheetComplete(effId);
         } catch (e) {
+          preFailPrimaryOutboxSet.add(String(outbox_id));
           await sbRpc(env, "tsfin_work_fail", { p_id: outbox_id, p_error: String(e?.message || e) });
           fail++;
         }
@@ -169122,6 +167985,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
         is_correction_ts: isCorrectionTs
       });
     } catch (e) {
+      preFailPrimaryOutboxSet.add(String(w.outbox_id));
       const allObs = [w.outbox_id, ...(w.extra_outbox_ids || [])].filter(Boolean);
       for (const ob of allObs) {
         await sbRpc(env, "tsfin_work_fail", { p_id: ob, p_error: String(e?.message || e) });
@@ -169139,25 +168003,11 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     ok += Number(wr?.ok_count || 0) || 0;
     fail += Number(wr?.fail_count || 0) || 0;
 
-    try {
-      let errs = wr?.errors;
-      if (typeof errs === 'string') {
-        try { errs = JSON.parse(errs); } catch { errs = null; }
-      }
-      if (Array.isArray(errs)) {
-        for (const e of errs) {
-          const ob = e?.outbox_id ? String(e.outbox_id) : '';
-          if (ob) failOutboxSet.add(ob);
-        }
-      }
-    } catch {
-      failOutboxSet = new Set();
-    }
+    // The existing helper validates native counts and exact failed input tuples.
+    failOutboxSet = new Set(wr.errors.map(error => error.outbox_id.toLowerCase()));
     for (const row of rowsToWriteAll) {
-      const outboxId = String(row?.outbox_id || '');
-      if (Number(wr?.fail_count || 0) === 0 && outboxId && !failOutboxSet.has(outboxId) && !preFailPrimaryOutboxSet.has(outboxId)) {
-        markTimesheetComplete(row?.timesheet_id);
-      }
+      const outboxId = String(row?.outbox_id || '').toLowerCase();
+      if (outboxId && !failOutboxSet.has(outboxId) && !preFailPrimaryOutboxSet.has(outboxId)) markTimesheetComplete(row.timesheet_id);
     }
   }
 
@@ -169169,6 +168019,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
     if (preFailPrimaryOutboxSet.has(p)) continue;
+    if (!completedPrimaryOutboxSet.has(p.toLowerCase())) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
@@ -169179,6 +168030,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
     if (preFailPrimaryOutboxSet.has(p)) continue;
+    if (!completedPrimaryOutboxSet.has(p.toLowerCase())) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
@@ -169504,6 +168356,18 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const code = firstString(detailObj?.error_code, detailObj?.error, detailObj?.code, rawCode, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    const missingRate = bpayNextAuthoriseKnownRefusal(rawCode, detailObj, options.message);
+    if (missingRate) return withJson(409, { ...missingRate,
+      current_timesheet_id: currentTimesheetId || null,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId) });
+    const sourceRefusal = weeklySourceAuthoriseKnownRefusal(rawCode, detailObj);
+    if (sourceRefusal) return withJson(sourceRefusal.status, {
+      error: sourceRefusal.error_code, error_code: sourceRefusal.error_code,
+      retryable: sourceRefusal.retryable, message: sourceRefusal.message,
+      detail: detailObj || null, current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+    });
     if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
       return withJson(409, {
         error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
@@ -169742,6 +168606,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       });
     }
   } catch (error) {
+    const pairRateRefusal = bpayNextAuthoriseKnownRefusal(error?.code, error, error?.message);
+    if (pairRateRefusal) return withJson(409, pairRateRefusal);
     return withJson(409, {
       ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
       error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
@@ -170002,6 +168868,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
+    if (bpayNextAuthoriseKnownRefusal(rpcErr.code, detailObj, rpcErr.message)) {
+      return mutationErrorResponse(rpcErr.code, detailObj, { currentTimesheetId, message: rpcErr.message });
+    }
     if (isUnknownLifecycleOutcomeError(err, rpcErr)) {
       let reconciliation = null;
       if (typeof reconcileTimesheetLifecycleAfterUnknownOutcome === 'function') {
@@ -171310,6 +170179,19 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const contractWeekId = firstString(detailObj?.contract_week_id, options.contractWeekId, weekId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    const missingRate = bpayNextOrdinaryMissingRateRefusal(rawCode, detailObj, options.message);
+    if (missingRate) return withJson(409, { ...missingRate,
+      current_timesheet_id: currentTimesheetId || null,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId) });
+    const sourceRefusal = weeklySourceAuthoriseKnownRefusal(rawCode, detailObj);
+    if (sourceRefusal) return withJson(sourceRefusal.status, {
+      error: sourceRefusal.error_code, error_code: sourceRefusal.error_code,
+      retryable: sourceRefusal.retryable, message: sourceRefusal.message,
+      detail: detailObj || null, current_timesheet_id: currentTimesheetId || null,
+      contract_week_id: contractWeekId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId, contractWeekId)
+    });
     if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
       return withJson(409, {
         error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
@@ -172367,11 +171249,16 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     // Server-only protected-hours preview: calculate a complete candidate-pay
     // target without copying invoice-locked source segments into that target.
     // It is never permitted on a writing TSFIN call.
-    ignore_locked_segments_for_preview = false
+    ignore_locked_segments_for_preview = false,
+    retain_protected_next_preview_facts = false
   } = (options && typeof options === 'object') ? options : {};
 
   if (ignore_locked_segments_for_preview === true && write_now === true) {
     throw new Error('PROTECTED_TARGET_PREVIEW_MUST_NOT_WRITE_TSFINS');
+  }
+  if (retain_protected_next_preview_facts === true
+      && (write_now !== false || ignore_locked_segments_for_preview !== true)) {
+    throw new Error('PROTECTED_NEXT_FACTS_REQUIRE_NONWRITING_PREVIEW');
   }
 
   if (!pay || !chg) {
@@ -173176,6 +172063,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     segments.push({
       segment_id: sid,
+      ...(retain_protected_next_preview_facts === true
+        ? retainWeeklyProtectedPreviewFacts({ scheduleSegment: seg,
+          financialSegment: shiftFinancials, payRates: pay, chargeRates: chg }) : {}),
 
       date: seg.date || null,
 
@@ -173809,17 +172699,15 @@ async function tsfinTargetedDrainNow(env, {
   try { cfg = await loadSettingsDefaults(env); } catch {}
   const tsfinCfg = cfg?.importConfig?.tsfin || {};
 
-  const maxInlineItems =
-    Number(tsfinCfg.maxInlineItems || 0) > 0 ? Number(tsfinCfg.maxInlineItems) : 3;
-
-  const maxLoopsCfg =
-    Number(tsfinCfg.maxDrainLoops || 0) > 0 ? Number(tsfinCfg.maxDrainLoops) : null;
-
-  const drainLimitCfg =
-    Number(tsfinCfg.drainLimit || 0) > 0 ? Number(tsfinCfg.drainLimit) : null;
-
-  const effectiveMaxLoops = drainAll ? (maxLoopsCfg ?? maxLoops ?? 60) : 0;
-  const effectiveDrainLimit = drainAll ? (drainLimitCfg ?? drainLimit ?? 50) : 0;
+  const boundedPositive = (value, fallback, maximum) => {
+    const number = typeof value === 'number' || typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(number) && number > 0 ? Math.min(maximum, Math.max(1, Math.floor(number))) : fallback;
+  };
+  const maxInlineItems = boundedPositive(tsfinCfg.maxInlineItems, 3, 500);
+  const maxLoopsCfg = boundedPositive(tsfinCfg.maxDrainLoops, null, 60);
+  const drainLimitCfg = boundedPositive(tsfinCfg.drainLimit, null, 500);
+  const effectiveMaxLoops = drainAll ? (maxLoopsCfg ?? boundedPositive(maxLoops, 60, 60)) : 0;
+  const effectiveDrainLimit = drainAll ? (drainLimitCfg ?? boundedPositive(drainLimit, 50, 500)) : 0;
 
   // Dedupe and normalize input ids
   const uniq = Array.from(new Set((timesheetIds || [])
@@ -173870,8 +172758,8 @@ async function tsfinTargetedDrainNow(env, {
   let fail = 0;
   let loops = 0;
 
-  let pendingTotal = 0;
-  let pendingReady = 0;
+  let pendingTotal = null;
+  let pendingReady = null;
   let pendingNextAttemptAtMin = null;
 
   // Enqueue all IDs (priority enqueue), chunked
@@ -173913,13 +172801,11 @@ async function tsfinTargetedDrainNow(env, {
       p_timesheet_ids: uniq
     });
     const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
-    const total = Number(payload?.total ?? 0);
-    const ready = Number(payload?.ready ?? 0);
-    return {
-      total: Number.isFinite(total) ? total : 0,
-      ready: Number.isFinite(ready) ? ready : 0,
-      next_attempt_at_min: payload?.next_attempt_at_min ?? null
-    };
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value :
+      typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    const total = count(payload?.total), ready = count(payload?.ready);
+    if (total === null || ready === null || ready > total) throw new Error('TSFIN_PENDING_SUMMARY_UNAVAILABLE');
+    return { total, ready, next_attempt_at_min: payload.next_attempt_at_min ?? null };
   };
 
   // Drain mode A (legacy): drain only inlineIds once
@@ -174017,6 +172903,9 @@ async function tsfinTargetedDrainNow(env, {
     const msg = String(e?.message || e || '');
     console.warn('[TSFIN][TARGET] drainAll loop exception', msg);
     L('DRAIN_ALL_EXCEPTION', { err: msg });
+    pendingTotal = null;
+    pendingReady = null;
+    pendingNextAttemptAtMin = null;
     done = false;
   }
 
@@ -187721,6 +186610,11 @@ async function csvAdapter_confirmManual() {
 }
 
 async function bankingCronTick(env, opts = {}) {
+  const financialOwner = await bpayNextOwnerStatusRpc(env)();
+  if (financialOwner.active_owner !== 'LEGACY') {
+    return { ok: financialOwner.active_owner === 'NEXT', skipped: true,
+      code: financialOwner.active_owner === 'NEXT' ? 'BPAY_NEXT_LEGACY_CRON_RETIRED' : 'BPAY_NEXT_MODULE_DISABLED' };
+  }
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
     for (let i = 0; i < arguments.length; i += 1) {
@@ -199957,6 +198851,26 @@ export default {
     }
 
     try {
+      if (isBpayNextLegacyFinancialRoute(req.method, p)) {
+        // Provider webhooks retain their own signature authentication. Every
+        // Office route authenticates BEFORE the service-only owner lookup.
+        const providerWebhook = matchPath(p, '/api/banking/pay/provider-webhook/:provider/:webhook_public_id');
+        if (!(providerWebhook && req.method === 'POST')) {
+          const paymentReauth = p === '/auth/reauth/start' || p === '/auth/reauth/verify';
+          const legacyUser = paymentReauth ? await requireUser(env, req) : await requireUser(env, req, ['admin']);
+          if (!legacyUser) return withCORS(env, req, unauthorized());
+        }
+        try {
+          await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
+        } catch (error) {
+          const code = ['BPAY_NEXT_LEGACY_WRITER_RETIRED', 'BPAY_NEXT_LEGACY_WRITER_DISABLED']
+            .includes(error?.code) ? error.code : 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE';
+          return withCORS(env, req, new Response(JSON.stringify({
+            ok: false, error_code: code, retryable: code !== 'BPAY_NEXT_LEGACY_WRITER_RETIRED'
+          }), { status: code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED' ? 410 : 503,
+            headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+        }
+      }
       // ====================== AUTH ======================
       if (req.method === 'POST' && p === '/auth/login')   return withCORS(env, req, await handleAuthLogin(env, req));
       if (req.method === 'POST' && p === '/auth/refresh') return withCORS(env, req, await handleAuthRefresh(env, req));
@@ -200009,6 +198923,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       });
       const weeklySourceResponse = await dispatchWeeklySourceRequest(req, env, ctx, {
         requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),
+        bpayNextOwnerStatusRpc: (runtimeEnv) => bpayNextOwnerStatusRpc(runtimeEnv)(),
         rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
         previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
@@ -200121,6 +199036,196 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
 
 
       // ====================== BANKING (rail-generic) ======================
+  // Exact NEXT contracts authenticate before constructing any service RPC.
+  const nextPath = p.replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
+  const nextAdviceMatch = /^\/api\/banking\/pay\/next\/advice\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(nextPath);
+  const nextOfficeRoute = (req.method === 'POST' && [
+    '/api/banking/pay/next/history-page', '/api/banking/pay/next/frozen-detail',
+    '/api/banking/pay/next/preparation', '/api/banking/pay/next/command','/api/banking/pay/next/reauth-preview', '/api/banking/pay/next/workbench-export', '/api/banking/pay/next/workbench-command'
+  ].includes(nextPath)) || (req.method === 'GET' && (nextPath === '/api/banking/pay/next/preparation-page' || nextPath === '/api/banking/pay/next/workbench-page' || nextPath === '/api/banking/pay/next/owner-status' || nextAdviceMatch));
+  if (nextOfficeRoute) {
+    const user = await requireUser(env, req);
+    if (!user) return withCORS(env, req, unauthorized());
+    if (user.role !== 'admin') return withCORS(env, req, new Response(JSON.stringify({
+      ok: false, error_code: 'BPAY_NEXT_OFFICE_FORBIDDEN', retryable: false
+    }), { status: 403, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+    // Preserve authentication, then refuse before any NEXT business RPC.
+    // Owner-status/capabilities are diagnostic bootstrap reads.
+    const nextEnvironmentFailure = bpayNextEnvironmentFailure(env, req);
+    if (nextEnvironmentFailure) return withCORS(env, req, nextEnvironmentFailure);
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/owner-status') {
+    try {
+      const status = await bpayNextOwnerStatusRpc(env)();
+      return withCORS(env, req, new Response(JSON.stringify(status), {
+        status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
+      }));
+    } catch {
+      return withCORS(env, req, new Response(JSON.stringify({
+        ok: false, error_code: 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', retryable: true
+      }), { status: 503, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+    }
+  }
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/history-page') {
+    return withCORS(env, req, await handleBpayNextHistoryRead(req, {
+      requireOfficeUser: async () => user,
+      historyRpc: createBpayNextHistoryRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/frozen-detail') {
+    return withCORS(env, req, await handleBpayNextFrozenRead(req, {
+      requireOfficeUser: async () => user,
+      frozenPageRpc: createBpayNextFrozenPageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/preparation-page') {
+    return withCORS(env, req, await handleBpayNextPreparationPage(req, {
+      requireOfficeUser: async () => user,
+      preparationPageRpc: createBpayNextPreparationPageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/workbench-export') {
+    return withCORS(env, req, await handleBpayNextWorkbenchExport(req, {
+      requireOfficeUser: async () => user,
+      workbenchRpc: createBpayNextWorkbenchRpc({baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)})
+    }));
+  }
+
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/workbench-page') {
+    return withCORS(env, req, await handleBpayNextWorkbenchPage(req, {
+      requireOfficeUser: async () => user,
+      workbenchRpc: createBpayNextWorkbenchRpc({baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)})
+    }));
+  }
+
+  if (req.method === 'GET' && nextAdviceMatch) {
+    return withCORS(env, req, await renderBpayNextFrozenAdvice(req, {
+      instruction_id: nextAdviceMatch[1]
+    }, {
+      requireOfficeUser: async () => user,
+      advicePageRpc: createBpayNextFrozenAdvicePageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/preparation') {
+    const preparationReauth=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    const preparationResponse = await handleBpayNextPreparationCommand(req, {
+      verifyBpayNextActionReauth:(token,actor,action)=>verifyBpayNextActionReauth(env,token,actor,action),
+      reauthRecordRpc:preparationReauth.record,
+      secondFactorRequired:()=>bpayNextSecondFactorRequired(env),
+      requireOfficeUser: async () => user,
+      preparationRpc: createBpayNextPreparationRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    });
+    if (preparationResponse.ok
+        && preparationResponse.headers.get('x-bpay-next-preparation-wake') === 'ENROLL') {
+      // Existing accepted wakes all remain. Only a closed accepted SEAL may
+      // add optional DR20 latency support after publishing its durable wake.
+      const preparationReceipt=preparationResponse.clone();
+      let inlineAllowed=false;
+      const wake = Promise.resolve().then(async () => {
+        if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+          throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+        }
+        await env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
+        const accepted=await preparationReceipt.json();
+        if(inlineAllowed&&accepted.ok===true&&accepted.action==='SEAL_ENQUEUE') {
+          const turn=await runBpayNextAcceptedPreparationTurn(bpayNextBackgroundDependencies(env));
+          if(!turn.ok)console.warn('[banking-pay-next] accepted preparation awaits recovery',{
+            error_code:'BPAY_NEXT_PREPARATION_TURN_DEFERRED'
+          });
+        }
+      }).catch(() => console.warn('[banking-pay-next] accepted preparation awaits recovery', {
+        error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+      }));
+      if (typeof ctx?.waitUntil === 'function') {
+        try { ctx.waitUntil(wake); inlineAllowed=true; } catch { await wake; }
+      } else await wake;
+    }
+    return withCORS(env, req, preparationResponse);
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/workbench-command') {
+    const response = await handleBpayNextWorkbenchCommand(req, {
+      requireOfficeUser: async () => user,
+      workbenchCommandRpc: createBpayNextWorkbenchCommandRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)})
+    });
+    if (response.ok) {
+      const result = await response.clone().json();
+      if ((['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(result.action)
+          || result.action === 'DECISIONS_CLEAR' && result.receipt.phase === 'APPLY')
+          && result.receipt.received && !result.receipt.replay) {
+        // Native publishers sealed the real POSITION_APPLY children. The
+        // existing enroller owns their jobs and the terminal zero-job clear
+        // receipt; this receipt has no fake job ID.
+        const wake = Promise.resolve().then(() => {
+          if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+            throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+          }
+          return env.BANKING_PAY_CONTINUATION_QUEUE.send({id:'1',kind:'ENROLL'});
+        }).catch(() => console.warn('[banking-pay-next] accepted rate decision awaits recovery', {
+          error_code:'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+        }));
+        if (typeof ctx?.waitUntil === 'function') {try {ctx.waitUntil(wake);} catch {await wake;}} else await wake;
+      }
+      if (result.receipt.received && result.receipt.status === 'READY') {
+        const wake = Promise.resolve().then(() => env.BANKING_PAY_CONTINUATION_QUEUE.send({
+          id:result.receipt.job_id,kind:'POSITION_APPLY'
+        })).catch(() => console.warn('[banking-pay-next] accepted work retry awaits recovery', {code:'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'}));
+        if (typeof ctx?.waitUntil === 'function') { try {ctx.waitUntil(wake);} catch {await wake;} } else await wake;
+      }
+    }
+    return withCORS(env,req,response);
+  }
+
+  if(req.method==='POST' && nextPath==='/api/banking/pay/next/reauth-preview') {
+    const rpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    return withCORS(env,req,await handleBpayNextReauthPreview(req,{requireOfficeUser:async()=>user,
+      reauthPreviewRpc:rpc.preview,secondFactorRequired:()=>bpayNextSecondFactorRequired(env)}));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/command') {
+    const reauthRpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    const commandResponse = await handleBpayNextCommand(req, {
+      verifyBpayNextActionReauth:(token,actor,action)=>verifyBpayNextActionReauth(env,token,actor,action),
+      reauthRecordRpc:reauthRpc.record,
+      secondFactorRequired:()=>bpayNextSecondFactorRequired(env),
+      requireOfficeUser: async () => user,
+      financialCommandRpc: createBpayNextFinancialCommandRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    });
+    if (commandResponse.ok) {
+      // The command is already durable. Failed transport must not turn its
+      // accepted receipt into a false rejection; the minute job scan recovers.
+      const wake = Promise.resolve().then(() => {
+        if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+          throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+        }
+        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
+      }).catch(() => console.warn('[banking-pay-next] accepted command awaits recovery', {
+        error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+      }));
+      if (typeof ctx?.waitUntil === 'function') {
+        try { ctx.waitUntil(wake); } catch { await wake; }
+      } else await wake;
+    }
+    return withCORS(env, req, commandResponse);
+  }
+
+  }
+
 if (p.startsWith('/api/banking/')) {
 
 
@@ -202711,76 +201816,21 @@ async scheduled(event, env, ctx) {
   })();
 
   const bankingPayWorkbenchTask = (async () => {
-    const taskStartedAtMs = Date.now();
-    console.log('[scheduled] Banking Pay workbench task started:', {
-      cron: cronExpr || null,
-      scheduled_started_at_utc: scheduledStartedAtUtc,
-      task_started_at_utc: new Date().toISOString(),
-      deployment_version: deploymentVersion,
-      ctx_present: !!ctx
-    });
     if (!bankingPayWorkbenchScheduledCronEligible(cronExpr)) {
-      console.log('[scheduled] Banking Pay workbench task skipped for non-minute schedule:', {
-        cron: cronExpr || null,
-        code: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER'
-      });
-      return {
-        ok: true,
-        skipped: true,
-        code: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER',
-        claimed: 0,
-        processed: 0
-      };
-    }
-    const scheduledSettings = await getScheduledSettings();
-    if (!scheduledSettings) {
-      console.warn('[scheduled] Banking Pay workbench task skipped: database settings gate unavailable');
-      return { ok: false, skipped: true, code: 'SCHEDULED_DATABASE_UNAVAILABLE', claimed: 0, processed: 0 };
+      return { ok: true, skipped: true, code: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER',
+        claimed: 0, processed: 0 };
     }
     try {
-      if (typeof bankingPayWorkbenchCronTick !== 'function') {
-        throw new Error('bankingPayWorkbenchCronTick is not available');
+      const owner = await bpayNextOwnerStatusRpc(env)();
+      if (owner.active_owner !== 'NEXT') {
+        return { ok: true, skipped: true,
+          code: owner.active_owner === 'DISABLED' ? 'BPAY_NEXT_MODULE_PAUSED' : 'BPAY_NEXT_LEGACY_RUNTIME_RETIRED',
+          claimed: 0, processed: 0 };
       }
-      const workbenchCronRes = await bankingPayWorkbenchCronTick(env, {
-        origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON',
-        cron: cronExpr || null,
-        ctx,
-        executionContext: ctx
-      });
-      if (shouldContinueBankingPayWorkbenchAfterCron(workbenchCronRes)) {
-        try {
-          nudgeBankingPayWorkbenchDrain(env, ctx, {
-            origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_CONTINUATION',
-            reason: 'SCHEDULED_PROGRESS_MORE_DUE',
-            budgetProfile: 'NUDGE'
-          });
-        } catch (continuationError) {
-          console.warn('[scheduled] Banking Pay workbench continuation nudge registration failed; minute cron recovery remains active.', {
-            cron: cronExpr || null,
-            error: String(continuationError?.message || continuationError || 'Unknown continuation registration error').slice(0, 300)
-          });
-        }
-      }
-      if (workbenchCronRes && typeof workbenchCronRes === 'object' && workbenchCronRes.ok === false) {
-        console.warn('[scheduled] Banking Pay workbench cron tick reported failure:', workbenchCronRes);
-      } else {
-        console.log('[scheduled] Banking Pay workbench task completed:', {
-          cron: cronExpr || null,
-          ok: true,
-          elapsed_ms: Math.max(0, Date.now() - taskStartedAtMs),
-          rollover_created_count: Number(workbenchCronRes?.rollover_created_count || 0),
-          expiry_processed_snooze_count: Number(workbenchCronRes?.expiry_processed_snooze_count || 0),
-          drain_processed_count: Number(workbenchCronRes?.processed_count || workbenchCronRes?.processed || 0)
-        });
-      }
-      return workbenchCronRes;
-    } catch (e) {
-      console.warn('[scheduled] Banking Pay workbench cron tick failed:', {
-        cron: cronExpr || null,
-        elapsed_ms: Math.max(0, Date.now() - taskStartedAtMs),
-        error: e?.message || String(e)
-      });
-      return { ok: false, code: 'SCHEDULED_BANKING_PAY_WORKBENCH_FAILED', message: e?.message || String(e) };
+      return await runBpayNextRecoveryTick(bpayNextBackgroundDependencies(env));
+    } catch {
+      console.warn('[scheduled] NEXT recovery unavailable', { code: 'BPAY_NEXT_BACKGROUND_UNAVAILABLE' });
+      return { ok: false, skipped: true, code: 'BPAY_NEXT_BACKGROUND_UNAVAILABLE', claimed: 0, processed: 0 };
     }
   })();
 

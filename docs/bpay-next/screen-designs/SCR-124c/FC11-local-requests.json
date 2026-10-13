@@ -1,0 +1,128 @@
+[
+  {
+    "id": "SCR-124c",
+    "file": "FC11-written-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\nWritten off\n£50.00\nOutstanding\n£30.00\nProtected in a Draft\n£30.00\nDate\n12/10/2026\n\nWritten off.\n\nCurrent PAYE Draft\n\nOpen Draft",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124c",
+    "file": "FC11-written-device-light.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\nWritten off\n£50.00\nOutstanding\n£30.00\nProtected in a Draft\n£30.00\nDate\n12/10/2026\n\nWritten off.\n\nCurrent PAYE Draft\n\nOpen Draft",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 38
+        }
+      ]
+    },
+    "failure": null
+  },
+  {
+    "id": "SCR-124c",
+    "file": "FC11-written-phone-dark.png",
+    "errors": [],
+    "copy": "Write off\n\nPayment Advance · Amelia Hughes · TMS 10421\n\nClose\nWritten off\n£50.00\nOutstanding\n£30.00\nProtected in a Draft\n£30.00\nDate\n12/10/2026\n\nWritten off.\n\nCurrent PAYE Draft\n\nOpen Draft",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      },
+      {
+        "kind": "MANIFEST",
+        "source": "Fixed native history response"
+      },
+      {
+        "kind": "WRITE_OFF",
+        "parent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "source": "Fixed native history response"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        }
+      ]
+    },
+    "failure": null
+  }
+]

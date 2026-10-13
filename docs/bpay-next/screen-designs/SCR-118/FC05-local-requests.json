@@ -1,0 +1,674 @@
+[
+  {
+    "file": "FC05-unselected-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-first-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-non-taxable-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nNot taxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-taxable-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-umbrella-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-comment-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\n\nEnter a comment before Preview.\n\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-channel-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-changed-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-preview-error-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-checking-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-pending-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-foreign-pending-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Credit.",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC05-accepted-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-refresh-error-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-unselected-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-first-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-non-taxable-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nNot taxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-taxable-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-umbrella-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-comment-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\n\nEnter a comment before Preview.\n\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-channel-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-changed-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-preview-error-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-checking-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-pending-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-foreign-pending-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Credit.",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC05-accepted-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-refresh-error-device-light.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-unselected-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChoose Candidate\nPay channel: —.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nChoose a Candidate before Preview.\n\nPreviewApply",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-first-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\n\nChoose taxable or not taxable.\n\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-non-taxable-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nNot taxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-taxable-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-umbrella-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: Umbrella.\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\nPREVIEW\n£40.00 credit\nTotal\n£40.00\nTax\nTaxable\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-comment-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\n\nEnter a comment before Preview.\n\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-missing-channel-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: —.\n\nSet a pay channel on the Candidate, then preview again.\n\nAmount\n£\nTax\nTaxable\nNot taxable\nComment\nNote\n\nPreview first.\n\nPreview\nApply",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-changed-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nDetails changed; preview again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-preview-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not prepare the preview; try again.\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-checking-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nChecking…\n\nPreview\nApply",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\nCandidate\nChloe Davies · TMS 10233\nPay channel: PAYE.\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-foreign-pending-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nFinish the previous Case change before creating a Manual Credit.",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    }
+  },
+  {
+    "file": "FC05-accepted-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nThis Case is being added.\n\nRefresh",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  },
+  {
+    "file": "FC05-refresh-error-phone-dark.png",
+    "errors": [],
+    "copy": "New Manual Credit\nClose\n\nChloe Davies · TMS 10233\n\nCould not refresh this Case; try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    }
+  }
+]
