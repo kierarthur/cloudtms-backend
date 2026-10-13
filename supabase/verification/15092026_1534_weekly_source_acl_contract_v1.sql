@@ -204,6 +204,17 @@ declare
   -- a signature listed in the service array but not actually granted makes the
   -- routine sweep fail, which is how the two lists stay honest.
   v_expected_private_helpers text[]:=array[
+    'private.weekly_source_staged_source_documents_v1(uuid)',
+    'private.weekly_source_staged_publication_context_v1(uuid,uuid)',
+    'private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)',
+    'private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)',
+    'private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)',
+    'private.weekly_source_staged_entitlement_components_v1(uuid,uuid)',
+    'private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)',
     'private._weekly_source_completed_pack_copy_eligibility_v1(uuid)',
     'private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)',
     'private._weekly_source_rule_values_v1(jsonb)',

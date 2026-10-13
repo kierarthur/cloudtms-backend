@@ -1,0 +1,59 @@
+-- Read the actual evidence already qualified by approval_basis_v2. This is
+-- not a current-TSFIN fallback: the I1 origin chooses one exact approved row
+-- or exact committed HEAD detail. The native domains and identities stay intact.
+create or replace function private.weekly_source_approved_detail_evidence_v1(p_root_id uuid,p_inventory jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_basis jsonb:=p_inventory->'approval_basis'; v_origin jsonb:=p_inventory#>'{approval_basis,origin}';
+  f public.timesheets_financials%rowtype; h public.weekly_source_entitlement_heads%rowtype;
+  v_details jsonb; v_policy jsonb; v_detail jsonb; v_component jsonb; v_count integer;
+begin
+  if p_inventory->>'ok' is distinct from 'true' or v_basis->>'coverage_complete' is distinct from 'true'
+    or v_basis#>>'{scope,root_timesheet_id}' is distinct from p_root_id::text
+    or private.weekly_source_inventory_approval_basis_v2(p_root_id,p_inventory) is distinct from v_basis then
+    raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+  if v_origin->>'kind'='INITIAL_AUTHORISED_TSFIN_V1' then
+    select * into strict f from public.timesheets_financials where id=(v_origin->>'financial_snapshot_id')::uuid
+      and timesheet_id=p_root_id and authorised_at_utc is not null and timesheet_version=(v_basis#>>'{scope,root_version}')::integer;
+    v_details:=jsonb_build_object('segments',f.invoice_breakdown_json->'segments','additional_units',f.additional_units_json,
+      'actual_schedule',f.actual_schedule_json,'rate_source_refs',f.rate_source_refs_json);
+    v_policy:=f.policy_snapshot_json;
+    if private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_FINANCIAL_SNAPSHOT_V2',jsonb_build_object(
+      'policy',v_policy,'details',v_details,'components',p_inventory->'components'))
+      is distinct from decode(v_origin->>'financial_snapshot_digest','hex')
+      or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_POLICY_V2',v_policy)
+        is distinct from decode(v_basis->>'policy_fingerprint','hex') then
+      raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+  elsif v_origin->>'kind'='COMMITTED_SOURCE_HEAD_V1' then
+    select * into strict h from public.weekly_source_entitlement_heads where id=(v_origin->>'head_id')::uuid and state='COMMITTED_CURRENT';
+    v_policy:=h.source_origin_json;v_details:='[]'::jsonb;
+    for v_component in select value from jsonb_array_elements(p_inventory->'components') loop
+      if v_component->>'component_kind'='WORKED_TIME' then
+        if to_regclass('private.bpay_next_source_chosen_detail') is null then
+          raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+        execute 'select count(*),jsonb_agg(to_jsonb(d))->0 from private.bpay_next_source_chosen_detail d
+          where d.head_id=$1 and d.component_id=$2 and d.decision_bundle_id=$3 and d.bundle_revision=$4'
+          into v_count,v_detail using h.id,(v_component->>'component_id')::uuid,h.decision_bundle_id,h.bundle_revision;
+        if v_count<>1 or v_detail->>'component_sha256' is distinct from ('\x'||(v_component->>'component_sha256'))
+          or v_detail->>'detail_sha256' is distinct from ('\x'||encode(sha256(convert_to((v_detail->'detail_json')::text,'UTF8')),'hex')) then
+          raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+        v_details:=v_details||jsonb_build_array(jsonb_build_object('component_id',v_component->'component_id','detail',v_detail->'detail_json'));
+      else
+        v_details:=v_details||jsonb_build_array(jsonb_build_object('component_id',v_component->'component_id','detail',v_component-'component_sha256'));
+      end if;
+    end loop;
+  else raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+  if private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_APPROVED_DETAIL_V2',v_details)
+    is distinct from decode(v_basis->>'detail_digest','hex') then
+    raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000'; end if;
+  return jsonb_build_object('approval_basis',v_basis,'details',v_details,'policy',v_policy,
+    'financial_rate_evidence',case when v_origin->>'kind'='INITIAL_AUTHORISED_TSFIN_V1' then
+      jsonb_build_object('pay',jsonb_build_object('day',f.pay_day,'night',f.pay_night,'sat',f.pay_sat,'sun',f.pay_sun,'bh',f.pay_bh),
+        'charge',jsonb_build_object('day',f.charge_day,'night',f.charge_night,'sat',f.charge_sat,'sun',f.charge_sun,'bh',f.charge_bh)) else null end);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_APPROVED_DETAIL_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_approved_detail_evidence_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_approved_detail_evidence_v1(uuid,jsonb) from public,anon,authenticated,service_role;

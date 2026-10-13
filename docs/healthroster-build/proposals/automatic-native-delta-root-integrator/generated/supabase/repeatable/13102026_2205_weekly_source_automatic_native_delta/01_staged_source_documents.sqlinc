@@ -1,0 +1,68 @@
+-- Source-only proposal. No receipt, store, calculator, readiness or exposure.
+-- Decode only the actual immutable native C1 records and sealed parts. Their
+-- transport UUIDs are provenance, never native I1 entitlement component IDs.
+create or replace function private.weekly_source_staged_source_documents_v1(p_request_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_exceptional_c1_publication_requests%rowtype; s record;
+  v_payload bytea; v_document jsonb; v_count integer; v_bytes bigint; v_parts integer;
+  v_result jsonb:='[]'::jsonb; v_total_bytes bigint:=0; v_ordinal integer:=0;
+begin
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select count(*) into v_count from public.weekly_exceptional_c1_source_records where publication_request_id=r.id;
+  if v_count is distinct from r.expected_source_count or v_count<1 then
+    raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+  for s in select source.* from public.weekly_exceptional_c1_source_records source
+    where source.publication_request_id=r.id order by source.source_ordinal loop
+    v_ordinal:=v_ordinal+1;
+    if s.source_ordinal is distinct from v_ordinal or s.root_timesheet_id is distinct from r.root_timesheet_id
+      or s.candidate_id is distinct from r.candidate_id or s.contract_id is distinct from r.contract_id
+      or octet_length(s.source_document_sha256) is distinct from 32 or octet_length(s.source_row_sha256) is distinct from 32
+      or s.payload_bytes not between 1 and 16384 or s.part_count not between 1 and 6 then
+      raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+    select count(*),coalesce(sum(octet_length(part.payload_utf8)),0),
+      decode(coalesce(string_agg(encode(part.payload_utf8,'hex'),'' order by part.part_ordinal),''),'hex')
+      into v_parts,v_bytes,v_payload from public.weekly_exceptional_c1_source_parts part
+      where part.publication_request_id=r.id and part.source_record_id=s.id;
+    if v_parts is distinct from s.part_count or v_bytes is distinct from s.payload_bytes::bigint
+      or exists(select 1 from public.weekly_exceptional_c1_source_parts part
+        where part.publication_request_id=r.id and part.source_record_id=s.id
+          and (part.source_ordinal is distinct from s.source_ordinal or part.part_ordinal not between 1 and s.part_count
+            or octet_length(part.payload_utf8) not between 1 and 3072
+            or extensions.digest(part.payload_utf8,'sha256') is distinct from part.fragment_sha256))
+      or exists(select 1 from public.weekly_exceptional_c1_source_parts part
+        where part.publication_request_id=r.id and part.source_record_id=s.id group by part.part_ordinal having count(*)<>1) then
+      raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+    v_document:=convert_from(v_payload,'UTF8')::jsonb;
+    if jsonb_typeof(v_document) is distinct from 'object'
+      or v_document->>'contract' is distinct from ('C1_'||s.authority_kind||'_V1')
+      or v_document->>'source_id' is distinct from s.id::text
+      or v_document->>'source_system' is distinct from s.source_system
+      or v_document->>'external_identity' is distinct from s.external_identity
+      or v_document->>'external_revision' is distinct from s.external_revision
+      or v_document->>'root_timesheet_id' is distinct from r.root_timesheet_id::text
+      or v_document->>'candidate_id' is distinct from r.candidate_id::text
+      or v_document->>'contract_id' is distinct from r.contract_id::text
+      or v_document->>'week_ending_date' is distinct from r.week_ending_date::text
+      or v_document->>'document_sha256' is distinct from encode(s.source_document_sha256,'hex') then
+      raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+    v_total_bytes:=v_total_bytes+v_bytes;
+    v_result:=v_result||jsonb_build_array(jsonb_build_object('source_id',s.id,'source_ordinal',s.source_ordinal,
+      'authority_kind',s.authority_kind,'source_system',s.source_system,'external_identity',s.external_identity,
+      'external_revision',s.external_revision,'source_document_sha256',encode(s.source_document_sha256,'hex'),
+      'source_row_sha256',encode(s.source_row_sha256,'hex'),'payload_bytes',s.payload_bytes,'part_count',s.part_count,
+      'work_date',s.work_date,'document',v_document));
+  end loop;
+  if v_total_bytes is distinct from r.expected_payload_bytes::bigint
+    or exists(select 1 from public.weekly_exceptional_c1_source_parts part where part.publication_request_id=r.id
+      and not exists(select 1 from public.weekly_exceptional_c1_source_records source
+        where source.id=part.source_record_id and source.publication_request_id=r.id)) then
+    raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+  return v_result;
+exception when no_data_found or too_many_rows or invalid_text_representation or character_not_in_repertoire then
+  raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_staged_source_documents_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_staged_source_documents_v1(uuid) from public,anon,authenticated,service_role;

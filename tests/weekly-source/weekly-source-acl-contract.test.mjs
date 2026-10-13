@@ -5,7 +5,11 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const repeatablePath = path.join(root, 'supabase', 'repeatable', '15092026_1534_weekly_source_acl_contract_v1.sql');
+const predecessorPath = path.join(root, 'supabase', 'repeatable', '15092026_1534_weekly_source_acl_contract_v1.sql');
+// The final Automatic closure replaces the complete central owner. Inspect
+// that actual installed-order successor, retaining the exact independent list.
+const repeatablePath = path.join(root, 'supabase', 'repeatable',
+  '13102026_2205_weekly_source_automatic_native_delta', '13_complete_final_acl_union.sqlinc');
 const verificationPath = path.join(root, 'supabase', 'verification', '15092026_1534_weekly_source_acl_contract_v1.sql');
 const migrationPaths = [
   '15092026_1534_weekly_source_plan6_schema.sql',
@@ -144,7 +148,7 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // owner-only entries, not new service or browser RPCs.
   // The qualified pay facts, exact covered-incident predicate and contact
   // retirement helper add three owner-only entries, never browser RPCs.
-  assert.equal(actual.length, 221);
+  assert.equal(actual.length, 232);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a
@@ -156,6 +160,22 @@ test('central Weekly Source ACL registers private helpers apart from the service
   assert.deepEqual(actual.filter((signature) => serviceSurface.has(canonical(signature))), []);
   const verifierServiceSurface = new Set(verificationSignatures(verification).map(canonical));
   assert.deepEqual(actual.filter((signature) => verifierServiceSurface.has(canonical(signature))), []);
+});
+
+test('final central owner retains all221 predecessor helpers and adds only the eleven private Automatic proof signatures',async()=>{
+  const [before,after,manifest,closure] = await Promise.all([
+    readFile(predecessorPath,'utf8'),readFile(repeatablePath,'utf8'),
+    readFile(path.join(root,'docs/healthroster-build/proposals/automatic-native-delta/SOURCE_MANIFEST.json'),'utf8'),
+    readFile(path.join(root,'supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql'),'utf8')
+  ]);
+  const old=contractPrivateHelpers(before),next=contractPrivateHelpers(after);
+  assert.equal(old.length,221);
+  assert.deepEqual(old.filter(signature=>!next.includes(signature)),[]);
+  assert.deepEqual(next.filter(signature=>!old.includes(signature)).sort(),JSON.parse(manifest).newPrivateSignatures.sort());
+  const registry=closure.indexOf('12_complete_private_registry_union.sqlinc');
+  const sweep=closure.indexOf('13_complete_final_acl_union.sqlinc');
+  const final=closure.indexOf('15_final_automatic_private_acl.sqlinc');
+  assert.ok(registry>=0&&registry<sweep&&sweep<final);
 });
 
 test('central Weekly Source ACL classifies every Plan 6 table exactly once', async () => {
