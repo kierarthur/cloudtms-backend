@@ -1,0 +1,1013 @@
+{
+  "contract": "HEALTHROSTER_A0_CREATOR_SCHEMA_AND_NATIVE_SOURCE_AUDIT_V2",
+  "status": "CORRECTED_EVIDENCE_SOURCE_ONLY_NATIVE_HELD",
+  "inputs": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "bytes": 6333208,
+      "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "bytes": 4481,
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    }
+  ],
+  "schemaChecks": [
+    {
+      "relation": "public.timesheets",
+      "columns": [
+        "timesheet_id",
+        "booking_id",
+        "contract_id",
+        "sheet_scope",
+        "submission_mode",
+        "occupant_key_norm",
+        "is_current",
+        "version"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "columns": [
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.contracts",
+      "columns": [
+        "id",
+        "candidate_id",
+        "client_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.candidates",
+      "columns": [
+        "id",
+        "key_norm",
+        "nhsp_hr_name_aliases",
+        "updated_at",
+        "created_at"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.timesheet_validations",
+      "columns": [
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.invoice_lines",
+      "columns": [
+        "timesheet_id",
+        "booking_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "private.timesheet_correction_requests",
+      "columns": [
+        "id",
+        "state",
+        "state_revision",
+        "target_revision",
+        "origin",
+        "reversed_financial_id",
+        "frozen_original_json",
+        "root_timesheet_id",
+        "reversed_timesheet_id",
+        "replacement_timesheet_id",
+        "original_booking_id",
+        "replacement_booking_id",
+        "candidate_id",
+        "client_id",
+        "contract_id"
+      ],
+      "missing": []
+    }
+  ],
+  "triggerReview": [
+    {
+      "name": "set_tms_ref",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()",
+      "triggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "sourceDefinitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_candidates_set_bank_hash",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()",
+      "triggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "sourceDefinitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "sourceFile": "supabase/migrations/22022026_banking_tables.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_candidates_set_rev",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()",
+      "triggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "sourceDefinitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_candidates_set_updated_at",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+      "triggerName": "trg_candidates_set_updated_at",
+      "routineName": "public.set_updated_at",
+      "sourceDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_invoice_line_archived_timesheet_guard_v1",
+      "table": "invoice_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1 BEFORE INSERT OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION invoice_line_archived_timesheet_guard_v1()",
+      "triggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "sourceDefinitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "sourceFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "weekly_source_invoice_line_owner_guard",
+      "table": "invoice_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_invoice_line_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION private.weekly_source_invoice_line_owner_guard_v1()",
+      "triggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "sourceDefinitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "sourceFile": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "bpay_expense_classification_ts_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()",
+      "triggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "sourceDefinitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "sourceFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "bpay_source_timesheet_family_gate_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()",
+      "triggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "sourceDefinitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "sourceFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "bpay_timesheet_work_revision_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()",
+      "triggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "sourceDefinitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "sourceFile": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "timesheet_settings_authority_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()",
+      "triggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "sourceDefinitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "sourceFile": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()",
+      "triggerName": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "routineName": "private._candidate_qr_pack_ready_notification_v1",
+      "sourceDefinitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "sourceFile": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_timesheet_archive_row_guard_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()",
+      "triggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "sourceDefinitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "sourceFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_timesheet_authorisation_overlap_biu",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()",
+      "triggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "sourceDefinitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "sourceFile": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "trg_timesheets_updated_at",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+      "triggerName": "trg_timesheets_updated_at",
+      "routineName": "public.set_updated_at",
+      "sourceDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "weekly_source_managed_root_authorisation_guard_bu",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "triggerName": "weekly_source_managed_root_authorisation_guard_bu",
+      "routineName": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "sourceDefinitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "sourceFile": "supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    },
+    {
+      "name": "zz_bpay_timesheet_work_key_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "A",
+      "definition": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()",
+      "triggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "sourceDefinitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "sourceFile": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Saved actual trigger identity/definition and complete source owner are distinct. Direct identity assignment absent; nested/installed/native effects held."
+    }
+  ],
+  "triggerOrderChecks": [
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "routineName": "private._candidate_qr_pack_ready_notification_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheets_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "weekly_source_managed_root_authorisation_guard_bu",
+      "routineName": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "A",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "A",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    }
+  ],
+  "observedOrderCounterexample": {
+    "triggerName": "000_preexisting_family_gate",
+    "routineName": "private.bpay_source_timesheet_family_gate_v1",
+    "failedChecks": [
+      {
+        "schema": "public",
+        "table": "timesheets",
+        "event": "insert",
+        "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+        "existingTriggerName": "000_preexisting_family_gate",
+        "routineName": "private.bpay_source_timesheet_family_gate_v1",
+        "enabled": "O",
+        "direction": "BEFORE_EXISTING",
+        "pass": false
+      },
+      {
+        "schema": "public",
+        "table": "timesheets",
+        "event": "update",
+        "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+        "existingTriggerName": "000_preexisting_family_gate",
+        "routineName": "private.bpay_source_timesheet_family_gate_v1",
+        "enabled": "O",
+        "direction": "BEFORE_EXISTING",
+        "pass": false
+      }
+    ],
+    "sourceOrDatabaseRenamed": false
+  },
+  "acl": [
+    {
+      "relation": "public.candidates",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "candidates_job_title_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (job_title_id) REFERENCES default_job_titles(id)"
+        },
+        {
+          "name": "candidates_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (umbrella_id) REFERENCES umbrellas(id) ON DELETE SET NULL"
+        }
+      ]
+    },
+    {
+      "relation": "public.invoice_lines",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "invoice_lines_invoice_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheet_validations",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "timesheet_validations_hr_request_set_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (hr_request_set_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_last_source_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (last_source) REFERENCES hr_imports(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_override_confirmed_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (override_confirmed_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_override_requested_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (override_requested_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheets",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "timesheets_active_document_operation_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (active_document_operation_id) REFERENCES invoice_operations(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_archived_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (archived_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_candidate_workflow_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_current_document_version_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (current_document_version_id) REFERENCES invoice_document_versions(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_manual_document_asset_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (manual_document_asset_id) REFERENCES invoice_document_assets(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_parent_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (parent_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        }
+      ]
+    }
+  ],
+  "invocationEvidence": {
+    "validationCreators": [
+      {
+        "id": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+        "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+        "sourceDefinitionSha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61"
+      },
+      {
+        "id": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+        "file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+        "sourceDefinitionSha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c"
+      }
+    ],
+    "candidateNativeWriters": [
+      {
+        "id": "public.candidate_pay_method_change_apply(uuid,text,jsonb,uuid,text)",
+        "file": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql",
+        "sourceDefinitionSha256": "33c47c8937d942af59b60cd2d970066e536ce0e3ede8e9de01398640e74aedd2",
+        "possibleCallees": [
+          "public._audit_insert",
+          "public.candidate_pay_method_change_refresh_scope_v1"
+        ],
+        "provenInvokedEdges": []
+      },
+      {
+        "id": "public.candidate_delete_apply(uuid,uuid,text)",
+        "file": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql",
+        "sourceDefinitionSha256": "a62e726b6c2fa6bd84d8f7ebb717e795516df3549d81a4d4f653c64bbf57af74",
+        "possibleCallees": [
+          "public._audit_insert",
+          "public._change_bump",
+          "public._pay_workbench_candidate_serial_key",
+          "public.candidate_delete_eligibility",
+          "public.candidates_tombstones"
+        ],
+        "provenInvokedEdges": []
+      },
+      {
+        "id": "public.candidate_google_rota_remove_v1(jsonb,jsonb,text,timestamp with time zone)",
+        "file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+        "sourceDefinitionSha256": "fff813076b144676bebe06d9d7659c96af9143c17d976b1e74d226ed89e58286",
+        "possibleCallees": [
+          "private._candidate_daily_json_sha256_v1",
+          "private._candidate_google_mobile_normalize_v1",
+          "private._candidate_normalize_email",
+          "private.candidate_google_rota_removal_receipts"
+        ],
+        "provenInvokedEdges": []
+      },
+      {
+        "id": "public.candidate_google_provisioning_attach_v1(jsonb,uuid,text,text,text,text,text,integer,text,timestamp with time zone)",
+        "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+        "sourceDefinitionSha256": "64c1b48f28efed0771aedacb0675e0f74638e84b24b79c6206a74159fb3a8c8e",
+        "possibleCallees": [
+          "private._candidate_google_mobile_normalize_v1",
+          "private._candidate_normalize_email"
+        ],
+        "provenInvokedEdges": []
+      }
+    ],
+    "note": "Possible source callees/dynamic candidates are never a claim of invocation. Existing five validation HTTP occurrences remain reads; current native SQL admission/body/role/trigger qualification held."
+  },
+  "holds": [
+    {
+      "kind": "VALIDATION_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "INVOICE_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "CANDIDATE_ALIAS_RANK",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "RAW_BOOKING_SIBLING",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "NATIVE_FIN_LATE_HOOKS",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    }
+  ],
+  "isolation": {
+    "savedSourceEnforcesRc": false,
+    "qualifiedRuntimeIsolation": null,
+    "hiddenRequestStatus": "HELD: earlier RR can hide later P0/WAITING; row intent is not a row-version change or visibility refresh.",
+    "ordinaryRrPreserved": true
+  },
+  "scope": "Evidence tools only. Six SQL helpers/four triggers/two complete successors stay byte-identical in the prior frozen20 packet. Root alone owns SQL/registry/ACL/contract/runtime composition and native qualification."
+}
