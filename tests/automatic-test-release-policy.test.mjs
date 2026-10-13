@@ -44,3 +44,11 @@ test('private authorities precede public broker and Office', () => {
   assert.deepEqual(publicationStages(classifyApplicationPaths(['office:app.js'])),['database','office']);
   assert.throws(()=>publicationStages(classifyApplicationPaths(['unregistered-service/code.js'])));
 });
+
+test('root Git ignore rules are known non-runtime source; other dot paths stay refused', () => {
+  assert.deepEqual(publicationStages(classifyApplicationPaths(['.gitignore'])),['database']);
+  assert.deepEqual(publicationStages(classifyApplicationPaths(['.gitignore','broker/src/index.js'])),
+    ['database','backend','candidate-private','candidate-synthetic','candidate-broker']);
+  for(const path of ['.gitignore-extra','.unknown/config','nested/.gitignore'])
+    assert.throws(()=>publicationStages(classifyApplicationPaths([path])));
+});
