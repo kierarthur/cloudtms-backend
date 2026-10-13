@@ -1,0 +1,80 @@
+{
+  "checkedAtUtc": "2026-10-13T09:47:10.125Z",
+  "scope": "Documentation feature-branch push guard only; not release preflight or product proof",
+  "cloudflareGETRequests": 8,
+  "normalBackend": {
+    "success": true,
+    "status": 200,
+    "resultKeys": [
+      "0"
+    ],
+    "triggers": [
+      {
+        "uuid": "5e1207d4-e550-4a74-8135-15d68b2060fa",
+        "trigger_name": "Deploy default branch",
+        "branch_includes": [
+          "deploy/cloudflare/test-cloudtms-backend"
+        ],
+        "branch_excludes": [],
+        "deploy_command": "npx wrangler deploy --env test"
+      }
+    ],
+    "errors": []
+  },
+  "candidateWorkers": {
+    "inventorySuccess": true,
+    "workers": [
+      {
+        "worker": "test-cloudtms-candidate-broker",
+        "success": true,
+        "status": 200,
+        "triggers": [
+          {
+            "uuid": "e4e44a2d-35cc-4189-86d2-c0c5c07958ac",
+            "branch_includes": [
+              "deploy/cloudflare/test-candidate-broker"
+            ],
+            "branch_excludes": [],
+            "deploy_command": "npx wrangler deploy --config candidate-broker/wrangler.jsonc --keep-vars"
+          }
+        ],
+        "errors": []
+      },
+      {
+        "worker": "test-cloudtms-candidate-private-api",
+        "success": true,
+        "status": 200,
+        "triggers": [
+          {
+            "uuid": "b85d23aa-8eeb-46f9-a498-199fb6949f8a",
+            "branch_includes": [
+              "deploy/cloudflare/test-candidate-private-api"
+            ],
+            "branch_excludes": [],
+            "deploy_command": "npx wrangler deploy --config candidate-private-api/wrangler.jsonc --keep-vars"
+          }
+        ],
+        "errors": []
+      },
+      {
+        "worker": "test-cloudtms-candidate-synthetic-private-api",
+        "success": true,
+        "status": 200,
+        "triggers": [
+          {
+            "uuid": "4ad64d89-46f4-4f50-b92b-2f9121a5c165",
+            "branch_includes": [
+              "deploy/cloudflare/test-candidate-synthetic-private-api"
+            ],
+            "branch_excludes": [],
+            "deploy_command": "npx wrangler deploy --config candidate-synthetic-private-api/wrangler.jsonc --keep-vars"
+          }
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "mutations": 0,
+  "buildsStarted": 0,
+  "secretsReturned": false
+}

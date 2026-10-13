@@ -1,0 +1,1050 @@
+{
+  "formatVersion": 1,
+  "date": "2026-10-13",
+  "scope": "WP-0 credit source and curated parent installed catalogue feasibility; P-5/P-6/P-9/P-14 and eighteen later acceptance gates",
+  "sourceWorktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026",
+  "sourceCommit": "77ffc9d7d15d19b6453ae25441eee8c1bff58c90",
+  "approvedArchiveSHA256": "07b5f265205a7d3b36da1bb5cc4d1f8a01c3a6e69f5ddbbd9451f310c62a04bf",
+  "authority": {
+    "latestOverride": "SEND_2C_NO_LOCAL_DB_USE_TEST.md",
+    "boundedProofRule": "SEND_2B_WP0_LIMITS.md: each proof once; no loops",
+    "decisions": "D1-D8 unchanged",
+    "account": "arthurrai2006@gmail.com owner-confirmed by parent; no account-route action by this subtask"
+  },
+  "finalSourceOwners": [
+    {
+      "name": "public.invoice_unissue_batch",
+      "physicalDefinitionFile": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "line": 276,
+      "lastInstallingRoot": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "rootClosureSHA256": "714a3cea45af5cd0a91fdde7a6be9514b62b02ce168309a76cc3d40d6e6e5648",
+      "physicalSourceSHA256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public.invoice_create_credit_note_and_unlock",
+      "physicalDefinitionFile": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "line": 587,
+      "lastInstallingRoot": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "rootClosureSHA256": "b29d12e05f3f840bf43f11494150fc606e20c7024b994440e824c8112c33c83a",
+      "physicalSourceSHA256": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public._ctms_assert_invoice_can_unissue_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql",
+      "line": 3404,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql",
+      "rootClosureSHA256": "a1274cddf4b5562b19af27c17db0e9d96c8cca3896cf28d8eca9a89a1e8e7710",
+      "physicalSourceSHA256": "d62a8132bf7ca319637b9d32af5e2d80860e4ca8342e24ad95854847dd8bc411",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public.invoice_correction_pair_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "rootClosureSHA256": "17c6aac5befde367679b9cc535eb8cb1e40593ef08a2f3650346d8d2c8ecf706",
+      "physicalSourceSHA256": "52a1f1b76cb9cf7902b35ee57c42a182b67bc9bc19bd2811decba0c14eb84979",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public.invoice_operation_control_batch",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/29072026_1523_invoice_operation_control_retry_waiting.sql",
+      "rootClosureSHA256": "1035a9e1d99b3c51c41f9defccf825d22dfd7428693ec10c1810be1a3b7db18a",
+      "physicalSourceSHA256": "c70886bb34982a0aa8531e1a45f2e03efdee241a1b2425a9b1379fc84f55d331",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public.invoice_unissue_one",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql",
+      "rootClosureSHA256": "db59c1a0841baf7592921014c0ffdec31c006350da1c980a2b8bf6f16459dd26",
+      "physicalSourceSHA256": "f4971f7465ca0886ca65053b0998bb56cdb97dd1c0aa5503f9369bff98c910a0",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "public.invoice_work_claim_batch",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql",
+      "rootClosureSHA256": "b4b8ff254be382ff708a4d3894cde55c61f68da9f23928d51aa68d10f1ea9810",
+      "physicalSourceSHA256": "0bc13edcccb6b86a68636010cb8dec7499c4766ac6fddff5f620248ff02abe58",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_correction_validate_batch",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+      "line": 4,
+      "lastInstallingRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rootClosureSHA256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "physicalSourceSHA256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_generation_resolve_command_groups",
+      "physicalDefinitionFile": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "line": 1387,
+      "lastInstallingRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rootClosureSHA256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "physicalSourceSHA256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_issue_validate_batch",
+      "physicalDefinitionFile": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+      "line": 727,
+      "lastInstallingRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rootClosureSHA256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "physicalSourceSHA256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_issue_advance_batch",
+      "physicalDefinitionFile": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_issue_advance_batch.sql",
+      "line": 2,
+      "lastInstallingRoot": "supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql",
+      "rootClosureSHA256": "7b4a28e9f6a327f2a00029ec41c6593b725245cfe9214856b9a4f4bc37ef1314",
+      "physicalSourceSHA256": "c6e543346e070f8b0d630a98ec5362b945e03280b2d646e23e9c824c01612628",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_presentation_snapshot_batch",
+      "physicalDefinitionFile": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 22,
+      "lastInstallingRoot": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "rootClosureSHA256": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "physicalSourceSHA256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_operation_start_core_v8",
+      "physicalDefinitionFile": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql",
+      "line": 2,
+      "lastInstallingRoot": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+      "rootClosureSHA256": "f0f00f14a088b5da8cff82057539b5305cd09396dc8cf43af5e672d543c3ce1d",
+      "physicalSourceSHA256": "5bb036fd44f31e86cfd346e3eefc2987b0c1c567538687a74a37b973478b9810",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_generation_advance_core_v8",
+      "physicalDefinitionFile": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+      "line": 9,
+      "lastInstallingRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rootClosureSHA256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "physicalSourceSHA256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    {
+      "name": "private._invoice_issue_advance_core_v8",
+      "physicalDefinitionFile": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+      "rootClosureSHA256": "f0f00f14a088b5da8cff82057539b5305cd09396dc8cf43af5e672d543c3ce1d",
+      "physicalSourceSHA256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    }
+  ],
+  "ownerInventorySource": "WP0_SOURCE_OWNER_INVENTORY.json parent canonical 801-root census; source hashes only, no installed acceptance",
+  "feasibilityGates": [
+    {
+      "id": "P-1",
+      "assertion": "Exact scoped components and money",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:1852-1883",
+      "expected": "CN clones all and only T0 components; -105.02 net/-21.00 VAT/-126.02 total; no TX line",
+      "actual": "Current whole-only generation credits complete I1; scoped branch is unbuilt",
+      "smallestRequiredExtension": "Scoped resolver/revision/PLAN/COMMIT branch",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "T0 L-A=100.01/20.00/120.01, L-B=5.01/1.00/6.01; unrelated TX=200.00/40.00/240.00",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-2",
+      "assertion": "Empty replacement completion",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:2148-2155; supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql:403-452",
+      "expected": "Empty P0 produces no invoice; only CN legal ISSUE plus verified final document completes",
+      "actual": "Parent generation completion is not legal CN issue; feature unbuilt",
+      "smallestRequiredExtension": "Separate placement from terminal issue/document receipt",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Empty P0; CN DRAFT/queued/parent COMPLETE negatives; verified issued CN positive",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-3",
+      "assertion": "Logical component placement",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql:338-401",
+      "expected": "Multiple P0 components on one ordinary invoice are legal; split/missing/duplicate fail; R0 on one CN",
+      "actual": "Current reader counts non-CN physical placement; approved WHOLE branch absent",
+      "smallestRequiredExtension": "WHOLE logical placement state, empty member handling",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "P0 components L-P1/L-P2 together on I2; split I2/I3, missing/duplicate variants",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-4",
+      "assertion": "Shared locks and overlap",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:1801-1925; supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql:639-645",
+      "expected": "Whole/scoped race one winner; disjoint credits on I1 both commit; stable I1 lock order",
+      "actual": "Current async/legacy source lacks approved common relationship fence",
+      "smallestRequiredExtension": "Common I1 lock in every reachable credit writer and Unissue",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Whole versus R-A scoped competing credit; R-A/R-B disjoint; duplicate multi-I1 order",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-5",
+      "assertion": "Creating-operation provenance and stable resume",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "FAIL",
+      "sourceResult": "FAIL",
+      "installedResult": "FAIL — installed definition/catalogue confirms structural incompatibility; behavioral acceptance remains UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:495,1852-1864; supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql:629-639",
+      "expected": "First planned CN ID reused on PLAN/retry; own O-A resume; O-B refusal; one number and line set",
+      "actual": "PLAN gen_random_uuid; CN header no creating operation ID; Retry returns VALIDATE_SOURCES",
+      "smallestRequiredExtension": "Persist planned ID and credit_scope creating operation ID; own-result validation under common lock",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "O-A crashes after COMMIT/QUEUE_DOCUMENT/issue FREEZE once each; own retry and foreign O-B",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-6",
+      "assertion": "Reachable legacy credit writers and effective ACL",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "FAIL",
+      "sourceResult": "FAIL",
+      "installedResult": "FAIL — installed definition/catalogue confirms structural incompatibility; behavioral acceptance remains UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql:587,639-645,828-875,955-973; broker/src/index.js:166101,199306-199313,201690",
+      "expected": "Every legacy route inaccessible or refuses protected origin/any linked CN under I1 lock",
+      "actual": "Final textual writer remains Worker-reachable and directly creates ISSUED whole credit/unlocks; installed service_execute=true, anon/authenticated_execute=false. End-to-end reachability not invoked.",
+      "smallestRequiredExtension": "Fence final physical writer; retain ordinary semantics; installed effective ACL census",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Protected C-A/C-S originals and already-CN originals refuse; ordinary C-O control",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-7",
+      "assertion": "Shared numbering",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql:1997-2041",
+      "expected": "Shared enabled BEFORE INSERT trigger gives unique number; own-operation retries preserve it",
+      "actual": "Source sequence/trigger exists; installation and behavior unproved",
+      "smallestRequiredExtension": "Retain shared invoice_no_seq; no parallel sequence",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Two separate CNs then own retry; accept harmless sequence gaps",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-8",
+      "assertion": "Original signed asset and witness",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql:327-442; supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql:192",
+      "expected": "Preview/final consume original issued V0/A0 manager witness after current version/settings change",
+      "actual": "Current reader uses current Timesheet/version/settings; planner input_document_version_id null",
+      "smallestRequiredExtension": "Freeze original issued asset/version, immutable electronic manager witness and policy; extend existing consumers",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "C-S signed V0/A0/D0 then current V1 attach No; paper/manual/QR/worker-only/foreign/missing witness negatives",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-9",
+      "assertion": "Legal claimable issue-child registration",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "FAIL",
+      "sourceResult": "FAIL",
+      "installedResult": "FAIL — installed definition/catalogue confirms structural incompatibility; behavioral acceptance remains UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:2077-2129; supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql:159-178; supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_issue_advance_batch.sql:58-75",
+      "expected": "CN child claimed and advances FREEZE/WAIT_DOCUMENT/FINALISE with exact verified final document",
+      "actual": "Installed/source child is INVOICE_BATCH/VALIDATE; is_manifest_member default FALSE, both manifest_committed defaults TRUE; no selection-expander payload. Actual claim predicate excludes it.",
+      "smallestRequiredExtension": "Register existing direct-INVOICE issue contract; stable idempotency and fencing; no claim gate weakening",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Actual child claim; stale/wrong-entity/empty document negatives; READY exact document positive",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-10",
+      "assertion": "Per-credit failure isolation",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_dispatch_advance_batch.sql:88-117",
+      "expected": "Failed credit leaves co-claimed valid scoped credit and ordinary invoice independently progressing",
+      "actual": "Dispatcher catches group-level error; per-credit branch is unbuilt",
+      "smallestRequiredExtension": "Bounded per-credit guarded block preserving leases/retries/group behavior",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "One failing credit + one valid credit + one ordinary invoice claim group",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-11",
+      "assertion": "Scoped attachment policy",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "PASS — physical columns/index key only; scoped T0 separability and feature acceptance UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql:2643-2650; supabase/baseline/22082026_1501_cloudtms_test_structural_finishing.sql:4212; supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:1572-1586; supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql:1111-1127",
+      "expected": "T0-only HR support according frozen policy; unsigned preset no Timesheet/file/cost/other-worker content",
+      "actual": "Store keyed invoice/source/import, no timesheet_id; source rows may share import",
+      "smallestRequiredExtension": "Deterministic frozen T0 member/row extraction in existing store; additive membership key only if necessary",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Same-import mixed W-A/W-B plus separate-import variant; S30 Yes/No; no Timesheet unsigned variant",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-12",
+      "assertion": "Correct query retirement",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql:448-452; supabase/repeatable/21072026_1235_59_invoice_issue_one.sql:600",
+      "expected": "Ordinary eligible issue closes exact query; CN issue/retry does not close wrong T0/TX query",
+      "actual": "All installed ISSUED writers/retirement paths not yet censused",
+      "smallestRequiredExtension": "Installed writer census and invoice-kind retirement guard",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "One ordinary eligible query plus T0/TX unrelated open query; CN issue/retry",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-13",
+      "assertion": "Original history and all R0 locks",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:1884-1925; supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql:142,218-223",
+      "expected": "I1/T0/TX unchanged; R0 whole+all segment locks point CN; T0/R0 ordinary selection excluded",
+      "actual": "Whole branch marks/unlocks/stales/recomputes original; scoped branch/readers unbuilt",
+      "smallestRequiredExtension": "Scoped no-mark/no-unlock arm; R0 locks; defensive selection/readers",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Before/after I1/T0/TX semantic equality; SEGMENTS R0; GENERATE_SELECTED T0/R0 refusal",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-14",
+      "assertion": "Ordinary original Unissue applicability",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "FAIL",
+      "sourceResult": "FAIL",
+      "installedResult": "FAIL — installed definition/catalogue confirms structural incompatibility; behavioral acceptance remains UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql:3404-3430; supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql:32-39",
+      "expected": "Ordinary I1/no classifier/no marker refuses after scoped CN including pending documents/issue; pre-CN control allowed; CN refused",
+      "actual": "Guard returns before invoice lock/count for ordinary invoice; installed body early return confirmed. Helper service_execute=false is expected owner-only ACL; public definer caller service_execute=true/browser false.",
+      "smallestRequiredExtension": "Common I1 lock plus linked scoped-CN fence before import early return; preserve classifier",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Ordinary T0/TX original; CN DRAFT/document-pending/issue-pending; each caller/race; pre-CN control",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-15",
+      "assertion": "Actor and ACL binding",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "PASS — sampled service/browser effective ACL only; end-user authority, full census/API/feature acceptance UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_start_batch.sql:16-25; broker/src/index.js:199306-199313; supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql:5685-5688",
+      "expected": "Active exact end-user action authority at Worker and locked mutation; no browser private/direct execution",
+      "actual": "Source service-only contract is separate from end-user authority and hosted effective ACL",
+      "smallestRequiredExtension": "Actor/action/target recheck plus service RLS/private-helper/effective ACL verification",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "U-A positive; inactive U-I, unflagged U-N, foreign target, forged actor, browser-role negatives",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office"
+      ],
+      "executableRuns": 0,
+      "receipt": null,
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "P-16",
+      "assertion": "Repeated correction chain",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2/03_IMPLEMENTATION_PLAN.md:1593-1604; IMPLEMENTATION_START_PLAN.md:79,83",
+      "expected": "Second/third correction credits latest reversed X invoice while root T0 fixed; one credit/tree and difference-only joined pay",
+      "actual": "New WHOLE/scoped provenance and joined published NEXT proof unbuilt",
+      "smallestRequiredExtension": "Root/latest-X provenance; reuse Banking frozen/settlement owners; no recovery engine here",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "T0→P1→P2→P3, empty/mixed states; original paid160→approved140→150 with actual recovered0/5/10/15/20",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents",
+        "Physical MyTMS"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-17",
+      "assertion": "Frozen original references",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql:170,327-442,1095; supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql:329-354",
+      "expected": "Original issued REF-T0-1/2, scoped HR, signed evidence identical preview/final after live reference change",
+      "actual": "Current references/current Timesheet readers are not immutable original proof",
+      "smallestRequiredExtension": "Same original snapshot/asset/member reference consumed by preview and final",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "Freeze REF-T0-1/2; introduce newer reference/settings/V1; preview/final equality",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    },
+    {
+      "id": "P-18",
+      "assertion": "Same draft return",
+      "target": "agency_test/cloudtms_test_clone",
+      "proofClass": "Source/static feasibility and later proof allocation",
+      "result": "UNPROVED",
+      "sourceResult": "Design/source constraint recorded",
+      "installedResult": "UNPROVED",
+      "featureAcceptance": "UNPROVED",
+      "source": "HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2/03_IMPLEMENTATION_PLAN.md:927-934; supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql:439-453,3343",
+      "expected": "Request-bound correction restores same D1 id/no preserving TX and matched P0 admission through unchanged editor",
+      "actual": "Request wrapper/lifecycle is unbuilt; no direct owner hash alteration permitted",
+      "smallestRequiredExtension": "Request wrapper+unchanged invoice editor service branch, unit-safe admission/idempotency",
+      "dependentWorkPackage": "WP-CN; consumers WP-AI and issued signed correction",
+      "fixture": "D1 original T0+TX; interruption each step; same D1/no; P0 correction unit/replay",
+      "laterProofClasses": [
+        "Source/static",
+        "Installed catalogue/ACL",
+        "TEST rollback first use",
+        "TEST runtime/Office",
+        "Documents",
+        "Physical MyTMS"
+      ],
+      "executableRuns": 0,
+      "receipt": null
+    }
+  ],
+  "additionalAssertions": [
+    {
+      "id": "CN-C03-IDENTITY",
+      "assertion": "Credit source must be physical INVOICE/I1 in both modes",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "source": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql:613-617",
+      "expected": "entity_type=INVOICE and entity_id=I1",
+      "actual": "GENERATION operation identity derived CLIENT/INVOICE_BATCH",
+      "smallestRequiredExtension": "Credit-specific identity arm for both modes",
+      "dependentWorkPackage": "WP-CN all-client C03 defect fix"
+    },
+    {
+      "id": "CN-C03-PHANTOM",
+      "assertion": "Credit commands excluded from Timesheet source-shape errors",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "source": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql:1994-2033,2079",
+      "expected": "one credit group only",
+      "actual": "shape_errors processes unresolved credit invoice source as Timesheet; union emits phantom error group",
+      "smallestRequiredExtension": "Exclude GENERATE_CREDIT_NOTE from shape_errors only",
+      "dependentWorkPackage": "WP-CN all-client C03 defect fix"
+    },
+    {
+      "id": "CN-SUPPORT-PHYSICAL",
+      "assertion": "Source physical HR support relation key recorded",
+      "proofClass": "Source/static and Installed catalogue",
+      "result": "PASS",
+      "source": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql:2643-2650; supabase/baseline/22082026_1501_cloudtms_test_structural_finishing.sql:4212",
+      "expected": "Record real columns/key, no invented timesheet_id",
+      "actual": "invoice/source_system/import primary key; header_columns/rows_json/header_rows; no timesheet_id",
+      "smallestRequiredExtension": "None for inventory; per-member immutable extraction remains UNPROVED",
+      "dependentWorkPackage": "WP-CN P-11/P-17; WP-AI",
+      "installedEvidenceReceipt": "WP0-INSTALLED-CATALOGUE"
+    },
+    {
+      "id": "CN-SUPPORT-SEPARABLE",
+      "assertion": "Frozen I1 support can separate only T0 from mixed-worker import",
+      "proofClass": "Source/static design constraint",
+      "result": "UNPROVED",
+      "source": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql:1572-1586; supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql:1111-1127",
+      "expected": "Lawful immutable member/row identity produces exact T0 support",
+      "actual": "Source store is import-keyed; this subtask has no installed row/mapping evidence",
+      "smallestRequiredExtension": "Deterministic same-store extraction; additive member key if source freeze cannot separate, no copy of full mixed import",
+      "dependentWorkPackage": "WP-CN P-11/P-17; WP-AI"
+    }
+  ],
+  "parentEvidenceRequests": {
+    "database": "agency_test only after Arthur parity/identity checks",
+    "operations": "Parent once-only 37-routine metadata/body inspection and 27-column/4-index catalogue completed; retain remaining ledger/complete installed census/trigger/API acceptance as explicitly unproved work, not a repeat programme.",
+    "relations": [
+      "public.invoices",
+      "public.invoice_lines",
+      "public.invoice_operations",
+      "public.invoice_operation_chunks",
+      "public.timesheets_financials",
+      "public.invoice_document_versions",
+      "public.invoice_hr_source_rows"
+    ],
+    "literalCensusTerms": [
+      "invoice_create_credit_note_and_unlock",
+      "_ctms_assert_invoice_can_unissue_v1",
+      "original_invoice_id",
+      "CREDIT_NOTE",
+      "locked_by_invoice_id",
+      "invoice_locked_invoice_id"
+    ],
+    "rehearsalRecommendation": "No additional credit WP-0 rehearsal needed: exact installed definitions/ACL/defaults settle structural blockers; do not execute unsafe legacy credit or unbuilt-feature fixture programme.",
+    "optionalCatalogAssertions": "Completed parent catalogue confirms both manifest_committed defaults TRUE and is_manifest_member FALSE. No repeat query or behavioral inference requested."
+  },
+  "testSetup": {
+    "status": "PROPOSED_NOT_CREATED_NOT_APPROVED",
+    "namespace": "HR_WP_CN_13102026",
+    "physicalIDs": "Native owner-generated synthetic IDs to be collision-checked and frozen in exact D5 approval receipt; none borrowed from real data",
+    "moneyComponents": [
+      {
+        "name": "T0.L-A",
+        "net": "100.01",
+        "vat": "20.00",
+        "total": "120.01"
+      },
+      {
+        "name": "T0.L-B",
+        "net": "5.01",
+        "vat": "1.00",
+        "total": "6.01"
+      },
+      {
+        "name": "TX.L-X",
+        "net": "200.00",
+        "vat": "40.00",
+        "total": "240.00"
+      }
+    ],
+    "expectedScopedCredit": {
+      "net": "-105.02",
+      "vat": "-21.00",
+      "total": "-126.02"
+    },
+    "fullSetupReference": "WP0_CREDIT_FEASIBILITY.md synthetic TEST setup proposal items 1-8"
+  },
+  "buildStage": {
+    "status": "AFTER_OWNER_WP0_REVIEW_ONLY",
+    "orderedSmallDisabledTESTInstalls": [
+      "WP-PP and immutable scope/contracts; own API/actor/ACL proof enables Banking HR-06 consumption",
+      "Both-mode C03 fix plus common credit/Unissue fence, provenance and legal issue registration",
+      "Scoped money/placement/all locks and frozen original document/support consumers; all P-1-P-18 TEST exits",
+      "Unsigned agency and issued signed correction consumers after prerequisites"
+    ],
+    "promotionApproval": "D3 for every canonical promotion and protected release",
+    "testSetupApproval": "D5 before exact TEST fixture/settings/flags changes",
+    "activationApproval": "D7 plus compatible published NEXT",
+    "appReleaseApproval": "D6 separate",
+    "releaseRoute": "Reviewed committed GitHub source then protected database release/release:test ordered backend/private/synthetic/broker; Office after database success",
+    "fixRule": "Reviewed forward-fix release only; no manual database/ledger edits",
+    "soleLocalDatabaseException": "Future release mechanical clean PG17 db:contract:seal-local, one small container removed immediately, no testing"
+  },
+  "preservation": {
+    "applicationFilesChanged": 0,
+    "sqlFilesChanged": 0,
+    "ownerRulesChanged": 0,
+    "bankingMessagesSent": 0,
+    "bankingFilesChanged": 0,
+    "gitWrites": 0,
+    "networkCalls": 0,
+    "applicationRuntimeCalls": 0,
+    "sqlExecuted": 0,
+    "databaseCalls": 0,
+    "rollbackRehearsals": 0,
+    "localDatabaseContainers": 0,
+    "dockerCalls": 0,
+    "secretsReadOrPrinted": false,
+    "deployments": 0,
+    "liveActions": 0,
+    "preExistingChanges": "Preserved"
+  },
+  "installedCatalogueEvidence": {
+    "source": "WP0_INSTALLED_OWNER_EVIDENCE.json",
+    "receipt": {
+      "id": "WP0-INSTALLED-CATALOGUE",
+      "sqlSha256": "d2013988e3a64744cb35e2271e38c958c62c9ff17c62c8c88315fa97e7663529",
+      "accepted": true,
+      "database": "cloudtms_test_clone",
+      "statementCount": 3,
+      "rolledBack": true,
+      "connectedFresh": true,
+      "priorProbeStillAbsent": true
+    },
+    "account": "arthurrai2006@gmail.com",
+    "proofClass": "Installed catalogue/definition/role-effective ACL; SELECT-only parent-owned transaction, no application invocation",
+    "routineMetadata": [
+      {
+        "schema_name": "private",
+        "routine_name": "_invoice_generation_advance_core_v8",
+        "identity_arguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "normalized_definition_sha256": "bb727a6d5f24e5ec137186e30f547743ffdcf05feb131287c918da2ab90896da",
+        "normalized_body_sha256": "ddce4d5df2e25afd62442a0a9ea918b38ffc3f9b0e9b03cbc0be1143af67bd3e",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "private",
+        "routine_name": "_invoice_issue_advance_batch",
+        "identity_arguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "normalized_definition_sha256": "f677b5f816f42244997c0615627c035d10facb5b22f213cf450dbc95f27f8d12",
+        "normalized_body_sha256": "dc729d01907b812cfde25d88271ac6e54bba8e1c4c7a2a1c01acaa147bc946c5",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "public",
+        "routine_name": "_ctms_assert_invoice_can_unissue_v1",
+        "identity_arguments": "p_invoice_id uuid, p_lock_row boolean, p_context text",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, pg_temp"
+        ],
+        "normalized_definition_sha256": "6e13557d958ca536420ab4313120f17861da49cdb75cb1926cd17ce2539191b1",
+        "normalized_body_sha256": "244be4fc03c35799fb2c43bea7928fe976dca367a13cfaf3e74b1ad634d821c4",
+        "service_execute": false,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "public",
+        "routine_name": "invoice_correction_pair_scope_v1",
+        "identity_arguments": "p_timesheet_id uuid, p_target_invoice_id uuid, p_actor_user_id uuid, p_lock_rows boolean, p_max_members integer",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, extensions, pg_temp"
+        ],
+        "normalized_definition_sha256": "8591ed1b47c38b1f2db31962bdc2712d624ed60ea0de594f1fb0c6bb05cf2858",
+        "normalized_body_sha256": "0780942584a93ab204df15f424ea149e54fee8381833bdcf53bf742f14f1ba83",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "public",
+        "routine_name": "invoice_create_credit_note_and_unlock",
+        "identity_arguments": "p_invoice_id uuid, p_actor_user_id uuid",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public"
+        ],
+        "normalized_definition_sha256": "b6c9e778e340943b0a19b4ece716a6ce426fe1e868a926373586073aef193673",
+        "normalized_body_sha256": "554be0fa554e09fafb3f3623ac3fc6ee013c21bb247f8aa438077d7558a6a903",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "public",
+        "routine_name": "invoice_unissue_one",
+        "identity_arguments": "p_invoice_id uuid, p_actor_user_id uuid, p_clear_pdf boolean",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, pg_temp"
+        ],
+        "normalized_definition_sha256": "9a9887400beda3f36cf3e16b8898a59363335dfa223c9b161bf35e624d9f2ab2",
+        "normalized_body_sha256": "2502e62fdbd47dc2ff8cdef69f4faf9edd70e57ad8457cd63be30baa35c12e0e",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      },
+      {
+        "schema_name": "public",
+        "routine_name": "invoice_work_claim_batch",
+        "identity_arguments": "p_chunk_types text[], p_worker_id text, p_limit integer, p_lease_seconds integer, p_now_utc timestamp with time zone",
+        "owner": "dee50tht",
+        "security_definer": true,
+        "configuration": [
+          "search_path=public, extensions, pg_temp"
+        ],
+        "normalized_definition_sha256": "f1d6fd7042222f5d9d6d6f926bff8058d9cc9de0828888354b79dee12aa3df32",
+        "normalized_body_sha256": "7d1fa3c52001ff9c03c2fecaa1674661fb238af452fb8d26b8cc2a09ad1511f0",
+        "service_execute": true,
+        "service_schema_usage": true,
+        "anon_execute": false,
+        "authenticated_execute": false
+      }
+    ],
+    "columns": [
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "invoice_id",
+        "data_type": "uuid",
+        "not_null": true,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "source_system",
+        "data_type": "text",
+        "not_null": true,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "import_id",
+        "data_type": "uuid",
+        "not_null": true,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "header_columns",
+        "data_type": "jsonb",
+        "not_null": false,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "rows_json",
+        "data_type": "jsonb",
+        "not_null": false,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "column_name": "header_rows",
+        "data_type": "jsonb",
+        "not_null": false,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_operation_chunks",
+        "column_name": "id",
+        "data_type": "uuid",
+        "not_null": true,
+        "default_expression": "gen_random_uuid()"
+      },
+      {
+        "relation_name": "invoice_operation_chunks",
+        "column_name": "operation_id",
+        "data_type": "uuid",
+        "not_null": true,
+        "default_expression": null
+      },
+      {
+        "relation_name": "invoice_operation_chunks",
+        "column_name": "status",
+        "data_type": "text",
+        "not_null": true,
+        "default_expression": "'QUEUED'::text"
+      },
+      {
+        "relation_name": "invoice_operation_chunks",
+        "column_name": "is_manifest_member",
+        "data_type": "boolean",
+        "not_null": true,
+        "default_expression": "false"
+      },
+      {
+        "relation_name": "invoice_operation_chunks",
+        "column_name": "manifest_committed",
+        "data_type": "boolean",
+        "not_null": true,
+        "default_expression": "true"
+      },
+      {
+        "relation_name": "invoice_operations",
+        "column_name": "id",
+        "data_type": "uuid",
+        "not_null": true,
+        "default_expression": "gen_random_uuid()"
+      },
+      {
+        "relation_name": "invoice_operations",
+        "column_name": "status",
+        "data_type": "text",
+        "not_null": true,
+        "default_expression": "'QUEUED'::text"
+      },
+      {
+        "relation_name": "invoice_operations",
+        "column_name": "manifest_committed",
+        "data_type": "boolean",
+        "not_null": true,
+        "default_expression": "true"
+      }
+    ],
+    "indexes": [
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "index_name": "invoice_hr_source_rows_invoice_idx",
+        "definition": "CREATE INDEX invoice_hr_source_rows_invoice_idx ON public.invoice_hr_source_rows USING btree (invoice_id)"
+      },
+      {
+        "relation_name": "invoice_hr_source_rows",
+        "index_name": "invoice_hr_source_rows_pkey",
+        "definition": "CREATE UNIQUE INDEX invoice_hr_source_rows_pkey ON public.invoice_hr_source_rows USING btree (invoice_id, source_system, import_id)"
+      },
+      {
+        "relation_name": "timesheets",
+        "index_name": "timesheets_booking_id_current_uidx",
+        "definition": "CREATE UNIQUE INDEX timesheets_booking_id_current_uidx ON public.timesheets USING btree (booking_id) WHERE is_current"
+      },
+      {
+        "relation_name": "timesheets",
+        "index_name": "timesheets_booking_id_version_uidx",
+        "definition": "CREATE UNIQUE INDEX timesheets_booking_id_version_uidx ON public.timesheets USING btree (booking_id, version)"
+      }
+    ],
+    "limits": [
+      "No application routine invoked",
+      "No business rows read or written",
+      "No installed definition changed",
+      "Owner-only helpers with service_execute=false require caller-context review; not an automatic ACL defect",
+      "Normalized definition/body SHA256 uses CRLF-to-LF before SHA256; not a sealed contract comparison",
+      "Not a full installed security/callability or API-path audit"
+    ],
+    "parentExactBodyObservations": {
+      "source": "Parent once-only pg_get_functiondef inspection reported in task handoff; complete bodies deliberately not copied",
+      "generation_core": {
+        "definitionLines": 2162,
+        "plannedUUIDLine": 485,
+        "creditHeaderOriginalInvoiceIdLine": 1844,
+        "creditChildInvoiceBatchLine": 2073,
+        "structuralResult": "FAIL: stable creator-bound scoped resume is absent; INVOICE_BATCH/VALIDATE nonmember child excluded"
+      },
+      "claim": {
+        "definitionLines": 237,
+        "nonBatchAlternativeLine": 148,
+        "nonMemberExpanderAlternativeLine": 150,
+        "committedMemberAlternativeLine": 157
+      },
+      "unissue": {
+        "structuralResult": "FAIL: ordinary-original classifier early return precedes linked-CN relationship check"
+      }
+    },
+    "manifestDefaults": {
+      "invoice_operations_manifest_committed": true,
+      "invoice_operation_chunks_manifest_committed": true,
+      "invoice_operation_chunks_is_manifest_member": false,
+      "claimConclusion": "TRUE manifest commit defaults do not make a FALSE-member INVOICE_BATCH/VALIDATE child admissible; no is_selection_expander payload and VALIDATE is neither BUILD_MANIFEST nor RELEASE_MANIFEST"
+    },
+    "ownerOnlyHelper": {
+      "routine": "public._ctms_assert_invoice_can_unissue_v1(uuid,boolean,text)",
+      "service_execute": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "interpretation": "Expected owner-only helper called from SECURITY DEFINER public invoice_unissue_one owned by same provider owner; not an ACL defect and no grant widening proposed"
+    },
+    "resourceUseAtParent": {
+      "localContainersCreated": 0,
+      "totalRollbackCalls": 2,
+      "capabilityRehearsals": 1,
+      "SELECTOnlyCatalogueTransactions": 1,
+      "creditBehaviouralRehearsals": 0
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "serialOnly": true,
+  "account": "arthurrai2006@gmail.com",
+  "physicalDatabase": "cloudtms_test_clone",
+  "rollbackTool": "cloudtms-miget-transaction-lab-arthurrai2006",
+  "totalRollbackCalls": 3,
+  "capabilityRehearsals": 1,
+  "SELECTOnlyCatalogueTransactions": 2,
+  "creditBehaviouralRehearsals": 0,
+  "noPaymentProviderEmailOrDrainInvocation": true,
+  "entries": [
+    {
+      "id": "WP0-DB-CAPABILITY",
+      "sqlSha256": "73a9f315c3870736605ca75733a2ca7ac9d958e6f3509a8d208b7c6c4ce06fb0",
+      "accepted": true,
+      "database": "cloudtms_test_clone",
+      "rolledBack": true,
+      "connectedFresh": true,
+      "statements": 5,
+      "syntheticProbeVisible": true,
+      "syntheticProbeAbsentAfter": true,
+      "applicationRowsChanged": 0
+    },
+    {
+      "id": "WP0-INSTALLED-CATALOGUE",
+      "sqlSha256": "d2013988e3a64744cb35e2271e38c958c62c9ff17c62c8c88315fa97e7663529",
+      "accepted": true,
+      "database": "cloudtms_test_clone",
+      "rolledBack": true,
+      "connectedFresh": true,
+      "statements": 3,
+      "targetRoutineRows": 37,
+      "columns": 27,
+      "indexes": 4,
+      "businessReadsOrWrites": 0,
+      "priorProbeStillAbsent": true
+    },
+    {
+      "id": "WP0-RELEASE-SHARED",
+      "sqlSha256": "5849e3f6499b078c86a71afdf08ccd22e1a51f86345995b450fb96c31e761f2d",
+      "accepted": false,
+      "database": "cloudtms_test_clone",
+      "rolledBack": true,
+      "connectedFresh": true,
+      "requestedStatements": 5,
+      "completedStatements": 2,
+      "failedStatement": 3,
+      "SQLSTATE": "42703",
+      "source": "13102026_1021_wp0_installed_release_shared_catalogue.sql:5",
+      "expected": "Read physical migration/repeatable ledger hash columns and compare exact source paths/hashes",
+      "actual": "column a.sha256 does not exist; alias assumed as physical column",
+      "result": "UNPROVED for ledger parity and unexecuted shared rows",
+      "applicationRowsChanged": 0,
+      "reruns": 0
+    }
+  ],
+  "localContainersCreated": 0,
+  "passedCalls": 2,
+  "failedCalls": 1
+}

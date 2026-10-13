@@ -1,0 +1,66 @@
+{
+  "account": "arthurrai2006@gmail.com",
+  "accountEvidence": "Owner reply in current chat",
+  "operationsConnector": "CloudTMS Miget Operations",
+  "operationsWorker": "codex-cloudtms-miget-gateway",
+  "parity": {
+    "accepted": true,
+    "authenticated": true,
+    "route": "ChatGPT web -> read-only MCP -> Miget REST API",
+    "resource_count": 1,
+    "secrets_returned": false
+  },
+  "agencyService": {
+    "authenticated": true,
+    "database": "agency_test",
+    "service": {
+      "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+      "name": "postgres-service-p0qoe",
+      "label": "cloudtms-codex-poc-pg17",
+      "service_type": "postgres",
+      "state": "healthy",
+      "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+      "created_at": "2026-08-23T16:00:33.774Z",
+      "updated_at": "2026-09-30T19:16:42.824Z"
+    }
+  },
+  "mytmsService": {
+    "authenticated": true,
+    "database": "mytms_test",
+    "service": {
+      "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+      "name": "postgres-service-kpqwi",
+      "label": "mytms-control-plane-pg17",
+      "service_type": "postgres",
+      "state": "healthy",
+      "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+      "created_at": "2026-08-23T20:17:27.386Z",
+      "updated_at": "2026-08-24T20:44:30.793Z"
+    }
+  },
+  "physicalDatabases": {
+    "agency": "cloudtms_test_clone",
+    "mytms": "uofvkfi5"
+  },
+  "readOnlyOperations": true,
+  "secretsReturned": false,
+  "anonymousMCPStatus": {
+    "operations": 401,
+    "arthurLab": 401
+  },
+  "lab": {
+    "tool": "cloudtms-miget-transaction-lab-arthurrai2006/miget_db_transaction_rollback",
+    "database": "cloudtms_test_clone",
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "sqlSha256": "73a9f315c3870736605ca75733a2ca7ac9d958e6f3509a8d208b7c6c4ce06fb0",
+    "statementCount": 5,
+    "temporarySyntheticTable": "private.wp0_arthur_capability_13102026",
+    "visibleInside": true,
+    "absentAfter": true,
+    "noBusinessRowsOrEffects": true
+  },
+  "wrongAccountToolsUsed": 0,
+  "localDatabaseResourcesCreated": 0
+}

@@ -1,0 +1,30 @@
+{
+  "latestAuthority": "SEND_2C_NO_LOCAL_DB_USE_TEST.md supersedes SEND_2B item2; remaining2B limits apply",
+  "wp0EvidenceOrder": [
+    "static source",
+    "installed TEST catalogue read-only",
+    "serial agency TEST rollback-only"
+  ],
+  "localPGOrDockerAllowedInWP0": false,
+  "localResourcesCreated": 0,
+  "priorDockerActions": "Inventory/free-space inspection only before latest2C; no resource created, stopped, removed, reused or copied",
+  "proofOnce": true,
+  "noFixtureProgrammesOrRerunLoops": true,
+  "buildStage": {
+    "smallOrderedTESTInstalls": true,
+    "featuresOff": true,
+    "eachInstallD3Approval": true,
+    "TESTAcceptanceD5ExactSetupApproval": true,
+    "forwardFixOnly": true,
+    "localContractSeal": "Only future mandatory mechanical cleanPG17contract generation/seal; one small containerperrelease removed immediately; no testingonit"
+  },
+  "sources": {
+    "backendSourceIntegrity": "PASS295migrations801repeatableclosures; static db:check once; no database invoked",
+    "mytmsResolution": "Published3d26ed7 contains canonicalmain18f07 asancestor12commits behind. Newcleanownfeaturebranch only fast-forwarded to completeexistingpublishedsource; no canonicalpromotion or authoredproductchange"
+  },
+  "toolStartupCorrection": {
+    "helper": "wp0_source_inventory.mjs",
+    "firstError": "ERR_MODULE_NOT_FOUND: helper relative import depth wrong, inventory never ran",
+    "correction": "Corrected output-only module path once; first actual inventory completed. No database/application proof rerun."
+  }
+}

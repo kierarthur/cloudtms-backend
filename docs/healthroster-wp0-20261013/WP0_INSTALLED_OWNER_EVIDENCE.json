@@ -1,0 +1,851 @@
+{
+  "proofClass": "Installed TEST catalogue; SELECT-only on real installed schema, not behavioural acceptance",
+  "account": "arthurrai2006@gmail.com",
+  "tool": "cloudtms-miget-transaction-lab-arthurrai2006",
+  "receipt": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "sqlSha256": "d2013988e3a64744cb35e2271e38c958c62c9ff17c62c8c88315fa97e7663529",
+    "statementCount": 3,
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "database_name",
+            "prior_probe_still_absent"
+          ],
+          "rows": [
+            {
+              "database_name": "cloudtms_test_clone",
+              "prior_probe_still_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    }
+  },
+  "routineMetadata": [
+    {
+      "schema_name": "private",
+      "routine_name": "_candidate_daily_read_projection_v1",
+      "identity_arguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "normalized_definition_sha256": "a38862ec29d7feb37c37141dce7517465a4ea52ea51bfa3dbd06e4cd6982b9ef",
+      "normalized_body_sha256": "c08c0707ea0eeb4f73732d9c6c5e6b72397e2f3eb06220c792bd5ec8b0249965",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_candidate_daily_receipt_context_v1",
+      "identity_arguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_require_mutable boolean, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "normalized_definition_sha256": "c65f3f23631ef2d26c52a6dc6fe4809401ccd973206ca58daa8f3041b3f2c319",
+      "normalized_body_sha256": "ef94429c9e3ae9edc6001d32d5c59cfd45141af10c7ccc5097ead3ff9c729d31",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_candidate_daily_receipt_reset_v1",
+      "identity_arguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_expected_timesheet_id uuid, p_reason text, p_actor_user_id uuid, p_event text, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=\"\""
+      ],
+      "normalized_definition_sha256": "65f662341bca16854d95c52e1c03a502e95078ac0bd29a8a2a5fcfc7c2a517d0",
+      "normalized_body_sha256": "0a0be37685530ba3b6d9dcf05606b62ad035031ea67a018c02a850ce4ef07f20",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_candidate_workflow_cancel_authority_v1",
+      "identity_arguments": "p_workflow_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "normalized_definition_sha256": "dd34e274c85228b6e34407f8627cf69c2a545a77c3557c5813ec53dfde96e023",
+      "normalized_body_sha256": "59682263e337641fba07c9c5d7065b6eb8578fb5d8894f071a26a48fc654d06b",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_invoice_generation_advance_core_v8",
+      "identity_arguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "bb727a6d5f24e5ec137186e30f547743ffdcf05feb131287c918da2ab90896da",
+      "normalized_body_sha256": "ddce4d5df2e25afd62442a0a9ea918b38ffc3f9b0e9b03cbc0be1143af67bd3e",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_invoice_issue_advance_batch",
+      "identity_arguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "f677b5f816f42244997c0615627c035d10facb5b22f213cf450dbc95f27f8d12",
+      "normalized_body_sha256": "dc729d01907b812cfde25d88271ac6e54bba8e1c4c7a2a1c01acaa147bc946c5",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "_invoice_issue_advance_core_v8",
+      "identity_arguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "17a28e9e58f08e7acc551875f81526a3fb9ffc254b69e31f97712cf22181dd08",
+      "normalized_body_sha256": "9d4b46a2b4023ce44c1c2f9300985d16b7b973d5f8602e2402a6753d950f6559",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "private",
+      "routine_name": "weekly_source_first_authorise_core_v1",
+      "identity_arguments": "p_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid, p_lock_result jsonb",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, private, extensions, pg_catalog, pg_temp"
+      ],
+      "normalized_definition_sha256": "97c194c002b9ea4bbcb44ac261c5506e257f69c692d1064aaf4c70220d9f3cd3",
+      "normalized_body_sha256": "98046f59cf9458b77fadc5b50e4bdc7639934ea8a71514c7e442abdd9f9fc578",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "_ctms_assert_invoice_can_unissue_v1",
+      "identity_arguments": "p_invoice_id uuid, p_lock_row boolean, p_context text",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "6e13557d958ca536420ab4313120f17861da49cdb75cb1926cd17ce2539191b1",
+      "normalized_body_sha256": "244be4fc03c35799fb2c43bea7928fe976dca367a13cfaf3e74b1ad634d821c4",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "_ctms_expand_lifecycle_items_v1",
+      "identity_arguments": "p_items jsonb, p_action text, p_actor_user_id uuid, p_max_members integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "c703a5b5c913faca9caf633798d96d5aca9da6c8ff878badfa1483a930772525",
+      "normalized_body_sha256": "2098ab5e78066759174001ce2ebd434d3b6f101555164d8222ca02c8a08160e4",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "_import_review_action_catalog_core_v1",
+      "identity_arguments": "p_import_id uuid, p_preview_generation integer, p_max_actions integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "c8597b68401d7c5840e5e86e18b6108234bff2f4767f28a3d82563edd12d0dcf",
+      "normalized_body_sha256": "0c79b959fd14489d1afe7a6a2d4ba6bffe303663fc5c31bf382c16508e30e803",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "_import_review_follow_up_reconcile_core_v1",
+      "identity_arguments": "p_import_id uuid, p_operation_id uuid, p_actor_user_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "6eceb8022680f8f9eccc4a817de9266fd0b5db792a197e97d112b6a6bd5d02aa",
+      "normalized_body_sha256": "9d1f3462b077678716dd1592c96c9536809a5c39c4060fef75b842b695fe3ddc",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "_import_review_query_evidence_core_v1",
+      "identity_arguments": "p_timesheet_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "ea6ec7d605a7673ac917250dbc9f74137a4aa16000ba4ab1bbef71b2ff4d7248",
+      "normalized_body_sha256": "4b93c1150a7b5f59332ce0e0e2781586e7fa20fee30aff34299b18555d65935e",
+      "service_execute": false,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_app_timesheet_detail_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_timesheet_id uuid, p_contract_week_id uuid, p_workflow_id uuid, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "normalized_definition_sha256": "096c818818f2bc07dca0cd21aa694694fda96258bcac2ee7f67c8796edfe0a44",
+      "normalized_body_sha256": "6a95c8c9859ae0514f86c1dcf624668eb665288da78a86464f0917a60f1c48aa",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_app_timesheet_detail_v2",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_timesheet_id uuid, p_contract_week_id uuid, p_workflow_id uuid, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "2482f8d4b79ad745274bf85eb6c0045e42b1a4b1c5ae806969901e83e4b7b04e",
+      "normalized_body_sha256": "9519e8a2dc796af5e071d3aace41790f863f3bf261dfea87102015ca4ccd46d7",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_app_timesheet_page_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "normalized_definition_sha256": "21f4d6377708ec8fb568c0bcd5be4aa85f26abe8bde6a4cec92eb9ff45303900",
+      "normalized_body_sha256": "093aa5487cd083e6bba356f3617ff9a42a9030431ded0dab79c36a3252c84f91",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_app_timesheet_page_v2",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "normalized_definition_sha256": "85227afee9199a5cf2e3dbb56b74c843eac712dc6ec7b104ae7e63a8099d8cc5",
+      "normalized_body_sha256": "ad70f86f6f020ff71d89ca6e05b1900b168e225329eecc93347c1feba477d701",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_submission_finalize_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp",
+        "lock_timeout=5s",
+        "statement_timeout=120s"
+      ],
+      "normalized_definition_sha256": "decdfe668a8482f481e36e92a390ee86aa7dcbb919fea1d712202aeee265f57c",
+      "normalized_body_sha256": "6a59e99405d0959e178a58366077a758b6ec5f94ccaddde3cad6bb4d58a2f8bd",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_workflow_cancel_atomic_v2",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "normalized_definition_sha256": "9b636481e7c3abd63e0cbe51a82ec5c73a5e523fd9c6822fec9fcfb65230970e",
+      "normalized_body_sha256": "92d0f3f306c422e5966d0f892401417e407d894898cc845b59e60aeb720f53aa",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "candidate_workflow_transition_atomic_v1",
+      "identity_arguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "normalized_definition_sha256": "0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df",
+      "normalized_body_sha256": "ae9522c243f17ca0bdd9d84667c17cba64040c22c9e10bdcec54d7c9de66c4fe",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "hr_daily_timesheet_resolution_save_v1",
+      "identity_arguments": "p_import_id uuid, p_hr_row_id uuid, p_timesheet_id uuid, p_expected_state_version bigint, p_expected_preview_generation integer, p_expected_evidence_fingerprint text, p_actor_user_id uuid, p_request_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "17e4d0c1a4335b975376886032e2991f8175e199b43223110494b184e3d493db",
+      "normalized_body_sha256": "bc3a06965cf79659b3ff66c2a847eb820fbd6d9469812aa9300ef969bf78f243",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "hr_daily_validation_preview_v1",
+      "identity_arguments": "p_import_id uuid, p_after_action_id text, p_limit integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "ff716d58b63684c8074debf4a5ed9ffc528dd6ca61a31edc13e83b3bf1de0798",
+      "normalized_body_sha256": "15edff997a0416c9e278e37081870e413c52f8c1e7aea4e78f90fde85473adc7",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "import_review_apply_status_get_v1",
+      "identity_arguments": "p_import_id uuid, p_operation_id uuid, p_request_hash text",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "465427e17b5b3aa92cd11491d838509a418c981d52ee8d669299da337f9b624f",
+      "normalized_body_sha256": "93574eeb563bf58e8553573f3fec8924e764c63a22917a61e15d6690b7e92d74",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "import_review_follow_up_component_update_v1",
+      "identity_arguments": "p_import_id uuid, p_operation_id uuid, p_request_hash text, p_component text, p_expected_component_status text, p_new_component_status text, p_error_code text, p_error_message text, p_actor_user_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "dbbbee5407cf53493058dd2441a2fb49934af13c859fc90ecc2e60a181801036",
+      "normalized_body_sha256": "aebbea613cd43f5dc7d8028715641ec7ee5c060bb178466dd64f26c58717d30a",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "invoice_correction_pair_scope_v1",
+      "identity_arguments": "p_timesheet_id uuid, p_target_invoice_id uuid, p_actor_user_id uuid, p_lock_rows boolean, p_max_members integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "8591ed1b47c38b1f2db31962bdc2712d624ed60ea0de594f1fb0c6bb05cf2858",
+      "normalized_body_sha256": "0780942584a93ab204df15f424ea149e54fee8381833bdcf53bf742f14f1ba83",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "invoice_create_credit_note_and_unlock",
+      "identity_arguments": "p_invoice_id uuid, p_actor_user_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public"
+      ],
+      "normalized_definition_sha256": "b6c9e778e340943b0a19b4ece716a6ce426fe1e868a926373586073aef193673",
+      "normalized_body_sha256": "554be0fa554e09fafb3f3623ac3fc6ee013c21bb247f8aa438077d7558a6a903",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "invoice_unissue_batch",
+      "identity_arguments": "p_invoice_ids uuid[], p_actor_user_id uuid, p_clear_pdf boolean",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public"
+      ],
+      "normalized_definition_sha256": "3c55526131eb8b9dcf70487236859997f3b6ab4aab1eab55c2555f5295809ed0",
+      "normalized_body_sha256": "28fdc030dbb97617c04a3e261f33e3575d4052980aec49fdec48ede4ff091b2c",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "invoice_unissue_one",
+      "identity_arguments": "p_invoice_id uuid, p_actor_user_id uuid, p_clear_pdf boolean",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "9a9887400beda3f36cf3e16b8898a59363335dfa223c9b161bf35e624d9f2ab2",
+      "normalized_body_sha256": "2502e62fdbd47dc2ff8cdef69f4faf9edd70e57ad8457cd63be30baa35c12e0e",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "invoice_work_claim_batch",
+      "identity_arguments": "p_chunk_types text[], p_worker_id text, p_limit integer, p_lease_seconds integer, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "f1d6fd7042222f5d9d6d6f926bff8058d9cc9de0828888354b79dee12aa3df32",
+      "normalized_body_sha256": "7d1fa3c52001ff9c03c2fecaa1674661fb238af452fb8d26b8cc2a09ad1511f0",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_authorise_bulk_atomic",
+      "identity_arguments": "p_items jsonb, p_actor_user_id uuid, p_now_utc timestamp with time zone",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public"
+      ],
+      "normalized_definition_sha256": "cc26a1c371cd6530f1faadf48cac71e57c74291c1566ff01b1aca3eb4fb211fe",
+      "normalized_body_sha256": "270cf05e1140fd52052c7dd8c621aa733b06f2ac161bdc3af3cf0fefdc032949",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_correction_chain_scope_v1",
+      "identity_arguments": "p_timesheet_id uuid, p_lock_rows boolean, p_max_depth integer, p_max_members integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "4b3e403373a1eb004a061edc196ee56d5b5b8c7199a6bab49e9459534e7e3fb9",
+      "normalized_body_sha256": "248b3fabb9b60661aa880c8311c3220d4492c500ace408bc15ac1733c7479773",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_correction_pair_transition_v1",
+      "identity_arguments": "p_timesheet_id uuid, p_action text, p_actor_user_id uuid, p_operation_id uuid, p_expected_chain_fingerprint text, p_lock_rows boolean, p_max_members integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "819f0f7e85f4b111347e52fe5b5c2c7014c53776583623a518a92ddf524b1bc6",
+      "normalized_body_sha256": "539700f2a28871ad474ad2f1bdf2598345253fc96ac1fcc0c6d53335742100d8",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_query_email_delivery_mark_v1",
+      "identity_arguments": "p_mail_outbox_id uuid, p_provider_message_id text, p_provider_status text, p_accepted_at_utc timestamp with time zone, p_actor_user_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "f0fce8bddd01e37a01bf0a418b82181a6c0d7be29b5e206c337bd44088c89014",
+      "normalized_body_sha256": "5b7ab9cc7ab8802e6d21ab5c4c6f8acce3395f76cf6080e3c6512ba8b7ba453b",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_query_email_enqueue_v1",
+      "identity_arguments": "p_import_id uuid, p_operation_id uuid, p_selected_action_ids jsonb, p_actor_user_id uuid, p_max_actions integer, p_max_groups integer",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "normalized_definition_sha256": "02d34f1dff7fe338b8a3bf8bb2d6d7690f796c94a62fc6339165150dff087be6",
+      "normalized_body_sha256": "39bb8bba461812d6ab177c2aa96d5f0981b8727eb8a09f8316d617f048148f5d",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_weekly_manual_adjustment_delete_apply",
+      "identity_arguments": "p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_ids uuid[], p_expected_contract_week_ids uuid[], p_expected_preserved_source_timesheet_ids uuid[], p_expected_preserved_source_contract_week_ids uuid[], p_expected_row_signature text",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "normalized_definition_sha256": "2718bf714e14bbf36421ea67a517c81c7d8c19d655f7125ca3f4bab6b68e2c96",
+      "normalized_body_sha256": "d0e618f1e7bdf204a21a184fa35d91129f68a2a73c24970b699603f77e8bdd8d",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "timesheet_weekly_manual_adjustment_delete_preview",
+      "identity_arguments": "p_timesheet_id uuid, p_actor_user_id uuid",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=public"
+      ],
+      "normalized_definition_sha256": "b5427f7ff5eb01cc5b2e01b7a6e008206beeb3667511a6d35c115ff91af702bb",
+      "normalized_body_sha256": "0bdbbd5495bd2fdad681f0fd0b108a01b6465af27c3b3a6572f3e7887ca58dc9",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    },
+    {
+      "schema_name": "public",
+      "routine_name": "weekly_source_office_authorise_scope_v1",
+      "identity_arguments": "p_request jsonb",
+      "owner": "dee50tht",
+      "security_definer": true,
+      "configuration": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "normalized_definition_sha256": "8c2f11cc5d104905f4d745446b346b6894059fe784df8f4cc360d38a5bc95954",
+      "normalized_body_sha256": "719283747115627110ec08a5720b4ba6f32576ee7ccd609034b793ed692eddf8",
+      "service_execute": true,
+      "service_schema_usage": true,
+      "anon_execute": false,
+      "authenticated_execute": false
+    }
+  ],
+  "columns": [
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "release_id",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "git_commit",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "repository_contract_sha256",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "installed_contract_sha256",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "install_mode",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "status",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "started_at_utc",
+      "data_type": "timestamp with time zone",
+      "not_null": true,
+      "default_expression": "clock_timestamp()"
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "completed_at_utc",
+      "data_type": "timestamp with time zone",
+      "not_null": false,
+      "default_expression": null
+    },
+    {
+      "relation_name": "cloudtms_database_releases",
+      "column_name": "evidence_json",
+      "data_type": "jsonb",
+      "not_null": true,
+      "default_expression": "'{}'::jsonb"
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "invoice_id",
+      "data_type": "uuid",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "source_system",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "import_id",
+      "data_type": "uuid",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "header_columns",
+      "data_type": "jsonb",
+      "not_null": false,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "rows_json",
+      "data_type": "jsonb",
+      "not_null": false,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "column_name": "header_rows",
+      "data_type": "jsonb",
+      "not_null": false,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_operation_chunks",
+      "column_name": "id",
+      "data_type": "uuid",
+      "not_null": true,
+      "default_expression": "gen_random_uuid()"
+    },
+    {
+      "relation_name": "invoice_operation_chunks",
+      "column_name": "operation_id",
+      "data_type": "uuid",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "invoice_operation_chunks",
+      "column_name": "status",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": "'QUEUED'::text"
+    },
+    {
+      "relation_name": "invoice_operation_chunks",
+      "column_name": "is_manifest_member",
+      "data_type": "boolean",
+      "not_null": true,
+      "default_expression": "false"
+    },
+    {
+      "relation_name": "invoice_operation_chunks",
+      "column_name": "manifest_committed",
+      "data_type": "boolean",
+      "not_null": true,
+      "default_expression": "true"
+    },
+    {
+      "relation_name": "invoice_operations",
+      "column_name": "id",
+      "data_type": "uuid",
+      "not_null": true,
+      "default_expression": "gen_random_uuid()"
+    },
+    {
+      "relation_name": "invoice_operations",
+      "column_name": "status",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": "'QUEUED'::text"
+    },
+    {
+      "relation_name": "invoice_operations",
+      "column_name": "manifest_committed",
+      "data_type": "boolean",
+      "not_null": true,
+      "default_expression": "true"
+    },
+    {
+      "relation_name": "timesheets",
+      "column_name": "booking_id",
+      "data_type": "text",
+      "not_null": true,
+      "default_expression": null
+    },
+    {
+      "relation_name": "timesheets",
+      "column_name": "status",
+      "data_type": "timesheet_status_enum",
+      "not_null": true,
+      "default_expression": "'RECEIVED'::timesheet_status_enum"
+    },
+    {
+      "relation_name": "timesheets",
+      "column_name": "version",
+      "data_type": "integer",
+      "not_null": true,
+      "default_expression": "1"
+    },
+    {
+      "relation_name": "timesheets",
+      "column_name": "is_current",
+      "data_type": "boolean",
+      "not_null": true,
+      "default_expression": "true"
+    }
+  ],
+  "indexes": [
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "index_name": "invoice_hr_source_rows_invoice_idx",
+      "definition": "CREATE INDEX invoice_hr_source_rows_invoice_idx ON public.invoice_hr_source_rows USING btree (invoice_id)"
+    },
+    {
+      "relation_name": "invoice_hr_source_rows",
+      "index_name": "invoice_hr_source_rows_pkey",
+      "definition": "CREATE UNIQUE INDEX invoice_hr_source_rows_pkey ON public.invoice_hr_source_rows USING btree (invoice_id, source_system, import_id)"
+    },
+    {
+      "relation_name": "timesheets",
+      "index_name": "timesheets_booking_id_current_uidx",
+      "definition": "CREATE UNIQUE INDEX timesheets_booking_id_current_uidx ON public.timesheets USING btree (booking_id) WHERE is_current"
+    },
+    {
+      "relation_name": "timesheets",
+      "index_name": "timesheets_booking_id_version_uidx",
+      "definition": "CREATE UNIQUE INDEX timesheets_booking_id_version_uidx ON public.timesheets USING btree (booking_id, version)"
+    }
+  ],
+  "limits": [
+    "No application routine invoked",
+    "No business rows read or written",
+    "No installed definition changed",
+    "Owner-only helpers with service_execute=false require caller-context review; not an automatic ACL defect",
+    "Normalized definition/body SHA256 uses CRLF-to-LF before SHA256; not a sealed contract comparison",
+    "Not a full installed security/callability or API-path audit"
+  ]
+}

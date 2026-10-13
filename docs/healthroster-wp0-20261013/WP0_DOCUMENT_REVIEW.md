@@ -1,0 +1,48 @@
+# WP-0 document review — owner review stop retained
+
+13 October 2026. One bounded independent documentary review of the saved WP-0 handback. This is not a new source, installed-database or business acceptance audit.
+
+**Verdict: suitable as a STOP handback for owner review, with the recorded FAIL and UNPROVED gates retained. It provides no clearance to build, promote, install, publish or activate a feature.** The consolidated report and ledger do not claim an all-green result. No remaining substantive inaccurate claim was identified in those two documents against the evidence reviewed.
+
+The final handback index, source-preservation comparison, resource measurement and exact documentation push receipts are being completed by the parent. They are outside this review's verdict and must be checked by the parent before final delivery.
+
+## Review scope and authority
+
+Read the workspace and backend AGENTS.md, SEND_2_TO_HEALTHROSTER_IMPLEMENTATION_CHAT_WP0.md, SEND_2B_WP0_LIMITS.md and the superseding SEND_2C_NO_LOCAL_DB_USE_TEST.md. Reconciled WP0_REPORT.md and WP0_LEDGER.md with all three specialist reports and JSON ledgers, the saved source observations, approved-source baseline, rule-count record, database preflight, installed metadata/body-comparison evidence, rollback receipts and the failed shared-catalogue result. D1–D8 and the original R-243 query requirement were checked as documentary authority.
+
+Latest 2C removes local PostgreSQL and Docker from WP-0. The remaining 2B limits require each proof once, failures recorded without repair loops, and serial agency TEST rollback calls. This reviewer made no database, network, Git, Docker, runtime or product-test call and performed no new source proof. Only this document was written. Underlying observations remain dated evidence; this review does not refresh them.
+
+## Documentary accuracy and proof limits
+
+| Claim | Review result |
+|---|---|
+| Approved archive and mapping | The saved baseline records ZIP SHA-256 `07b5f265205a7d3b36da1bb5cc4d1f8a01c3a6e69f5ddbbd9451f310c62a04bf`, 183 archive members and 88 LF payload checks. The mapping record is 204 rules, 509 literal and 513 expanded specified IDs. The report correctly says these are specified IDs, not executed tests. No archive or mapping proof was rerun here. |
+| Audited and newer source | Backend `77ffc9d7`, Office `887e7af7`, complete published MyTMS `3d26ed7` and committed NEXT `497fb059` are distinguished from later observed backend `bea90218` and MyTMS `d021e6aa`. The newer bodies remain unreviewed; the complete MyTMS task-source fast-forward is not represented as a canonical promotion or installation. |
+| Source-owner census | The 801 roots, 803 physical files and 1,349 scoped names are explicitly a static name-level census. Overloads, dynamic definition patches, final ACL closure and installed callers require qualification. The saved body comparison has 32 LF-normalized matches and five UNPROVED results among 37 selected routines. Neither that sample nor the static census proves the complete installed contract. |
+| Arthur account and route | The preflight records owner-confirmed `arthurrai2006@gmail.com`, its read-only Operations route, healthy TEST service identities, physical names `cloudtms_test_clone` and `uofvkfi5`, and anonymous HTTP 401. Arthur's separate lab is agency-only. The handback does not infer MyTMS mutation authority or borrow another account's route. |
+| Three serial rollback calls | Final WP0_ROLLBACK_RECEIPTS.json records three calls: one successful synthetic capability probe, one successful SELECT-only catalogue capture, and one failed SELECT-only attempt. Two passed; one failed. All record agency identity, rollback and fresh verification. Rollback completion does not convert accepted=false into a passed proof. |
+| Failed shared-catalogue attempt | The final attempt completed LEGACY/epoch 1 and latest-release FAILED observations, then stopped at statement 3 with `42703`, `column a.sha256 does not exist`. Full ledger parity and the remaining 26 routine rows stay UNPROVED. This is a proof-query authoring error, not evidence of an application defect. No retry is claimed. |
+| Credit and journey feasibility | P-5/P-6/P-9/P-14 are structural FAILs while all 18 feature acceptance exits remain UNPROVED. Journey totals are six static PASS, nine existing-owner FAIL and seven UNPROVED. No feature, API, document, browser, phone, claim, issue or delivery acceptance is inferred. |
+| P-9 and ACL interpretation | Installed parent and chunk manifest_committed defaults are TRUE; is_manifest_member is FALSE. The report correctly retains the member/expander admission gap. Owner-only helpers with service EXECUTE denied are qualified by their definer caller context, not automatically scored as defects or proposed for grant widening. |
+| NEXT coordination | The ledger contains 28 direct shared owners and 95 consumers. Source currency, matrix progress and authored tests do not prove NX-B1 publication or joined acceptance. WP-PP remains the sole proposed producer; HR-06 waits for an actual compatible publication receipt. |
+
+A concrete receipt-total discrepancy was found during compilation: the initial consolidated receipt contained only two entries. The parent's final saved file now contains all three calls, distinguishes the failed attempt and agrees with the report and ledger. This documentary correction required no proof rerun. The credit specialist's two-call resource snapshot is expressly evidence at its earlier handoff, not the final total; use the consolidated receipt for final resource reporting.
+
+## Required review and evidence gaps
+
+1. **Retain D2 STOP.** Owner review and explicit continuation precede feature work. Static reuse findings and proposed extensions are preparation outcomes, not permission to start a package.
+2. **Resolve C09 as the recorded feasibility conflict.** R-243 requires querying every difference with reminders. The recorded source/installed guard blocks the concrete issued-invoice case: correct signed 10 hours versus incorrect later HealthRoster 9 hours. D8 remains answered: show the reason, preserve I1/T0 and correct only if Office decides the signed Timesheet is wrong. A truthful blocked display is not a mail/reminder pass. The recommendation grants no invoice-lock bypass, new exception or forced correction.
+3. **Review current successors and the protected-release failure before publication.** The later `bea90218`/`d021e6aa` bodies have not been reconciled with the audited pins. The observed failed UPGRADE holds future runtime/Office publication. Any repair belongs to a reviewed forward-fix release; no manual ledger/database repair is authorised by this handback.
+4. **Keep installed-owner qualification incomplete.** Full ledger/closure equality, the unexecuted 26 shared routines, five selected body reconciliations, complete caller/legacy-writer/retirement census and enabled trigger coverage remain gaps. Allocate them to a subsequent approved checkpoint; do not extend this document review or rerun failed WP-0 proofs.
+5. **Freeze the physical WHOLE/request and scoped-credit contracts before their consumers.** Distinct P0 physical family, exact retirement, initial approval/A0 units, stable credit provenance/resume, legal issue-child registration, ordinary-original Unissue fencing and immutable support-member separation are still required. Keep uniqueness, pinned Authorise/Unauthorise, protected boundaries and Policy X intact.
+6. **Do not treat the setup proposals as an executable D5 manifest.** JS-1–JS-7 reserve some identifiers and logical states; credit and NEXT proposals define money and cases. Vacancy, actual before values, missing native booking/Timesheet/TSFIN/workflow/signature/invoice/document IDs, legal creation actions, exact counts and any permitted delivery sink remain unfrozen. No setup is currently approval-ready for mutation merely because these proposals exist.
+7. **Keep publication and activation gates separate.** The proposed future plan correctly uses small disabled TEST batches, D3 for every promotion and release, reviewed GitHub source, protected database release and release:test with fresh agent-created evidence and ordered Workers. Real TEST acceptance needs D5; MyTMS submission needs D6; activation needs D7 and compatible published NEXT. Mechanical clean PostgreSQL 17 contract generation/sealing is the sole future local database step, one small container per release removed immediately, with no local acceptance programme.
+8. **Preserve the exclusive Banking integration barrier.** One integrator must reconcile shared final bodies, native hooks, recursive include order and generated contract. Publish WP-PP early after its own proofs; reserve Banking's final integration window exclusively and finish its approved install/readback before dependent HealthRoster batches. A textually clean merge cannot prove retained SQL authority. No Banking message or builder change is implied.
+
+No new owner question or business-rule change is proposed by this review. The recorded review points and missing evidence remain visible for the existing owner checkpoint.
+
+## Closing record
+
+Changed: WP0_DOCUMENT_REVIEW.md only. Tests, source proofs, hosted calls, database writes, local databases, Docker actions, Git writes, deployment, activation and Banking messages by this reviewer: zero. No secret, auth state, raw business data or signed binary was read or saved. Existing files and dirty work were preserved.
+
+**STOP retained.** The parent completes administrative handback verification; substantive failed and unproved items remain held for the owner review.
