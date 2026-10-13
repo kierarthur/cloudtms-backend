@@ -16674,6 +16674,25 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_resolution_changed_evidence_v1(p_actor_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "b4e6f8fd839b189ed103861ebc30c4c8129ad75642f02424a1aea8dd9c645265"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_resolution_command_v1(p_actor_id uuid, p_action text, p_args jsonb, p_readback boolean)",
       "parallel": "u",
       "volatility": "v",
@@ -19766,7 +19785,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "4ae426aa51183b774e3e8126352bcdd5fd7633936c69880d74d5e5f84a886282"
+      "definition_sha256": "3da92df9dc98041fb351b55d27124c612016462a408dae1db9226d646f9bf61c"
     },
     {
       "acl": [
@@ -35624,7 +35643,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "001152156c63f58ff6a4319417e11cf69061272e69a3bcf80b8cf7e63137695c"
+      "definition_sha256": "ba6360d35246d0bedce52ab1619e2780c4c688bc4dd7903837c87ac72784cd40"
     },
     {
       "acl": [
@@ -35649,7 +35668,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a4cda69379253e04bbb0821d5bfba23c9d59d2da112bb32ac7deadebdee1b1e5"
+      "definition_sha256": "481cea9bf9e342a5816b9d5d53995f08b6c783a1aa3df884b056d0af5a835268"
     },
     {
       "acl": [

@@ -48,6 +48,7 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  'private.bpay_next_resolution_changed_evidence_v1(uuid,jsonb)',
   // WB28 exact frozen scope and immutable per-unit defaults.
   "private.bpay_next_selection_remembered_unit_v1(bigint,bigint,boolean,boolean)",
   "private.bpay_next_selection_reset_matches_v1(uuid,uuid,uuid,uuid,uuid,uuid)",
@@ -246,6 +247,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  'private.bpay_next_resolution_changed_evidence_v1(uuid,jsonb)': ['current_setting','jsonb_agg','octet_length','to_jsonb','private.bpay_next_resolution_scope_validate_v1','private.bpay_next_component_resolution_basis_v1','private.bpay_next_resolution_context_v1','x','y'],
   "private.bpay_next_selection_remembered_unit_v1(bigint,bigint,boolean,boolean)": [],
   "private.bpay_next_selection_reset_matches_v1(uuid,uuid,uuid,uuid,uuid,uuid)": [],
   "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)": ["transaction_timestamp","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_selection_memory_resolve_v1","jsonb_object_keys","octet_length","bool_or","sum","filter","by","distinct"],
@@ -314,7 +316,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
   'private.bpay_next_case_allocation_plan_v1(jsonb)':["private.bpay_next_treatment_approval_revision_v1",'private.bpay_next_case_restructure_origin_v1','private.bpay_next_case_restructure_period_free_v1','private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_retry_prepare_job_v1","private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
-  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_decisions_clear_command_v1","private.bpay_next_resolution_command_v1","private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
+  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_resolution_changed_evidence_v1","private.bpay_next_decisions_clear_command_v1","private.bpay_next_resolution_command_v1","private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
   "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
 
@@ -1877,7 +1879,14 @@ function closedHistoryTemplates(part,file){
 function closedWorkbenchTemplates(part,file){
   if(part.signature!=='private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)')return false;
   const variables=new Set(['V_SQL','V_WHERE','V_PROJECTION','V_TUPLE','V_SEEK','V_KEY','V_ORDER','V_OP','V_DESC']);
-  const allowed=new Set([...variables,'CASE','WHEN','THEN','ELSE','END','IN','AND','LIKE','P_KIND','V_SORT','V_SECTION','V_DESC','V_OP','REPLACE','V_ANCHOR_PAGE','OR']);
+  const refresh=/\bv_refresh_identity\b/i.test(part.text);
+  if(refresh){
+    const identity="v_refresh_identity:=case when p_kind='CANDIDATES' then 's.candidate_id=($10->>-1)::uuid' when p_kind='CANDIDATE_GROUPS' then 's.presentation_key=($10->>-2)||'':''||($10->>-1)' else 'i.id=($10->>-1)::uuid' end;";
+    const executable=sqlWithoutComments(part.text);
+    if((executable.match(/\bv_refresh_identity\s*(?::=|=)/gi)??[]).length!==1||!executable.replace(/\s+/g,' ').includes(identity)||! /\bv_refresh_before\s+boolean\s*:=\s*false\s*;/i.test(executable))return false;
+    variables.add('V_REFRESH_IDENTITY');
+  }
+  const allowed=new Set([...variables,'CASE','WHEN','THEN','ELSE','END','IN','AND','LIKE','P_KIND','V_SORT','V_SECTION','V_DESC','V_OP','REPLACE','V_ANCHOR_PAGE','OR','V_REFRESH_BEFORE']);
   let producers=0;
   const declaration=part.text.match(/\bdeclare\b([\s\S]*?)\bbegin\b/i);
   if(!declaration)return false;
@@ -1925,6 +1934,14 @@ function closedWorkbenchExecution(statement){
   const at=flat.search(/\bexecute\b/i);if(at<0)return false;
   const execution=flat.slice(at);
   const values='v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\\+1';
+  // WB34: exactly three additional read executions. All keys/scalars remain USING
+  // values; fragment producers and the three immutable PK predicates are checked above.
+  const refreshExecutions=new Set([
+    "execute 'select '||v_key||v_sql||v_where||' and '||v_refresh_identity into v_refresh_live using v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit+1;",
+    "execute 'select exists(select 1'||v_sql||v_where||' and '||v_tuple||case when v_desc then '<=' else '>=' end||v_seek||')' into v_member using v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit+1;",
+    "execute 'select '||v_key||v_sql||v_where||' and '||v_tuple||case when v_desc then '>' else '<' end||v_seek||' order by '|| replace(v_order,case when v_desc then ' desc' else ' asc' end,case when v_desc then ' asc' else ' desc' end)||' limit 1' into v_refresh_live using v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit+1;"
+  ]);
+  if(refreshExecutions.has(execution))return true;
   if(new RegExp('^execute v_sql using '+values+' loop\\b','i').test(execution))return /for v_row in\s*$/i.test(flat.slice(0,at));
   // WB15 native first-visible group seeks use only the closed reader template and typed bindings.
   if(new RegExp("^execute 'select '\\|\\|v_key\\|\\|v_sql\\|\\|v_where\\|\\|' and s\\.presentation_key=\\$7' into p_after using "+values+'\\s*;?$','i').test(execution))return true;
@@ -2365,6 +2382,12 @@ export function verifyBpayNextSourceGates(){
   if(readyReaderParts.length!==1||sqlWithoutComments(readyReaderParts[0].text).split(readyPrefix).length!==2||(sqlWithoutComments(readyReaderSource).match(/\b(?:min|max)\s*\(\s*ex\s*\)/gi)??[]).length!==1)
     throw Error('BPAY_NEXT_READY_PREFIX_TYPE_UNCLASSIFIED');
   const readyPrefixColumns=new Map([['EX','NUMERIC']]);
+  const readyReaderFiles=new Set([readyReaderFile,'supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql']);
+  for(const file of readyReaderFiles){
+    const source=read(file).replaceAll('\r\n','\n'),parts=executableParts(source,file).filter(part=>part.signature===readyReaderSignature);
+    if(parts.length!==1||sqlWithoutComments(parts[0].text).split(readyPrefix).length!==2||(sqlWithoutComments(source).match(/\b(?:min|max)\s*\(\s*ex\s*\)/gi)??[]).length!==1)
+      throw Error('BPAY_NEXT_READY_PREFIX_TYPE_UNCLASSIFIED');
+  }
   const sourceFailures=[];
   for(const file of sources){
     const source=read(file);assertSqlWriteBoundaries(source,file);assertNextExactNumericTypes(source,file);
@@ -2376,7 +2399,7 @@ export function verifyBpayNextSourceGates(){
           const isProjection=routineDefinitions(text,file).includes('private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)');
           assertSpecialConstructs(text,file,file===discardRowFile?discardRowHazards:baselineHazards,isProjection?projectionMembershipColumns:new Map());
         }
-      } else if(file===readyReaderFile){
+      } else if(readyReaderFiles.has(file)){
         const normalized=source.replaceAll('\r\n','\n');
         for(const statement of scanManagedSql(normalized).statements){
           const text=normalized.slice(statement.start,statement.end);

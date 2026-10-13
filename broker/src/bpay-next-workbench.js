@@ -9,7 +9,7 @@ const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{1
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','CANDIDATE_ESTIMATE','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
 const EXPORT_SORT_FIELDS={"C_NAME":["text","boolean","text","uuid","uuid"],"C_AMOUNT":["boolean","decimal","uuid","uuid"],"C_DEDUCTIONS":["boolean","text","boolean","text","uuid","uuid"],"C_STATUS":["boolean","boolean","text","text","uuid","uuid"],"G_PAYMENT":["boolean","date","text","uuid","uuid"],"G_CLIENT":["boolean","text","text","uuid","uuid"],"G_CHANNEL":["boolean","text","text","uuid","uuid"],"G_AMOUNT":["boolean","decimal","text","uuid","uuid"],"G_DEDUCTIONS":["boolean","text","uuid","uuid"],"G_REASON":["small","text","text","uuid","uuid"]};
 const EXPORT_SORTS=Object.keys(EXPORT_SORT_FIELDS).flatMap(k=>[k+'_ASC',k+'_DESC']);
-const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',count_selection:'countSelection?',selection_memory:'selectionMemory?',progress_after:'progressCursor?',estimate:'estimate?',after:'cursor?',limit:'limit'};
+const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',count_selection:'countSelection?',selection_memory:'selectionMemory?',progress_after:'progressCursor?',estimate:'estimate?',refresh_anchor:'refreshAnchor?',after:'cursor?',limit:'limit'};
 export const BPAY_NEXT_WORKBENCH_PAGE_INPUTS=Object.freeze(Object.fromEntries(KINDS.map(k=>[k,Object.freeze({...COMMON})])));
 // Generated once from the explicit SQL projections; reviewed source is durable.
 export const ROWS=Object.freeze({
@@ -422,7 +422,7 @@ function memoryIntent(v){
  const schemas={candidates:{candidate_id:'uuid',selected:'boolean'},works:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',selected:'boolean',mode:'mode'},components:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',approved_line_id:'uuid',selected:'boolean'},cases:{candidate_id:'uuid',case_component_id:'uuid',selected:'boolean'}};
  return Object.entries(schemas).every(([kind,schema])=>Array.isArray(v[kind])&&v[kind].length<=1000&&v[kind].every(row=>exact(row,Object.keys(schema))&&Object.entries(schema).every(([k,t])=>t==='mode'?['ALL','SUBSET'].includes(row[k]):field(row[k],t)))&&new Set(v[kind].map(row=>row.case_component_id??row.approved_line_id??row.work_id??row.candidate_id)).size===v[kind].length)&&ENCODER.encode(JSON.stringify(v)).byteLength<=32768;
 }
-const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','limit','progress_after','estimate'].includes(k))));
+const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','refresh_anchor','limit','progress_after','estimate'].includes(k))));
 const CONTEXT={kind:'kind',agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',official_pay_date:'date',workbench_revision:'integer',adoption_revision:'integer',scope:'scope',selection_memory:'selectionMemory'};
 const REFUSAL={ok:'false',error_code:'refusal',retryable:'boolean',reload_required:'boolean',workbench_revision:'integer?',complete:'false',projection_state:'adoption?',dirty_candidate_count:'integer?',dirty_group_count:'integer?',pending_task_count:'integer?'};
 const FAILURE_CODES=['BPAY_NEXT_CHOICE_CONTEXT_CHANGED','BPAY_NEXT_MODULE_NOT_ACTIVE','BPAY_NEXT_WORKBENCH_FORBIDDEN','BPAY_NEXT_WORKBENCH_UNAUTHORIZED','BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED','BPAY_NEXT_WORKBENCH_REQUEST_INVALID','BPAY_NEXT_WORKBENCH_RESPONSE_INVALID','BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE','BPAY_NEXT_WORKBENCH_CURSOR_STALE','BPAY_NEXT_WORKBENCH_PROJECTION_NOT_CURRENT','BPAY_NEXT_WORKBENCH_DATE_UNAVAILABLE','BPAY_NEXT_WORKBENCH_UNAVAILABLE'];
@@ -464,6 +464,7 @@ function field(v,type){
   if(type==='scope')return shape(v,SCOPE);
   if(type==='sourceKind')return ['ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT'].includes(v);
   if(type==='estimate')return estimateInput(v);
+  if(type==='refreshAnchor')return exact(v,Object.hasOwn(v??{},'before')?['context','key','before']:['context','key'])&&(!Object.hasOwn(v,'before')||typeof v.before==='boolean')&&contextValid(v.context)&&validKey(v.key,v.context.kind,v.context.scope.sort);
   if(type==='cursor')return exact(v,['context','key'])&&contextValid(v.context)&&((v.context.kind==='CANDIDATE_ESTIMATE'&&v.key===null)||validKey(v.key,v.context.kind,v.context.scope.sort));
   if(type==='refusal')return FAILURE_CODES.includes(v);
   return false;
@@ -474,7 +475,7 @@ function estimateVersions(v){return Array.isArray(v)&&v.length<=8000&&v.every(ro
 function estimateScope(v){return exact(v,['descriptor','expected_financial_view_revision','versions'])&&estimateDescriptor(v.descriptor)&&field(v.expected_financial_view_revision,'integer')&&estimateVersions(v.versions);}
 function estimateInput(v){return exact(v,['descriptor','expected_financial_view_revision','versions','verify_only'])&&estimateDescriptor(v.descriptor)&&field(v.expected_financial_view_revision,'integer')&&(v.versions===null||estimateVersions(v.versions))&&typeof v.verify_only==='boolean';}
 function contextValid(v){if(v?.kind==='CANDIDATE_ESTIMATE'&&Object.hasOwn(v,'estimate_scope')){const base={...v};delete base.estimate_scope;return shape(base,CONTEXT)&&estimateScope(v.estimate_scope);}return shape(v,CONTEXT);}
-function estimateQueryBytes(args){const query=new URLSearchParams({kind:'CANDIDATE_ESTIMATE'});for(const [key,value]of Object.entries(args))if(value!==null)query.set(key,['after','count_selection','progress_after','selection_memory','estimate'].includes(key)?JSON.stringify(value):String(value));return ENCODER.encode('/api/banking/pay/next/workbench-page?'+query.toString()).byteLength;}
+function estimateQueryBytes(args){const query=new URLSearchParams({kind:'CANDIDATE_ESTIMATE'});for(const [key,value]of Object.entries(args))if(value!==null)query.set(key,['after','refresh_anchor','count_selection','progress_after','selection_memory','estimate'].includes(key)?JSON.stringify(value):String(value));return ENCODER.encode('/api/banking/pay/next/workbench-page?'+query.toString()).byteLength;}
 function validateEstimate(payload,args,actorId){
  const invalid=()=>{throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');},money=['estimated_gross_source_ex_vat','estimated_gross_target_ex_vat','estimated_gross_deductions','estimated_net_additions','estimated_net_deductions'];
  if(!exact(payload,['ok','kind','state','context','workbench_revision','complete','rows','next_cursor','verification_cursor',...money,'financial_view_revision_before','financial_view_revision_after','affected_candidate_count','page_receipt'])||payload.ok!==true||payload.kind!=='CANDIDATE_ESTIMATE'||!['ESTIMATE','OUTDATED','PENDING'].includes(payload.state)||!contextValid(payload.context)||payload.context.kind!==payload.kind||payload.workbench_revision!==payload.context.workbench_revision||typeof payload.complete!=='boolean'||!Array.isArray(payload.rows)||payload.rows.length>args.limit||payload.affected_candidate_count!=='1'||!field(payload.financial_view_revision_before,'integer')||payload.financial_view_revision_before!==payload.financial_view_revision_after)invalid();
@@ -531,7 +532,7 @@ export function normalizeWorkbenchInput(kind,input={}){
   if(kind==='RESOLUTION_CONTEXT')return normalizeResolutionInput(input);
   if(kind==='SNOOZES')return normalizeSnoozesInput(input);
   if(!KINDS.includes(kind)||!record(input)||Reflect.ownKeys(input).some(k=>typeof k!=='string'||!Object.hasOwn(COMMON,k)))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-  const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,selection_memory:null,progress_after:null,estimate:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
+  const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,selection_memory:null,progress_after:null,estimate:null,refresh_anchor:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
   for(const k of ['candidate_id','client_id','item_id'])if(typeof args[k]==='string')args[k]=args[k].toLowerCase();
   if(args.count_selection!==null&&(kind!=='HEADER'||args.section!=='READY')||kind!=='CANDIDATES'&&String(args.sort).startsWith('STATUS_'))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   if(kind==='CANDIDATE_ESTIMATE'?(args.estimate===null||args.candidate_id===null||args.section!=='READY'||args.estimate.versions===null&&(args.after!==null||args.estimate.verify_only)):args.estimate!==null)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
@@ -544,6 +545,7 @@ export function normalizeWorkbenchInput(kind,input={}){
   if(kind==='CANDIDATES')args.section='READY';else if(kind==='ACTION_REQUIRED')args.section='ACTION';else if(kind==='BLOCKED')args.section='BLOCKED';
   if(kind==='PICK_CANDIDATES'&&args.sort!=='NAME_ASC')throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   const scope=Object.fromEntries(Object.keys(SCOPE).map(k=>[k,args[k]]));
+  if(args.refresh_anchor!==null&&(args.after!==null||!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES'].includes(kind)||args.refresh_anchor.context.kind!==kind||!same(args.refresh_anchor.context.scope,scope)))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
   if(args.after!==null&&(args.after.context.kind!==kind||!same(args.after.context.scope,scope)))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
   return args;
 }
@@ -596,7 +598,7 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
   if(kind==='CANDIDATE_ESTIMATE')return validateEstimate(payload,args,actorId);
   if(!exact(payload,['ok','kind','workbench_revision','complete','context','rows','next_cursor','page_receipt','affected_candidate_count'])||payload.ok!==true||payload.kind!==kind||!field(payload.workbench_revision,'integer')||typeof payload.complete!=='boolean'||!shape(payload.context,CONTEXT)||payload.context.kind!==kind||payload.context.workbench_revision!==payload.workbench_revision||!Array.isArray(payload.rows)||payload.rows.length>args.limit||(kind==='HEADER'&&payload.rows.length!==1)||(!payload.complete&&payload.rows.length===0)||(kind==='ISSUE_DETAIL'?!field(payload.affected_candidate_count,'integer'):payload.affected_candidate_count!==null))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
   const scope=Object.fromEntries(Object.keys(SCOPE).map(k=>[k,args[k]])),context=payload.context;
-  if(!same(context.scope,scope)||(actorId!==null&&context.actor_user_id!==actorId)||args.after!==null&&!same(args.after.context,context))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+  if(!same(context.scope,scope)||(actorId!==null&&context.actor_user_id!==actorId)||args.after!==null&&!same(args.after.context,context)||args.refresh_anchor!==null&&(!same(Object.fromEntries(Object.entries(args.refresh_anchor.context).filter(([k])=>!['workbench_revision','adoption_revision'].includes(k))),Object.fromEntries(Object.entries(context).filter(([k])=>!['workbench_revision','adoption_revision'].includes(k))))||BigInt(args.refresh_anchor.context.workbench_revision)>BigInt(context.workbench_revision)||BigInt(args.refresh_anchor.context.adoption_revision)>BigInt(context.adoption_revision)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
   const memory=args.selection_memory;
   if(memory!==null&&!same(context.selection_memory,memory)||context.selection_memory.scope.client_id!==args.client_id||context.selection_memory.scope.channel!==args.channel||context.selection_memory.scope.candidate_id!==null&&context.selection_memory.scope.candidate_id!==args.candidate_id)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
   let prior=args.after?.key??null,last=null;const seen=new Set();
@@ -708,7 +710,7 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
         if(!exact(value,['ok','kind','context'])||value.ok!==true||value.kind!=='SNOOZE_CHECK')throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
         validateBpayNextSnoozeContext(value.context,args);return json(200,value,'SNOOZE_CHECK');})(),timeout]);
     }
-    const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'||key==='count_selection'||key==='progress_after'||key==='selection_memory'||key==='estimate'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
+    const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'||key==='refresh_anchor'||key==='count_selection'||key==='progress_after'||key==='selection_memory'||key==='estimate'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
     const args=normalizeWorkbenchInput(kind,input);readKind=kind;if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
     if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
     controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},BPAY_NEXT_WORKBENCH_LIMITS.timeoutMs);});
@@ -897,7 +899,7 @@ export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
     const response=await dependencies.workbenchCommandRpc(args,body.readback,{actorUserId:user.id.toLowerCase(),signal:controller.signal,action:body.action});
     if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     const value=await readWorkbenchJson(response,controller.signal,131072);
-    if(!response.ok){const native=resolutionCommandNativeFault(value);if(native){attempted=false;throw native;}throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+    if(!response.ok){const native=resolutionCommandNativeFault(value,args,user.id.toLowerCase());if(native){attempted=false;throw native;}throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
     const receipt=validateResolutionCommandReceipt(value,body.action,args);
     if(!body.readback&&!receipt.received)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     return json(200,{ok:true,action:body.action,receipt});
@@ -928,7 +930,7 @@ export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
    return json(200,{ok:true,action:'RETRY_WORK_JOB',receipt});
   };
   return await Promise.race([send(),timeout]);
- }catch(e){return json(e?.status??503,{ok:false,error_code:e?.code??'BPAY_NEXT_WORKBENCH_UNAVAILABLE',retryable:e?.retryable===true,outcome_unknown:attempted});}
+ }catch(e){let payload={ok:false,error_code:e?.code??'BPAY_NEXT_WORKBENCH_UNAVAILABLE',retryable:e?.retryable===true,outcome_unknown:attempted};if(!attempted&&e?.changedEvidence){payload.changed_evidence=e.changedEvidence;if(ENCODER.encode(JSON.stringify(payload)).byteLength>125000)payload.changed_evidence={request_id:e.changedEvidence.request_id,candidate_id:e.changedEvidence.candidate_id,state:'UNAVAILABLE',mappings:null,facts:null,unavailable_code:'BPAY_NEXT_RESOLUTION_CONTEXT_UNAVAILABLE'};}return json(e?.status??503,payload);}
  finally{clearTimeout(timer);abort();request.signal?.removeEventListener('abort',abort);}
 }
 export function createBpayNextWorkJobFailureRpc({baseUrl,headers,fetchImpl=fetch}){

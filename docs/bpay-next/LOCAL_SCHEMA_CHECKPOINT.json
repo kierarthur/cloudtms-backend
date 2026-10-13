@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "9a193962bf69e7081da24be2c8bc5ab35b668155",
-  "compiledAtUtc": "2026-10-13T07:23:57.727Z",
+  "sourceCommit": "497fb059f186de97ae7df4d5fc7558ff229c0b9f",
+  "compiledAtUtc": "2026-10-13T10:23:57.342Z",
   "inventory": {
     "migrations": [
       {
@@ -8984,6 +8984,27 @@
         "sha256": "9d5def4656866ff86fb0cf6f75b58ae3617b516549701bbfca8675ad02308b97"
       },
       {
+        "path": "supabase/repeatable/13102026_0926_banking_pay_next_resolution_changed_evidence_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_0926_banking_pay_next_resolution_changed_evidence_v1.sql"
+        ],
+        "sha256": "8d33e82e522dba597acd5dd08142e8a871e50b26ec713d7c1f3b3c762543c0ac"
+      },
+      {
+        "path": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql"
+        ],
+        "sha256": "7e0fd811e5852d255cf142967655214a9cbc68c861dca65fc505b857faedbfa8"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql"
+        ],
+        "sha256": "924bb48ff053c0394619758962765c1ee077be33fb2cf7b0e91dc7edd2c9ad0b"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8993,12 +9014,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql",
-        "sha256": "faa8f3c99658fb38f474e08c393a2b32d85d97333f796bd76a035b6ec1892972"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -9022,11 +9038,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+        "path": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
         "paths": [
-          "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql"
+          "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql"
         ],
-        "sha256": "9d5def4656866ff86fb0cf6f75b58ae3617b516549701bbfca8675ad02308b97"
+        "sha256": "924bb48ff053c0394619758962765c1ee077be33fb2cf7b0e91dc7edd2c9ad0b"
       }
     ]
   },
