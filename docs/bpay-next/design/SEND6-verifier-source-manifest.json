@@ -1,0 +1,46 @@
+{
+  "baseHead": "3abaed3e4f74644bf229c2b58d7e0805ea7284fb",
+  "scope": "Only verification/fixture forward fixes and diagnostic instrumentation; no product routine replacement",
+  "files": [
+    {
+      "path": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+      "sha256": "2f42c3cb26114dfcd62e6b3fa623aef11ad8d75a1c3b85aca218ec94763a5449"
+    },
+    {
+      "path": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "sha256": "ad10ad9f3cadeab76dd049f6a6cc002b8ce2217d3e77a913357ed9ee9f453763"
+    },
+    {
+      "path": "supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql",
+      "sha256": "282fbcdfdd33ed4d59c6e5a0acfbd929c8a2c2c96229d64bdef8c927085abfd4"
+    },
+    {
+      "path": "supabase/verification/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "sha256": "9043ca8e254cdea64867c9df0ec7fdf55a21b2c29ae12907b2b87becea4ec646"
+    },
+    {
+      "path": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "sha256": "d0c8ceb99c7539c77c2463e6e46c2f7b26f7c59d1e1adac5423a7ebee49f8a3e"
+    },
+    {
+      "path": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "sha256": "98b819b77ff45889f559c772e10e5a4763d6272cdda86119f560cac1031dd557"
+    },
+    {
+      "path": "supabase/verification/17092026_0110_weekly_source_banking_pay_absence_v1.sql",
+      "sha256": "fd28eaad9f4997f54b929201b369f2932cb32d571dec3d6f9bb08d44d5c282f7"
+    },
+    {
+      "path": "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "sha256": "f2ef1a14d4402b871b38af4868c1ea0babb0e1de81aeca3b8c602d7d03ea9264"
+    },
+    {
+      "path": "supabase/verification/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "sha256": "c019a151500b71a1dc30c6d7e212fa5f91b057c6735fa1f005cd007da810e5b4"
+    },
+    {
+      "path": "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "440296e29e7fb7b090d7e86b2369d349892f05184ffb7dab400987784eef5684"
+    }
+  ]
+}

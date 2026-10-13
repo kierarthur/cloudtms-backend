@@ -217,7 +217,12 @@ create function pg_temp.publish_head(
   p_head_id uuid,p_bundle_id uuid,p_decision_id uuid,p_receipt_id uuid,
   p_token uuid,p_candidate_id uuid,p_contract_id uuid,p_root uuid,p_family text,
   p_version integer,p_certified_zero boolean,p_component_count integer
-) returns void language sql as $function$
+) returns void language plpgsql as $function$
+begin
+  -- Construct the declared inventory before flushing its two native guards.
+  -- Only these named constraints are deferred; every other guard stays active.
+  set constraints public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert deferred;
   insert into public.weekly_source_entitlement_decision_bundles(
     decision_bundle_id,bundle_revision,agency_id,candidate_id,week_ending_date,
     bundle_kind,source_root_family_booking_id,source_root_timesheet_id,
@@ -232,18 +237,7 @@ create function pg_temp.publish_head(
     pg_catalog.sha256(pg_catalog.convert_to('revision','UTF8')),
     pg_catalog.sha256(pg_catalog.convert_to('choice','UTF8')),
     pg_catalog.sha256(pg_catalog.convert_to('before','UTF8')),
-    array[p_head_id]::uuid[],'COMMITTED',pg_catalog.transaction_timestamp());
-  insert into private.weekly_source_entitlement_publication_receipts(
-    id,decision_bundle_id,bundle_revision,request_digest,publication_mode,
-    candidate_id,member_root_ids,member_family_booking_ids,member_root_versions,
-    head_ids,scope_change_tx_token,decision_id,decided_by_user_id,
-    census_json,proof_json
-  ) values (
-    p_receipt_id,p_bundle_id,1,
-    pg_catalog.sha256(pg_catalog.convert_to('receipt-'||p_head_id::text,'UTF8')),
-    'IMMEDIATE',p_candidate_id,array[p_root]::uuid[],array[p_family]::text[],
-    array[p_version]::integer[],array[p_head_id]::uuid[],p_token,p_decision_id,
-    'c7000000-0000-4000-8000-000000000001','{}'::jsonb,'{}'::jsonb);
+    array[p_head_id]::uuid[],'PROPOSED',null);
   insert into public.weekly_source_entitlement_heads(
     id,authority_kind,agency_id,candidate_id,contract_id,week_ending_date,
     root_timesheet_id,root_family_booking_id,root_timesheet_version,head_revision,
@@ -254,19 +248,13 @@ create function pg_temp.publish_head(
   ) values (
     p_head_id,'LOCKED_FINAL_SOURCE','c7000000-0000-4000-8000-0000000000a1',
     p_candidate_id,p_contract_id,'2026-09-13',p_root,p_family,p_version,1,
-    'COMMITTED_CURRENT',p_certified_zero,p_component_count,
+    'STAGED',p_certified_zero,p_component_count,
     pg_catalog.sha256(pg_catalog.convert_to('entitlement-'||p_head_id::text,'UTF8')),
     pg_catalog.sha256(pg_catalog.convert_to('inventory-'||p_head_id::text,'UTF8')),
     pg_catalog.sha256(pg_catalog.convert_to('generation-'||p_head_id::text,'UTF8')),
     p_bundle_id,1,p_decision_id,'c7000000-0000-4000-8000-000000000001',
-    pg_catalog.transaction_timestamp(),
-    pg_catalog.sha256(pg_catalog.convert_to('receipt-'||p_head_id::text,'UTF8')),
-    p_token);
-  -- A non-zero head really carries its components, so the relation's own
-  -- inventory rule (component_count = the number of component rows, and
-  -- certified_zero = the count being zero) is satisfied for real rather than
-  -- declared.  It is a DEFERRABLE constraint trigger, so a rollback-contained
-  -- proof never fires it; the rows are here so the state is genuine anyway.
+    null,null,null);
+  -- Populate the real declared inventory before publishing the head.
   insert into public.weekly_source_entitlement_head_components(
     head_id,component_ordinal,component_id,component_kind,economic_key_type,
     economic_key_value,component_member_identity,pay_ex_vat,exclude_from_pay,
@@ -280,9 +268,30 @@ create function pg_temp.publish_head(
          pg_catalog.sha256(pg_catalog.convert_to(
            'component-'||p_head_id::text||'-'||ordinal.value::text,'UTF8'))
   from pg_catalog.generate_series(1,p_component_count) as ordinal(value);
+  insert into private.weekly_source_entitlement_publication_receipts(
+    id,decision_bundle_id,bundle_revision,request_digest,publication_mode,
+    candidate_id,member_root_ids,member_family_booking_ids,member_root_versions,
+    head_ids,scope_change_tx_token,decision_id,decided_by_user_id,
+    census_json,proof_json
+  ) values (
+    p_receipt_id,p_bundle_id,1,
+    pg_catalog.sha256(pg_catalog.convert_to('receipt-'||p_head_id::text,'UTF8')),
+    'IMMEDIATE',p_candidate_id,array[p_root]::uuid[],array[p_family]::text[],
+    array[p_version]::integer[],array[p_head_id]::uuid[],p_token,p_decision_id,
+    'c7000000-0000-4000-8000-000000000001','{}'::jsonb,'{}'::jsonb);
+  update public.weekly_source_entitlement_heads
+   set state='COMMITTED_CURRENT',committed_at_utc=pg_catalog.transaction_timestamp(),
+    publication_receipt_digest=pg_catalog.sha256(pg_catalog.convert_to('receipt-'||p_head_id::text,'UTF8')),
+    scope_change_tx_token=p_token where id=p_head_id;
+  update public.weekly_source_entitlement_decision_bundles
+   set state='COMMITTED',committed_at_utc=pg_catalog.transaction_timestamp()
+   where decision_bundle_id=p_bundle_id and bundle_revision=1;
   update public.weekly_source_root_authorisations
      set current_entitlement_head_id=p_head_id
    where root_timesheet_id=p_root and withdrawn_at_utc is null;
+  set constraints public.weekly_source_entitlement_head_inventory_assert,
+    public.weekly_source_entitlement_head_component_inventory_assert immediate;
+end;
 $function$;
 
 -- ---------------------------------------------------------------------------
@@ -296,8 +305,8 @@ insert into public.settings_defaults(
 on conflict (id) do update set
   candidate_manager_email_templates_sha256=excluded.candidate_manager_email_templates_sha256;
 
-insert into public.tms_users(id,email,role,is_active,password_hash)
-values ('c7000000-0000-4000-8000-000000000001','wp07c-office@example.test','admin',true,'not-a-login');
+insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key)
+values ('c7000000-0000-4000-8000-000000000001','wp07c-office@example.test','admin',true,'not-a-login',true,false);
 insert into public.clients(id,name) values ('c7000000-0000-4000-8000-000000000002','WP07C Client');
 insert into public.client_settings(client_id,vat_rate_pct,effective_from)
 values ('c7000000-0000-4000-8000-000000000002',20,'2026-01-01');
@@ -438,14 +447,13 @@ begin
     'c7000000-0000-4000-8000-000000000d01','c7000000-0000-4000-8000-000000000c01',
     'c7000000-0000-4000-8000-000000000e01','c7000000-0000-4000-8000-000000000101',
     'c7000000-0000-4000-8000-000000000201',v_root,'WP07C-BK-01',1,false,2);
-  -- component_count is declared 0 above only because the head's own inventory
-  -- assert compares it with the component rows; the certified_zero flag is what
-  -- distinguishes this case from the WP-07 verifier's, and it is FALSE here.
   perform pg_temp.assert_true(
-    (select not head_row.certified_zero from public.weekly_source_entitlement_heads head_row
-      where head_row.id='c7000000-0000-4000-8000-000000000f01') is not true
-    or true,
-    'fixture note');
+    (select not head_row.certified_zero and head_row.component_count=2
+      and (select count(*) from public.weekly_source_entitlement_head_components component_row
+        where component_row.head_id=head_row.id)=2
+     from public.weekly_source_entitlement_heads head_row
+      where head_row.id='c7000000-0000-4000-8000-000000000f01'),
+    'fixture: the non-zero published head carries its two actual components');
 
   v_before:=pg_temp.write_fingerprint();
   v_signature:=pg_temp.current_signature(v_root);
@@ -1134,7 +1142,9 @@ begin
     'A3: the selector must still consume only current committed heads');
   -- The three CALL-ONLY owners are pinned by hash, because nothing else in this
   -- Source reader-repair programme is editing them. Authorise retains the
-  -- reviewed H1/H2 successor (03102026_0500); invalidate retains the reviewed
+  -- reviewed H1/H2 plus final shift-query exclusion (11102026_2223);
+  -- SEND6 canonical fresh PG17/LF read-back is SEND6-PG17-pin-readback.json.
+  -- Invalidate retains the reviewed
   -- factual legacy callback boundary (04102026_0555). Their exact LF body
   -- hashes independently match the restricted native installed read-back.
   -- Unauthorise retains the PHD-022 source-owner correction below. This fixture
@@ -1152,7 +1162,7 @@ begin
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='timesheet_authorise_generic_atomic')
-    ='643b1bf291f93b2ab92e5b9b76c8ef69'
+    ='52e97f5bd9ea4fca77030dee69e942e0'
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='private' and p.proname='pay_workbench_scope_invalidate_v1')

@@ -9,7 +9,7 @@ test('withdrawal verifier retains the unchanged ordinary Unauthorise owner pin',
 });
 
 test('withdrawal verifier requires the exact jointly reviewed current CALL-only successors', () => {
-  assert.match(fixture, /p\.proname='timesheet_authorise_generic_atomic'\)\s*='643b1bf291f93b2ab92e5b9b76c8ef69'/);
+  assert.match(fixture, /p\.proname='timesheet_authorise_generic_atomic'\)\s*='52e97f5bd9ea4fca77030dee69e942e0'/);
   assert.match(fixture, /p\.proname='pay_workbench_scope_invalidate_v1'\)\s*='31dff4424dcbf63f476451f59d9025f4'/);
   assert.doesNotMatch(fixture, /cd5f05df8e4be03dec4b3f1bc56adaa6|0d26de465bc221f6a41043fb27c8d797/);
 });

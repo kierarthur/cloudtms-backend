@@ -1,0 +1,34 @@
+{
+  "database": "banking_modal_v2_test",
+  "server": "17.11 (Debian 17.11-1.pgdg12+2)",
+  "sourceHead": "3abaed3e4f74644bf229c2b58d7e0805ea7284fb",
+  "canonicalDefinitionSource": "fresh NEW PostgreSQL17, canonical committed LF parents",
+  "rows": [
+    {
+      "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "finalPhysical": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "committedLfBlob": "10ebafbdf4b0a10d11fdd642c40418d6ba1f825f",
+      "owner": "cloudtms_bpay_local_owner",
+      "sha256": "658e71e3e01090063771ee43109021579a8e701b5a11d0e1df9a9b72ca78d0d7",
+      "body_md5": "1f17c36a59276eb1a7832bcb71d1088c",
+      "cr_bytes": 0,
+      "configuration": [
+        "search_path=public"
+      ],
+      "security_definer": true
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "finalPhysical": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "committedLfBlob": "5bb94ce851ab8ae683c5a8046362cea28a9aa1e3",
+      "owner": "cloudtms_bpay_local_owner",
+      "sha256": "08eacfead86a4ee04fd39602846a5cf92cdb5f2c31e09fe8ff6b24520aa8eae6",
+      "body_md5": "52e97f5bd9ea4fca77030dee69e942e0",
+      "cr_bytes": 0,
+      "configuration": [
+        "search_path=public"
+      ],
+      "security_definer": true
+    }
+  ]
+}

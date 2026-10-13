@@ -221,8 +221,8 @@ insert into public.settings_defaults(
 on conflict (id) do update set
   candidate_manager_email_templates_sha256=excluded.candidate_manager_email_templates_sha256;
 
-insert into public.tms_users(id,email,role,is_active,password_hash)
-values ('b7000000-0000-4000-8000-000000000001','wp07-office@example.test','admin',true,'not-a-login');
+insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key)
+values ('b7000000-0000-4000-8000-000000000001','wp07-office@example.test','admin',true,'not-a-login',true,false);
 insert into public.tms_users(id,email,role,is_active,password_hash)
 values ('b7000000-0000-4000-8000-00000000000e','wp07-inactive@example.test','admin',false,'not-a-login');
 insert into public.clients(id,name) values ('b7000000-0000-4000-8000-000000000002','WP07 Client');
@@ -1683,6 +1683,19 @@ begin
     pg_catalog.sha256(pg_catalog.convert_to('before','UTF8')),
     array['b7000000-0000-4000-8000-000000000fc1']::uuid[],'COMMITTED',
     pg_catalog.transaction_timestamp());
+  -- D8's committed zero head has a real matching immutable receipt.
+  insert into private.weekly_source_entitlement_publication_receipts(
+   id,decision_bundle_id,bundle_revision,request_digest,publication_mode,candidate_id,
+   member_root_ids,member_family_booking_ids,member_root_versions,head_ids,
+   scope_change_tx_token,decision_id,decided_by_user_id,census_json,proof_json)
+  values(
+   'b7000000-0000-4000-8000-000000000ff1','b7000000-0000-4000-8000-000000000fb1',1,
+   pg_catalog.sha256(pg_catalog.convert_to('receipt','UTF8')),'IMMEDIATE',
+   'b7000000-0000-4000-8000-000000000106',
+   array['b7000000-0000-4000-8000-000000000306']::uuid[],array['WP07-BK-06']::text[],
+   array[2]::integer[],array['b7000000-0000-4000-8000-000000000fc1']::uuid[],
+   'b7000000-0000-4000-8000-000000000fe1','b7000000-0000-4000-8000-000000000fd1',
+   'b7000000-0000-4000-8000-000000000001','{}'::jsonb,'{}'::jsonb);
   insert into public.weekly_source_entitlement_heads(
     id,authority_kind,agency_id,candidate_id,contract_id,week_ending_date,
     root_timesheet_id,root_family_booking_id,root_timesheet_version,head_revision,
@@ -2409,6 +2422,7 @@ $verify_workbench_result_no_draft$;
 do $verify_ordering_rule$
 declare
   v_definition text;
+  v_executable_definition text;
   v_result jsonb;
   v_signature text;
   v_root uuid:='b7000000-0000-4000-8000-000000000313';
@@ -2425,22 +2439,41 @@ declare
   v_closure_pass integer;
   v_broad_triggers text;
   v_xid_before bigint;
+  v_owner_frame_xmin text;
   v_xid_after bigint;
 begin
   v_definition:=pg_catalog.pg_get_functiondef(
     'public.weekly_source_first_authorisation_withdraw_v1(uuid,uuid,text,uuid)'::regprocedure);
 
+  -- Use the installed-writer census's existing lexical mask: executable
+  -- tokens stay visible, while ORDERING RULE comments cannot look like COMMIT.
+  -- The original plain-English rule and every executed transaction proof below
+  -- continue to use the unmasked definition/native writer.
+  v_executable_definition:=pg_catalog.regexp_replace(
+    pg_catalog.regexp_replace(v_definition, '\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$', ' ', 'g'),
+    '(/\*(?:[^*]|\*+[^*/])*\*+/)|(--[^\n]*)|([Ee]''(?:[^''\\]|\\.|'''')*'')|(''(?:[^'']|'''')*'')',
+    ' ', 'g');
+
   -- (i) one transaction, statically.  An EXCEPTION handler would put a write in
   -- a sub-transaction that can roll back on its own; transaction control or an
   -- out-of-transaction call would separate the two writes outright.
   perform pg_temp.assert_true(
-    v_definition !~* '\mexception\s+when\m',
+    v_executable_definition !~* '\mexception\s+when\M',
     'ordering rule: the withdrawal owner must contain no EXCEPTION handler, '
     ||'because that would place a write in a sub-transaction');
   perform pg_temp.assert_true(
-    v_definition !~* '\m(commit|rollback|start\s+transaction|savepoint|dblink|dblink_exec|pg_background_launch)\m',
+    v_executable_definition !~* '\m(commit|rollback|start\s+transaction|savepoint|dblink|dblink_exec|pg_background_launch)\M',
     'ordering rule: the withdrawal owner must contain no transaction control '
     ||'and no out-of-transaction call');
+  -- Keep the original detection of forbidden tokens in quoted SQL, too.
+  -- The same one-pass mask exposes literals separately from prose comments.
+  perform pg_temp.assert_true(
+    not exists(select 1 from pg_catalog.regexp_matches(
+      pg_catalog.regexp_replace(v_definition, '\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$', ' ', 'g'),
+      '(/\*(?:[^*]|\*+[^*/])*\*+/)|(--[^\n]*)|([Ee]''(?:[^''\\]|\\.|'''')*'')|(''(?:[^'']|'''')*'')', 'g') as literal_parts(parts)
+      where coalesce(parts[3],parts[4],'') ~*
+        '\m(exception\s+when|commit|rollback|start\s+transaction|savepoint|dblink|dblink_exec|pg_background_launch)\M'),
+    'ordering rule: quoted executable SQL must contain no separate-frame or external-call token');
   perform pg_temp.assert_true(
     v_definition ~ 'ORDERING RULE',
     'ordering rule: the rule must be stated in plain English at the site');
@@ -2472,6 +2505,11 @@ begin
   perform pg_temp.drain_workbench_jobs();
   v_signature:=pg_temp.current_signature(v_root);
   v_xid_before:=pg_catalog.pg_current_xact_id()::text::bigint;
+  -- ON_ERROR_ROLLBACK may place this DO in a caller SAVEPOINT. Its writing
+  -- frame, not the outer transaction ID, is the exact native-owner reference.
+  create temporary table ws_verify_withdrawal_frame_probe(marker integer) on commit drop;
+  insert into pg_temp.ws_verify_withdrawal_frame_probe values(1)
+    returning xmin::text into v_owner_frame_xmin;
   v_result:=public.weekly_source_first_authorisation_withdraw_v1(
     v_root,v_root,v_signature,'b7000000-0000-4000-8000-000000000001');
   v_xid_after:=pg_catalog.pg_current_xact_id()::text::bigint;
@@ -2503,7 +2541,7 @@ begin
   -- carry a later xid; that sub-transaction still rolls back with this one,
   -- which section 13 proves by forcing a failure after it.  This owner's own two
   -- writes — the withdrawal marks and the audit entry — must share one xid, and
-  -- that xid must be the top-level one.
+  -- that xid must equal this caller frame's independently written probe.
   perform pg_temp.assert_true(
     v_xmin_timesheet is not null
     and v_xmin_timesheet::bigint>=v_xid_before
@@ -2520,11 +2558,13 @@ begin
     ||' audit='||coalesce(v_xmin_audit,'<null>'));
   perform pg_temp.assert_true(
     v_xmin_authorisation=v_xmin_audit
-    and v_xmin_authorisation::bigint=v_xid_before,
+    and v_owner_frame_xmin is not null
+    and v_xmin_authorisation=v_owner_frame_xmin,
     'ordering rule: the withdrawal marks and the audit entry must be written by '
     ||'the withdrawal owner''s OWN frame, not a sub-transaction — authorisation='
     ||coalesce(v_xmin_authorisation,'<null>')||' audit='
-    ||coalesce(v_xmin_audit,'<null>')||' top-level xid='||v_xid_before::text);
+    ||coalesce(v_xmin_audit,'<null>')||' caller frame='||v_owner_frame_xmin
+    ||' top-level xid='||v_xid_before::text);
 
   -- (iii) the window test, EXECUTED (WP-25).  A concurrent session can never see
   -- the order, because PostgreSQL has no dirty read at any isolation level.  The

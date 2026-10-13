@@ -105,8 +105,8 @@ insert into public.settings_defaults(
 on conflict (id) do update set
   candidate_manager_email_templates_sha256=excluded.candidate_manager_email_templates_sha256;
 
-insert into public.tms_users(id,email,role,is_active,password_hash)
-values ('21000000-0000-4000-8000-000000000001','wp21-office@example.test','admin',true,'not-a-login');
+insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key)
+values ('21000000-0000-4000-8000-000000000001','wp21-office@example.test','admin',true,'not-a-login',true,false);
 insert into public.clients(id,name) values ('21000000-0000-4000-8000-000000000002','WP21 Client');
 insert into public.client_settings(client_id,vat_rate_pct,effective_from)
 values ('21000000-0000-4000-8000-000000000002',20,'2026-01-01');

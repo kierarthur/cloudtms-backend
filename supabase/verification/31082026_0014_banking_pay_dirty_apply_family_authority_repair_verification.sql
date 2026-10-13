@@ -62,7 +62,7 @@ BEGIN
       -- forms yield the same value and both pins carry it.  The expected
       -- proconfig below is deliberately unchanged: only the definition moved.
       ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)'::regprocedure,
-       'd05fe8c683bfe6dc5a850d57360a2d1ef303fd184773cafb2a8a6ebbf018f21f'::text,
+       '658e71e3e01090063771ee43109021579a8e701b5a11d0e1df9a9b72ca78d0d7'::text,
        ARRAY['search_path=public']::text[]),
       ('public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
       ('public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
