@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: lawful actual complete before/after proposal/native proof and full DTO mapper are byte identical
+ok 1 - lawful actual complete before/after proposal/native proof and full DTO mapper are byte identical
+  ---
+  duration_ms: 3630.1368
+  type: 'test'
+  ...
+# Subtest: exact unsupported-backslash row and unsupported object refuse before selection
+ok 2 - exact unsupported-backslash row and unsupported object refuse before selection
+  ---
+  duration_ms: 31.8592
+  type: 'test'
+  ...
+# Subtest: exact FF/FE lossy-name counterexamples refuse instead of collapsing
+ok 3 - exact FF/FE lossy-name counterexamples refuse instead of collapsing
+  ---
+  duration_ms: 15.0776
+  type: 'test'
+  ...
+# Subtest: valid Unicode raw pathname roundtrip remains exact and Unicode path drift refuses
+ok 4 - valid Unicode raw pathname roundtrip remains exact and Unicode path drift refuses
+  ---
+  duration_ms: 25.6737
+  type: 'test'
+  ...
+# Subtest: no internal empty record, unsupported path or missing terminal NUL can be omitted
+ok 5 - no internal empty record, unsupported path or missing terminal NUL can be omitted
+  ---
+  duration_ms: 19.7133
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3928.7285
