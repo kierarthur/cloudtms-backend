@@ -4107,7 +4107,7 @@ ITEM and D01–D05 BUILT/REVIEWED. design/SP-04-routing.md; design/SP-04-complet
 
 ## WB-45 — Independent target decisions and residual quote consumption
 
-Seq 139; Rates/shared kernel · WB-C; reviewer R2; current requested-feature status MISSING.
+Seq 139; Rates/shared kernel · WB-C; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: R2.md appended WB-45
 
@@ -4137,9 +4137,11 @@ Same-day DAY+NIGHT independent decisions and two arbitrary Additional codes; man
 
 Foundation D05/D06/D07/D09 implementation a52a45116f45785a94a17da11f23c95ed4303a4c; independent reviews/WB-45-source-review.md PASS. Whole ITEM PARTLY_DONE pending WB-29 assigned consumer joins. Joined app acceptance AUTHORED_NOT_RUN.
 
+13 October final completion supersedes historical partial notes above. Whole WB-45 BUILT_REVIEWED; required shared consumer joins reconciled. BE d23544f600187821ca24195a09a78648bdcc9c4e; FE f0d71fa73b038a95f81086ba84a3e55fb98c6f4e. Independent final Ready A4/SOURCE PASS and full-card reconciliation linked in CSV. Local schema-only evidence; revised hosted installation and every joined app journey remain NOT_RUN. Later WB30–34/CM card work remains in its own sequence.
+
 ## WB-29 — NEXT rate-resolution owner (payment-treatment decisions on approved work)
 
-Seq 140; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 140; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Explicit EX08 needs/events and existing resolver precedence; extract independent/residual quote contract WB45.
 
@@ -4147,7 +4149,7 @@ Dependencies: F-04, F-06, WB-06, WB-08, WB-19, EX-08, DR-38, WB-45; successor po
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-29-D20 | DOC: EX-08 Candidate channel/Umbrella event → WB-29 exact durable needs | PARTLY_DONE | Explicit need event/version and exact finite current scope; A→B→A/Umbrella-change transitions deterministic; mismatch alone is not need and compatible move/source differences remain resolver Ready. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-29-D20 | DOC: EX-08 Candidate channel/Umbrella event → WB-29 exact durable needs | BUILT_REVIEWED | Explicit need event/version and exact finite current scope; A→B→A/Umbrella-change transitions deterministic; mismatch alone is not need and compatible move/source differences remain resolver Ready. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4187,6 +4189,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - No missing-rate case ever appears here; such a Timesheet was refused at authorisation (J1c, WB-01).
 
 First explicit-need batch implementation 8ae064e947d1552926d8aef0f78271cc985cc9a2; SOURCE PASS reviews/WB-29-needs-source-review.md. ITEM/D20 PARTLY_DONE: own-treatment mapping and W2/context/accepted/quote/snooze joins remain; all app acceptance AUTHORED_NOT_RUN.
+
+13 October final completion supersedes historical partial notes above. Whole WB-29 BUILT_REVIEWED; required shared consumer joins reconciled. BE d23544f600187821ca24195a09a78648bdcc9c4e; FE f0d71fa73b038a95f81086ba84a3e55fb98c6f4e. Independent final Ready A4/SOURCE PASS and full-card reconciliation linked in CSV. Local schema-only evidence; revised hosted installation and every joined app journey remain NOT_RUN. Later WB30–34/CM card work remains in its own sequence.
 
 ## WB-30 — Review suggested rates window (bucket groups, linked Timesheets)
 

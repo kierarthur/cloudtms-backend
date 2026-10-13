@@ -1,7 +1,7 @@
 {
   "item": "WB-29",
   "sequence": 140,
-  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "implementationCommit": "d23544f600187821ca24195a09a78648bdcc9c4e",
   "previousReadyDisplayCommit": "16d1d76bb67b1e1f8d9df2b4f0ff63c7a691554a",
   "files": [
     {
@@ -46,7 +46,8 @@
     "nodeCheck": "changed Worker/source gate/Office syntax PASS",
     "contractSealAndCoupling": "25717a10a932938360964678518334267dc439159585720ed77536bc8e712dc2 PASS"
   },
-  "screen": "Real local fixed-read captures produced; independent A4 review pending. FE changes not yet committed.",
+  "screen": "A4 PASS final actual local captures; own per-SCR WB29/review.md preserves earlier review history.",
   "businessAcceptance": "AUTHORED_NOT_RUN",
-  "wholeItem": "PARTLY_DONE; full-card reconciliation and screen closure remain"
+  "wholeItem": "BUILT_REVIEWED; full-card source reconciliation complete, all joined app journeys AUTHORED_NOT_RUN",
+  "frontendImplementationCommit": "f0d71fa73b038a95f81086ba84a3e55fb98c6f4e"
 }
