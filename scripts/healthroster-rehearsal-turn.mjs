@@ -45,6 +45,25 @@ export function assertNoProtectedRelease(){
 }
 
 export async function withSharedRehearsalTurn({task,progressPath,work},deps={}){
+ const now=deps.now??(()=>Date.now());
+ const lastBusy=deps.readLastBusy??(()=>{
+  if(!progressPath||!fs.existsSync(progressPath))return null;
+  let latest=null;
+  for(const line of fs.readFileSync(progressPath,'utf8').split(/\r?\n/)){
+   if(!line.startsWith('SEND_7 turn: '))continue;
+   const record=JSON.parse(line.slice('SEND_7 turn: '.length));
+   if(record.chat==='HealthRoster'&&record.status==='BUSY_NO_TRIAL'){
+    const time=Date.parse(record.checkedAt);if(!Number.isFinite(time))throw Error('TURN_BUSY_TIMESTAMP_INVALID');
+    latest=Math.max(latest??time,time);
+   }
+  }
+  return latest;
+ });
+ const busyAt=lastBusy();
+ if(busyAt!==null){
+  if(!Number.isFinite(busyAt))throw Error('TURN_BUSY_TIMESTAMP_INVALID');
+  if(now()<busyAt+300000)return {status:'COOLDOWN_NO_CONNECTION',nextEligibleAt:new Date(busyAt+300000).toISOString()};
+ }
  const check=deps.checkProtectedRelease??assertNoProtectedRelease;
  const open=deps.openTurn??(()=>new OwnedTurnConnection(agencyChildEnvironment('healthroster_rehearsal_turn')));
  const log=deps.log??(record=>{fs.appendFileSync(progressPath,'\nSEND_7 turn: '+JSON.stringify(record)+'\n');});

@@ -7,3 +7,13 @@ test('separate turn survives before, trial, rollback and fresh after, then unloc
 test('trial failure still unlocks and closes before propagating its error',async()=>{const {events,deps}=fixture([['t'],['t'],['t']]);await assert.rejects(withSharedRehearsalTurn({task:'test',work(){throw Error('source failure');}},deps),/source failure/);assert.ok(events.includes('select pg_advisory_unlock(20261013, 1);'));assert.equal(events.at(-2),'close');assert.equal(events.at(-1),'RELEASED');});
 test('wrong physical or release identity refuses work and releases acquired turn',async()=>{const {events,deps}=fixture([['t'],['f'],['t']]);await assert.rejects(withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps),/TURN_TEST_IDENTITY_OR_RELEASE_REFUSED/);assert.equal(events.at(-2),'close');assert.equal(events.at(-1),'RELEASED');});
 test('active protected release opens no database connection',async()=>{const {events,deps}=fixture([]);deps.checkProtectedRelease=()=>{throw Error('PROTECTED_RELEASE_RUNNING_HOLD');};await assert.rejects(withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps),/PROTECTED_RELEASE_RUNNING_HOLD/);assert.deepEqual(events,[]);});
+test('persisted busy cooldown refuses an early retry before release check or connection',async()=>{
+ const {events,deps}=fixture([]);deps.now=()=>1000000;deps.readLastBusy=()=>900000;
+ const result=await withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps);
+ assert.equal(result.status,'COOLDOWN_NO_CONNECTION');assert.equal(result.nextEligibleAt,new Date(1200000).toISOString());assert.deepEqual(events,[]);
+});
+test('exact five-minute boundary permits a fresh protected check and non-waiting lock attempt',async()=>{
+ const {events,deps}=fixture([['f']]);deps.now=()=>1200000;deps.readLastBusy=()=>900000;
+ const result=await withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps);
+ assert.equal(result.status,'BUSY_NO_TRIAL');assert.equal(events[0],'releaseCheck');assert.equal(events.at(-1),'close');
+});
