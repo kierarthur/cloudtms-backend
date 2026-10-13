@@ -1,0 +1,114 @@
+{
+  "status": "PROPOSAL_SOURCE_ONLY_NOT_INSTALLED",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+      "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c",
+      "bytes": 147499
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+      "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a",
+      "bytes": 47513
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+      "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d",
+      "bytes": 30544
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+      "bytes": 37250
+    },
+    {
+      "path": "supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+      "sha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4",
+      "bytes": 856
+    },
+    {
+      "path": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+      "sha256": "9d7028abe3c49d6fd7448600efcdff9bca2a36c6d9a8cc79bb781bb52d8aeb39",
+      "bytes": 30683
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9",
+      "bytes": 88623
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "bytes": 101268
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "bytes": 113770
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+      "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5",
+      "bytes": 24851
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "bytes": 229113
+    },
+    {
+      "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "bytes": 16112
+    },
+    {
+      "path": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "bytes": 3770
+    }
+  ],
+  "ordinary_invoice_apply_edits_body_after_removing_two_declared_hunks_is_identical": true,
+  "unchanged_invoice_move_atomic_body_sha256": "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb",
+  "outputs": [
+    {
+      "path": "source/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "bytes": 16376
+    },
+    {
+      "path": "source/01_invoice_apply_edits.sqlinc",
+      "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "bytes": 148338
+    },
+    {
+      "path": "source/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "bytes": 9625
+    },
+    {
+      "path": "source/03_invoice_issue_validate.sqlinc",
+      "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+      "bytes": 38834
+    },
+    {
+      "path": "source/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+      "bytes": 27516
+    },
+    {
+      "path": "source/05_invoice_edit_context.sqlinc",
+      "sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc",
+      "bytes": 10853
+    },
+    {
+      "path": "source/06_native_acl.sqlinc",
+      "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+      "bytes": 857
+    },
+    {
+      "path": "source/07_new_owner_acl.sqlinc",
+      "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+      "bytes": 1025
+    }
+  ]
+}

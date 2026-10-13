@@ -1,0 +1,2320 @@
+{
+  "contract": "HEALTHROSTER_VERIFIER_SAFETY_REVIEW_0_55_V1",
+  "scope": "current-release.json verificationFiles indices 0 through 55 inclusive",
+  "source_root_head": "547c74da5f0a05b09297c042bc7f3cc0c0105b85",
+  "saved_disk_authoritative": true,
+  "release_file": "supabase/release/current-release.json",
+  "release_file_sha256": "e3e94adc74a404f1f600a8e2843bdce00c6dcaf1ca14ec3f3e9f7511b20cb31d",
+  "review_date": "2026-10-13",
+  "full_body_read_count": 56,
+  "unique_nested_support_body_read_count": 4,
+  "reviewed_verifier_bytes": 631533,
+  "safe_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55
+  ],
+  "exclude_indices": [
+    31
+  ],
+  "actual_database_calls_performed": false,
+  "verifiers_executed": false,
+  "feature_or_financial_acceptance_claimed": false,
+  "rehearsal_conditions": [
+    "Root alone executes under the authorized agency TEST outer rollback; preserved native triggers remain enabled.",
+    "Exclude index31, with no substituted global claim or queue drain.",
+    "Transaction wrappers, psql includes/display directives must be translated by the existing reviewed rehearsal packager; classification does not authorize durable commits.",
+    "Outbox/job enqueue rows remain uncommitted and disappear on rollback; no external executor, network, payment, settlement, email sender or worker drain is added.",
+    "Historical synthetic manager/signature/render/document fixture evidence qualifies only its historical DB contract assertions; it is not accepted as new native HealthRoster document/financial proof.",
+    "Application callee source has been followed for reached effects, including the dynamic PAPER enqueue, explicit empty sync, missing-session and invalid-authority refusal boundaries. Catalogue routine-definition and ACL identity strings are not execution."
+  ],
+  "branch_review": [
+    {
+      "boundary": "Candidate Daily generation/availability/reconciliation",
+      "effect": "DB canonical authority, receipts and outbox rows only; no external Sheet execution.",
+      "files": [
+        {
+          "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af"
+        },
+        {
+          "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5"
+        },
+        {
+          "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338"
+        }
+      ]
+    },
+    {
+      "boundary": "Emergency effect receipt",
+      "effect": "Exact fixture receipt create/replay/UNKNOWN completion; external execution payload is returned, never executed by SQL.",
+      "files": [
+        {
+          "file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+          "sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8"
+        }
+      ]
+    },
+    {
+      "boundary": "PAPER and document planning",
+      "effect": "Dynamic call targets enqueue DB held mail/document records. BUILD_MANIFEST advances only fixture chunks, producing queued render work; no renderer/queue drain.",
+      "files": [
+        {
+          "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+        },
+        {
+          "file": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+          "sha256": "9f47ab97b5e520074576c77bcfeee8867211663a4d7be0c8667aff9f7c73845a"
+        },
+        {
+          "file": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+          "sha256": "f9b0b2071b12bd355502b63d4c04e8aaaf2f550ef090757cace630fc494f7d85"
+        },
+        {
+          "file": "supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql",
+          "sha256": "64bf02f3967218cf22c7db9d62dca650f6e40491609d5a593bcafb8256680563"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+          "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e"
+        }
+      ]
+    },
+    {
+      "boundary": "Empty-scope Workbench reconciliation",
+      "effect": "Exact empty scope returns before finance-case writes, then updates only empty build/canonical-stage attestation.",
+      "files": [
+        {
+          "file": "supabase/repeatable/04082026_1210_pay_sync_overpayments_from_preview.sql",
+          "sha256": "822341c3a71e2c5146ce6c1857169edee55581bcf133316c734722d6dca04521"
+        },
+        {
+          "file": "supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql",
+          "sha256": "c61d38bece93d97853fb6592dc12cdbbfd0219edb5075ac38b7443cee05dbe33"
+        },
+        {
+          "file": "supabase/repeatable/29082026_1153_banking_pay_empty_scope_reconciliation_v1.sql",
+          "sha256": "be98f1bd248bab9e97daf18420cc159cabe7e54dc006d21fe04fc343f2b7969f"
+        }
+      ]
+    },
+    {
+      "boundary": "Fixture-scoped invalid source claim",
+      "effect": "Both session and Candidate parameters are fixture identities; expected invalid-authority raise is inside a rollback subtransaction. No actual attempt execution.",
+      "files": [
+        {
+          "file": "supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql",
+          "sha256": "95c1fa5eba6af5a10102a4479d631efb58c94ec21882dcf47f86886d02cf7a56"
+        }
+      ]
+    },
+    {
+      "boundary": "Missing-session modal mutations",
+      "effect": "Modal context requires a real session before selection writes; all tested session UUIDs are absent.",
+      "files": [
+        {
+          "file": "supabase/repeatable/28082026_1159_banking_pay_modal_structure_v2.sql",
+          "sha256": "8625eb0975f87edbc55af1bd8153ab911574334d12d59a91d68fb4ef14c35425"
+        }
+      ]
+    },
+    {
+      "boundary": "All stored SQL external primitive cross-check",
+      "effect": "Baseline/repeatable external primitive search found only denied-command regexp literals/comments, no executable HTTP/dblink/COPY PROGRAM sender on reached paths. This supplements, not substitutes, full verifier and reached-callee review.",
+      "files": [
+        {
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_05.sql",
+          "sha256": "47eef189e2ea92b15f3ee60538bd3ff12d555bedbe9ea0bf2de199198a71c827"
+        }
+      ]
+    }
+  ],
+  "callee_source_file_fingerprints": [
+    {
+      "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+      "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+      "sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+      "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sha256": "180bd448cc1d6a6b11f0b69e6ce1c83321d44712be7b0b096f2c3232bfd4359f"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+    },
+    {
+      "file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+    },
+    {
+      "file": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+      "sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005"
+    },
+    {
+      "file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+      "sha256": "df4298cab586719b93c7eb7edba22527cc9e9f8f8db17625043d7301b3b11371"
+    },
+    {
+      "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "sha256": "e96db0e91e88cab1009c504e2acc1bb0b03ebc57277295bed4ac6280fac7e541"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+      "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+      "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+      "sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8"
+    },
+    {
+      "file": "supabase/repeatable/30082026_0454_candidate_daily_emergency_window_row_v1.sql",
+      "sha256": "9d4792fc0a90acad50262117334e93bc7771206b04de10d481898aa998125a4d"
+    },
+    {
+      "file": "supabase/repeatable/07102026_1151_candidate_emergency_roster_snapshot.sql",
+      "sha256": "9acfa3bd8adfb9b54bae9729e9eb8b6516cc7137531f087bda70cc1b85e15870"
+    },
+    {
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+      "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "sha256": "e9d216505943acf21aba1620843e414fb30f08c35dd0c952e84b2ee3d2c600ea"
+    },
+    {
+      "file": "supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql",
+      "sha256": "be11550a2e08b2538b254dc6f26255fe55cb040243139f162830c01dbff8ffaa"
+    },
+    {
+      "file": "supabase/repeatable/30082026_1414_candidate_paper_return_pack_complete_v2.sql",
+      "sha256": "932c7c119d024b176420c47fe6eaf8c6a21a44fb254999580dc47d5f75089e9a"
+    },
+    {
+      "file": "supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql",
+      "sha256": "49fc1fe0b7c2740ce86a046ce525c7d123b6f350309cb4b2afcfcce156bac04d"
+    },
+    {
+      "file": "supabase/repeatable/04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql",
+      "sha256": "0720d34076a6422cb0a29d0cf13880c19678573a4dbd9fe2f0cc4c48a7a9f4a8"
+    },
+    {
+      "file": "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+      "sha256": "49ae5f6729122e9f611096b458df1b52e2fd2be211a14a4b32f3837f591a6037"
+    },
+    {
+      "file": "supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql",
+      "sha256": "79bccad6c156fcbc0de904f0a480a056b934be41cc3a3b3f91f4cda90a361898"
+    },
+    {
+      "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+    },
+    {
+      "file": "supabase/repeatable/26082026_1607_candidate_daily_membership_ready_activation_v1.sql",
+      "sha256": "83014efeb3517e0e11a4ef2ac4681a4967474a7f2d3555fa2199c7150791ace5"
+    },
+    {
+      "file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+      "sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "sha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1"
+    },
+    {
+      "file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+      "sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+      "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
+      "sha256": "0a01a651a1a01641b9bff29f016836c5a7fd98c525be5a2a9d914254fb5f34ab"
+    },
+    {
+      "file": "supabase/repeatable/31082026_1025_candidate_daily_active_window_projection_readiness_v1.sql",
+      "sha256": "82c4e792d3f6dc367fdace058e10a580cedaa56e1c493fa7eb644478dc0211cf"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+      "sha256": "2cada6bede4b1073ecbbd588b57706714ce6466e0ac42679fb0760fb3aa98de4"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql",
+      "sha256": "d6e1f92f8e158f1ee698dc48ea1488831d426c56ec0e60192f7f45175baee304"
+    },
+    {
+      "file": "supabase/repeatable/28082026_2203_candidate_daily_inapplicable_break_context_v1.sql",
+      "sha256": "8e8f8c4e759bfc0c170abbc1e12d099c1f928c2c8191a7412af448d7ffd6e274"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+      "sha256": "e1d94c93a9a0b17f4e932d37af3028ff2bcd03f0c1b48ceb9729f3dad2379be4"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "sha256": "24284276bdbe3d45301e329d5c7a1ad93dc9264d535c0bd6de1570999bb9b749"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "sha256": "6da37413a8f5ac0e462cf8f4d1c331859a382b3e9b54dcb702aebedf95edfdf3"
+    },
+    {
+      "file": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+      "sha256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5"
+    },
+    {
+      "file": "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+      "sha256": "8b6d78ca518aeb780bfd2a32430511bda3c53978adac3c80916de76121624d3f"
+    },
+    {
+      "file": "supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql",
+      "sha256": "c4c750e434cbfa8d6c60cb276dafd0a9a00f9ac6d21b3578aeb722c2013a96da"
+    },
+    {
+      "file": "supabase/repeatable/04012026_enqueue_ts_financials_priority.sql",
+      "sha256": "98df9b7f415a25d5d6e740f7357a9091b20b14537334bee3af69d9ea6ce4da95"
+    },
+    {
+      "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67"
+    },
+    {
+      "file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+      "sha256": "a75a774a205e5f6c57b0b6d35b43f07e8c137105055044c2c276c18263b04067"
+    },
+    {
+      "file": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+      "sha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648"
+    },
+    {
+      "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+      "sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9"
+    },
+    {
+      "file": "supabase/repeatable/21072026_1235_38_tsfin_write_snapshots_and_complete.sql",
+      "sha256": "175903f7dd7b6f48af6209cf29173a5e05372d05ba8c59d87399833e1d008693"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0115_candidate_daily_projection_expired_lease_recovery_v1.sql",
+      "sha256": "07c2779fa33ea2524391ee68fff816b67310115242756c26fe32ae07703d185b"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0245_banking_pay_modal_capability_v2.sql",
+      "sha256": "9d7dd90989869e645c5e53c6f04429540c625f75241809d28c3356e9ff274cea"
+    },
+    {
+      "file": "supabase/repeatable/31082026_2230_banking_pay_action_required_amount_presentation_v1.sql",
+      "sha256": "fac331dad866c65d8034d07a2ebd91b0f9a51fc97c066984c0b5e5d36a70704e"
+    },
+    {
+      "file": "supabase/repeatable/28082026_2201_banking_pay_modal_blocked_pages.sql",
+      "sha256": "c60c7a903611b39f37cc15f206f659af59c56c901cb0a8cf9b5bd94ca686ba33"
+    },
+    {
+      "file": "supabase/repeatable/01092026_1058_banking_pay_candidate_current_payable_groups_v2.sql",
+      "sha256": "15973f0f00839b80f9fce104d2c8a93a9b839c6da4592d2d2fccceca2a121d01"
+    },
+    {
+      "file": "supabase/repeatable/28082026_2035_banking_pay_modal_summary.sql",
+      "sha256": "cad82e3a46a965e9d4544cd0072590c909d30058e780d647cd2349d834eef855"
+    },
+    {
+      "file": "supabase/repeatable/28082026_2313_banking_pay_modal_candidate_selection_response.sql",
+      "sha256": "058fbb5a271bd85913cb4829688e08f13702ed153fbb82e8627793a17c9ca702"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0002_banking_pay_modal_global_selection_response.sql",
+      "sha256": "e260f344bd8fd40f4a9c2d637e687e9c206b5db8af7630f390d2765144c19ba3"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0114_banking_pay_modal_group_selection_response.sql",
+      "sha256": "c335f36f528d3490c1273acd1ebe054cccc924626b3cc6061fe82b8499fcb1e8"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0019_banking_pay_modal_row_selection_response.sql",
+      "sha256": "60f9039d469244b139933ae296cfe7cbc78438a567481a83673c6ce9502ba98d"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql",
+      "sha256": "04b259926c2a71000d1d78d37153fda1788c610c3a4060c78f9f64f9685aac9d"
+    },
+    {
+      "file": "supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql",
+      "sha256": "95c1fa5eba6af5a10102a4479d631efb58c94ec21882dcf47f86886d02cf7a56"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0719_banking_pay_discarded_session_blocker_repair_v1.sql",
+      "sha256": "2323404c9b434612829ff70bfac6ff7391d76be59e9fb5467af6f6376ede17d4"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0801_banking_pay_version_one_refresh_v1.sql",
+      "sha256": "a9e76419f196560b37be73e7a51d6718fe377d1d14d5885d172b49cfc378fb3b"
+    },
+    {
+      "file": "supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql",
+      "sha256": "7f88a2894d15ad69a02d061a2da2340f5bd0536d018c1cd99c97c80c7486af43"
+    },
+    {
+      "file": "supabase/repeatable/04082026_1210_pay_sync_overpayments_from_preview.sql",
+      "sha256": "822341c3a71e2c5146ce6c1857169edee55581bcf133316c734722d6dca04521"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+      "sha256": "5defbbf5ca2c6eeac284edf06c5216d6ccc7a5511119eb103808b28d962359ec"
+    },
+    {
+      "file": "supabase/repeatable/29082026_1312_banking_pay_invalid_source_authority_repair_v1.sql",
+      "sha256": "499234d4092b7ce2ed18d2a2b6b69eee8344c768353b4c3b5fc1c71fb8695879"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1232_banking_pay_modal_certified_projection.sql",
+      "sha256": "02a4d7e2cfccc11834155e34139838efa1fda62f9c31d19e4f0c1ede4a5289d0"
+    },
+    {
+      "file": "supabase/repeatable/28082026_1915_banking_pay_modal_finance_tasks.sql",
+      "sha256": "eb9cc63ef56b4713f4ac80bb24f9c01c88f3ee045acf4f667c74f4bb5993dde4"
+    },
+    {
+      "file": "supabase/repeatable/30082026_0315_candidate_daily_information_directory_v1.sql",
+      "sha256": "15a297b4e89c6830dfcb57d464d75c4c7da1745e2a5346ef61ce1426d82859b9"
+    },
+    {
+      "file": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+      "sha256": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86"
+    },
+    {
+      "file": "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+      "sha256": "e762c129dabf49696e41773d642298d9f4cbc8ca2a209399f8be20b75d44ffae"
+    }
+  ],
+  "verifiers": [
+    {
+      "index": 0,
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "bytes": 8958,
+      "sha256": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture generation publication and missing-choice reconciliation mutate only Candidate Daily database authority/receipts and projection outbox rows. No Sheet executor or queue claim/drain is invoked.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_reconciliation_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "source_file_sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+          "line": 8
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 1,
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "bytes": 8443,
+      "sha256": "05e9676d1b3f86f9085ec9355906c37f60aa8965a70acb3590de14fb0650c6c1",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture legacy availability writes canonical preferences, command receipts and projection outbox rows only. The legacy owner contains no external executor.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_legacy_availability_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "source_file_sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 2,
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "bytes": 15672,
+      "sha256": "54efab0b929e2e8da38a161908e3a9ceba88fada326f5296a33f11c703903232",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Session-owned notification page, visibility and SNAPSHOT/DELETE/UNDO/MARK_READ owners read or mutate database inbox/operation rows. push_state is fixture data; no push dispatch or claim owner is invoked.",
+      "calls": [
+        {
+          "name": "private._candidate_home_summary_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+          "source_file_sha256": "180bd448cc1d6a6b11f0b69e6ce1c83321d44712be7b0b096f2c3232bfd4359f",
+          "line": 2
+        },
+        {
+          "name": "private.candidate_notification_visible_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "source_file_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+          "line": 3
+        },
+        {
+          "name": "public.candidate_app_notifications_manage_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "source_file_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+          "line": 127
+        },
+        {
+          "name": "public.candidate_app_notifications_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "source_file_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+          "line": 97
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 3,
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "bytes": 18471,
+      "sha256": "1df601877c770cdaae660e514e148a5a6bc77f2f03658f48c8747f59b676e485",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Expense policy/route checks and PAPER preparation create fixture workflow/carrier/document records and an explicitly held mail outbox item. Dynamic PAPER calls resolve to enqueue owners; neither sends mail nor drains queues.",
+      "calls": [
+        {
+          "name": "private._candidate_sha256_jsonb_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "source_file_sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed",
+          "line": 8
+        },
+        {
+          "name": "private._expense_approval_policy_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 9
+        },
+        {
+          "name": "private._expense_approval_route_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 47
+        },
+        {
+          "name": "public.candidate_app_timesheet_detail_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 5432
+        },
+        {
+          "name": "public.candidate_paper_manifest_v2_promote_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+          "source_file_sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005",
+          "line": 9
+        },
+        {
+          "name": "public.candidate_weekly_paper_prepare_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+          "source_file_sha256": "df4298cab586719b93c7eb7edba22527cc9e9f8f8db17625043d7301b3b11371",
+          "line": 8
+        },
+        {
+          "name": "public.candidate_workflow_transition_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 79
+        },
+        {
+          "name": "public.expense_carrier_resolve_or_create_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "source_file_sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "line": 3111
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [
+        {
+          "name": "public.timesheet_qr_send_enqueue_v1",
+          "execution": "DYNAMIC_PAPER_BRANCH",
+          "effect": "DB held outbox/document enqueue only"
+        },
+        {
+          "name": "public.candidate_targetless_expense_paper_pack_enqueue_v1",
+          "execution": "DYNAMIC_TARGETLESS_PAPER_BRANCH",
+          "effect": "DB held outbox only"
+        }
+      ],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 4,
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "bytes": 1184,
+      "sha256": "892fc4ad6be3f99b7c7b40761d7a93514a6312ee582a8b4f2b380c8cde7d9f7a",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_READ_OR_GUARD_PROBE",
+      "reason": "Catalogue ACL assertions plus empty-facts contact-policy result and browser-role denial. The policy computes eligibility; it does not dispatch contact messages.",
+      "calls": [
+        {
+          "name": "private.weekly_source_office_contact_policy_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql",
+          "source_file_sha256": "e96db0e91e88cab1009c504e2acc1bb0b03ebc57277295bed4ac6280fac7e541",
+          "line": 6
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 5,
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "bytes": 8395,
+      "sha256": "a34b3f5687c57d9c60a6f8010436fee2e0f7b302ec90ebf9a32108f4551eee01",
+      "full_body_read": true,
+      "includes": [
+        {
+          "file": "supabase/verification/support/06102026_1818_source_verifier_snapshot_guard.sql",
+          "bytes": 753,
+          "sha256": "14325718fa6297b78dae4b914e178a322b3dcc7b7e057296f4c2763541072972",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/06102026_1117_source_workbench_fixture_isolation.sql",
+          "bytes": 3475,
+          "sha256": "07a5931f76f9a4bbf57aeefe5927b61bd944dff486be4fe65980c97ea108d1e6",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/22092026_1850_source_fixture_capture.sql",
+          "bytes": 4053,
+          "sha256": "fcadfe617ce40a2eb29476df1cc9ba31af6ca1796697be54dbdaa08ccc6f34f8",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/06102026_1410_source_full_row_fingerprints.sql",
+          "bytes": 1097,
+          "sha256": "701511e00b8b5561374d7088f1b847d07960d808457ec42550200f5c75e9e100",
+          "full_body_read": true
+        }
+      ],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Synthetic NHSP Client setup calls get/save settings owners only. Included capture guards reject mutation of pre-existing watched rows; full fingerprints are dynamic read-only SELECTs.",
+      "calls": [
+        {
+          "name": "pg_temp.ws_verify_full_relation_fingerprint",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "pg_temp.ws_verify_watch",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "public.weekly_source_client_settings_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+          "source_file_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+          "line": 343
+        },
+        {
+          "name": "public.weekly_source_client_settings_save_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+          "source_file_sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+          "line": 218
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 6,
+      "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "bytes": 26474,
+      "sha256": "84b081908ff837103c907e2e4032ce52264735403a92598bfdffd7e5018bf0ba",
+      "full_body_read": true,
+      "includes": [
+        {
+          "file": "supabase/verification/support/06102026_1818_source_verifier_snapshot_guard.sql",
+          "bytes": 753,
+          "sha256": "14325718fa6297b78dae4b914e178a322b3dcc7b7e057296f4c2763541072972",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/06102026_1117_source_workbench_fixture_isolation.sql",
+          "bytes": 3475,
+          "sha256": "07a5931f76f9a4bbf57aeefe5927b61bd944dff486be4fe65980c97ea108d1e6",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/22092026_1850_source_fixture_capture.sql",
+          "bytes": 4053,
+          "sha256": "fcadfe617ce40a2eb29476df1cc9ba31af6ca1796697be54dbdaa08ccc6f34f8",
+          "full_body_read": true
+        },
+        {
+          "file": "supabase/verification/support/06102026_1410_source_full_row_fingerprints.sql",
+          "bytes": 1097,
+          "sha256": "701511e00b8b5561374d7088f1b847d07960d808457ec42550200f5c75e9e100",
+          "full_body_read": true
+        }
+      ],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Synthetic released-review rows are read through workspace/scopes/review owners. No finalisation or financial mutation RPC is called. Includes install only rollback-local capture/fingerprint helpers.",
+      "calls": [
+        {
+          "name": "pg_temp.assert_true",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "public.weekly_source_combined_finalise_workspace_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+          "source_file_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+          "line": 706
+        },
+        {
+          "name": "public.weekly_source_combined_review_workspace_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+          "source_file_sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8",
+          "line": 447
+        },
+        {
+          "name": "public.weekly_source_workspace_scopes_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+          "source_file_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+          "line": 3103
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 7,
+      "file": "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
+      "bytes": 16282,
+      "sha256": "6fc8e976fe4d0ceebcd2b14f5035cba4432173f25e817b75675e33cd2f2ddb54",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Emergency-roster reader/publisher and fixture-specific DNA effect receipt claim/completion are DB-only. Complete uses UNKNOWN with no provider reference; the external executor is never called.",
+      "calls": [
+        {
+          "name": "private._candidate_daily_emergency_token_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+          "source_file_sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8",
+          "line": 5
+        },
+        {
+          "name": "private._candidate_daily_specialist_shift_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0454_candidate_daily_emergency_window_row_v1.sql",
+          "source_file_sha256": "9d4792fc0a90acad50262117334e93bc7771206b04de10d481898aa998125a4d",
+          "line": 1
+        },
+        {
+          "name": "public.candidate_daily_effect_claim_candidate_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+          "source_file_sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8",
+          "line": 379
+        },
+        {
+          "name": "public.candidate_daily_effect_complete_candidate_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+          "source_file_sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8",
+          "line": 502
+        },
+        {
+          "name": "public.candidate_daily_specialist_read_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07102026_1151_candidate_emergency_roster_snapshot.sql",
+          "source_file_sha256": "9acfa3bd8adfb9b54bae9729e9eb8b6516cc7137531f087bda70cc1b85e15870",
+          "line": 44
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 8,
+      "file": "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "bytes": 3300,
+      "sha256": "e2081a2d69d2e7b0649036800fe09f9f3ae4a32fa174fbafc0356d46ed2f91c2",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_READ_OR_GUARD_PROBE",
+      "reason": "Catalogue ownership/ACL/immutability assertions and deliberately invalid/browser-role accepted-publication record/verify calls. Both fail at admission before business mutation.",
+      "calls": [
+        {
+          "name": "private.weekly_source_accepted_publication_action_record_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+          "source_file_sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d",
+          "line": 123
+        },
+        {
+          "name": "private.weekly_source_accepted_publication_action_verify_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+          "source_file_sha256": "e397b067c2782a047633b9154b5faa5b8ef54c2c77a24d9733db2cf2fba20d9d",
+          "line": 263
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 9,
+      "file": "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "bytes": 3397,
+      "sha256": "099067d21e9f5110c65f958c67f13f1419b3a52a42919d02e2b1fda34610d994",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_READ_OR_GUARD_PROBE",
+      "reason": "Catalogue checks and two deliberately invalid protected complete_local calls (browser role and empty service request). No valid completion/publication/payment scope is supplied.",
+      "calls": [
+        {
+          "name": "public.weekly_exceptional_pay_complete_local_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "source_file_sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae",
+          "line": 1332
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 10,
+      "file": "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+      "bytes": 30718,
+      "sha256": "fe7df45348b9ac8a1bfe9fba46cf3067e0b10c8c8d54d0e53fb559d0ee60cff7",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture PAPER preparation, QR proof/component/pack owners and explicit fixture DOCUMENT_PLAN BUILD_MANIFEST advancement are database-only. The planner queues SOURCE_RENDER input work; no global document drain, renderer, mail sender or FINAL_ISSUE call runs.",
+      "calls": [
+        {
+          "name": "private._candidate_sha256_jsonb_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "source_file_sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed",
+          "line": 8
+        },
+        {
+          "name": "private._invoice_document_advance_batch",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+          "source_file_sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e",
+          "line": 1
+        },
+        {
+          "name": "private._invoice_processor_limits",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+          "source_file_sha256": "e9d216505943acf21aba1620843e414fb30f08c35dd0c952e84b2ee3d2c600ea",
+          "line": 14129
+        },
+        {
+          "name": "public.candidate_component_prepare_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql",
+          "source_file_sha256": "be11550a2e08b2538b254dc6f26255fe55cb040243139f162830c01dbff8ffaa",
+          "line": 7
+        },
+        {
+          "name": "public.candidate_paper_manifest_v2_promote_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+          "source_file_sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005",
+          "line": 9
+        },
+        {
+          "name": "public.candidate_paper_return_pack_complete_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_1414_candidate_paper_return_pack_complete_v2.sql",
+          "source_file_sha256": "932c7c119d024b176420c47fe6eaf8c6a21a44fb254999580dc47d5f75089e9a",
+          "line": 10
+        },
+        {
+          "name": "public.candidate_paper_return_proof_validate_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+          "source_file_sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005",
+          "line": 235
+        },
+        {
+          "name": "public.candidate_weekly_paper_prepare_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+          "source_file_sha256": "df4298cab586719b93c7eb7edba22527cc9e9f8f8db17625043d7301b3b11371",
+          "line": 8
+        },
+        {
+          "name": "public.candidate_weekly_paper_target_prepare_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql",
+          "source_file_sha256": "49fc1fe0b7c2740ce86a046ce525c7d123b6f350309cb4b2afcfcce156bac04d",
+          "line": 19
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [
+        {
+          "name": "public.timesheet_qr_send_enqueue_v1",
+          "execution": "DYNAMIC_PAPER_BRANCH",
+          "effect": "DB held outbox/document enqueue only"
+        }
+      ],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 11,
+      "file": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+      "bytes": 44815,
+      "sha256": "e0666765091409704533ed0f471aea4dc0d001801715a5730be00c3697c6dede",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Sealed physical-rate projection and finance-effect JSON normalisation operate on disposable private build facts and temporary vectors. Synchroniser/Draft/payment names appear in inspected definition strings only, not invoked calls.",
+      "calls": [
+        {
+          "name": "private.pay_workbench_finance_effect_normalise_row_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql",
+          "source_file_sha256": "0720d34076a6422cb0a29d0cf13880c19678573a4dbd9fe2f0cc4c48a7a9f4a8",
+          "line": 4
+        },
+        {
+          "name": "private.pay_workbench_sealed_rate_component_projection_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+          "source_file_sha256": "49ae5f6729122e9f611096b458df1b52e2fd2be211a14a4b32f3837f591a6037",
+          "line": 9
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 12,
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "bytes": 31174,
+      "sha256": "0c0496dabf3e3a24aeb91909c8ac56f6ad17161ff027c7241dd89663f4dd187c",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue relation/view/RPC/sequence/default-ACL hashes and MFA execution-grant assertions only; no application routine is executed.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 13,
+      "file": "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
+      "bytes": 2656,
+      "sha256": "97bec745fcfa91d39d003a64dd632154fa4a437043d2ae6edfc30ec198a38523",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue security, owner, argument/result and ACL checks for the two compatibility routines only; neither is executed.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 14,
+      "file": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+      "bytes": 9720,
+      "sha256": "e4f027dc5656d30844312e8b1e99d4ef3dcf37676ddc73faad58318755a64be1",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue named table/view/Candidate RPC inventory and MFA ACL assertions only.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 15,
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "bytes": 4393,
+      "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue Candidate/MyTMS table, view and function grant assertions only. Delete function names are regprocedure literals, not calls.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 16,
+      "file": "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
+      "bytes": 4413,
+      "sha256": "efad90585235ed640a51f5ae3cdeec9aed2695714c5cb0f4afc2d53541d0b06b",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_READ_OR_GUARD_PROBE",
+      "reason": "Catalogue/security/settings consistency plus manager email settings GET. Templates are read; no enqueue, claim, sender or retirement mutation is called.",
+      "calls": [
+        {
+          "name": "public.candidate_manager_email_settings_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql",
+          "source_file_sha256": "79bccad6c156fcbc0de904f0a480a056b934be41cc3a3b3f91f4cda90a361898",
+          "line": 170
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 17,
+      "file": "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
+      "bytes": 1013,
+      "sha256": "2822fbe2718626863dbe89d5f6058a2e7219715039c643942389562f1f5ea9d6",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue private helper schema/function ACL only. Email claim helper is an identity literal, not executed.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 18,
+      "file": "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
+      "bytes": 9169,
+      "sha256": "232da03b5625e1dfa69bb1c421dbeff70aec39a09af5a808e468e696a1db64ff",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Pure authoriser-policy/email-admission normalisers plus fixture Client/Contract policy CAS saves and replay/negative checks. No message dispatch follows policy save.",
+      "calls": [
+        {
+          "name": "private._candidate_manager_authoriser_effective_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "source_file_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+          "line": 148
+        },
+        {
+          "name": "private._candidate_manager_email_allowed_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "source_file_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+          "line": 213
+        },
+        {
+          "name": "public.client_manager_authoriser_policy_update_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "source_file_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+          "line": 415
+        },
+        {
+          "name": "public.contract_manager_authoriser_policy_update_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "source_file_sha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+          "line": 466
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 19,
+      "file": "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+      "bytes": 7060,
+      "sha256": "7b3b12279a152679d5adb63660b190d4e94d5702398f48f4d68d85d69d8ae3d9",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture membership-ready activation and exact replay use DB-only authority transition, entitlement and sync-state owners. No service target activation or external Sheet executor is called.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_system_policy_activate_ready_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26082026_1607_candidate_daily_membership_ready_activation_v1.sql",
+          "source_file_sha256": "83014efeb3517e0e11a4ef2ac4681a4967474a7f2d3555fa2199c7150791ace5",
+          "line": 507
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 20,
+      "file": "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
+      "bytes": 1021,
+      "sha256": "721074977f0dbadbd9761206f74bdee25b6957ca8e0d2da5cbca0f8bd541682e",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Reads configured Candidate system actor and asserts stored role/activity/pay-flag posture; no application call or mutation.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 21,
+      "file": "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
+      "bytes": 5213,
+      "sha256": "7e07a9ed18275836cf7bb661e9c4d70ac0e51c34529ad140471b14319e592406",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Rollback-local summary cursor/revision upsert and temporary trigger fixtures; rpc_changes_ping reads change cursors. Trigger helpers only maintain database revision rows.",
+      "calls": [
+        {
+          "name": "private._candidate_timesheet_summary_approval_revision_trg_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+          "source_file_sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375",
+          "line": 125
+        },
+        {
+          "name": "private._candidate_timesheet_summary_mail_revision_trg_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+          "source_file_sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375",
+          "line": 141
+        },
+        {
+          "name": "private._candidate_timesheet_summary_revision_upsert_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+          "source_file_sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375",
+          "line": 8
+        },
+        {
+          "name": "private._candidate_timesheet_summary_workflow_revision_trg_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+          "source_file_sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375",
+          "line": 73
+        },
+        {
+          "name": "public.candidate_timesheet_summary_cursor_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+          "source_file_sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375",
+          "line": 166
+        },
+        {
+          "name": "public.rpc_changes_ping",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+          "source_file_sha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1",
+          "line": 17013
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 22,
+      "file": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+      "bytes": 1801,
+      "sha256": "676742eec620099f188fd6ddd0c87246e58a096a51f1a6f3f728a88ac0c19fbf",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Reads the timesheet-page definition and ACL, then tests required expression strings. No timesheet-page call or mutation.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 23,
+      "file": "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
+      "bytes": 3469,
+      "sha256": "01e6749bbf851ce70f85cef8b552005713bfb86ae273d28051b81241684a454d",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Reads workflow/replacement/card definitions and searches literal predicates. No workflow transition, resubmission or approval executes.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 24,
+      "file": "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+      "bytes": 7482,
+      "sha256": "e3a97257a36662fe6c6791c1540ddf261a2f9d70692e94ecfb0e4d1e89bf9419",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture Rota generation and legacy preference owners clear only matching fixture days and enqueue their exact projection rows. No projection claim, executor or drain.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_legacy_availability_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "source_file_sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5",
+          "line": 8
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 25,
+      "file": "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
+      "bytes": 18164,
+      "sha256": "ff54dc1e5b0666776fc8e2e3691752ef41cf8538fdd76f03cca1d3a3a09e3ab2",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture availability writes, Rota reads, freshness reads and completion of one explicitly selected fixture projection receipt. Completion acknowledges a supplied receipt; it never sends to Sheets or globally claims work.",
+      "calls": [
+        {
+          "name": "private._candidate_daily_capability_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+          "source_file_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85",
+          "line": 1623
+        },
+        {
+          "name": "private._candidate_daily_freshness_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+          "source_file_sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b",
+          "line": 6
+        },
+        {
+          "name": "public.candidate_daily_availability_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
+          "source_file_sha256": "0a01a651a1a01641b9bff29f016836c5a7fd98c525be5a2a9d914254fb5f34ab",
+          "line": 197
+        },
+        {
+          "name": "public.candidate_daily_projection_complete_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+          "source_file_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85",
+          "line": 567
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        },
+        {
+          "name": "public.candidate_daily_tiles_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+          "source_file_sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b",
+          "line": 121
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 26,
+      "file": "supabase/verification/31082026_1026_candidate_daily_active_window_projection_readiness_verification.sql",
+      "bytes": 5546,
+      "sha256": "b1e9061e6066fbe83151a3c256229099697abb5785e2c47341191c0213adf404",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture sync-state refresh and generation publication; refresh aggregates database projection state and does not claim/drain it.",
+      "calls": [
+        {
+          "name": "private._candidate_daily_refresh_sync_state_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/31082026_1025_candidate_daily_active_window_projection_readiness_v1.sql",
+          "source_file_sha256": "82c4e792d3f6dc367fdace058e10a580cedaa56e1c493fa7eb644478dc0211cf",
+          "line": 8
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 27,
+      "file": "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
+      "bytes": 23585,
+      "sha256": "9177f72342ee4ff3f43bc4da3e4ad5b28813feda8cadefc027f7c355b1cb5d68",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture Google Rota remove/attach and generation publication mutate database identity/entitlement/history and enqueue ordinary derived rechecks. Pending/uncertain external receipts are fixture rows; no normal drain or external executor is invoked.",
+      "calls": [
+        {
+          "name": "pg_temp.rota_removal_preserved_rows",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        },
+        {
+          "name": "public.candidate_google_provisioning_attach_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 5
+        },
+        {
+          "name": "public.candidate_google_rota_remove_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+          "source_file_sha256": "2cada6bede4b1073ecbbd588b57706714ce6466e0ac42679fb0760fb3aa98de4",
+          "line": 12
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 28,
+      "file": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+      "bytes": 62035,
+      "sha256": "73842f8c6593f5b37d1886709f489760efb9b90a86e2b3e03d5fc0a33da92e0b",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture Daily workflow/approval/document receipt/canonical TS/TSFIN/delete/reject/authorise owners are DB-only. Financial snapshot processing/authorisation is not a payment execution; derived outbox/jobs can be enqueued but no worker/global drain is called.",
+      "calls": [
+        {
+          "name": "pg_temp.candidate_phone_approve_all",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "pg_temp.candidate_register_all_final_components",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "pg_temp.candidate_register_all_review_components",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "private._candidate_component_render_contract_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "source_file_sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed",
+          "line": 289
+        },
+        {
+          "name": "private._candidate_daily_booked_source_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql",
+          "source_file_sha256": "d6e1f92f8e158f1ee698dc48ea1488831d426c56ec0e60192f7f45175baee304",
+          "line": 6
+        },
+        {
+          "name": "private._candidate_daily_break_entry_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2203_candidate_daily_inapplicable_break_context_v1.sql",
+          "source_file_sha256": "8e8f8c4e759bfc0c170abbc1e12d099c1f928c2c8191a7412af448d7ffd6e274",
+          "line": 8
+        },
+        {
+          "name": "private._candidate_daily_first_receipt_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+          "source_file_sha256": "e1d94c93a9a0b17f4e932d37af3028ff2bcd03f0c1b48ceb9729f3dad2379be4",
+          "line": 114
+        },
+        {
+          "name": "private._candidate_daily_receipt_context_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+          "source_file_sha256": "24284276bdbe3d45301e329d5c7a1ad93dc9264d535c0bd6de1570999bb9b749",
+          "line": 4
+        },
+        {
+          "name": "private._candidate_daily_receipt_reset_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+          "source_file_sha256": "6da37413a8f5ac0e462cf8f4d1c331859a382b3e9b54dcb702aebedf95edfdf3",
+          "line": 5
+        },
+        {
+          "name": "public.candidate_app_timesheet_detail_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+          "source_file_sha256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5",
+          "line": 18
+        },
+        {
+          "name": "public.candidate_app_timesheet_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "source_file_sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "line": 345
+        },
+        {
+          "name": "public.candidate_break_entry_context_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+          "source_file_sha256": "8b6d78ca518aeb780bfd2a32430511bda3c53978adac3c80916de76121624d3f",
+          "line": 550
+        },
+        {
+          "name": "public.candidate_daily_rota_generation_publish_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+          "source_file_sha256": "650f1469dc233ce33572d15488a2a833bb0f676ea4fa63dc802f279e059dc6af",
+          "line": 139
+        },
+        {
+          "name": "public.candidate_daily_tiles_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+          "source_file_sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b",
+          "line": 121
+        },
+        {
+          "name": "public.candidate_submission_finalize_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 4427
+        },
+        {
+          "name": "public.candidate_workflow_transition_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 79
+        },
+        {
+          "name": "public.cloudtms_office_candidate_adapter_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql",
+          "source_file_sha256": "c4c750e434cbfa8d6c60cb276dafd0a9a00f9ac6d21b3578aeb722c2013a96da",
+          "line": 1068
+        },
+        {
+          "name": "public.enqueue_ts_financials_priority",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04012026_enqueue_ts_financials_priority.sql",
+          "source_file_sha256": "98df9b7f415a25d5d6e740f7357a9091b20b14537334bee3af69d9ea6ce4da95",
+          "line": 1
+        },
+        {
+          "name": "public.timesheet_authorise_generic_atomic",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+          "source_file_sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67",
+          "line": 8474
+        },
+        {
+          "name": "public.timesheet_daily_abandoned_receipt_delete_apply_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+          "source_file_sha256": "a75a774a205e5f6c57b0b6d35b43f07e8c137105055044c2c276c18263b04067",
+          "line": 130
+        },
+        {
+          "name": "public.timesheet_daily_abandoned_receipt_delete_preview_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+          "source_file_sha256": "a75a774a205e5f6c57b0b6d35b43f07e8c137105055044c2c276c18263b04067",
+          "line": 8
+        },
+        {
+          "name": "public.timesheet_lifecycle_guard_signature_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+          "source_file_sha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648",
+          "line": 15674
+        },
+        {
+          "name": "public.tsfin_load_context_batch",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+          "source_file_sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+          "line": 4
+        },
+        {
+          "name": "public.tsfin_write_snapshots_and_complete",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/21072026_1235_38_tsfin_write_snapshots_and_complete.sql",
+          "source_file_sha256": "175903f7dd7b6f48af6209cf29173a5e05372d05ba8c59d87399833e1d008693",
+          "line": 4
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 29,
+      "file": "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+      "bytes": 2601,
+      "sha256": "d8031788eee1fb06cdd82528051889ac1c476f89a639c8300e22bafd203cebd8",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_READ_OR_GUARD_PROBE",
+      "reason": "Private Daily break-context reads and invalid/missing-Client assertions; no application rows are written.",
+      "calls": [
+        {
+          "name": "private._candidate_daily_break_entry_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2203_candidate_daily_inapplicable_break_context_v1.sql",
+          "source_file_sha256": "8e8f8c4e759bfc0c170abbc1e12d099c1f928c2c8191a7412af448d7ffd6e274",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 30,
+      "file": "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+      "bytes": 1988,
+      "sha256": "e4fb9311b074e521616fc1c9a8e816d22b64f4c961920289473e5ce4dba5ef4d",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Projection lease recovery function is read with pg_get_functiondef and tested as text/ACL. No claim call executes.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 31,
+      "file": "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+      "bytes": 7374,
+      "sha256": "9b5515545e4c9a4241ebe9d6139516ac5dca0e5fbb2e145f255ef04bfd29c30b",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "EXCLUDE",
+      "reason": "EXCLUDE: invokes candidate_daily_projection_claim_v1 twice with a global target and no Candidate filter, recovering/claiming up to 100 genuine hosted queue rows. Fixture-only completion does not confine the global claim. Root explicitly confirmed exclusion under the no-queue-drain rule.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_projection_claim_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0115_candidate_daily_projection_expired_lease_recovery_v1.sql",
+          "source_file_sha256": "07c2779fa33ea2524391ee68fff816b67310115242756c26fe32ae07703d185b",
+          "line": 3
+        },
+        {
+          "name": "public.candidate_daily_projection_complete_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+          "source_file_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85",
+          "line": 567
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 32,
+      "file": "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql",
+      "bytes": 8388,
+      "sha256": "6c8a68077adb2c59c90c96741e5dde5b28877bcbd26bcde824cd1ead1d479774",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Catalogue contract/security checks and missing-session read/selection calls. Native modal context rejects the nonexistent session before any selection or financial mutation.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_contract_version_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0245_banking_pay_modal_capability_v2.sql",
+          "source_file_sha256": "9d7dd90989869e645c5e53c6f04429540c625f75241809d28c3356e9ff274cea",
+          "line": 9
+        },
+        {
+          "name": "public.pay_workbench_session_get_action_required_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/31082026_2230_banking_pay_action_required_amount_presentation_v1.sql",
+          "source_file_sha256": "fac331dad866c65d8034d07a2ebd91b0f9a51fc97c066984c0b5e5d36a70704e",
+          "line": 10
+        },
+        {
+          "name": "public.pay_workbench_session_get_blocked_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2201_banking_pay_modal_blocked_pages.sql",
+          "source_file_sha256": "c60c7a903611b39f37cc15f206f659af59c56c901cb0a8cf9b5bd94ca686ba33",
+          "line": 50
+        },
+        {
+          "name": "public.pay_workbench_session_get_candidate_ready_group_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/01092026_1058_banking_pay_candidate_current_payable_groups_v2.sql",
+          "source_file_sha256": "15973f0f00839b80f9fce104d2c8a93a9b839c6da4592d2d2fccceca2a121d01",
+          "line": 149
+        },
+        {
+          "name": "public.pay_workbench_session_get_candidate_ready_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/01092026_1058_banking_pay_candidate_current_payable_groups_v2.sql",
+          "source_file_sha256": "15973f0f00839b80f9fce104d2c8a93a9b839c6da4592d2d2fccceca2a121d01",
+          "line": 11
+        },
+        {
+          "name": "public.pay_workbench_session_get_candidate_summary_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2035_banking_pay_modal_summary.sql",
+          "source_file_sha256": "cad82e3a46a965e9d4544cd0072590c909d30058e780d647cd2349d834eef855",
+          "line": 8
+        },
+        {
+          "name": "public.pay_workbench_session_set_candidate_ready_selection_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2313_banking_pay_modal_candidate_selection_response.sql",
+          "source_file_sha256": "058fbb5a271bd85913cb4829688e08f13702ed153fbb82e8627793a17c9ca702",
+          "line": 108
+        },
+        {
+          "name": "public.pay_workbench_session_set_filtered_ready_selection_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0002_banking_pay_modal_global_selection_response.sql",
+          "source_file_sha256": "e260f344bd8fd40f4a9c2d637e687e9c206b5db8af7630f390d2765144c19ba3",
+          "line": 5
+        },
+        {
+          "name": "public.pay_workbench_session_set_ready_group_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0114_banking_pay_modal_group_selection_response.sql",
+          "source_file_sha256": "c335f36f528d3490c1273acd1ebe054cccc924626b3cc6061fe82b8499fcb1e8",
+          "line": 8
+        },
+        {
+          "name": "public.pay_workbench_session_set_ready_rows_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0019_banking_pay_modal_row_selection_response.sql",
+          "source_file_sha256": "60f9039d469244b139933ae296cfe7cbc78438a567481a83673c6ce9502ba98d",
+          "line": 5
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 33,
+      "file": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+      "bytes": 7262,
+      "sha256": "6fee715f67c0de76ca0e45cba168a9a4293a3e88c4bf13ec498911878a2eca60",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue definition SHA/ACL checks only. Draft, provider-adjacent, authorisation, QR enqueue and worker_drain identities are strings, never CALL/PERFORM/EXECUTE targets here.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 34,
+      "file": "supabase/verification/29082026_0518_banking_pay_replaced_queue_terminal_shape_verification.sql",
+      "bytes": 8223,
+      "sha256": "c4bc774476338df50eee3437a3fb0d335e42059238156fe21d104f169c0a5629",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Exact fixture-session replaced-queue replay/terminalisation creates only target refresh instructions. No worker drain or Draft/payment/provider/settlement owner is invoked.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_session_replay_replaced_queue_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql",
+          "source_file_sha256": "04b259926c2a71000d1d78d37153fda1788c610c3a4060c78f9f64f9685aac9d",
+          "line": 7
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 35,
+      "file": "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
+      "bytes": 14350,
+      "sha256": "25746a344a4cc862826c56689710e35acda95bedf113b6106ee5a445041a1c47",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture session/candidate queue replay and repair replace refresh instructions through canonical enqueue. Scope is the fixture target session; no work is drained or financially executed.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_repair_replayed_candidate_jobs_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql",
+          "source_file_sha256": "04b259926c2a71000d1d78d37153fda1788c610c3a4060c78f9f64f9685aac9d",
+          "line": 366
+        },
+        {
+          "name": "public.pay_workbench_session_replay_replaced_queue_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql",
+          "source_file_sha256": "04b259926c2a71000d1d78d37153fda1788c610c3a4060c78f9f64f9685aac9d",
+          "line": 7
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 36,
+      "file": "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
+      "bytes": 11687,
+      "sha256": "b4f1895f05a94d5e6ba273471463983d82448e1e8543984519b59f5f1dc35768",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture-specific discarded-session blocker repair and serial-state read affect only fixture jobs/attempts/build states. No source build execution, Draft or payment operation.",
+      "calls": [
+        {
+          "name": "public._pay_workbench_candidate_serial_active_state",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql",
+          "source_file_sha256": "95c1fa5eba6af5a10102a4479d631efb58c94ec21882dcf47f86886d02cf7a56",
+          "line": 14154
+        },
+        {
+          "name": "public.pay_workbench_repair_discarded_session_blockers_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0719_banking_pay_discarded_session_blocker_repair_v1.sql",
+          "source_file_sha256": "2323404c9b434612829ff70bfac6ff7391d76be59e9fb5467af6f6376ede17d4",
+          "line": 9
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 37,
+      "file": "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
+      "bytes": 6228,
+      "sha256": "0734bd8a5ce7f41a85d4649a49bd4f394752e2964be649eff9051a5ff67dd617",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture version-one refresh enqueues one canonical Candidate source-build job and tests replay. No source worker drain or financial execution.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_session_refresh_current_authority_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0801_banking_pay_version_one_refresh_v1.sql",
+          "source_file_sha256": "a9e76419f196560b37be73e7a51d6718fe377d1d14d5885d172b49cfc378fb3b",
+          "line": 11
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 38,
+      "file": "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+      "bytes": 2178,
+      "sha256": "c5012d2476a440824d7e013edeb7ac142a81a266394e1987d87ed223353eab07",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue reconciliation definition/refresh-call count/security checks only; reconciliation is not invoked.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 39,
+      "file": "tests/29082026_0924_candidate_daily_reconciliation_linked_window_runtime_verification.sql",
+      "bytes": 5492,
+      "sha256": "0640554467f31b374706dfcfced2f7c17e48a0596aa035515c50ed0e3bc359fb",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture-only reconciliation batches classify linked/unlinked identities and update DB sync/batch receipts. No outbox claim/drain/external executor.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_reconciliation_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "source_file_sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 40,
+      "file": "supabase/verification/29082026_1407_candidate_daily_reconciliation_identity_probe_verification.sql",
+      "bytes": 2117,
+      "sha256": "81b1c7f5af33729edd6232f51f1ff951e296184610f9a3c592434170eb79e97e",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue identity-probe definition/security/ACL assertions only.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 41,
+      "file": "tests/29082026_1408_candidate_daily_reconciliation_identity_probe_runtime_verification.sql",
+      "bytes": 4922,
+      "sha256": "5833af1d3305aaadb45e5447b5a28c13a6b04f15e87c0e3f4fd599e281261d7b",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture-only identity probe invokes reconciliation with probe_only; it records batch replay authority while asserting no availability/projection/sync/command mutation.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_reconciliation_apply_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "source_file_sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 42,
+      "file": "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql",
+      "bytes": 1893,
+      "sha256": "159393c883d534091d42d50951483843c6fd1f9ade5f3bb59c83f05c486445b0",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Workflow function definition and ACL inspection only. Expense resubmission is text, not executed.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 43,
+      "file": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+      "bytes": 15855,
+      "sha256": "85e3879cf552e2374aa9a7ed78973fc1b54b19cd87a931d2f720689b22e0c8d9",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture expense carrier resolver and CREATE workflow only, with independent route/anchor checks. The final section resolves reuse of a reserved carrier; it does not invoke actual finalisation, payment or mail sending.",
+      "calls": [
+        {
+          "name": "public.candidate_workflow_transition_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 79
+        },
+        {
+          "name": "public.expense_carrier_resolve_or_create_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "source_file_sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "line": 3111
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 44,
+      "file": "supabase/verification/29082026_1157_banking_pay_source_refresh_terminal_verification.sql",
+      "bytes": 16616,
+      "sha256": "3d856d46bddeec29fcb2131816bbccaae05f547ad617aada3971b5c7a3833dba",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture dependency closure and pay_sync_overpayments_from_preview use an owner-scoped zero-Timesheet build. The explicit AUTHORITATIVE_EMPTY path returns before finance-case DML, then only seals empty build state. No Draft/provider/payment/settlement call.",
+      "calls": [
+        {
+          "name": "pg_temp._bpay_wb_sync_context_v1",
+          "execution": "TEMPORARY_FIXTURE_HELPER"
+        },
+        {
+          "name": "private.pay_workbench_timesheet_dependency_closure_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql",
+          "source_file_sha256": "7f88a2894d15ad69a02d061a2da2340f5bd0536d018c1cd99c97c80c7486af43",
+          "line": 4
+        },
+        {
+          "name": "public.pay_sync_overpayments_from_preview",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04082026_1210_pay_sync_overpayments_from_preview.sql",
+          "source_file_sha256": "822341c3a71e2c5146ce6c1857169edee55581bcf133316c734722d6dca04521",
+          "line": 4
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 45,
+      "file": "supabase/verification/29082026_1313_banking_pay_invalid_source_authority_repair_verification.sql",
+      "bytes": 16905,
+      "sha256": "a8b062ac19f41febeb0f0c888ef40beb776bd71b3ed37ba644ae1225716e2538",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture session/Candidate scoped invalid source-build claim is expected to raise before valid attempt/build admission, inside a caught subtransaction. Repair/enqueue targets that fixture session only. No global claim, worker drain or financial execution.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_enqueue_candidate_refresh",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+          "source_file_sha256": "5defbbf5ca2c6eeac284edf06c5216d6ccc7a5511119eb103808b28d962359ec",
+          "line": 6043
+        },
+        {
+          "name": "public.pay_workbench_repair_invalid_source_authority_jobs_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/29082026_1312_banking_pay_invalid_source_authority_repair_v1.sql",
+          "source_file_sha256": "499234d4092b7ce2ed18d2a2b6b69eee8344c768353b4c3b5fc1c71fb8695879",
+          "line": 16
+        },
+        {
+          "name": "public.pay_workbench_source_build_attempt_claim_start_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql",
+          "source_file_sha256": "95c1fa5eba6af5a10102a4479d631efb58c94ec21882dcf47f86886d02cf7a56",
+          "line": 48617
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 46,
+      "file": "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
+      "bytes": 8370,
+      "sha256": "305a0e56e35fea90a68746413ecf821f8bfc24c5c05dae241e661daf7c494f71",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture action-list/summary readers and sort negatives only. Preview/payment-label rows are synthetic presentation data, not payments.",
+      "calls": [
+        {
+          "name": "public.pay_workbench_session_get_action_required_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/31082026_2230_banking_pay_action_required_amount_presentation_v1.sql",
+          "source_file_sha256": "fac331dad866c65d8034d07a2ebd91b0f9a51fc97c066984c0b5e5d36a70704e",
+          "line": 10
+        },
+        {
+          "name": "public.pay_workbench_session_get_candidate_summary_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2035_banking_pay_modal_summary.sql",
+          "source_file_sha256": "cad82e3a46a965e9d4544cd0072590c909d30058e780d647cd2349d834eef855",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 47,
+      "file": "supabase/verification/31082026_2231_banking_pay_action_required_amount_presentation_verification.sql",
+      "bytes": 9624,
+      "sha256": "c7b26b54423a8fc10e234723d7bf7b74e5936bf72f174235256e4bcf0a8b2fd3",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture action-list/summary/eligible-member readers over a synthetic unresolved pay-advance case. No recovery/payment/settlement execution owner is called.",
+      "calls": [
+        {
+          "name": "private.pay_workbench_modal_eligible_rows_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1232_banking_pay_modal_certified_projection.sql",
+          "source_file_sha256": "02a4d7e2cfccc11834155e34139838efa1fda62f9c31d19e4f0c1ede4a5289d0",
+          "line": 7
+        },
+        {
+          "name": "private.pay_workbench_modal_finance_task_members_v2",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_1915_banking_pay_modal_finance_tasks.sql",
+          "source_file_sha256": "eb9cc63ef56b4713f4ac80bb24f9c01c88f3ee045acf4f667c74f4bb5993dde4",
+          "line": 68
+        },
+        {
+          "name": "public.pay_workbench_session_get_action_required_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/31082026_2230_banking_pay_action_required_amount_presentation_v1.sql",
+          "source_file_sha256": "fac331dad866c65d8034d07a2ebd91b0f9a51fc97c066984c0b5e5d36a70704e",
+          "line": 10
+        },
+        {
+          "name": "public.pay_workbench_session_get_candidate_summary_page_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/28082026_2035_banking_pay_modal_summary.sql",
+          "source_file_sha256": "cad82e3a46a965e9d4544cd0072590c909d30058e780d647cd2349d834eef855",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 48,
+      "file": "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
+      "bytes": 3621,
+      "sha256": "6f4e13b9ac3508bd52a1635b7679ae55a9ef65cf124bcc0a7c9ae1e1247b7d90",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Timesheet-page definition/ACL inspection only. Workflow state names and content predicates are strings.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 49,
+      "file": "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
+      "bytes": 9056,
+      "sha256": "4686588c0fcff6efa30aa3fe539b074a212a51d43b2cce45ded8802de7f57e5c",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Rollback-contained information-directory settings CAS update/replay and Candidate read. No email or network call; map_query is stored display data.",
+      "calls": [
+        {
+          "name": "public.candidate_daily_information_candidate_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0315_candidate_daily_information_directory_v1.sql",
+          "source_file_sha256": "15a297b4e89c6830dfcb57d464d75c4c7da1745e2a5346ef61ce1426d82859b9",
+          "line": 279
+        },
+        {
+          "name": "public.candidate_daily_information_settings_get_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0315_candidate_daily_information_directory_v1.sql",
+          "source_file_sha256": "15a297b4e89c6830dfcb57d464d75c4c7da1745e2a5346ef61ce1426d82859b9",
+          "line": 183
+        },
+        {
+          "name": "public.candidate_daily_information_settings_set_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0315_candidate_daily_information_directory_v1.sql",
+          "source_file_sha256": "15a297b4e89c6830dfcb57d464d75c4c7da1745e2a5346ef61ce1426d82859b9",
+          "line": 202
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 50,
+      "file": "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+      "bytes": 8512,
+      "sha256": "54591ecaf499bf4767f509c424ed5666d9a43b807cbfa9a30e1505ea658fb3a6",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture emergency-window readers and DB roster publication only. No external effect claim or executor in this verifier.",
+      "calls": [
+        {
+          "name": "private._candidate_daily_emergency_token_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/23082026_1820_candidate_daily_specialist_v1.sql",
+          "source_file_sha256": "8e1d890f0befabc1b253fc620fc3433ab68c4fb5de92edae9bb53074232426c8",
+          "line": 5
+        },
+        {
+          "name": "private._candidate_daily_specialist_shift_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_0454_candidate_daily_emergency_window_row_v1.sql",
+          "source_file_sha256": "9d4792fc0a90acad50262117334e93bc7771206b04de10d481898aa998125a4d",
+          "line": 1
+        },
+        {
+          "name": "public.candidate_daily_specialist_read_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07102026_1151_candidate_emergency_roster_snapshot.sql",
+          "source_file_sha256": "9acfa3bd8adfb9b54bae9729e9eb8b6516cc7137531f087bda70cc1b85e15870",
+          "line": 44
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 51,
+      "file": "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
+      "bytes": 1738,
+      "sha256": "38bd47904579fe717bf8397aae827a36d4c288a730b64bb20b74e839a18f788b",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue proof validator security/volatility/search_path/ACL and definition string checks only; validator is not invoked.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 52,
+      "file": "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
+      "bytes": 2157,
+      "sha256": "eecae1828f5ac8b25db0832b089610cd3b0f17fc6a9d10bc62f4143151949001",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_CATALOGUE",
+      "reason": "Catalogue expense-apply definition/ACL/owner checks only; apply routine is not invoked.",
+      "calls": [],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 53,
+      "file": "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+      "bytes": 25742,
+      "sha256": "717c8b145f77b3f708b64caeedb6aa17b0f111403fb8d3ef558616b98bb98b95",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture PAPER transitions, held QR/mail enqueue, manifest promotion and Office finalisation/replay modify database canonical TS/expense/evidence authority only. Dynamic SQL creates the fixture actor. No email sender, renderer/global drain, payment/provider/settlement execution.",
+      "calls": [
+        {
+          "name": "private._invoice_processor_limits",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+          "source_file_sha256": "e9d216505943acf21aba1620843e414fb30f08c35dd0c952e84b2ee3d2c600ea",
+          "line": 14129
+        },
+        {
+          "name": "public.candidate_paper_manifest_v2_promote_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+          "source_file_sha256": "74f500aa959bc28141815c71760c1426d68e93c1c61152ca904b1524e4520005",
+          "line": 9
+        },
+        {
+          "name": "public.candidate_workflow_transition_atomic_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+          "source_file_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+          "line": 79
+        },
+        {
+          "name": "public.cloudtms_office_candidate_adapter_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql",
+          "source_file_sha256": "c4c750e434cbfa8d6c60cb276dafd0a9a00f9ac6d21b3578aeb722c2013a96da",
+          "line": 1068
+        },
+        {
+          "name": "public.timesheet_lifecycle_guard_signature_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+          "source_file_sha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648",
+          "line": 15674
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [
+        {
+          "name": "public.timesheet_qr_send_enqueue_v1",
+          "execution": "DYNAMIC_PAPER_BRANCH",
+          "effect": "DB held outbox/document enqueue only"
+        },
+        {
+          "name": "FIXTURE_TMS_USER_INSERT",
+          "execution": "DYNAMIC_SQL",
+          "effect": "Creates only synthetic fixture actor, not an application executor"
+        }
+      ],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 54,
+      "file": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "bytes": 28264,
+      "sha256": "2a7bca5f00a6ea9540e0655f58c0cb33a5c3babcb089bbef02589c01db2f6ca1",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Fixture-known DIRTY_APPLY job processing/repair and deferred constraint finalisation affect database Workbench refresh authority only. Dynamic EXECUTE statements are SET CONSTRAINTS. worker_drain/Draft/pay owner names elsewhere are expected catalogue identities, not executed.",
+      "calls": [
+        {
+          "name": "private.pay_workbench_scope_invalidate_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+          "source_file_sha256": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86",
+          "line": 3566
+        },
+        {
+          "name": "public.pay_workbench_candidate_dirty_apply_job_process",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+          "source_file_sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67",
+          "line": 4752
+        },
+        {
+          "name": "public.pay_workbench_repair_invalid_dirty_apply_jobs_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+          "source_file_sha256": "e762c129dabf49696e41773d642298d9f4cbc8ca2a209399f8be20b75d44ffae",
+          "line": 27
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [
+        {
+          "name": "SET CONSTRAINTS trg_pay_workbench_scope_change_finalize_v1",
+          "execution": "DYNAMIC_SQL",
+          "effect": "Transaction-local deferred constraint timing; not queue drain"
+        }
+      ],
+      "genuine_applying_release_required": false
+    },
+    {
+      "index": 55,
+      "file": "supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql",
+      "bytes": 16347,
+      "sha256": "1135b2912a9c36e7019a6503ee59ab1c330f2cc6d8148cadc7640e79739efa40",
+      "full_body_read": true,
+      "includes": [],
+      "decision": "SAFE_TRANSACTIONAL_FIXTURE",
+      "reason": "Synthetic Daily/Weekly overlap admission and authorisation table triggers plus JSON hash helper. No payment/provider, settlement, communications or queue-drain owner is called.",
+      "calls": [
+        {
+          "name": "private._candidate_sha256_jsonb_v1",
+          "execution": "APPLICATION_CALL",
+          "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "source_file_sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed",
+          "line": 8
+        }
+      ],
+      "direct_or_nested_dynamic_calls": [],
+      "genuine_applying_release_required": false
+    }
+  ]
+}

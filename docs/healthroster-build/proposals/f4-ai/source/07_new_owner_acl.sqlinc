@@ -1,0 +1,10 @@
+alter function private.weekly_source_invoice_allocation_assert_v1(uuid) owner to postgres;
+alter function private.weekly_source_invoice_issue_validate_v1(uuid) owner to postgres;
+alter function public.weekly_source_invoice_move_atomic_v1(jsonb) owner to postgres;
+alter function public.weekly_source_invoice_edit_context_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_invoice_allocation_assert_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_invoice_issue_validate_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function public.weekly_source_invoice_move_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+revoke all on function public.weekly_source_invoice_edit_context_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_invoice_move_atomic_v1(jsonb) to service_role;
+grant execute on function public.weekly_source_invoice_edit_context_v1(jsonb) to service_role;
