@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: actual current Git tree is entirely selected with mode/type/bytes intact
+ok 1 - actual current Git tree is entirely selected with mode/type/bytes intact
+  ---
+  duration_ms: 314.7179
+  type: 'test'
+  ...
+# Subtest: actual osv-scanner.toml blob mutation to a different real Git object is refused
+ok 2 - actual osv-scanner.toml blob mutation to a different real Git object is refused
+  ---
+  duration_ms: 118.0214
+  type: 'test'
+  ...
+# Subtest: actual osv-scanner.toml executable mode and unsupported object type mutations are refused
+ok 3 - actual osv-scanner.toml executable mode and unsupported object type mutations are refused
+  ---
+  duration_ms: 140.9185
+  type: 'test'
+  ...
+# Subtest: actual .gitattributes blob mutation to a different real Git object is refused
+ok 4 - actual .gitattributes blob mutation to a different real Git object is refused
+  ---
+  duration_ms: 1.0135
+  type: 'test'
+  ...
+# Subtest: actual .gitattributes executable mode and unsupported object type mutations are refused
+ok 5 - actual .gitattributes executable mode and unsupported object type mutations are refused
+  ---
+  duration_ms: 12.524
+  type: 'test'
+  ...
+# Subtest: AGENTS and actual documentary/native-result inputs cannot change between R1 and R2
+ok 6 - AGENTS and actual documentary/native-result inputs cannot change between R1 and R2
+  ---
+  duration_ms: 73.3859
+  type: 'test'
+  ...
+# Subtest: actual first-use setup lock extracts JSON text before concatenating; guard catches former class
+ok 7 - actual first-use setup lock extracts JSON text before concatenating; guard catches former class
+  ---
+  duration_ms: 0.9192
+  type: 'test'
+  ...
+# Subtest: complete SQL DTO guard and native sidecar retain required actual source-gate inputs
+ok 8 - complete SQL DTO guard and native sidecar retain required actual source-gate inputs
+  ---
+  duration_ms: 0.7342
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1719.4258
