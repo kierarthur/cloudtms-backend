@@ -1138,7 +1138,7 @@ create temporary table wp18_dynamic_sql_acknowledged (
 insert into wp18_dynamic_sql_acknowledged
   (schema_name, routine_name, identity_arguments, definition_sha256) values
 -- BEGIN EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
--- Fifteen fixed-query readers: original RELEASE8 acknowledgements retained;
+-- Sixteen fixed-query readers: original RELEASE8 acknowledgements retained;
 -- five current Banking reader bodies rederived from clean PG17 on 13 October.
 -- Their full source/callee review is recorded in first-install-census-dynamic-
 -- readers-review.md. These are installed-definition hashes, not file hashes.
@@ -1146,6 +1146,10 @@ insert into wp18_dynamic_sql_acknowledged
 -- that dynamic SQL cannot write evidence. Existing scanner/refusal stays intact.
   ('private','bpay_next_current_case_page_v1','p_candidate_id uuid, p_after_case_id uuid, p_limit integer','68d98f65f4ed6a9033c3066136d6f04ee99967cd85a1277616abbf3181f87df6'),
   ('private','bpay_next_current_stored_credit_page_v1','p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer','0b450bf8cce85f2df493206827fa04f0097987f02bab4a7df133c41465bfa955'),
+  -- XD01: independently reviewed readonly sorted overload; exact native
+  -- anchors/finite direction fragments and unchanged masked eligibility point.
+  -- Catalogue acknowledgement of assembled SQL, not an absence/safety proof.
+  ('private','bpay_next_current_stored_credit_page_v1','p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer, p_sort text','6b2ca90e171ce8c834ea5062f5a28118f6438476cf519bf5783215b9cd4405a6'),
   ('private','bpay_next_current_work_page_v1','p_candidate_id uuid, p_after_week date, p_after_work_id uuid, p_limit integer','b4ed30958ceda2b5f985bbc988392bd78bc9402d25d4a8ef38ce3e631ba7502d'),
   ('private','bpay_next_return_cash_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','58829da8c927cba024275c7f1671c00f9c669b503ce645605754a5b104b2f76e'),
   ('private','bpay_next_workbench_kind_page_v1','p_kind text, p_scope jsonb, p_after jsonb, p_limit integer','3da92df9dc98041fb351b55d27124c612016462a408dae1db9226d646f9bf61c'),

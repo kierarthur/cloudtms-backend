@@ -1539,6 +1539,10 @@
       "sha256": "faa8f3c99658fb38f474e08c393a2b32d85d97333f796bd76a035b6ec1892972"
     },
     {
+      "path": "supabase/migrations/13102026_1452_banking_pay_next_stored_credit_sort_indexes.sql",
+      "sha256": "82dbd7a3c4697491ceb896296d4eafc3ee98386ef9e65595e9c90205b495674b"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

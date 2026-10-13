@@ -628,6 +628,7 @@ export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
   "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
   "private.bpay_next_current_case_page_v1(uuid,uuid,integer)",
   "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)",
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)",
   "private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)",
   "private.bpay_next_return_cash_page_v1(uuid,uuid,integer,integer)",
   "private.bpay_next_simple_break_page_v1(uuid,uuid,integer,integer)",
@@ -656,6 +657,9 @@ const TYPED_PAGE_PROJECTIONS=Object.freeze({
     "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_id,c.candidate_id,c.case_kind,c.tax_treatment,c.status, c.principal_approved::text,c.principal_funded::text,c.principal_recovered::text, c.principal_written_off::text,c.active_hold_amount::text from"
   ],
   "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.to_jsonb(page) into v_value from ( select a.id as legacy_case_id,a.candidate_id,c.source_amount::text as principal_source_ex_vat, c.source_pay_method as original_source_pay_channel, a.taxability::text as original_tax_treatment,a.routing_kind::text as original_routing_kind, a.created_at as original_created_at_utc,b.updated_at_utc as bank_version_at_utc, b.bank_details_hash,b.beneficiary_name,pg_catalog.right(b.account_number,4) as account_last4 from"
+  ],
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)": [
     "pg_catalog.to_jsonb(page) into v_value from ( select a.id as legacy_case_id,a.candidate_id,c.source_amount::text as principal_source_ex_vat, c.source_pay_method as original_source_pay_channel, a.taxability::text as original_tax_treatment,a.routing_kind::text as original_routing_kind, a.created_at as original_created_at_utc,b.updated_at_utc as bank_version_at_utc, b.bank_details_hash,b.beneficiary_name,pg_catalog.right(b.account_number,4) as account_last4 from"
   ],
   "private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)": [
@@ -699,6 +703,10 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
   "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',true,'scan_cursor',null)",
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not v_more,'scan_cursor',v_scan_cursor)"
+  ],
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)": [
     "pg_catalog.jsonb_build_object('rows',v_rows,'complete',true,'scan_cursor',null)",
     "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not v_more,'scan_cursor',v_scan_cursor)"
   ],
@@ -2113,6 +2121,48 @@ export function firstInstallIncomingHazards(source,file,baseline=new Map()){
   for(const [key,count] of approved.hazards)result.set(key,Math.max(result.get(key)??0,count));
   return result;
 }
+// XD01: only the reviewed sorted overload's two finite SELECT bases,
+// typed native anchors/direction/operator and unchanged first-two singleton
+// point are admitted. Pin all producer text, not just EXECUTE. Other detectors,
+// typed projections, ACL, frozen/write and final-owner checks remain strict.
+const XD01_SORTED_READER_CLASSIFICATION=Object.freeze({
+  "file": "supabase/repeatable/13102026_1452_banking_pay_next_stored_credit_sorted_reader_v1.sql",
+  "signature": "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)",
+  "sha256": "58eec52dec8f9dd78ed6ac764a06522784fdb96a3ad4940802d5859d5482e4d6",
+  "body_sha256": "af8c8e2cbf274faadc2730197781a9098dbb156b9dc26c9ba8ad3bca06b91433",
+  "hazards": [
+    [
+      "[\"private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if p_sort like 'PAID_TO_%' then\\n    v_query:=$query$select b.finance_case_id as id\\n      from public.pay_finance_case_oneoff_payout_bank_details b where b.candidate_id=$1$query$;\"]",
+      1
+    ],
+    [
+      "[\"private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"else\\n    v_query:=$query$select a.id from public.pay_advances a\\n      where a.candidate_id=$1 and a.case_type='MANUAL_CREDIT_ADJUSTMENT'\\n        and a.taxability='NON_TAXABLE' and a.routing_kind='ONE_OFF_SPECIFIED_BANK_ACCOUNT'\\n        and a.oneoff_bank_details_required is true and a.status='ACTIVE' and a.payout_status='PENDING'$query$;\"]",
+      1
+    ],
+    [
+      "[\"private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_raw in execute v_query using p_candidate_id,p_after_legacy_case_id,p_limit+1,v_anchor_text,v_anchor_time,v_anchor_amount loop\\n    if v_seen=p_limit then v_more:=true;\"]",
+      1
+    ],
+    [
+      "[\"private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer,text)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"select pg_catalog.to_jsonb(page) into v_value from (\\n      select a.id as legacy_case_id,a.candidate_id,c.source_amount::text as principal_source_ex_vat,\\n        c.source_pay_method as original_source_pay_channel,\\n        a.taxability::text as original_tax_treatment,a.routing_kind::text as original_routing_kind,\\n        a.created_at as original_created_at_utc,b.updated_at_utc as bank_version_at_utc,\\n        b.bank_details_hash,b.beneficiary_name,pg_catalog.right(b.account_number,4) as account_last4\\n      from public.pay_advances a\\n      cross join lateral (\\n        select count(*) as component_count,min(probe.id::text)::uuid as component_id\\n        from (select pc.id from public.pay_finance_case_components pc\\n          where pc.finance_case_id=a.id order by pc.id limit 2) probe\\n      ) identity_probe\\n      join public.pay_finance_case_components c on c.id=identity_probe.component_id and identity_probe.component_count=1\\n      join public.pay_finance_case_oneoff_payout_bank_details b on b.finance_case_id=a.id and b.candidate_id=a.candidate_id\\n      where a.id=v_raw.id and a.candidate_id=p_candidate_id and a.case_type='MANUAL_CREDIT_ADJUSTMENT'\\n        and a.taxability='NON_TAXABLE' and a.routing_kind='ONE_OFF_SPECIFIED_BANK_ACCOUNT'\\n        and a.oneoff_bank_details_required is true and a.status='ACTIVE' and a.payout_status='PENDING'\\n        and a.payout_pay_batch_id is null and a.payout_transfer_id is null\\n        and a.original_amount>0 and a.outstanding_amount=a.original_amount\\n        and a.cleared_at_utc is null and a.written_off_at_utc is null\\n        and c.finance_case_id=a.id and c.candidate_id=a.candidate_id and c.source_pay_method='UMBRELLA'\\n        and c.classification='REIMBURSEMENT_GROSS_FIXED' and c.component_key_type='CASE_TOTAL' and c.component_key_value='TOTAL'\\n        and c.source_family_key='case:'||a.id::text and c.linked_timesheet_id is null and c.closed_at_utc is null\\n        and c.source_amount=a.original_amount and c.remaining_source_amount=c.source_amount\\n        and c.source_amount not in ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric)\\n        and c.source_basis_json->>'case_type'='MANUAL_CREDIT_ADJUSTMENT'\\n        and c.source_basis_json->>'taxability'='NON_TAXABLE'\\n        and c.source_basis_json->>'routing_kind'='ONE_OFF_SPECIFIED_BANK_ACCOUNT'\\n        and pg_catalog.isfinite(a.created_at) and pg_catalog.isfinite(b.updated_at_utc)\\n        and pg_catalog.octet_length(b.bank_details_hash) between 1 and 256\\n        and nullif(pg_catalog.btrim(b.beneficiary_name),'') is not null\\n        and b.account_number~'^[0-9]{8}$'\\n        and public._bank_hash(b.sort_code,b.account_number,b.beneficiary_name)=b.bank_details_hash\\n        and not exists(select 1 from private.bpay_next_stored_credit_origin o where o.legacy_case_id=a.id)\\n    ) page;\"]",
+      1
+    ]
+  ]
+});
+export function sortedStoredCreditHazards(source,file,baseline=new Map()){
+  const approved=XD01_SORTED_READER_CLASSIFICATION;
+  if(file!==approved.file)return baseline;
+  const canonical=source.replaceAll('\r\n','\n'),hash=value=>createHash('sha256').update(value).digest('hex');
+  const parts=executableParts(canonical,file).filter(part=>part.signature===approved.signature);
+  if(hash(canonical)!==approved.sha256||parts.length!==1||parts[0].unclassified||hash(parts[0].text)!==approved.body_sha256)
+    throw Error('BPAY_NEXT_SORTED_CREDIT_SOURCE_CLASSIFICATION_CHANGED: '+file);
+  const actual=specialConstructViolations(canonical,file),counts=new Map();
+  for(const row of actual)counts.set(row.key,(counts.get(row.key)??0)+1);
+  if(counts.size!==approved.hazards.length||approved.hazards.some(([key,count])=>counts.get(key)!==count))
+    throw Error('BPAY_NEXT_SORTED_CREDIT_SOURCE_CLASSIFICATION_CHANGED: '+file);
+  const result=new Map(baseline);for(const [key,count] of approved.hazards)result.set(key,Math.max(result.get(key)??0,count));
+  return result;
+}
 export function assertRpcReload(source,file){
   source=source.replaceAll('\r\n','\n');
   const rows=scanManagedSql(source).statements;
@@ -2424,7 +2474,7 @@ export function verifyBpayNextSourceGates(){
           const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
           assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:firstInstallIncomingHazards(source,file,baselineHazards));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }

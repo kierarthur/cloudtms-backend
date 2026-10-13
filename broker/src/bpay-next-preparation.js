@@ -531,6 +531,7 @@ function field(v,t){
   if(t==='positiveCashMoney')return field(v,'cashMoney')&&/[1-9]/.test(v);
   if(t==='positiveMoney')return field(v,'money')&&!v.startsWith('-')&&/[1-9]/.test(v);
   if(t==='storedOriginChannel')return v==='UMBRELLA';
+  if(t==='storedCreditSort')return typeof v==='string'&&/^(CREDIT|CREATED|AMOUNT|PAID_TO)_(ASC|DESC)$/.test(v);
   if(t==='storedOriginTax')return v==='NON_TAXABLE';
   if(t==='storedOriginRouting')return v==='ONE_OFF_SPECIFIED_BANK_ACCOUNT';
   if(t==='last4')return typeof v==='string'&&/^[0-9]{4}$/.test(v);
@@ -776,7 +777,8 @@ function pageCall(request){
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
   const kind=url.searchParams.get('kind');
   if(['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(kind)){try{return caseFinanceQuery(kind,url.searchParams);}catch{throw fault('REQUEST_INVALID',400);}}
-  const schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{}),...(url.searchParams.has('restructure_command_id')?{restructure_command_id:'uuid'}:{}),...(url.searchParams.has('channel_command_id')?{channel_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  let schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{}),...(url.searchParams.has('restructure_command_id')?{restructure_command_id:'uuid'}:{}),...(url.searchParams.has('channel_command_id')?{channel_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  if(kind==='CURRENT_STORED_CREDITS'&&url.searchParams.has('sort'))schema={...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CURRENT_STORED_CREDITS,sort:'storedCreditSort'};
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
@@ -804,8 +806,30 @@ async function limitedJson(input,maximum,request,signal,mutation){
   }catch(e){await reader.cancel().catch(()=>{});if(e instanceof PreparationError)throw e;throw bad();}
   finally{signal?.removeEventListener('abort',cancel);reader.releaseLock();}
 }
+function storedCreditCompare(a,b,sort){
+  let n=0;
+  if(sort.startsWith('CREATED_')){const x=caseListTime(a.original_created_at_utc),y=caseListTime(b.original_created_at_utc);n=x===y?0:x<y?-1:1;}
+  else if(sort.startsWith('AMOUNT_')){const value=v=>{const [w,f='']=v.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));},x=value(a.principal_source_ex_vat),y=value(b.principal_source_ex_vat);n=x===y?0:x<y?-1:1;}
+  else if(sort.startsWith('PAID_TO_'))n=caseListTextCompare(a.beneficiary_name,b.beneficiary_name);
+  if(n===0)n=caseListTextCompare(a.legacy_case_id,b.legacy_case_id);
+  return sort.endsWith('_DESC')?-n:n;
+}
+function sortedStoredCreditsResult(payload,args,bad){
+  if(!record(payload)||Object.keys(payload).sort().join()!=='complete,rows,scan_cursor'
+    ||!Array.isArray(payload.rows)||payload.rows.length>args.limit||typeof payload.complete!=='boolean'
+    ||!field(payload.scan_cursor,'uuid?')||(payload.scan_cursor===null&&(!payload.complete||payload.rows.length!==0))
+    ||payload.scan_cursor!==null&&payload.scan_cursor===args.after_legacy_case_id)bad();
+  const ids=new Set();let previous=null;
+  for(const row of payload.rows){
+    if(!exact(row,ROWS.CURRENT_STORED_CREDITS)||row.candidate_id!==args.candidate_id||row.legacy_case_id===args.after_legacy_case_id
+      ||ids.has(row.legacy_case_id)||previous!==null&&storedCreditCompare(row,previous,args.sort)<=0)bad();
+    ids.add(row.legacy_case_id);previous=row;
+  }
+  return {rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{after_legacy_case_id:payload.scan_cursor}};
+}
 function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
+  if(!mutation&&call.kind==='CURRENT_STORED_CREDITS'&&Object.hasOwn(call.args,'sort'))return sortedStoredCreditsResult(payload,call.args,bad);
   if(!mutation&&call.kind==='CASE_CHANNEL_SUGGEST'){if(!caseChannelPreview(payload,call.args,call.actorUserId))bad();return payload;}
   if(!mutation&&call.kind==='CASE_RESTRUCTURE_PREVIEW'){if(!caseRestructurePreview(payload,call.args,call.actorUserId))bad();return payload;}
   if(!mutation&&['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)){try{return caseFinanceResult(payload,call.kind,call.args,call.actorUserId);}catch{bad();}}
@@ -1090,6 +1114,10 @@ function safeError(e,attempted,mutation,action=null,args=null){
       &&field(refusal.run_id,'uuid')&&refusal.run_id.toLowerCase()===args?.run_id&&field(refusal.command_id,'uuid')&&field(refusal.agency_sequence,'positive'))
       return new PreparationError('BPAY_NEXT_PREPARATION_COMMAND_CONFLICT',409,false,false,normalized(refusal));
   }
+  if(!mutation&&action==='CURRENT_STORED_CREDITS'&&db?.code==='23514'&&db.message==='BPAY_NEXT_PREPARATION_CURSOR_CHANGED')
+    return new PreparationError('BPAY_NEXT_PREPARATION_CURSOR_CHANGED',409,false,false);
+  if(!mutation&&action==='CURRENT_STORED_CREDITS'&&db?.code==='54000'&&db.message==='BPAY_NEXT_PREPARATION_ROW_TOO_LARGE')
+    return new PreparationError('BPAY_NEXT_PREPARATION_ROW_TOO_LARGE',503,false,false);
   if(['PGRST202','42883','42P01','42703'].includes(db?.code))return fault('SCHEMA_UNAVAILABLE',503,false);
   if(db?.code==='42501'||[401,403].includes(e?.status))return fault('FORBIDDEN',403);
   if(db?.code==='P0002')return fault('SCOPE_NOT_FOUND',404);

@@ -14075,6 +14075,26 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public",
+        "statement_timeout=5s"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_current_stored_credit_page_v1(p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer, p_sort text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "6b2ca90e171ce8c834ea5062f5a28118f6438476cf519bf5783215b9cd4405a6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -35562,7 +35582,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9deedfa06d79680d02cb7d1b52e0743ad183306afa8871f5d7176731054e89bb"
+      "definition_sha256": "d99f9798a0f06000b2eab4c46983e4d1881f4445957dd848b9435c503e4dc62a"
     },
     {
       "acl": [
@@ -187944,6 +187964,14 @@
           "definition": "CREATE INDEX bpay_next_daily_retention_advance_ts_idx ON public.pay_advances USING btree (linked_timesheet_id) WHERE (linked_timesheet_id IS NOT NULL)"
         },
         {
+          "name": "bpay_next_stored_credit_amount_cursor_v1",
+          "definition": "CREATE INDEX bpay_next_stored_credit_amount_cursor_v1 ON public.pay_advances USING btree (candidate_id, original_amount, id) WHERE ((case_type = 'MANUAL_CREDIT_ADJUSTMENT'::pay_finance_case_type_enum) AND (taxability = 'NON_TAXABLE'::pay_finance_taxability_enum) AND (routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::pay_finance_routing_kind_enum) AND (oneoff_bank_details_required IS TRUE) AND (status = 'ACTIVE'::pay_advance_status_enum) AND (payout_status = 'PENDING'::pay_advance_payout_status_enum))"
+        },
+        {
+          "name": "bpay_next_stored_credit_created_cursor_v1",
+          "definition": "CREATE INDEX bpay_next_stored_credit_created_cursor_v1 ON public.pay_advances USING btree (candidate_id, created_at, id) WHERE ((case_type = 'MANUAL_CREDIT_ADJUSTMENT'::pay_finance_case_type_enum) AND (taxability = 'NON_TAXABLE'::pay_finance_taxability_enum) AND (routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::pay_finance_routing_kind_enum) AND (oneoff_bank_details_required IS TRUE) AND (status = 'ACTIVE'::pay_advance_status_enum) AND (payout_status = 'PENDING'::pay_advance_payout_status_enum))"
+        },
+        {
           "name": "idx_pay_advances_candidate_status",
           "definition": "CREATE INDEX idx_pay_advances_candidate_status ON public.pay_advances USING btree (candidate_id, status)"
         },
@@ -193481,6 +193509,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_stored_credit_payee_prefix_cursor_v1",
+          "definition": "CREATE INDEX bpay_next_stored_credit_payee_prefix_cursor_v1 ON public.pay_finance_case_oneoff_payout_bank_details USING btree (candidate_id, \"left\"(beneficiary_name, 128) COLLATE \"C\", finance_case_id)"
+        },
         {
           "name": "idx_pay_fin_case_oneoff_payout_bank_details_candidate",
           "definition": "CREATE INDEX idx_pay_fin_case_oneoff_payout_bank_details_candidate ON public.pay_finance_case_oneoff_payout_bank_details USING btree (candidate_id)"
