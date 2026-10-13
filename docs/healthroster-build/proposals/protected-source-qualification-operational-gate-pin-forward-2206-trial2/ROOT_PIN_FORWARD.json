@@ -1,0 +1,241 @@
+{
+  "schema_version": "PROTECTED_SOURCE_STRICT_GATE_ROOT_PIN_FORWARD_TRIAL2_V1",
+  "status": "FROZEN_SOURCE_PIN_FORWARD_NATIVE_OPERATIONAL_ACCEPTANCE_UNEXECUTED",
+  "root_before": "b65df0997ac69188eadf4de2a88f70226fa99532",
+  "root_after": "d67f94e19000a612ee4f1099c14429d8a8b4bee1",
+  "predecessor_strict45_commit": "adec5f8b8a3955ac725c0da15ee344ac891b7674",
+  "predecessor_strict45_manifest_sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+  "predecessor_pin6_manifest_sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f",
+  "frozen_predecessor_files_verified_unchanged": 51,
+  "changed_files": [
+    {
+      "status": "M",
+      "file": "docs/healthroster-build/PROGRESS.md",
+      "sha256": "daf4d5a4dd040aec63a22c26775612033898ccd6a51c46ed202add6f2f5995a5",
+      "bytes": 66509
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE.sql",
+      "sha256": "f6ff5a9623ef73955156fb53d43d07d0cf99d9acc189fbfd5b5ec5259bf279d5",
+      "bytes": 179135
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_FRESH.sql",
+      "sha256": "e1315412fc82c4bc783a60a2309a5aed22b8fce259f5544fbab3310888c7f624",
+      "bytes": 1530
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_PLAN.json",
+      "sha256": "2f7e2ff1798b0ab872b729b78166232e5295d2642e2d2d9e4509a0451ba51b77",
+      "bytes": 5149
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_1.json",
+      "sha256": "96c274c1da77a0d45f9e43ed72ab86674025783bf7b9c92573ef56e3e767caae",
+      "bytes": 15976
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_1_SQL_CAPSULE.json",
+      "sha256": "0f53daf2769a822fab5c76bfc0225b0af3b3cffffe6aa8dfaef9da8cdd3144e9",
+      "bytes": 263800
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_2.json",
+      "sha256": "fd5e064daed7c28dd17691054e8a6f5a044959069fa3029a98e8c33c99b83aed",
+      "bytes": 16356
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_2.sql",
+      "sha256": "6d4e80fe502be58b62a9acacf9d03246adab630eb2719b1a52a0aa21c52c7b28",
+      "bytes": 179171
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_2_FRESH.sql",
+      "sha256": "e1315412fc82c4bc783a60a2309a5aed22b8fce259f5544fbab3310888c7f624",
+      "bytes": 1530
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_2_PLAN.json",
+      "sha256": "fb2a3c3b89960cccf3ecef01f45c514cec2a7ed3a52a7dc39c16b0a638267fdf",
+      "bytes": 5149
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_2_SQL_CAPSULE.json",
+      "sha256": "3924e8bbdd637191fd3f59b6162b6dd6e3c1363bbf1b27b0e0c711c807c33498",
+      "bytes": 264194
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/prepare_automatic_short_compile.mjs",
+      "sha256": "374c3589406c059ed08bd579ef391f116dcfcf4097340868d42305666fa5e307",
+      "bytes": 6216
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/prepare_automatic_short_compile_v2.mjs",
+      "sha256": "d5cb8b9017e6df97019fb1c29342f7dd03b13932541df9c9a081017203a3b80c",
+      "bytes": 6240
+    },
+    {
+      "status": "M",
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "bytes": 7115
+    }
+  ],
+  "full_diff": {
+    "file": "ROOT_B65_TO_D67_FULL_DIFF.patch",
+    "sha256": "a36169e114436f69c8dd39d40ba7c9ff9fa70338b0ef4c12c9ebd820e20aac78",
+    "bytes": 964111
+  },
+  "runtime_diff": {
+    "file": "VERIFIER_2206_COMPLETE_FORWARD.patch",
+    "sha256": "109c2a06b8316ef75c982bcf2c2d338ce44fcc0d51559b46589e993f5db4529b",
+    "bytes": 3159
+  },
+  "updated_root_input_pins": [
+    {
+      "file": "supabase/release/current-release.json",
+      "before_sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "after_sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "bytes": 34534,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "before_sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7",
+      "after_sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7",
+      "bytes": 34870,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+      "before_sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da",
+      "after_sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da",
+      "bytes": 1357,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "before_sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf",
+      "after_sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf",
+      "bytes": 5442,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "before_sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "after_sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "bytes": 19923,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "before_sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8",
+      "after_sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8",
+      "bytes": 5083,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "before_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "after_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "bytes": 51247,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "before_sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95",
+      "after_sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95",
+      "bytes": 8082,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "before_sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861",
+      "after_sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861",
+      "bytes": 8551,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "before_sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261",
+      "after_sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261",
+      "bytes": 15071,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "before_sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "after_sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "bytes": 18659,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "before_sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b",
+      "after_sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b",
+      "bytes": 31628,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "before_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "after_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "bytes": 35662,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "before_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "after_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "bytes": 58831,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "before_sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c",
+      "after_sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c",
+      "bytes": 2578,
+      "byte_identical": true
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "before_sha256": "0b80cdf4eeb411407fcf4faca6a35462a71575c7497dc3fc0e6b39c676bbe9a1",
+      "after_sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "bytes": 7115,
+      "byte_identical": false
+    }
+  ],
+  "complete_reverse_hunks_match_entire_b65_verifier": true,
+  "verifier_changes": [
+    "Retained-owner alias p becomes retained_proc",
+    "Missing-stage exact55000/name rather than raw no_data_found",
+    "Missing-delta exact55000/name rather than raw no_data_found",
+    "Adjacent explanatory comment"
+  ],
+  "root_private_count_preserved": 232,
+  "planned_complete_private_union": 258,
+  "tables_preserved": 105,
+  "service_signatures_preserved": 142,
+  "new_signatures": 0,
+  "new_service_grants": 0,
+  "operational_prerequisite_v2": false,
+  "actual_sql_trial_acceptance": false,
+  "actual_native_financial_acceptance": false,
+  "actual_activation": false,
+  "actual_api_ui_phone": false,
+  "lane_database_calls": 0,
+  "source_evidence_rule": "The original b65 and cdaf trial failures retain their exact execution identities. This selected verifier change is not same-source equivalence; new execution evidence requires the actual new identity. Definition/ACL progress is not financial or operational qualification.",
+  "integration_rule": "Use d67f94e as the root pin/current2206 hash; keep the frozen strict45 and older pin6 unchanged. All2205 Local/receipt/helper/ACL/release-registration inputs are byte-identical. Union the full26 absent dependencies against root232; remeasure actual catalogue."
+}
