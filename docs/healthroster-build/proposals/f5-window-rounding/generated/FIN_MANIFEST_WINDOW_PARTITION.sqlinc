@@ -1,0 +1,81 @@
+-- REVIEW ONLY: insert ROUND once per actual scope before this block; foreign-window manifests are invoice-only in pay callers.
+  for v_manifest in
+    select scope.client_id,scope.invoice_window_cycle_id,actual.finalisation_week_ending as invoice_week_ending
+    from (select movement.actual_client_id as client_id,
+      private.weekly_source_invoice_movement_window_id_v1(movement.id) as invoice_window_cycle_id
+      from public.weekly_source_billing_movements movement where movement.final_revision_id=v_revision_id
+      union select v_client_id,v_cycle.id) scope
+    join public.weekly_source_cycles actual on actual.id=scope.invoice_window_cycle_id
+    where scope.client_id is not null order by scope.client_id,scope.invoice_window_cycle_id
+  loop
+    select private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CLIENT_MANIFEST_V1',
+      pg_catalog.jsonb_build_object(
+        'final_revision_id',v_revision_id,'source_group_id',v_group.id,
+        'source_cycle_id',v_cycle.id,'client_id',v_manifest.client_id,
+        'finalisation_week_ending',v_manifest.invoice_week_ending,
+        'backing_report_number',v_backing_report_number,
+        'movements',coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'movement_id',movement.id,
+          'movement_economic_hash',pg_catalog.encode(movement.movement_economic_hash,'hex')
+        ) order by pg_catalog.encode(movement.movement_economic_hash,'hex')),
+        '[]'::jsonb),
+        'expense_authorities',coalesce((
+          select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+            'expense_authority_generation_id',expense.id,
+            'authority_hash',pg_catalog.encode(expense.authority_hash,'hex')
+          ) order by pg_catalog.encode(expense.authority_hash,'hex'))
+          from public.weekly_expense_authority_generations expense
+          join public.weekly_work_events event on event.id=expense.work_event_id
+          where expense.final_revision_id=v_revision_id and event.client_id=v_manifest.client_id
+            and v_manifest.invoice_window_cycle_id=v_cycle.id
+        ),'[]'::jsonb)
+      )||case when v_manifest.invoice_window_cycle_id=v_cycle.id then '{}'::jsonb else jsonb_build_object('invoice_window_cycle_id',v_manifest.invoice_window_cycle_id) end
+      ||case when v_rule_version is null then '{}'::jsonb else jsonb_build_object('rule_set_version_id',v_rule_version,'rule_set_values_sha256',v_rule_set->>'values_sha256') end
+    ) into v_client_manifest_hash
+    from public.weekly_source_billing_movements movement
+    where movement.final_revision_id=v_revision_id
+      and movement.actual_client_id=v_manifest.client_id
+      and private.weekly_source_invoice_movement_window_id_v1(movement.id)=v_manifest.invoice_window_cycle_id;
+    insert into public.weekly_source_client_manifests(
+      final_revision_id,source_group_id,source_cycle_id,invoice_window_cycle_id,client_id,
+      finalisation_week_ending,backing_report_number,manifest_hash,movement_count,
+      unchanged_snapshot_count,expense_line_count,invoice_state
+    ) values (
+      v_revision_id,v_group.id,v_cycle.id,case when v_manifest.invoice_window_cycle_id=v_cycle.id then null else v_manifest.invoice_window_cycle_id end,v_manifest.client_id,
+      v_manifest.invoice_week_ending,v_backing_report_number,v_client_manifest_hash,
+      (select pg_catalog.count(*)::integer
+       from public.weekly_source_billing_movements movement
+       where movement.final_revision_id=v_revision_id
+         and movement.actual_client_id=v_manifest.client_id
+         and private.weekly_source_invoice_movement_window_id_v1(movement.id)=v_manifest.invoice_window_cycle_id),
+      (select pg_catalog.count(*)::integer
+       from public.weekly_source_state_transitions transition_row
+       join public.weekly_source_final_snapshot_lines snapshot_line
+         on snapshot_line.id=transition_row.new_snapshot_line_id
+       where transition_row.final_revision_id=v_revision_id
+         and transition_row.outcome='NO_CHANGE'
+         and snapshot_line.client_id=v_manifest.client_id
+         and v_manifest.invoice_window_cycle_id=v_cycle.id),
+      (select pg_catalog.count(*)::integer
+       from public.weekly_expense_authority_generations expense
+       join public.weekly_work_events event on event.id=expense.work_event_id
+       where expense.final_revision_id=v_revision_id
+         and event.client_id=v_manifest.client_id
+         and v_manifest.invoice_window_cycle_id=v_cycle.id),
+      'READY'
+    ) returning id into v_client_manifest_id;
+    insert into public.weekly_source_manifest_movements(
+      client_manifest_id,billing_movement_id,manifest_ordinal,movement_hash
+    )
+    select v_client_manifest_id,movement.id,
+           pg_catalog.row_number() over(
+             order by pg_catalog.encode(movement.movement_economic_hash,'hex')
+           )::integer,
+           movement.movement_economic_hash
+    from public.weekly_source_billing_movements movement
+    where movement.final_revision_id=v_revision_id
+      and movement.actual_client_id=v_manifest.client_id
+      and private.weekly_source_invoice_movement_window_id_v1(movement.id)=v_manifest.invoice_window_cycle_id;
+  end loop;
+

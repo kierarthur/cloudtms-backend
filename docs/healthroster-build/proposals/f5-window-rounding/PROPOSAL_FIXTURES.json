@@ -1,0 +1,35 @@
+{
+  "contract": "HEALTHROSTER_F5_WINDOW_RECEIPT_FIXTURES_V1",
+  "source_only": true,
+  "hosted_financial_proof": false,
+  "fixture_prefix": "f5520000-0000-4000-8000-",
+  "arithmetic_vectors_pence": [
+    {"name":"post-final-default","net":["10000"],"raw_vat":["2100"],"raw_rounding":"-100","released_vat":["2000"],"admitted_rounding":"0","target_vat":"2000","target_gross":"12000","visible_rounding_line":false,"qualified_internal_authority":true},
+    {"name":"raw-zero-positive-mixed","net":["100","100"],"raw_vat":["30","10"],"raw_rounding":"0","actions":["BILL_AT_NET_PLUS_20","BILL_AS_FILE"],"released_vat":["20","10"],"admitted_rounding":"10","target_vat":"40","target_gross":"240","visible_rounding_line":true},
+    {"name":"raw-zero-negative-mixed","net":["100","100"],"raw_vat":["30","10"],"raw_rounding":"0","actions":["BILL_AS_FILE","BILL_AT_NET_PLUS_20"],"released_vat":["30","20"],"admitted_rounding":"-10","target_vat":"40","target_gross":"240","visible_rounding_line":true},
+    {"name":"raw-zero-both-file","net":["100","100"],"raw_vat":["30","10"],"raw_rounding":"0","actions":["BILL_AS_FILE","BILL_AS_FILE"],"released_vat":["30","10"],"admitted_rounding":"0","target_vat":"40","target_gross":"240","visible_rounding_line":false,"qualified_internal_authority":true},
+    {"name":"zero-no-hold-regression","net":["100","100"],"raw_vat":["20","20"],"raw_rounding":"0","receipts":[],"admitted_rounding":"0","target_vat":"40","target_gross":"240","rounding_movement":false,"internal_rounding_line":false,"visible_rounding_line":false},
+    {"name":"negative-half-up","net":["-3"],"raw_vat":["-1"],"method":"ONCE_ON_TOTAL_HALF_UP","raw_rounding":"0","target_vat":"-1"},
+    {"name":"negative-truncate","net":["-3"],"raw_vat":["-1"],"method":"ONCE_ON_TOTAL_TRUNCATE","raw_rounding":"1","target_vat":"0"}
+  ],
+  "native_root_rollback_journeys": [
+    {"id":"WR1","purpose":"Earlier existing OPEN cycle before any later CURRENT; stage same genuine whole file through existing native owners earliest-first, verify original bytes/physical/money/coverage and no duplicate pay or invoice."},
+    {"id":"WR2","purpose":"Later genuine CURRENT exists and earlier real invoice window is OPEN. Produce actual NO_CHANGE money-only pair in original Source revision; partition foreign invoice manifest, preserve all original source IDs/hashes, place on real earlier invoice window/header; no fake earlier Source finalisation."},
+    {"id":"WR3","purpose":"One genuine file contains earlier money-only correction and current ordinary pay rows. Every movement belongs to exactly one immutable manifest/window, all correction pay0; current pay owning manifest only; no pay-context exposure from foreign invoice-only manifest."},
+    {"id":"WR4","purpose":"Multiple real windows, native per-window ROUND uniqueness, each membership target independently matches frozen S09; replay same file has no duplicate pair/rounding/manifest/placement."},
+    {"id":"WR5","purpose":"Missing/foreign/closed/stale target, changed cutoff/version/group/member/profile, earlier than go-live coverage floor, malformed/unfinalised timestamp and window/root-set growth refuse before mutation; no current-policy fallback."},
+    {"id":"VR1","purpose":"One held line finalised while pay remains native. Release after final at net+20; first invoice uses exact immutable receipt and ROUND purpose projection, original money/hash/manifest/pay unchanged; exact replay."},
+    {"id":"VR2","purpose":"Two opposite raw VAT errors with rawD0: mixed choices yield exact +10/-10 vectors; approved pending zero authority exists before original manifest freeze; no post-final movement append."},
+    {"id":"VR3","purpose":"Raw nonzero or pending rawD0 becomes admitted D0; native bindings/placement/census retain internal zero authority, frozen presentation model/FINAL_ISSUE retain qualified suppression witness, PDF has no zero visible rounding row."},
+    {"id":"VR4","purpose":"D0/no VAT_FIT, including original Report210825, retains no rounding movement, internal line or visible line."},
+    {"id":"VR5","purpose":"Release before final and after final produce equal invoice targets; both file and default choices; later genuine AMEND/CANCEL and correction unwind consume exact admitted prior line receipt identities with unchanged native pay heads."},
+    {"id":"VR6","purpose":"Forged/missing/extra/foreign receipt/member/row/hash/action/pence, changed frozen version, stale invoice/document CAS, placed/issued scopes and suppression flag tampering fail allocation/issue/model creation; no hiding an ordinary zero line."},
+    {"id":"VR7","purpose":"Actual LEGACY/NEXT/protected native publication/pay/Source hooks remain; PI1/PI2 and AL1/AL2/AL3 on every added purpose branch; FINAL_ISSUE document transport uses frozen snapshot without live rebuild."}
+  ],
+  "setup_requirements": [
+    "Root chooses legal real current-clock cycle/upload dates and exact pre-go-live coverage; no fake clock, READY, manager signature or publication marker.",
+    "Root proves vacancy for all prefix/unique keys and generated native IDs through exact fixture parents before DDL/DML.",
+    "Root captures original owner hashes/census/ACL/schema and fresh rollback absence with physical agency TEST identity.",
+    "Root composes accepted variant and all Source/Report/Protection/Date/Bank call-only contracts before actual financial assertions."
+  ]
+}

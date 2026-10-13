@@ -1,0 +1,16 @@
+{
+  "contract": "HEALTHROSTER_F5_WINDOW_RECEIPT_SOURCE_PROPOSAL_V1",
+  "frozen_inputs_unchanged": true,
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/COMPLETE_MONEY_OWNER_PROPOSALS.sqlinc",
+      "bytes": 19792,
+      "sha256": "277722b8b3fe8bf20d9b26dc930fa9c2900cdd7643a43799a0194d6de8b1cd6e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/FIN_MANIFEST_WINDOW_PARTITION.sqlinc",
+      "bytes": 5204,
+      "sha256": "aa8992505fac306a73c5fa896b33180880c81f2f848ba9c158f4a60e55813506"
+    }
+  ]
+}

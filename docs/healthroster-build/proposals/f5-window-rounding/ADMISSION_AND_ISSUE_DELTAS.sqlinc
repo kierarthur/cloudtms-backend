@@ -1,0 +1,83 @@
+-- REVIEWABLE INTEGRATION HUNKS ONLY. Not standalone installable SQL.
+
+-- 1. Native ADMIT, after existing manifest/revision/completion/actor/CAS
+-- checks and before invoice header creation. Additional declarations:
+-- v_invoice_cycle public.weekly_source_cycles%rowtype;
+-- v_rounding_receipt_set jsonb; v_rounding_authority jsonb;
+select * into strict v_invoice_cycle from public.weekly_source_cycles
+where id=coalesce(v_manifest.invoice_window_cycle_id,v_manifest.source_cycle_id) for share;
+if v_invoice_cycle.source_group_id is distinct from v_manifest.source_group_id
+  or (v_invoice_cycle.scope_client_id is not null and v_invoice_cycle.scope_client_id<>v_manifest.client_id)
+  or v_invoice_cycle.finalisation_week_ending<>v_manifest.finalisation_week_ending then
+  raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_MANIFEST_INVALID' using errcode='55000'; end if;
+if v_manifest.invoice_window_cycle_id is not null and exists(
+  select 1 from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+  where mm.client_manifest_id=v_manifest.id and (m.total_pay_ex_vat<>0
+    or m.source_line_kind not in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')
+    or private.weekly_source_invoice_movement_window_id_v1(m.id)<>v_invoice_cycle.id)) then
+  raise exception 'WEEKLY_SOURCE_FOREIGN_WINDOW_PAY_OR_MEMBERSHIP_INVALID' using errcode='55000'; end if;
+-- Reassert each foreign correction's frozen window scope SHA, actual row,
+-- timestamp bounds and initial cutoff/version CAS here. Historical issue uses
+-- its frozen scope, not today's window state/settings. Keep all original
+-- Source revision/cycle/manifest/money/hash checks exactly as they are.
+
+-- Header meta: retain source_cycle_id=original actual Source cycle and existing
+-- final_revision_id/client_manifest_id. Add invoice_window_cycle_id and source
+-- finalisation week; finalisation_week_ending is the actual invoice week.
+-- Existing initial placement uses v_invoice_cycle.id for BOTH
+-- original_automatic_cycle_id and current_target_cycle_id; binding's
+-- original_cycle_id remains the genuine movement/source cycle. No Move call.
+
+-- 2. First-admission complete explicit receipt set, chosen once before loop.
+select coalesce(jsonb_agg(jsonb_build_object('billing_movement_id',m.id,
+  'invoice_hold_release_id',receipt.id) order by m.id),'[]'::jsonb)
+into v_rounding_receipt_set
+from public.weekly_source_manifest_movements mm
+join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+left join public.weekly_source_invoice_hold_releases receipt
+  on receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT'
+  and m.movement_role in ('POSITIVE','REPLACEMENT')
+  and m.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+where mm.client_manifest_id=v_manifest.id and m.source_line_kind<>'INVOICE_VAT_ROUNDING';
+
+-- 3. Existing rounding admission branch after ordinary receipt projection,
+-- before presentation/source hash and immutable invoice line materialisation.
+if v_is_rounding then
+  v_rounding_authority:=private.weekly_source_invoice_rounding_receipt_set_v1(v_manifest.id,v_rounding_receipt_set);
+  if v_rounding_authority is not null then
+    v_vat:=(v_rounding_authority->>'admitted_rounding_vat_pence')::numeric/100;
+    v_total:=v_vat; -- net/pay remain0; no original movement/hash is rewritten.
+    v_source_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_ROUNDING_PRESENTATION_V1',jsonb_build_object(
+      'original_movement_source_hash',encode(v_source_hash,'hex'),
+      'rounding_authority_sha256',v_rounding_authority->>'authority_sha256'));
+  end if;
+end if;
+-- Insert v_rounding_authority in new nullable presentation authority JSON.
+-- Freeze same authority+explicit receipt UUID/null map in invoice_lines.meta_json.
+-- Existing presentation_hash already binds v_vat/v_total/v_source_hash; keep it.
+
+-- 4. Allocation and issue rebuild only presentation's EXACT stored receipt map
+-- and compare full derived authority JSON/SHA, native source hash and amounts.
+-- Never lookup a latest receipt/current configuration for historical validation.
+-- Native invoice-line↔presentation equality, canonical PAY/net/hours, original
+-- movement hash/census, member cardinality, FKs, placement and totals still run.
+-- Only ROUND VAT/gross comparison uses this proven purpose projection; original
+-- per-member movement VAT fallback remains for unclaimed/NULL authority paths.
+
+-- 5. FINAL_ISSUE/model source hook: a zero internal ROUND line is omitted from
+-- VISIBLE model lines only when this exact authority is independently qualified:
+-- actual invoice/line/CURRENT binding/presentation + ROUND approved origin,
+-- total_pay/net/VAT/gross all0, native hash/census checks, exact receipt-set
+-- authority rebuild and suppress_visible_rounding_line=true. Claim without
+-- qualified witness fails model creation. The native snapshot retains an
+-- explicit suppressed_rounding_authority_lines witness array (line UUID,
+-- presentation UUID/hash, source hash, authority SHA and0 amounts) inside its
+-- hashed model/supporting sources. Internal line and binding remain, keeping
+-- all native census/cardinality/placement checks. Ordinary zero lines are not
+-- hidden. Existing FINAL_ISSUE frozen snapshot transport is unchanged.
+
+-- 6. Pay contexts/open/task handlers admit only the canonical Source manifest:
+-- coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id.
+-- Foreign manifests are invoice-only and never reopen a revision-level pay
+-- context that happens to contain ordinary movements in a DIFFERENT manifest.
+-- Source/Bank publish_revision hook stays once per genuine Source revision.

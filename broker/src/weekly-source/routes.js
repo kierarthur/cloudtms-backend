@@ -31,6 +31,7 @@ const DIRECT_RPC_COMMANDS = Object.freeze({
   ADMIT_SOURCE_INVOICE: 'weekly_source_invoice_admit_atomic_v1',
   MOVE_SOURCE_INVOICE: 'weekly_source_invoice_move_atomic_v1',
   ACCEPT_NHSP_SOURCE_CHARGES: 'weekly_source_charge_accept_atomic_v1',
+  RELEASE_INVOICE_HOLD: 'weekly_source_invoice_hold_release_atomic_v1',
   // WP-12 handoff N2: the Office `Unauthorise` control on a Weekly-Source-managed
   // root had no route behind it, so the screen could not complete a withdrawal at
   // all. The owner takes one jsonb request like every other Weekly Source owner

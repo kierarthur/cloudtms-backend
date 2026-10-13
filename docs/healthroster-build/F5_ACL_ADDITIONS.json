@@ -1,0 +1,51 @@
+{
+  "contract": "HEALTHROSTER_F5_ACL_ADDITIONS_V1",
+  "input_source": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+  "input_sha256": "8e4f040fe382ddd2714b65e9341d44e9d1bef5e5ed8f4b4c7753a8c68f12b947",
+  "table": {
+    "name": "weekly_source_invoice_hold_releases",
+    "record_class": "IMMUTABLE_APPEND_ONLY",
+    "rls": true,
+    "force_rls": true,
+    "policy": "cloudtms_miget_service_owner_all",
+    "direct_role_access": false
+  },
+  "combined_stage": {
+    "total": 103,
+    "immutable": 38,
+    "lifecycle": 19,
+    "stateful": 46
+  },
+  "new_private_owner_only": [
+    "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+    "private.weekly_source_billing_movement_hash_v1(jsonb)",
+    "private.weekly_source_frozen_rule_values_v1(uuid)",
+    "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+    "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+    "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+    "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()",
+    "private.weekly_source_invoice_window_cycle_v1(uuid,uuid)",
+    "private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)",
+    "private.weekly_source_invoice_movement_money_v1(uuid,uuid)",
+    "private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)",
+    "private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)",
+    "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)",
+    "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+    "private.weekly_source_invoice_placement_identity_guard_v1()",
+    "private.weekly_source_source_amount_warnings_v1(uuid,uuid)"
+  ],
+  "new_public_service_only": [
+    "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)"
+  ],
+  "retained_pp_service": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+  "f8_owner_only_union": [
+    "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)",
+    "private.weekly_source_final_upload_gate_v1(uuid)",
+    "private.weekly_source_final_upload_assert_v1(uuid)",
+    "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_context_v1(uuid,uuid)",
+    "private.weekly_source_upload_coverage_floor_assert_v1(uuid,uuid,text,date)"
+  ],
+  "final_gate_owner": "Root; union report/F7/credit and later source additions before final ACL."
+}

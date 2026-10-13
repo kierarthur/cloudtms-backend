@@ -176,7 +176,7 @@ function validateBreakAllocation(value, breakMinutes) {
   });
 }
 
-function validatePriceComparison(comparison, sourceMode, calculation) {
+function validatePriceComparison(comparison, sourceMode, calculation, effectiveRuleSet) {
   if (comparison == null) {
     if (sourceMode === 'NHSP_WEEKLY') {
       fail(
@@ -232,6 +232,18 @@ function validatePriceComparison(comparison, sourceMode, calculation) {
     return;
   }
 
+  if (effectiveRuleSet?.values?.invoice_sender === 'CLIENT_SELF_BILL'
+      && effectiveRuleSet.values.invoice_amount_basis === 'SOURCE_AMOUNT'
+      && effectiveRuleSet.values.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+      && comparison.amountAuthority === 'VALIDATED_SOURCE_PENCE'
+      && ['EXACT', 'SOURCE_ROUNDING_EQUIVALENT', 'SOURCE_AMOUNT_DIFFERS'].includes(upper(comparison.result))) {
+    if (integerPence(comparison.invoicePresentationChargePence, 'WEEKLY_SOURCE_PRICE_COMPARISON_INVALID', 'Roster source net')
+        !== integerPence(comparison.sourceValidationChargePence, 'WEEKLY_SOURCE_PRICE_COMPARISON_INVALID', 'Roster validated source net')
+        || comparison.requiresOfficeAcceptance === true || comparison.acceptanceKind != null) {
+      fail('WEEKLY_SOURCE_PRICE_COMPARISON_INVALID', 'The roster source amount comparison is invalid.');
+    }
+    return;
+  }
   if (
     upper(comparison.result) !== 'NOT_APPLICABLE'
     || comparison.amountAuthority !== 'CLOUDTMS_CALCULATION'
@@ -325,7 +337,7 @@ export function buildWeeklySourceCanonicalEconomicSnapshot(input = {}) {
   ) {
     fail('WEEKLY_SOURCE_ECONOMIC_TOTAL_MISMATCH', 'Canonical totals do not match server-resolved rates.');
   }
-  validatePriceComparison(priceComparison, sourceMode, calculation);
+  validatePriceComparison(priceComparison, sourceMode, calculation, resolvedFacts.effectiveRuleSet);
 
   const breakAllocation = validateBreakAllocation(calculation.breakAllocation, breakMinutes);
   const snapshot = {

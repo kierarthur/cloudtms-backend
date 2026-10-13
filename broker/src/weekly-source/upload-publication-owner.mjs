@@ -170,6 +170,10 @@ function parserOptions(body, context) {
       expectedTrust: context.client_name,
     } : {}),
     ...(!NHSP.has(profileId) ? { expectedClient: context.client_name } : {}),
+    // Database-resolved and disabled by default. Browser parser_options cannot
+    // activate source invoice money or choose an immutable rule version.
+    ...(!NHSP.has(profileId) && context.effective_rule_set != null
+      ? { effectiveRuleSet: context.effective_rule_set } : {}),
   };
 }
 
@@ -333,7 +337,9 @@ function calculationFor(row, contract) {
     const comparison = compareWeeklySourceShiftPrice({
       sourceMode,
       financialInput,
-      ...(sourceMode === 'NHSP_WEEKLY' ? { sourceChargePence: row.source_shift_charge_pence } : {}),
+      ...((sourceMode === 'NHSP_WEEKLY' || contract.effective_rule_set?.values?.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY')
+        ? { sourceChargePence: row.source_shift_charge_pence } : {}),
+      effectiveRuleSet: contract.effective_rule_set,
     });
     if (Number(comparison.calculation.paidMinutes) !== Number(row.actual_net_minutes)
         || Number(comparison.calculation.breakMinutes) !== Number(row.break_minutes)) {
@@ -496,6 +502,7 @@ function projectionRow(source, body) {
         rateMethod: upper(policy.weekly_rate_classification_method),
         payRates: economic.payRates,
         chargeRates: economic.chargeRates,
+        effectiveRuleSet: contract.effective_rule_set,
       },
       priceComparison: economic.comparison,
     });
@@ -530,6 +537,16 @@ function projectionRow(source, body) {
           ? 'PROVISIONAL_WARNING'
           : 'NONE',
         blocker_code: null,
+      };
+    } else if (contract.effective_rule_set?.values?.invoice_sender === 'CLIENT_SELF_BILL'
+        && contract.effective_rule_set.values.invoice_amount_basis === 'SOURCE_AMOUNT') {
+      if (contract.effective_rule_set.values.source_amount_basis !== 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY') return result;
+      result.charge_check = {
+        row_sign_kind: 'POSITIVE', source_commission_pence: null, source_total_cost_pence: null,
+        source_shift_charge_pence: String(row.source_shift_charge_pence),
+        calculated_segment_charge_pence: economic.comparison.calculatedComparisonChargePence,
+        comparison_result: economic.comparison.result, comparison_reason_code: economic.comparison.result,
+        phase_severity: economic.comparison.result === 'SOURCE_AMOUNT_DIFFERS' ? 'INFORMATION' : 'NONE', blocker_code: null,
       };
     }
   }

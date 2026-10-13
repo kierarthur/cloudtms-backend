@@ -1,0 +1,48 @@
+-- REVIEW ONLY: no install/registration/service mount. Both arguments are
+-- already server-resolved by the native calling owner, never mutation payload.
+create or replace function private.weekly_source_magnit_contract_price_assert_v1(p_rule_values jsonb,p_effective_policy jsonb)
+returns boolean language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_rule_values is null or p_rule_values->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or p_rule_values->>'checking_profile_kind' is distinct from 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' then return false; end if;
+  if p_rule_values->>'self_bill_source' is distinct from 'SAME_FILE'
+    or p_rule_values->>'final_report_profile_kind' is distinct from 'NONE'
+    or p_rule_values->>'invoice_membership' is distinct from 'FINALISED_IN_CYCLE_WINDOW'
+    or p_rule_values->>'pay_membership' is distinct from 'ALL_FINALISED_IN_FILE'
+    or p_rule_values->>'invoice_amount_basis' is distinct from 'CONTRACT_CALCULATION'
+    or p_rule_values->>'source_amount_basis' is distinct from 'NONE'
+    or p_rule_values->>'rate_difference_policy' is distinct from 'NOT_APPLICABLE'
+    or p_rule_values->'earliest_final_weekday' is distinct from 'null'::jsonb
+    or p_rule_values->'earliest_final_local_time' is distinct from 'null'::jsonb then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_PRESET_INVALID' using errcode='22023'; end if;
+  if p_effective_policy->>'weekly_rate_classification_method' is distinct from 'WHOLE_SHIFT_START_DAY' then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_WHOLE_SHIFT_REQUIRED' using errcode='22023'; end if;
+  return true;
+end;
+$function$;
+alter function private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb) owner to postgres;
+revoke all on function private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb) from public,anon,authenticated,service_role;
+
+-- Run after native snapshot type/key/minute guards. The Worker native
+-- calculator remains the sole start-date/BH/weekend/overnight category producer.
+create or replace function private.weekly_source_magnit_bucket_assert_v1(p_rule_values jsonb,p_economic_snapshot jsonb)
+returns boolean language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare used integer; total integer;
+begin
+  if p_rule_values is null or p_rule_values->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or p_rule_values->>'checking_profile_kind' is distinct from 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' then return false; end if;
+  if p_economic_snapshot->>'rate_method' is distinct from 'WHOLE_SHIFT_START_DAY'
+    or jsonb_typeof(p_economic_snapshot->'bucket_minutes') is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_BUCKET_INVALID' using errcode='22023'; end if;
+  select count(*) filter(where (p_economic_snapshot#>>array['bucket_minutes',bucket.name])::integer>0),
+    sum((p_economic_snapshot#>>array['bucket_minutes',bucket.name])::integer)
+    into used,total from (values('day'),('night'),('sat'),('sun'),('bh')) bucket(name);
+  if used<>1 or total is distinct from (p_economic_snapshot->>'paid_minutes')::integer or total<=0 then
+    raise exception 'WEEKLY_SOURCE_MAGNIT_BUCKET_INVALID' using errcode='22023'; end if;
+  return true;
+end;
+$function$;
+alter function private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb) owner to postgres;
+revoke all on function private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb) from public,anon,authenticated,service_role;

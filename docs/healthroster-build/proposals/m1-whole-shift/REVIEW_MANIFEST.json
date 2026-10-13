@@ -1,0 +1,70 @@
+{
+  "contract": "HEALTHROSTER_M1_REVIEW_MANIFEST_V1",
+  "status": "SOURCE_PROPOSAL_ONLY",
+  "frozen28_unchanged": true,
+  "new_tests": 13,
+  "existing_rate_tests": 12,
+  "tests_pass": 25,
+  "tests_skipped": 0,
+  "hosted_compile": false,
+  "financial_acceptance": false,
+  "sp20": "Existing R7 refusal preserved; actual published/joined first-use proof pending",
+  "new_tables": 0,
+  "new_service_rpcs": 0,
+  "new_private_signatures": [
+    "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+    "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)"
+  ],
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/DESIGN.md",
+      "bytes": 8674,
+      "sha256": "4b59dedc384a2c48d3038a14cb96750abe74afdc565d42b3b227e7af69482a96"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generate-complete-owners.mjs",
+      "bytes": 5515,
+      "sha256": "2c6e9251aa892400fdf0a537edd3980c4d94ee8d159d004aafa2cb85a9e69f23"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/COMPLETE_SOURCE_OWNERS.sqlinc",
+      "bytes": 88937,
+      "sha256": "127097c3e3a86b3c7b0d0922f42668a0c46cb2607515897ca849e77da78e3a6c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/SOURCE_MANIFEST.json",
+      "bytes": 1915,
+      "sha256": "19e752ccfbe90f43225b288f29bf0202efd0dc3adaeaa49c51bf351c0ec35139"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/upload-publication-owner.mjs",
+      "bytes": 48835,
+      "sha256": "45baaacb23a3b0242bda76ea2ed4bcc8fce399eb3a93ccbfa7c8283bec46f742"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/NATIVE_JOURNEYS.json",
+      "bytes": 3599,
+      "sha256": "44e1c5d5d52f515b58a409ca35855bc6db3592daf496d5b9b53e79e252c31719"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/PRIVATE_ADMISSION_OWNER.sqlinc",
+      "bytes": 3501,
+      "sha256": "9a810d5d86939679a60f435e4c5450825bd8b9e9dab1fad055f3f4c0c4d9aea0"
+    },
+    {
+      "file": "tests/weekly-source/magnit-whole-shift-proposal.test.mjs",
+      "bytes": 8099,
+      "sha256": "1bb90e76e1ce7be987c5feae8257c54fbc310ea439f32c17fc8a2ce8a0493494"
+    }
+  ]
+}

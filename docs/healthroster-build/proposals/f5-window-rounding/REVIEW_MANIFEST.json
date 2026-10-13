@@ -1,0 +1,71 @@
+{
+  "contract": "HEALTHROSTER_F5_WINDOW_RECEIPT_REVIEW_MANIFEST_V1",
+  "status": "SOURCE_PROPOSAL_ONLY",
+  "frozen28_unchanged": true,
+  "vector_tests_pass": 8,
+  "hosted_compile": false,
+  "financial_acceptance": false,
+  "publication": false,
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/ADMISSION_AND_ISSUE_DELTAS.sqlinc",
+      "bytes": 5825,
+      "sha256": "0dc0919f510a0a50ba1248da8e1af4ae7cd99e91d6ab979bcaca142aaac136a1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/DESIGN.md",
+      "bytes": 12948,
+      "sha256": "7586e534ff74ada4db6f6c28a1f856f75078c8e1d56b460e9551120327945247"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generate-owner-deltas.mjs",
+      "bytes": 12451,
+      "sha256": "299820317982c8fbc38f32dfe300100d1fc8b36b590843586b09014c1231e675"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/ARTIFACT_HASHES.json",
+      "bytes": 596,
+      "sha256": "32ff5768d51d8197a57469f15a17db70bdf6922e61a6573c299e75d8e09e6793"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/COMPLETE_MONEY_OWNER_PROPOSALS.sqlinc",
+      "bytes": 19792,
+      "sha256": "277722b8b3fe8bf20d9b26dc930fa9c2900cdd7643a43799a0194d6de8b1cd6e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/generated/FIN_MANIFEST_WINDOW_PARTITION.sqlinc",
+      "bytes": 5204,
+      "sha256": "aa8992505fac306a73c5fa896b33180880c81f2f848ba9c158f4a60e55813506"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/invoice-window-receipt-proposal.mjs",
+      "bytes": 8512,
+      "sha256": "9b427428e3d531294a952a46dc66075e94e1254880c2da3646ee963d4086fa6c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/PROPOSAL_FIXTURES.json",
+      "bytes": 5401,
+      "sha256": "1f4b9ba37e0c9cf06629da47baaaf9c4f990cda9cc1a55ca1777fccb3aede75e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/PROPOSED_PRIVATE_OWNERS.sqlinc",
+      "bytes": 16877,
+      "sha256": "d53b758881994af2312bb84142aa7e4e6b8ee52489a859fc6740aedc2942c29c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/PROPOSED_SCHEMA.sqlinc",
+      "bytes": 1996,
+      "sha256": "b99a2ad7cee8695be10ac3bf129f6a844755c3e1716659b903068b1d1a13780d"
+    },
+    {
+      "file": "tests/weekly-source/invoice-window-rounding-proposal.test.mjs",
+      "bytes": 6649,
+      "sha256": "c71986243f65236ae214a775675c6f2e12a4311097040fbd4cab54464bb2dcbe"
+    }
+  ],
+  "root_decisions_pending": [
+    "Exact additive manifest/window scope variant and every caller census",
+    "Pending zero ROUND authority and qualified model/PDF/FINAL_ISSUE suppression coverage",
+    "Complete native financial/ACL/G1/replay/issued/stale/foreign proofs before source acceptance"
+  ]
+}

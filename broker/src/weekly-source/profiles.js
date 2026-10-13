@@ -289,6 +289,14 @@ export function resolveWeeklySourceProfile(evidence, options = {}) {
       detectedProfileId: selected.profileId,
     });
   }
+  const rules = options.effectiveRuleSet?.values;
+  if (rules?.invoice_sender === 'CLIENT_SELF_BILL'
+      && rules.invoice_amount_basis === 'SOURCE_AMOUNT'
+      && rules.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY') {
+    const moneyColumns = exactUniqueColumns(headerMapForRow(selected.sheet, selected.headerRow), ['Agency Worker Pay', 'Actual Cost']);
+    if (!moneyColumns) failParser('HEALTHROSTER_SOURCE_MONEY_HEADERS_REQUIRED', 'The source amount needs one Agency Worker Pay and one Actual Cost column.');
+    selected.columns = { ...selected.columns, sourceNet: moneyColumns['Agency Worker Pay'], sourceGross: moneyColumns['Actual Cost'] };
+  }
   if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1) {
     const expectedHeading = trimNhspOuterWhitespace(options.configuredNhspReportHeadingName);
     if (!expectedHeading) {

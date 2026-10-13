@@ -1,0 +1,198 @@
+-- REVIEW ONLY. Owner-private proposals; no service/browser grants or RPC mount.
+-- Native rounding insert and receipt projection must share this one S09 target.
+create or replace function private.weekly_source_invoice_vat_target_pence_v1(
+  p_net_pence numeric,p_line_vat_pence numeric,p_method text,p_rate_pct numeric
+) returns bigint language plpgsql immutable set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_net_pence is null or p_line_vat_pence is null or p_rate_pct is null
+    or p_net_pence<>trunc(p_net_pence) or p_line_vat_pence<>trunc(p_line_vat_pence)
+    or p_rate_pct<0 or p_rate_pct>100 then
+    raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_MONEY_INVALID' using errcode='22023'; end if;
+  return case p_method when 'SUM_OF_LINES' then p_line_vat_pence::bigint
+    when 'ONCE_ON_TOTAL_HALF_UP' then round(p_net_pence*p_rate_pct/100)::bigint
+    when 'ONCE_ON_TOTAL_TRUNCATE' then trunc(p_net_pence*p_rate_pct/100)::bigint
+    else null end;
+end;
+$function$;
+
+-- A production caller must lock the whole discovered actual cycle set after
+-- I-1 and group, capture this witness BEFORE insertion, and use its immutable
+-- fields for later admission/issue. Current state is initial admission only.
+create or replace function private.weekly_source_invoice_window_scope_v1(
+  p_source_cycle_id uuid,p_client_id uuid,p_upload_row_id uuid,p_window_cycle_id uuid
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare source_cycle public.weekly_source_cycles%rowtype; invoice_cycle public.weekly_source_cycles%rowtype;
+  source_row public.weekly_source_upload_rows%rowtype; previous_cutoff timestamptz; result jsonb;
+begin
+  select * into strict source_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  select * into strict invoice_cycle from public.weekly_source_cycles where id=p_window_cycle_id;
+  select * into strict source_row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  if p_client_id is null or invoice_cycle.source_group_id<>source_cycle.source_group_id
+    or (invoice_cycle.scope_client_id is not null and invoice_cycle.scope_client_id<>p_client_id)
+    or invoice_cycle.state not in ('OPEN','FINALISABLE','FINALISING')
+    or not exists(select 1 from public.weekly_source_group_clients member
+      where member.source_group_id=invoice_cycle.source_group_id and member.client_id=p_client_id
+        and invoice_cycle.finalisation_week_ending between member.valid_from and coalesce(member.valid_to,'infinity'::date)) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_SCOPE_INVALID' using errcode='55000'; end if;
+  if not exists(select 1 from public.weekly_source_uploads upload
+    join public.weekly_source_projection_publications publication on publication.upload_id=upload.id
+      and publication.source_cycle_id=source_cycle.id and publication.authority_scope_kind='CYCLE'
+      and publication.report_scope_id is null and publication.state in ('CURRENT','CORRECTION_READY')
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+      and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+      and resolution.client_id=p_client_id and resolution.mapping_state='RESOLVED'
+    join public.weekly_work_events event on event.id=resolution.work_event_id and event.client_id=p_client_id
+      and event.first_source_group_id=source_cycle.source_group_id and event.work_date=source_row.work_date
+    where upload.id=source_row.upload_id and upload.source_cycle_id=source_cycle.id and upload.report_scope_id is null
+      and upload.state in ('CURRENT','CORRECTION_READY')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_SOURCE_SCOPE_INVALID' using errcode='55000'; end if;
+  select max(previous.cutoff_at_utc) into previous_cutoff from public.weekly_source_cycles previous
+    where previous.source_group_id=invoice_cycle.source_group_id and previous.cutoff_at_utc<invoice_cycle.cutoff_at_utc;
+  previous_cutoff:=coalesce(previous_cutoff,((invoice_cycle.cutoff_at_utc at time zone 'Europe/London')-interval '7 days') at time zone 'Europe/London');
+  if source_row.finalised_at_utc is null or nullif(btrim(source_row.finalised_by),'') is null
+    or source_row.work_date>invoice_cycle.finalisation_week_ending
+    or source_row.finalised_at_utc<=previous_cutoff or source_row.finalised_at_utc>invoice_cycle.cutoff_at_utc then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_TIMESTAMP_INVALID' using errcode='55000'; end if;
+  result:=jsonb_build_object('contract','WEEKLY_SOURCE_INVOICE_WINDOW_SCOPE_V1','source_cycle_id',source_cycle.id,
+    'invoice_window_cycle_id',invoice_cycle.id,'invoice_window_version',invoice_cycle.version,
+    'source_group_id',invoice_cycle.source_group_id,'actual_client_id',p_client_id,
+    'invoice_week_ending',invoice_cycle.finalisation_week_ending,'window_previous_cutoff_at_utc',previous_cutoff,
+    'window_cutoff_at_utc',invoice_cycle.cutoff_at_utc,'upload_row_id',source_row.id,
+    'source_row_hash',encode(source_row.normalised_row_hash,'hex'),'finalised_at_utc',source_row.finalised_at_utc);
+  return result||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_WINDOW_SCOPE_V1',result),'hex'));
+end;
+$function$;
+
+-- Input is a complete closed UUID/null map, not caller money. ADMIT builds it
+-- from actual immutable receipts under its existing locks; history passes the
+-- exact map frozen in the admitted presentation, not a latest receipt lookup.
+create or replace function private.weekly_source_invoice_rounding_receipt_set_v1(
+  p_client_manifest_id uuid,p_receipt_set jsonb
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare manifest public.weekly_source_client_manifests%rowtype; rounding public.weekly_source_billing_movements%rowtype;
+  member record; item jsonb; receipt_id uuid; money jsonb; rules jsonb; facts jsonb;
+  witness jsonb:='[]'::jsonb; net numeric:=0; raw_vat numeric:=0; admitted_vat numeric:=0;
+  target bigint; raw_target bigint; actual_count integer:=0; supplied_count integer; rate_count integer; rate numeric;
+begin
+  select * into strict manifest from public.weekly_source_client_manifests where id=p_client_manifest_id;
+  rules:=private.weekly_source_frozen_rule_values_v1(manifest.final_revision_id);
+  if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL'
+    or rules->>'invoice_vat_method'='SUM_OF_LINES' then return null; end if;
+  if jsonb_typeof(p_receipt_set) is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_ROUNDING_RECEIPT_SET_INVALID' using errcode='22023'; end if;
+  supplied_count:=jsonb_array_length(p_receipt_set);
+  if exists(select 1 from jsonb_array_elements(p_receipt_set) supplied where jsonb_typeof(supplied)<>'object'
+      or not(supplied ?& array['billing_movement_id','invoice_hold_release_id'])
+      or exists(select 1 from jsonb_object_keys(supplied) key where key not in ('billing_movement_id','invoice_hold_release_id')))
+    or (select count(distinct supplied->>'billing_movement_id') from jsonb_array_elements(p_receipt_set) supplied)<>supplied_count then
+    raise exception 'WEEKLY_SOURCE_ROUNDING_RECEIPT_SET_INVALID' using errcode='22023'; end if;
+  select m.* into rounding from public.weekly_source_manifest_movements mm
+    join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    where mm.client_manifest_id=manifest.id and m.source_line_kind='INVOICE_VAT_ROUNDING';
+  if not found then raise exception 'WEEKLY_SOURCE_FROZEN_ROUNDING_AUTHORITY_REQUIRED' using errcode='55000'; end if;
+  for member in select m.*,mm.movement_hash from public.weekly_source_manifest_movements mm
+    join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    where mm.client_manifest_id=manifest.id and m.source_line_kind<>'INVOICE_VAT_ROUNDING' order by m.id
+  loop
+    actual_count:=actual_count+1;
+    if member.final_revision_id<>manifest.final_revision_id or member.finalisation_cycle_id<>manifest.source_cycle_id
+      or member.actual_client_id<>manifest.client_id or member.movement_hash<>member.movement_economic_hash then
+      raise exception 'WEEKLY_SOURCE_ROUNDING_MANIFEST_INVALID' using errcode='55000'; end if;
+    select supplied into item from jsonb_array_elements(p_receipt_set) supplied where supplied->>'billing_movement_id'=member.id::text;
+    if not found then raise exception 'WEEKLY_SOURCE_ROUNDING_RECEIPT_SET_CENSUS_INVALID' using errcode='55000'; end if;
+    receipt_id:=nullif(item->>'invoice_hold_release_id','')::uuid;
+    if receipt_id is null then
+      -- Explicit original money: never use the implicit CURRENT-presentation
+      -- branch of movement_money_v1 for a null frozen receipt-map entry.
+      money:=jsonb_build_object('net_pence',member.invoice_presentation_charge_pence,
+        'vat_pence',(member.vat_amount*100)::bigint,'gross_pence',(member.total_inc_vat*100)::bigint,'release_authority',null);
+    else money:=private.weekly_source_invoice_movement_money_v1(member.id,receipt_id); end if;
+    if (money->>'net_pence')::bigint<>member.invoice_presentation_charge_pence
+      or (money->>'gross_pence')::bigint<>(money->>'net_pence')::bigint+(money->>'vat_pence')::bigint then
+      raise exception 'WEEKLY_SOURCE_ROUNDING_RELEASE_MONEY_INVALID' using errcode='55000'; end if;
+    net:=net+member.invoice_presentation_charge_pence; raw_vat:=raw_vat+member.vat_amount*100;
+    admitted_vat:=admitted_vat+(money->>'vat_pence')::numeric;
+    witness:=witness||jsonb_build_array(jsonb_build_object('billing_movement_id',member.id,
+      'movement_hash',encode(member.movement_economic_hash,'hex'),'invoice_hold_release_id',receipt_id,
+      'release_authority',money->'release_authority','net_pence',member.invoice_presentation_charge_pence,
+      'original_vat_pence',(member.vat_amount*100)::bigint,'admitted_vat_pence',(money->>'vat_pence')::bigint));
+  end loop;
+  if actual_count<>supplied_count then raise exception 'WEEKLY_SOURCE_ROUNDING_RECEIPT_SET_CENSUS_INVALID' using errcode='55000'; end if;
+  select min(m.vat_rate_pct),count(distinct m.vat_rate_pct) into rate,rate_count
+    from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    where mm.client_manifest_id=manifest.id and m.source_line_kind<>'INVOICE_VAT_ROUNDING';
+  if rate_count<>1 then raise exception 'WEEKLY_SOURCE_VAT_ROUNDING_RATE_AMBIGUOUS' using errcode='55000'; end if;
+  raw_target:=private.weekly_source_invoice_vat_target_pence_v1(net,raw_vat,rules->>'invoice_vat_method',rate);
+  target:=private.weekly_source_invoice_vat_target_pence_v1(net,admitted_vat,rules->>'invoice_vat_method',rate);
+  if target is null or (raw_target-raw_vat)::bigint<>(rounding.vat_amount*100)::bigint then
+    raise exception 'WEEKLY_SOURCE_FROZEN_ROUNDING_AMOUNT_INVALID' using errcode='55000'; end if;
+  facts:=jsonb_build_object('contract','WEEKLY_SOURCE_INVOICE_ROUNDING_AUTHORITY_V1','client_manifest_id',manifest.id,
+    'manifest_hash',encode(manifest.manifest_hash,'hex'),'final_revision_id',manifest.final_revision_id,
+    'actual_client_id',manifest.client_id,'invoice_window_cycle_id',coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id),
+    'rounding_movement_id',rounding.id,'rounding_movement_hash',encode(rounding.movement_economic_hash,'hex'),
+    'frozen_rule_set_version_id',(select r.rule_set_version_id from public.weekly_source_final_revisions r where r.id=manifest.final_revision_id),
+    'frozen_rule_values_sha256',(select v.values_sha256 from public.weekly_source_final_revisions r
+      join public.weekly_source_rule_set_versions v on v.id=r.rule_set_version_id where r.id=manifest.final_revision_id),
+    'invoice_vat_method',rules->>'invoice_vat_method','vat_rate_pct',rate,'membership_net_pence',net,
+    'original_rounding_vat_pence',(rounding.vat_amount*100)::bigint,'admitted_line_vat_pence',admitted_vat,
+    'target_vat_pence',target,'admitted_rounding_vat_pence',target-admitted_vat,'member_witnesses',witness,
+    'suppress_visible_rounding_line',target-admitted_vat=0);
+  return facts||jsonb_build_object('authority_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_ROUNDING_AUTHORITY_V1',facts),'hex'));
+end;
+$function$;
+
+-- Doc/model qualification runs after the accepted complete allocation successor.
+-- Allocation uses receipt_set_v1 directly, never this helper (no recursion).
+create or replace function private.weekly_source_invoice_rounding_suppression_witness_v1(p_invoice_line_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare line public.invoice_lines%rowtype; presentation public.weekly_source_invoice_presentation_lines%rowtype;
+  movement public.weekly_source_billing_movements%rowtype; authority jsonb; rebuilt jsonb; receipt_map jsonb;
+  binding_count integer; original_hash bytea; disposition text;
+begin
+  select * into strict line from public.invoice_lines where id=p_invoice_line_id;
+  disposition:=line.meta_json->>'presentation_disposition';
+  if disposition is distinct from 'SUPPRESS_ZERO_ROUNDING_AUTHORITY' then return null; end if;
+  -- Full native invoice lineage, money, source-hash and cardinality validation
+  -- must succeed before a document/model can suppress any source line.
+  perform private.weekly_source_invoice_allocation_assert_v1(line.invoice_id);
+  select count(*) into binding_count from public.weekly_source_invoice_line_bindings b
+    where b.invoice_line_id=line.id and b.invoice_id=line.invoice_id and b.state='CURRENT';
+  if binding_count<>1 then raise exception 'WEEKLY_SOURCE_ZERO_ROUNDING_SUPPRESSION_INVALID' using errcode='55000'; end if;
+  select p.* into strict presentation from public.weekly_source_invoice_line_bindings b
+    join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+    where b.invoice_line_id=line.id and b.state='CURRENT';
+  select m.* into strict movement from public.weekly_source_invoice_line_bindings b
+    join public.weekly_source_billing_movements m on m.id=b.billing_movement_id
+    where b.invoice_line_id=line.id and b.state='CURRENT';
+  authority:=presentation.invoice_rounding_authority_json;
+  if movement.source_line_kind<>'INVOICE_VAT_ROUNDING' or movement.vat_rounding_revision_id<>movement.final_revision_id
+    or presentation.line_kind<>'INVOICE_VAT_ROUNDING' or presentation.origin_kind<>'INVOICE_VAT_ROUNDING'
+    or movement.total_pay_ex_vat<>0 or movement.invoice_presentation_charge_pence<>0
+    or line.total_pay_ex_vat<>0 or line.total_charge_ex_vat<>0 or line.vat_amount<>0 or line.total_inc_vat<>0
+    or presentation.total_pay_ex_vat<>0 or presentation.total_charge_ex_vat<>0 or presentation.vat_amount<>0 or presentation.total_inc_vat<>0
+    or authority->>'contract' is distinct from 'WEEKLY_SOURCE_INVOICE_ROUNDING_AUTHORITY_V1'
+    or authority->'suppress_visible_rounding_line' is distinct from 'true'::jsonb
+    or line.meta_json->'weekly_source_rounding_authority' is distinct from authority then
+    raise exception 'WEEKLY_SOURCE_ZERO_ROUNDING_SUPPRESSION_INVALID' using errcode='55000'; end if;
+  select jsonb_agg(jsonb_build_object('billing_movement_id',member->'billing_movement_id',
+    'invoice_hold_release_id',member->'invoice_hold_release_id') order by member->>'billing_movement_id') into receipt_map
+    from jsonb_array_elements(authority->'member_witnesses') member;
+  rebuilt:=private.weekly_source_invoice_rounding_receipt_set_v1(presentation.client_manifest_id,receipt_map);
+  original_hash:=private.weekly_source_invoice_presentation_source_hash_v1(array[movement.id],null);
+  if rebuilt is distinct from authority or presentation.source_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_INVOICE_ROUNDING_PRESENTATION_V1',jsonb_build_object('original_movement_source_hash',encode(original_hash,'hex'),
+      'rounding_authority_sha256',authority->>'authority_sha256')) then
+    raise exception 'WEEKLY_SOURCE_ZERO_ROUNDING_SUPPRESSION_INVALID' using errcode='55000'; end if;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_ZERO_ROUNDING_SUPPRESSION_V1','invoice_id',line.invoice_id,
+    'invoice_line_id',line.id,'presentation_line_id',presentation.id,'presentation_hash',encode(presentation.presentation_hash,'hex'),
+    'source_hash',encode(presentation.source_hash,'hex'),'rounding_authority_sha256',authority->>'authority_sha256',
+    'total_pay_pence',0,'net_pence',0,'vat_pence',0,'gross_pence',0);
+end;
+$function$;
+
+-- Root must compile all four, owner-map and revoke PUBLIC/anon/authenticated/
+-- service_role after acceptance. These drafts deliberately mount no service RPC.

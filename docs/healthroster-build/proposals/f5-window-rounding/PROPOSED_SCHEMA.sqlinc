@@ -1,0 +1,28 @@
+-- REVIEW ONLY. Not a registered migration or an instruction to install.
+-- No new table/origin/financial revision. NULL keeps the original single window.
+alter table public.weekly_source_client_manifests
+  add column invoice_window_cycle_id uuid references public.weekly_source_cycles(id) on delete restrict;
+alter table public.weekly_source_billing_movements
+  add column invoice_window_cycle_id uuid references public.weekly_source_cycles(id) on delete restrict,
+  add constraint weekly_source_round_window_kind_chk check (
+    invoice_window_cycle_id is null or (source_line_kind='INVOICE_VAT_ROUNDING'
+      and invoice_window_cycle_id<>finalisation_cycle_id));
+alter table public.weekly_source_invoice_presentation_lines
+  add column invoice_rounding_authority_json jsonb,
+  add constraint weekly_source_round_authority_kind_chk check (
+    invoice_rounding_authority_json is null or (line_kind='INVOICE_VAT_ROUNDING'
+      and jsonb_typeof(invoice_rounding_authority_json)='object'
+      and invoice_rounding_authority_json->>'contract'='WEEKLY_SOURCE_INVOICE_ROUNDING_AUTHORITY_V1'));
+
+-- Root must catalogue-lock the existing UNIQUE(revision,client) and ROUND
+-- partial unique before replacing them: do not guess provider-truncated names.
+-- Required successor keys (one membership per REAL invoice window):
+-- manifest UNIQUE(final_revision_id,client_id,coalesce(invoice_window_cycle_id,source_cycle_id))
+-- ROUND UNIQUE(vat_rounding_revision_id,actual_client_id,coalesce(invoice_window_cycle_id,finalisation_cycle_id))
+-- Every existing manifest-member uniqueness, five-origin/hash/FK, PAY zero,
+-- RLS/direct-role and immutable/lifecycle trigger remains in force.
+
+-- Zero-round pending-hold authority uses existing nonzero line/kind shape; no
+-- binding/placement/cardinality NULL or exemption is introduced. If its final
+-- admitted VAT is0, its internal line is explicitly recorded as suppressed in
+-- the immutable presentation model/FINAL_ISSUE snapshot, never visibly printed.
