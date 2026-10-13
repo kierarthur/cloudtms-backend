@@ -1,7 +1,7 @@
 {
   "item": "WB-30",
   "sequence": 141,
-  "stage": "Reader/source complete; independent screen policy review pending",
+  "stage": "Complete source and independent A4/SOURCE review",
   "builderDecisions": [
     "BD171"
   ],
@@ -45,7 +45,31 @@
     "changedJS": "node --check PASS",
     "contract": "b9c6079fd9a3652db396e765f7de47782c542067800f4b7856be35d0d29f4399 export/seal/coupling PASS"
   },
-  "review": "DESIGN/SOURCE PASS; final catalogue/inverse review requested; A4 pending",
+  "review": "DESIGN/SOURCE/A4 PASS; independent exact catalogue/inverse receipt saved",
   "acceptance": "AUTHORED_NOT_RUN",
-  "wholeItem": "PARTLY_DONE; not ticked yet"
+  "wholeItem": "BUILT_REVIEWED; full-card reconciliation complete; joined acceptance AUTHORED_NOT_RUN",
+  "implementationCommit": "e8f5ac42da903ada4526ddf1f8915449357628be",
+  "frontendImplementationCommit": "dda957deaae647cfd302eecdcf679a054f786233",
+  "frontendFiles": [
+    {
+      "path": "js/bpay-next-rates.js",
+      "sha256": "d00310c17354d771b9b6a29e5c1b15402721a6f8ff2be82f82f8ec3dccbf5e35"
+    },
+    {
+      "path": "js/bpay-next-resolution.js",
+      "sha256": "e1b5511476a3b7324144e14dd25a444899caaae7b88c50105a3704f96ce64c51"
+    },
+    {
+      "path": "js/bpay-next-workbench.js",
+      "sha256": "4adce5296e9148e47500a5ee064e2a8ce298aeb4452fc61e2408fc4328baa26e"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "9f07e5308a133a7caf06e5ffc7f50793489ec5ee1cfd2584253840b37a645805"
+    },
+    {
+      "path": "index.html",
+      "sha256": "737d733daca04c554874c1a51132054d903c035dc402624d015e2d84ecf28c4f"
+    }
+  ]
 }

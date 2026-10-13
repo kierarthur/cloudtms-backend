@@ -4194,7 +4194,7 @@ First explicit-need batch implementation 8ae064e947d1552926d8aef0f78271cc985cc9a
 
 ## WB-30 — Review suggested rates window (bucket groups, linked Timesheets)
 
-Seq 141; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 141; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: ActionRequired matching closure included; source/target/policy/bucket signature and exact versions/disclosure.
 
@@ -4202,7 +4202,7 @@ Dependencies: WB-29, WB-14, F-16, WB-45; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-30-D07 | SCREEN: Independent bucket/linked needs rates window | MISSING | All five standards and exact independent rate evidence; Action Required linked closure with identities/policy/versions/count and explicit opt-in. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-30-D07 | SCREEN: Independent bucket/linked needs rates window | BUILT_REVIEWED | All five standards and exact independent rate evidence; Action Required linked closure with identities/policy/versions/count and explicit opt-in. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4220,6 +4220,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 A case with Day and Sun buckets shows two rows in Day, Sun order with current and suggested figures from the server (RQ-041, RQ-056, LUI-050). Sun has no suggestion, so it stays blank and Apply is refused with "Enter a Sun rate" (RQ-042). With 3 linked Timesheets the box shows "Apply to 3 matching linked Timesheets" ticked; the confirmation shows the rate and 4 works, and the result lists 4 saved works (RQ-043, RQ-047, LUI-051, LSV-010). Closing after typing asks "Discard changed rates?" (RQ-048).
+
+13 October final source completion: whole WB30 and assigned D07 BUILT_REVIEWED. BE e8f5ac42da903ada4526ddf1f8915449357628be; FE dda957deaae647cfd302eecdcf679a054f786233. Full-card reconciliation and independent SOURCE/A442-row receipts linked in CSV. Sole local schema/catalogue evidence only; hosted installation and all joined application checks remain NOT_RUN. Later WB31–34 owners retain their plan order.
 
 ## WB-31 — Single-component choices: suggested rate, manual rate with reason, manual amount, gross total
 
