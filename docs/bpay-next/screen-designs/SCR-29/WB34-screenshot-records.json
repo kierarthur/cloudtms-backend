@@ -1,0 +1,1887 @@
+[
+  {
+    "file": "WB34-changed-dark.png",
+    "scenario": "changed",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\nPAYMENT\tBEFORE\tNOW\nDay · Hours\t7.50\t8.00\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nReview again",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-review-again-dark.png",
+    "scenario": "changed",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t8.00\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000001500",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unavailable-dark.png",
+    "scenario": "unavailable",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\n\nThe updated payment details cannot be checked yet.\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nRefresh",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-original-read-retry-dark.png",
+    "scenario": "unavailable",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-dark.png",
+    "scenario": "unknown",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-reopened-dark.png",
+    "scenario": "unknown",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": true
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-dark.png",
+    "scenario": "accepted",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\tDay £20.85 · Sun £18.00\tProcessing\n\nRates saved; check the result.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-reopened-dark.png",
+    "scenario": "accepted",
+    "mode": "dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\tDay £20.85 · Sun £18.00\tProcessing\n\nCould not check the saved choice; try again.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-changed-device-light.png",
+    "scenario": "changed",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\nPAYMENT\tBEFORE\tNOW\nDay · Hours\t7.50\t8.00\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nReview again",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-review-again-device-light.png",
+    "scenario": "changed",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t8.00\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000001500",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unavailable-device-light.png",
+    "scenario": "unavailable",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\n\nThe updated payment details cannot be checked yet.\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nRefresh",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-original-read-retry-device-light.png",
+    "scenario": "unavailable",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n\n▸\nDay\nHours · RGN · Band 5\n\t7.50\t£16.20\t£24.50\t£8.30\t£20.85\t£3.65\t\tSuggested\n\n▸\nSun\nHours · RGN · Band 5\n\t7.50\t£21.00\t£31.50\t£10.50\t—\t—\t\tTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-device-light.png",
+    "scenario": "unknown",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-reopened-device-light.png",
+    "scenario": "unknown",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": true
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-device-light.png",
+    "scenario": "accepted",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\tDay £20.85 · Sun £18.00\tProcessing\n\nRates saved; check the result.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-reopened-device-light.png",
+    "scenario": "accepted",
+    "mode": "device-light",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\tDay £20.85 · Sun £18.00\tProcessing\n\nCould not check the saved choice; try again.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-changed-phone-dark.png",
+    "scenario": "changed",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\nPAYMENT\tBEFORE\tNOW\nDay · Hours\n7.50\n8.00\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n7.50\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nReview again",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-changed-bottom-phone-dark.png",
+    "scenario": "changed",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\nPAYMENT\tBEFORE\tNOW\nDay · Hours\n7.50\n8.00\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n7.50\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nReview again",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-review-again-phone-dark.png",
+    "scenario": "changed",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n8.00\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000001500",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unavailable-phone-dark.png",
+    "scenario": "unavailable",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\n\nThe updated payment details cannot be checked yet.\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n7.50\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nRefresh",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-unavailable-bottom-phone-dark.png",
+    "scenario": "unavailable",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nThe list has changed. Refresh and try again.\n\nWhat changed\n\nThe updated payment details cannot be checked yet.\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n7.50\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nRefresh",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-original-read-retry-phone-dark.png",
+    "scenario": "unavailable",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nPay channel changed: PAYE to Umbrella. Choose the rate.\n\nRATE\tHOURS\tCURRENT PAYE RATE\tCHARGE RATE\tCURRENT MARGIN\tSUGGESTED UMBRELLA RATE\tSUGGESTED MARGIN\tNEW UMBRELLA RATE\tSTATUS\n▸\nDay\nHours · RGN · Band 5\n7.50\n£16.20\n£24.50\n£8.30\n£20.85\n£3.65\nSuggested\n▸\nSun\nHours · RGN · Band 5\n7.50\n£21.00\n£31.50\n£10.50\n—\n—\nTo apply\nReason\n\nApply rates",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-bottom-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-unknown-reopened-phone-dark.png",
+    "scenario": "unknown",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nDay · £20.85\n\nSun · £18.00\n\nReason: Agreed Sunday rate\n\nThe result has not been confirmed.\n\nCheck result",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": true
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-phone-dark.png",
+    "scenario": "accepted",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\nDay £20.85 · Sun £18.00\nProcessing\n\nRates saved; check the result.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-bottom-phone-dark.png",
+    "scenario": "accepted",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\nDay £20.85 · Sun £18.00\nProcessing\n\nRates saved; check the result.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  },
+  {
+    "file": "WB34-accepted-reopened-phone-dark.png",
+    "scenario": "accepted",
+    "mode": "phone-dark",
+    "errors": [],
+    "copy": "Review suggested rates\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\n\nRates saved. Timesheets are being updated.\n\nTIMESHEET\tRATES\tRESULT\nw/e 11/10/2026\nDay £20.85 · Sun £18.00\nProcessing\n\nCould not check the saved choice; try again.\n\nCheck progress",
+    "reads": [
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "bucket_review": {
+              "candidate_id": "60000000-0000-0000-0000-000000000001",
+              "work_id": "60000000-0000-0000-0000-000000000100",
+              "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+              "approved_line_id": null
+            }
+          }
+        }
+      },
+      {
+        "kind": "RESOLUTION_CONTEXT",
+        "args": {
+          "resolution": {
+            "candidate_id": "60000000-0000-0000-0000-000000000001",
+            "works": [
+              {
+                "work_id": "60000000-0000-0000-0000-000000000100",
+                "expected_revision_id": "60000000-0000-0000-0000-000000000200",
+                "rows": [
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000400",
+                    "rate_family": "STANDARD",
+                    "rate_code": "DAY",
+                    "intent": {
+                      "resolution_mode": "SUGGESTED_EQUIVALENT_BASIS",
+                      "manual_replacement_rate": null,
+                      "manual_amount_ex_vat": null
+                    }
+                  },
+                  {
+                    "approved_line_id": "60000000-0000-0000-0000-000000000401",
+                    "rate_family": "STANDARD",
+                    "rate_code": "SUN",
+                    "intent": {
+                      "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                      "manual_replacement_rate": "18",
+                      "manual_amount_ex_vat": null
+                    }
+                  }
+                ]
+              }
+            ],
+            "reason": "Agreed Sunday rate"
+          }
+        }
+      },
+      {
+        "kind": "LOCAL_DISPLAY_RECEIPT",
+        "action": "RESOLUTION_SAVE",
+        "readback": false
+      }
+    ]
+  }
+]

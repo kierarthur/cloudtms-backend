@@ -1,0 +1,1843 @@
+{
+  "notice": "Three fixed native recovery displays; no DB rows/business request.",
+  "component": {
+    "ok": true,
+    "kind": "RESOLUTION_CONTEXT",
+    "context": {
+      "agency_id": "61000000-0000-0000-0000-000000000003",
+      "actor_user_id": "61000000-0000-0000-0000-000000000002",
+      "candidate_id": "61000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "metadata_version": "1",
+      "financial_view_revision": "1",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "last_command_sequence": "1",
+      "target_pay_channel": "UMBRELLA",
+      "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+      "target_umbrella_vat_chargeable": false,
+      "target_umbrella_enabled": true,
+      "official_pay_date": "2026-10-16",
+      "works": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000200",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-11",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000400",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "ADDITIONAL:FIXED",
+                "component_kind": "ADDITIONAL",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "FIXED",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "ADDITIONAL",
+                "rate_code": "FIXED",
+                "source_units": null,
+                "source_rate": null,
+                "source_charge_rate": null,
+                "component_source_ex_vat": "40.00",
+                "semantics": "AMOUNT_LED"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "40.00",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": null,
+                "umbrella_rate": null,
+                "charge_rate": null,
+                "unit_label": "FIXED"
+              },
+              "decisions": []
+            }
+          ]
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000101",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000201",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-04",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000401",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000101",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "ADDITIONAL:FIXED",
+                "component_kind": "ADDITIONAL",
+                "source_component_id": null,
+                "work_date": "2026-10-04",
+                "unit_label": "FIXED",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "ADDITIONAL",
+                "rate_code": "FIXED",
+                "source_units": null,
+                "source_rate": null,
+                "source_charge_rate": null,
+                "component_source_ex_vat": "40.00",
+                "semantics": "AMOUNT_LED"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "40.00",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000201",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": null,
+                "umbrella_rate": null,
+                "charge_rate": null,
+                "unit_label": "FIXED"
+              },
+              "decisions": []
+            }
+          ]
+        }
+      ]
+    },
+    "works": [
+      {
+        "work_id": "61000000-0000-0000-0000-000000000100",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000400",
+            "rate_family": "ADDITIONAL",
+            "rate_code": "FIXED",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "ADDITIONAL:FIXED",
+              "component_kind": "ADDITIONAL",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "FIXED",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "source_units": null,
+              "source_rate": null,
+              "source_charge_rate": null,
+              "component_source_ex_vat": "40.00",
+              "semantics": "AMOUNT_LED"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": null,
+              "umbrella_rate": null,
+              "charge_rate": null,
+              "unit_label": "FIXED"
+            },
+            "suggestion": {
+              "source_ex_vat": "40.00",
+              "source_component_residual_ex_vat": "40.00",
+              "included_source_component_ex_vat": "40.00",
+              "remaining_units": null,
+              "quote": {
+                "ex": "51.48",
+                "vat": "0.00",
+                "inc": "51.48",
+                "rate": null
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "51.48",
+                "charge_ex_vat": "52.00",
+                "margin_ex_vat": "0.52",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          }
+        ]
+      },
+      {
+        "work_id": "61000000-0000-0000-0000-000000000101",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000401",
+            "rate_family": "ADDITIONAL",
+            "rate_code": "FIXED",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000101",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "ADDITIONAL:FIXED",
+              "component_kind": "ADDITIONAL",
+              "source_component_id": null,
+              "work_date": "2026-10-04",
+              "unit_label": "FIXED",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "source_units": null,
+              "source_rate": null,
+              "source_charge_rate": null,
+              "component_source_ex_vat": "40.00",
+              "semantics": "AMOUNT_LED"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": null,
+              "umbrella_rate": null,
+              "charge_rate": null,
+              "unit_label": "FIXED"
+            },
+            "suggestion": {
+              "source_ex_vat": "40.00",
+              "source_component_residual_ex_vat": "40.00",
+              "included_source_component_ex_vat": "40.00",
+              "remaining_units": null,
+              "quote": {
+                "ex": "51.48",
+                "vat": "0.00",
+                "inc": "51.48",
+                "rate": null
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "51.48",
+                "charge_ex_vat": "52.00",
+                "margin_ex_vat": "0.52",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          }
+        ]
+      }
+    ],
+    "component_review": {
+      "work_id": "61000000-0000-0000-0000-000000000100",
+      "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+      "approved_line_id": "61000000-0000-0000-0000-000000000400",
+      "rate_family": "ADDITIONAL",
+      "rate_code": "FIXED",
+      "linked_count": "1",
+      "excluded": [],
+      "complete": true,
+      "header": {
+        "candidate_display_name": "Chloe Davies",
+        "candidate_reference": "TMS 10233",
+        "client_display_name": "St Anne’s Hospital",
+        "timesheet_reference": "TS 4187",
+        "week_ending_date": "2026-10-11",
+        "job_title": "RGN",
+        "band_label": "Band 5"
+      }
+    }
+  },
+  "channel": {
+    "ok": true,
+    "kind": "RESOLUTION_CONTEXT",
+    "context": {
+      "agency_id": "61000000-0000-0000-0000-000000000003",
+      "actor_user_id": "61000000-0000-0000-0000-000000000002",
+      "candidate_id": "61000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "metadata_version": "1",
+      "financial_view_revision": "1",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "last_command_sequence": "1",
+      "target_pay_channel": "UMBRELLA",
+      "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+      "target_umbrella_vat_chargeable": false,
+      "target_umbrella_enabled": true,
+      "official_pay_date": "2026-10-16",
+      "works": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000200",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-11",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000400",
+              "rate_family": "STANDARD",
+              "rate_code": "DAY",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:DAY",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "DAY",
+                "source_units": "22.50",
+                "source_rate": "16.20",
+                "source_charge_rate": "24.50",
+                "component_source_ex_vat": "364.50",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "364.50",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "16.20",
+                "umbrella_rate": "20.85",
+                "charge_rate": "24.50",
+                "unit_label": "HOURS"
+              },
+              "decisions": []
+            },
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000410",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:NIGHT",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "NIGHT",
+                "source_units": "11.00",
+                "source_rate": "19.40",
+                "source_charge_rate": "29.10",
+                "component_source_ex_vat": "213.40",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "213.40",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "19.40",
+                "umbrella_rate": "24.97",
+                "charge_rate": "29.10",
+                "unit_label": "HOURS"
+              },
+              "decisions": []
+            },
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000450",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "ADDITIONAL:FIXED",
+                "component_kind": "ADDITIONAL",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "FIXED",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "ADDITIONAL",
+                "rate_code": "FIXED",
+                "source_units": null,
+                "source_rate": null,
+                "source_charge_rate": null,
+                "component_source_ex_vat": "40.00",
+                "semantics": "AMOUNT_LED"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "40.00",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": null,
+                "umbrella_rate": null,
+                "charge_rate": null,
+                "unit_label": "FIXED"
+              },
+              "decisions": []
+            }
+          ]
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000101",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000201",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-04",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000401",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000101",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:NIGHT",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-04",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "NIGHT",
+                "source_units": "22.00",
+                "source_rate": "19.40",
+                "source_charge_rate": "29.10",
+                "component_source_ex_vat": "426.80",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "426.80",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000201",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "19.40",
+                "umbrella_rate": "24.97",
+                "charge_rate": "29.10",
+                "unit_label": "HOURS"
+              },
+              "decisions": []
+            }
+          ]
+        }
+      ]
+    },
+    "works": [
+      {
+        "work_id": "61000000-0000-0000-0000-000000000100",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000400",
+            "rate_family": "STANDARD",
+            "rate_code": "DAY",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:DAY",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "DAY",
+              "source_units": "22.50",
+              "source_rate": "16.20",
+              "source_charge_rate": "24.50",
+              "component_source_ex_vat": "364.50",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "16.20",
+              "umbrella_rate": "20.85",
+              "charge_rate": "24.50",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "364.50",
+              "source_component_residual_ex_vat": "364.50",
+              "included_source_component_ex_vat": "364.50",
+              "remaining_units": "22.50",
+              "quote": {
+                "ex": "469.13",
+                "vat": "0.00",
+                "inc": "469.13",
+                "rate": "20.85"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "469.13",
+                "charge_ex_vat": "551.25",
+                "margin_ex_vat": "82.12",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          },
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000410",
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "11.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "213.40",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "213.40",
+              "source_component_residual_ex_vat": "213.40",
+              "included_source_component_ex_vat": "213.40",
+              "remaining_units": "11.00",
+              "quote": {
+                "ex": "274.67",
+                "vat": "0.00",
+                "inc": "274.67",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "274.67",
+                "charge_ex_vat": "320.10",
+                "margin_ex_vat": "45.43",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          },
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000450",
+            "rate_family": "ADDITIONAL",
+            "rate_code": "FIXED",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "ADDITIONAL:FIXED",
+              "component_kind": "ADDITIONAL",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "FIXED",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "source_units": null,
+              "source_rate": null,
+              "source_charge_rate": null,
+              "component_source_ex_vat": "40.00",
+              "semantics": "AMOUNT_LED"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": null,
+              "umbrella_rate": null,
+              "charge_rate": null,
+              "unit_label": "FIXED"
+            },
+            "suggestion": {
+              "source_ex_vat": "40.00",
+              "source_component_residual_ex_vat": "40.00",
+              "included_source_component_ex_vat": "40.00",
+              "remaining_units": null,
+              "quote": {
+                "ex": "51.48",
+                "vat": "0.00",
+                "inc": "51.48",
+                "rate": null
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "51.48",
+                "charge_ex_vat": "52.00",
+                "margin_ex_vat": "0.52",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          }
+        ]
+      },
+      {
+        "work_id": "61000000-0000-0000-0000-000000000101",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000401",
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000101",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-04",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "22.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "426.80",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "426.80",
+              "source_component_residual_ex_vat": "426.80",
+              "included_source_component_ex_vat": "426.80",
+              "remaining_units": "22.00",
+              "quote": {
+                "ex": "549.34",
+                "vat": "0.00",
+                "inc": "549.34",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": null,
+            "saved_decision": null,
+            "saved_quote": null,
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "549.34",
+                "charge_ex_vat": "640.20",
+                "margin_ex_vat": "90.86",
+                "charge_state": "APPROVED"
+              },
+              "saved": null,
+              "preview": null
+            }
+          }
+        ]
+      }
+    ],
+    "channel_review": {
+      "candidate_id": "61000000-0000-0000-0000-000000000001",
+      "work_id": "61000000-0000-0000-0000-000000000100",
+      "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+      "complete": true,
+      "header": {
+        "candidate_display_name": "Chloe Davies",
+        "candidate_reference": "TMS 10233"
+      },
+      "owners": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "approved_line_id": "61000000-0000-0000-0000-000000000400",
+          "rate_family": "STANDARD",
+          "rate_code": "DAY",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": null,
+          "owner_version": null,
+          "fingerprint": {
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:DAY",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "DAY",
+              "source_units": "22.50",
+              "source_rate": "16.20",
+              "source_charge_rate": "24.50",
+              "component_source_ex_vat": "364.50",
+              "semantics": "RATE_BEARING"
+            },
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "valuation_date": "2026-10-16"
+          },
+          "from_channel": "PAYE",
+          "from_umbrella_id": null,
+          "to_channel": "UMBRELLA",
+          "to_umbrella_id": "61000000-0000-0000-0000-000000000005",
+          "clear_class": "NOT_CLEARABLE",
+          "clear_reason": "NO_SAVED_DECISION",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "resolver_ready": false
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "approved_line_id": "61000000-0000-0000-0000-000000000410",
+          "rate_family": "STANDARD",
+          "rate_code": "NIGHT",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": null,
+          "owner_version": null,
+          "fingerprint": {
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "11.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "213.40",
+              "semantics": "RATE_BEARING"
+            },
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "valuation_date": "2026-10-16"
+          },
+          "from_channel": "PAYE",
+          "from_umbrella_id": null,
+          "to_channel": "UMBRELLA",
+          "to_umbrella_id": "61000000-0000-0000-0000-000000000005",
+          "clear_class": "NOT_CLEARABLE",
+          "clear_reason": "NO_SAVED_DECISION",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "resolver_ready": false
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "approved_line_id": "61000000-0000-0000-0000-000000000450",
+          "rate_family": "ADDITIONAL",
+          "rate_code": "FIXED",
+          "owner_family": "GROSS",
+          "owner_id": null,
+          "owner_version": null,
+          "fingerprint": {
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "ADDITIONAL:FIXED",
+              "component_kind": "ADDITIONAL",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "FIXED",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "ADDITIONAL",
+              "rate_code": "FIXED",
+              "source_units": null,
+              "source_rate": null,
+              "source_charge_rate": null,
+              "component_source_ex_vat": "40.00",
+              "semantics": "AMOUNT_LED"
+            },
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "valuation_date": "2026-10-16"
+          },
+          "from_channel": "PAYE",
+          "from_umbrella_id": null,
+          "to_channel": "UMBRELLA",
+          "to_umbrella_id": "61000000-0000-0000-0000-000000000005",
+          "clear_class": "NOT_CLEARABLE",
+          "clear_reason": "NO_SAVED_DECISION",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "resolver_ready": false
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000101",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+          "approved_line_id": "61000000-0000-0000-0000-000000000401",
+          "rate_family": "STANDARD",
+          "rate_code": "NIGHT",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": null,
+          "owner_version": null,
+          "fingerprint": {
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000101",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-04",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "22.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "426.80",
+              "semantics": "RATE_BEARING"
+            },
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "valuation_date": "2026-10-16"
+          },
+          "from_channel": "PAYE",
+          "from_umbrella_id": null,
+          "to_channel": "UMBRELLA",
+          "to_umbrella_id": "61000000-0000-0000-0000-000000000005",
+          "clear_class": "NOT_CLEARABLE",
+          "clear_reason": "NO_SAVED_DECISION",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "resolver_ready": false
+        }
+      ]
+    }
+  },
+  "clear": {
+    "ok": true,
+    "kind": "RESOLUTION_CONTEXT",
+    "context": {
+      "agency_id": "61000000-0000-0000-0000-000000000003",
+      "actor_user_id": "61000000-0000-0000-0000-000000000002",
+      "candidate_id": "61000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "metadata_version": "1",
+      "financial_view_revision": "1",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "last_command_sequence": "1",
+      "target_pay_channel": "UMBRELLA",
+      "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+      "target_umbrella_vat_chargeable": false,
+      "target_umbrella_enabled": true,
+      "official_pay_date": "2026-10-16",
+      "works": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000200",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000300",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-11",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000400",
+              "rate_family": "STANDARD",
+              "rate_code": "DAY",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:DAY",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "DAY",
+                "source_units": "22.50",
+                "source_rate": "16.20",
+                "source_charge_rate": "24.50",
+                "component_source_ex_vat": "364.50",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "364.50",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "16.20",
+                "umbrella_rate": "20.85",
+                "charge_rate": "24.50",
+                "unit_label": "HOURS"
+              },
+              "decisions": [
+                {
+                  "decision_id": "61000000-0000-0000-0000-000000000900",
+                  "decision_version": "1",
+                  "target_pay_channel": "UMBRELLA",
+                  "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+                  "target_umbrella_vat_chargeable": false,
+                  "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                  "valuation_date": "2026-10-16",
+                  "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                  "manual_replacement_rate": "20.85",
+                  "manual_amount_ex_vat": null,
+                  "reason": "Agreed with the Client.",
+                  "clearable": true
+                }
+              ]
+            },
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000410",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000100",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:NIGHT",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-11",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "NIGHT",
+                "source_units": "11.00",
+                "source_rate": "19.40",
+                "source_charge_rate": "29.10",
+                "component_source_ex_vat": "213.40",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "213.40",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000200",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "19.40",
+                "umbrella_rate": "24.97",
+                "charge_rate": "29.10",
+                "unit_label": "HOURS"
+              },
+              "decisions": [
+                {
+                  "decision_id": "61000000-0000-0000-0000-000000000901",
+                  "decision_version": "1",
+                  "target_pay_channel": "UMBRELLA",
+                  "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+                  "target_umbrella_vat_chargeable": false,
+                  "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                  "valuation_date": "2026-10-16",
+                  "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                  "manual_replacement_rate": "24.97",
+                  "manual_amount_ex_vat": null,
+                  "reason": "Agreed with the Client.",
+                  "clearable": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000101",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+          "applied_revision_id": "61000000-0000-0000-0000-000000000201",
+          "revision_no": "1",
+          "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "physical_timesheet_version": "1",
+          "original_timesheet_id": "61000000-0000-0000-0000-000000000301",
+          "contract_id": "61000000-0000-0000-0000-000000000007",
+          "week_ending_date": "2026-10-04",
+          "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+          "source_pay_channel": "PAYE",
+          "source_umbrella_id": null,
+          "rows": [
+            {
+              "approved_line_id": "61000000-0000-0000-0000-000000000401",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "original_basis": {
+                "work_id": "61000000-0000-0000-0000-000000000101",
+                "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+                "physical_timesheet_version": "1",
+                "financial_snapshot_id": null,
+                "source_kind": "ORDINARY",
+                "source_head_id": null,
+                "source_event_id": null,
+                "source_pay_channel": "PAYE",
+                "source_umbrella_id": null,
+                "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                "component_key": "WORK:NIGHT",
+                "component_kind": "WORK",
+                "source_component_id": null,
+                "work_date": "2026-10-04",
+                "unit_label": "HOURS",
+                "tax_treatment": "TAXABLE",
+                "rate_family": "STANDARD",
+                "rate_code": "NIGHT",
+                "source_units": "22.00",
+                "source_rate": "19.40",
+                "source_charge_rate": "29.10",
+                "component_source_ex_vat": "426.80",
+                "semantics": "RATE_BEARING"
+              },
+              "position_basis": {
+                "approved_source_ex_vat": "426.80",
+                "realised_source_ex_vat": "0.00",
+                "held_source_ex_vat": "0.00",
+                "source_basis_channel": "PAYE"
+              },
+              "position_applied_revision_id": "61000000-0000-0000-0000-000000000201",
+              "source_book_state": "UNBOUND",
+              "source_book_revision": "0",
+              "source_binding_version_id": null,
+              "available_rates": {
+                "provenance": "CURRENT_CONTRACT",
+                "paye_rate": "19.40",
+                "umbrella_rate": "24.97",
+                "charge_rate": "29.10",
+                "unit_label": "HOURS"
+              },
+              "decisions": [
+                {
+                  "decision_id": "61000000-0000-0000-0000-000000000903",
+                  "decision_version": "1",
+                  "target_pay_channel": "UMBRELLA",
+                  "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+                  "target_umbrella_vat_chargeable": false,
+                  "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+                  "valuation_date": "2026-10-16",
+                  "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+                  "manual_replacement_rate": "24.97",
+                  "manual_amount_ex_vat": null,
+                  "reason": "Agreed with the Client.",
+                  "clearable": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "works": [
+      {
+        "work_id": "61000000-0000-0000-0000-000000000100",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000400",
+            "rate_family": "STANDARD",
+            "rate_code": "DAY",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:DAY",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "DAY",
+              "source_units": "22.50",
+              "source_rate": "16.20",
+              "source_charge_rate": "24.50",
+              "component_source_ex_vat": "364.50",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "16.20",
+              "umbrella_rate": "20.85",
+              "charge_rate": "24.50",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "364.50",
+              "source_component_residual_ex_vat": "364.50",
+              "included_source_component_ex_vat": "364.50",
+              "remaining_units": "22.50",
+              "quote": {
+                "ex": "469.13",
+                "vat": "0.00",
+                "inc": "469.13",
+                "rate": "20.85"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000900",
+              "decision_version": "1"
+            },
+            "saved_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000900",
+              "decision_version": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_date": "2026-10-16",
+              "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+              "manual_replacement_rate": "20.85",
+              "manual_amount_ex_vat": null,
+              "reason": "Agreed with the Client.",
+              "clearable": true
+            },
+            "saved_quote": {
+              "source_ex_vat": "364.50",
+              "source_component_residual_ex_vat": "364.50",
+              "included_source_component_ex_vat": "364.50",
+              "remaining_units": "22.50",
+              "quote": {
+                "ex": "469.13",
+                "vat": "0.00",
+                "inc": "469.13",
+                "rate": "20.85"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+              "decision_id": "61000000-0000-0000-0000-000000000900",
+              "decision_version": "1"
+            },
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "469.13",
+                "charge_ex_vat": "551.25",
+                "margin_ex_vat": "82.12",
+                "charge_state": "APPROVED"
+              },
+              "saved": {
+                "pay_ex_vat": "469.13",
+                "charge_ex_vat": "551.25",
+                "margin_ex_vat": "82.12",
+                "charge_state": "APPROVED"
+              },
+              "preview": null
+            }
+          },
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000410",
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000100",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000300",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-11",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "11.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "213.40",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "213.40",
+              "source_component_residual_ex_vat": "213.40",
+              "included_source_component_ex_vat": "213.40",
+              "remaining_units": "11.00",
+              "quote": {
+                "ex": "274.67",
+                "vat": "0.00",
+                "inc": "274.67",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000901",
+              "decision_version": "1"
+            },
+            "saved_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000901",
+              "decision_version": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_date": "2026-10-16",
+              "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+              "manual_replacement_rate": "24.97",
+              "manual_amount_ex_vat": null,
+              "reason": "Agreed with the Client.",
+              "clearable": true
+            },
+            "saved_quote": {
+              "source_ex_vat": "213.40",
+              "source_component_residual_ex_vat": "213.40",
+              "included_source_component_ex_vat": "213.40",
+              "remaining_units": "11.00",
+              "quote": {
+                "ex": "274.67",
+                "vat": "0.00",
+                "inc": "274.67",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+              "decision_id": "61000000-0000-0000-0000-000000000901",
+              "decision_version": "1"
+            },
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "274.67",
+                "charge_ex_vat": "320.10",
+                "margin_ex_vat": "45.43",
+                "charge_state": "APPROVED"
+              },
+              "saved": {
+                "pay_ex_vat": "274.67",
+                "charge_ex_vat": "320.10",
+                "margin_ex_vat": "45.43",
+                "charge_state": "APPROVED"
+              },
+              "preview": null
+            }
+          }
+        ]
+      },
+      {
+        "work_id": "61000000-0000-0000-0000-000000000101",
+        "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+        "rows": [
+          {
+            "approved_line_id": "61000000-0000-0000-0000-000000000401",
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "original_basis": {
+              "work_id": "61000000-0000-0000-0000-000000000101",
+              "physical_timesheet_id": "61000000-0000-0000-0000-000000000301",
+              "physical_timesheet_version": "1",
+              "financial_snapshot_id": null,
+              "source_kind": "ORDINARY",
+              "source_head_id": null,
+              "source_event_id": null,
+              "source_pay_channel": "PAYE",
+              "source_umbrella_id": null,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "component_key": "WORK:NIGHT",
+              "component_kind": "WORK",
+              "source_component_id": null,
+              "work_date": "2026-10-04",
+              "unit_label": "HOURS",
+              "tax_treatment": "TAXABLE",
+              "rate_family": "STANDARD",
+              "rate_code": "NIGHT",
+              "source_units": "22.00",
+              "source_rate": "19.40",
+              "source_charge_rate": "29.10",
+              "component_source_ex_vat": "426.80",
+              "semantics": "RATE_BEARING"
+            },
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "suggestion": {
+              "source_ex_vat": "426.80",
+              "source_component_residual_ex_vat": "426.80",
+              "included_source_component_ex_vat": "426.80",
+              "remaining_units": "22.00",
+              "quote": {
+                "ex": "549.34",
+                "vat": "0.00",
+                "inc": "549.34",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006"
+            },
+            "suggestion_unavailable_code": null,
+            "expected_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000903",
+              "decision_version": "1"
+            },
+            "saved_decision": {
+              "decision_id": "61000000-0000-0000-0000-000000000903",
+              "decision_version": "1",
+              "target_pay_channel": "UMBRELLA",
+              "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+              "target_umbrella_vat_chargeable": false,
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_date": "2026-10-16",
+              "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+              "manual_replacement_rate": "24.97",
+              "manual_amount_ex_vat": null,
+              "reason": "Agreed with the Client.",
+              "clearable": true
+            },
+            "saved_quote": {
+              "source_ex_vat": "426.80",
+              "source_component_residual_ex_vat": "426.80",
+              "included_source_component_ex_vat": "426.80",
+              "remaining_units": "22.00",
+              "quote": {
+                "ex": "549.34",
+                "vat": "0.00",
+                "inc": "549.34",
+                "rate": "24.97"
+              },
+              "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+              "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+              "decision_id": "61000000-0000-0000-0000-000000000903",
+              "decision_version": "1"
+            },
+            "saved_unavailable_code": null,
+            "incompatible_decisions": [],
+            "preview": null,
+            "preview_unavailable_code": null,
+            "requires_zero_confirmation": false,
+            "effect": {
+              "suggestion": {
+                "pay_ex_vat": "549.34",
+                "charge_ex_vat": "640.20",
+                "margin_ex_vat": "90.86",
+                "charge_state": "APPROVED"
+              },
+              "saved": {
+                "pay_ex_vat": "549.34",
+                "charge_ex_vat": "640.20",
+                "margin_ex_vat": "90.86",
+                "charge_state": "APPROVED"
+              },
+              "preview": null
+            }
+          }
+        ]
+      }
+    ],
+    "clear_review": {
+      "candidate_id": "61000000-0000-0000-0000-000000000001",
+      "work_id": "61000000-0000-0000-0000-000000000100",
+      "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+      "owner_family": "WORK_BUCKET",
+      "owner_id": null,
+      "complete": true,
+      "header": {
+        "candidate_display_name": "Chloe Davies",
+        "candidate_reference": "TMS 10233"
+      },
+      "owners": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "approved_line_id": "61000000-0000-0000-0000-000000000400",
+          "rate_family": "STANDARD",
+          "rate_code": "DAY",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": "61000000-0000-0000-0000-000000000900",
+          "owner_version": "1",
+          "linked": false,
+          "signature": {
+            "rate_family": "STANDARD",
+            "rate_code": "DAY",
+            "component_kind": "WORK",
+            "tax_treatment": "TAXABLE",
+            "source_kind": "ORDINARY",
+            "source_pay_channel": "PAYE",
+            "source_umbrella_id": null,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "unit_label": "HOURS",
+            "semantics": "RATE_BEARING",
+            "source_rate": "16.20",
+            "source_charge_rate": "24.50",
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "16.20",
+              "umbrella_rate": "20.85",
+              "charge_rate": "24.50",
+              "unit_label": "HOURS"
+            },
+            "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+            "suggested_rate": "20.85",
+            "amount_position": null,
+            "amount_quantity": null,
+            "amount_basis": null,
+            "contract_id": "61000000-0000-0000-0000-000000000007",
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "owner_policy_id": "61000000-0000-0000-0000-000000000004",
+            "owner_valuation_date": "2026-10-16",
+            "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+            "manual_replacement_rate": "20.85",
+            "manual_amount_ex_vat": null,
+            "source_amount": null
+          },
+          "amount_ex_vat": "469.13",
+          "amount_unavailable_code": null,
+          "clear_class": "RESOLVED_AND_CLEARABLE",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "week_ending_date": "2026-10-11",
+          "target_pay_channel": "UMBRELLA",
+          "target_umbrella_id": "61000000-0000-0000-0000-000000000005"
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000100",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000200",
+          "approved_line_id": "61000000-0000-0000-0000-000000000410",
+          "rate_family": "STANDARD",
+          "rate_code": "NIGHT",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": "61000000-0000-0000-0000-000000000901",
+          "owner_version": "1",
+          "linked": false,
+          "signature": {
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "component_kind": "WORK",
+            "tax_treatment": "TAXABLE",
+            "source_kind": "ORDINARY",
+            "source_pay_channel": "PAYE",
+            "source_umbrella_id": null,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "unit_label": "HOURS",
+            "semantics": "RATE_BEARING",
+            "source_rate": "19.40",
+            "source_charge_rate": "29.10",
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+            "suggested_rate": "24.97",
+            "amount_position": null,
+            "amount_quantity": null,
+            "amount_basis": null,
+            "contract_id": "61000000-0000-0000-0000-000000000007",
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "owner_policy_id": "61000000-0000-0000-0000-000000000004",
+            "owner_valuation_date": "2026-10-16",
+            "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+            "manual_replacement_rate": "24.97",
+            "manual_amount_ex_vat": null,
+            "source_amount": null
+          },
+          "amount_ex_vat": "274.67",
+          "amount_unavailable_code": null,
+          "clear_class": "RESOLVED_AND_CLEARABLE",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "week_ending_date": "2026-10-11",
+          "target_pay_channel": "UMBRELLA",
+          "target_umbrella_id": "61000000-0000-0000-0000-000000000005"
+        },
+        {
+          "work_id": "61000000-0000-0000-0000-000000000101",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000201",
+          "approved_line_id": "61000000-0000-0000-0000-000000000401",
+          "rate_family": "STANDARD",
+          "rate_code": "NIGHT",
+          "owner_family": "WORK_BUCKET",
+          "owner_id": "61000000-0000-0000-0000-000000000903",
+          "owner_version": "1",
+          "linked": true,
+          "signature": {
+            "rate_family": "STANDARD",
+            "rate_code": "NIGHT",
+            "component_kind": "WORK",
+            "tax_treatment": "TAXABLE",
+            "source_kind": "ORDINARY",
+            "source_pay_channel": "PAYE",
+            "source_umbrella_id": null,
+            "valuation_policy_id": "61000000-0000-0000-0000-000000000004",
+            "unit_label": "HOURS",
+            "semantics": "RATE_BEARING",
+            "source_rate": "19.40",
+            "source_charge_rate": "29.10",
+            "available_rates": {
+              "provenance": "CURRENT_CONTRACT",
+              "paye_rate": "19.40",
+              "umbrella_rate": "24.97",
+              "charge_rate": "29.10",
+              "unit_label": "HOURS"
+            },
+            "valuation_window_id": "61000000-0000-0000-0000-000000000006",
+            "suggested_rate": "24.97",
+            "amount_position": null,
+            "amount_quantity": null,
+            "amount_basis": null,
+            "contract_id": "61000000-0000-0000-0000-000000000007",
+            "target_pay_channel": "UMBRELLA",
+            "target_umbrella_id": "61000000-0000-0000-0000-000000000005",
+            "target_umbrella_vat_chargeable": false,
+            "owner_policy_id": "61000000-0000-0000-0000-000000000004",
+            "owner_valuation_date": "2026-10-16",
+            "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+            "manual_replacement_rate": "24.97",
+            "manual_amount_ex_vat": null,
+            "source_amount": null
+          },
+          "amount_ex_vat": "549.34",
+          "amount_unavailable_code": null,
+          "clear_class": "RESOLVED_AND_CLEARABLE",
+          "client_display_name": "St Anne’s Hospital",
+          "timesheet_reference": "TS 4187",
+          "week_ending_date": "2026-10-04",
+          "target_pay_channel": "UMBRELLA",
+          "target_umbrella_id": "61000000-0000-0000-0000-000000000005"
+        }
+      ],
+      "excluded": [
+        {
+          "work_id": "61000000-0000-0000-0000-000000000800",
+          "expected_revision_id": "61000000-0000-0000-0000-000000000801",
+          "reason": "IN_DRAFT"
+        }
+      ]
+    }
+  }
+}

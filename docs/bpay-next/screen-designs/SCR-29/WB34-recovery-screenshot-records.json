@@ -1,0 +1,47 @@
+[
+  {
+    "file": "WB34-component-recovery-dark.png",
+    "errors": [],
+    "copy": "Review payment\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nPayment · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-channel-recovery-dark.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026\nClose\nTimesheet w/e 11/10/2026\n\nDay · £18.00\n\nNight · £18.00\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nNight · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-clear-recovery-dark.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nTimesheet w/e 11/10/2026\n\nDay · £469.13 · Saved pay\n\nNight · £274.67 · Saved pay\n\nTimesheet w/e 04/10/2026\n\nNight · £549.34 · Saved pay\n\nCheck result"
+  },
+  {
+    "file": "WB34-component-recovery-device-light.png",
+    "errors": [],
+    "copy": "Review payment\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nPayment · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-channel-recovery-device-light.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026\nClose\nTimesheet w/e 11/10/2026\n\nDay · £18.00\n\nNight · £18.00\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nNight · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-clear-recovery-device-light.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nTimesheet w/e 11/10/2026\n\nDay · £469.13 · Saved pay\n\nNight · £274.67 · Saved pay\n\nTimesheet w/e 04/10/2026\n\nNight · £549.34 · Saved pay\n\nCheck result"
+  },
+  {
+    "file": "WB34-component-recovery-phone-dark.png",
+    "errors": [],
+    "copy": "Review payment\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026 · St Anne’s Hospital\nClose\nTimesheet w/e 11/10/2026\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nPayment · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-channel-recovery-phone-dark.png",
+    "errors": [],
+    "copy": "Pay channel changed\nChloe Davies · TMS 10233 · Timesheet w/e 11/10/2026\nClose\nTimesheet w/e 11/10/2026\n\nDay · £18.00\n\nNight · £18.00\n\nPayment · £18.00\n\nTimesheet w/e 04/10/2026\n\nNight · £18.00\n\nReason: Agreed payment\n\nThe result has not been confirmed.\n\nCheck result"
+  },
+  {
+    "file": "WB34-clear-recovery-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel saved choice\nChloe Davies · TMS 10233\nClose\n\nThe result has not been confirmed.\n\nTimesheet w/e 11/10/2026\n\nDay · £469.13 · Saved pay\n\nNight · £274.67 · Saved pay\n\nTimesheet w/e 04/10/2026\n\nNight · £549.34 · Saved pay\n\nCheck result"
+  }
+]

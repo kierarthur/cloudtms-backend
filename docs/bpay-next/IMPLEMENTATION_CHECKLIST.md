@@ -4340,7 +4340,7 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 
 ## WB-34 — Resolution save behaviour: stale refusal, kept input, targeted refresh, survives reopen
 
-Seq 146; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 146; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Bounded coherent immediate pending/completed adoption, saved revision continuity; no required Refresh/reopen.
 
@@ -4348,7 +4348,7 @@ Dependencies: WB-29, WB-19, F-16, WB-45; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-34-D06 | SCREEN: Bounded coherent rate-save completion adoption | MISSING | Mapped revision survives reopen; retain stale/refused/unknown input, truthful pending then atomic own completion without Refresh/reopen. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-34-D06 | SCREEN: Bounded coherent rate-save completion adoption | BUILT_REVIEWED | Mapped revision survives reopen; retain stale/refused/unknown input, truthful pending then atomic own completion without Refresh/reopen. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4365,6 +4365,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 Second stale editor keeps typed £18 and sees changed evidence. Successful save coherently adopts pending then completion in the same parent without manual Refresh/reopen, unrelated rows/page/selection unchanged. Reopen shows saved choice via mapped published revision. Measure affected usability separately from actual background Ready completion.
+
+13 October final completion: ITEM+D06 BUILT_REVIEWED, BE b6596402c9533bb0685dabf38480e56d99130e6b; FE 612a3251019ca9ebe3a37ce697637882043dc683. Independent SOURCE and full42 A4,52 actual native local PNGs; every supplied-design difference justified. Joined acceptance AUTHORED_NOT_RUN. Owner4B first-install fixes/integration/newPG17contract/candidate publication before XD01–03; no promotion/install until explicit recheck PASS.
 
 ## XD-01 — Current stored-credit reader (masked, cursor-paged)
 

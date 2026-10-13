@@ -1,0 +1,248 @@
+{
+  "item": "WB-34",
+  "sequence": 146,
+  "decision": "BD176",
+  "whole": "BUILT_REVIEWED",
+  "backendImplementationCommit": "b6596402c9533bb0685dabf38480e56d99130e6b",
+  "frontendImplementationCommit": "612a3251019ca9ebe3a37ce697637882043dc683",
+  "assignedRows": [
+    "WB-34 ITEM",
+    "WB-34-D06"
+  ],
+  "reviews": [
+    {
+      "path": "docs/bpay-next/reviews/WB-34-lifecycle-source-review.md",
+      "sha256": "858e3359fe227c913572db338c84a671a20bec7d78d3923f4611f5f7ae5ed78c"
+    },
+    {
+      "path": "docs/bpay-next/reviews/WB-34-parent-stage-source-review.md",
+      "sha256": "38f159bc6e7bd067a75ab4c6fc64582c03f2d9671d3681466a14624a4772a25d"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/review.md",
+      "sha256": "6e449b0aeb2091b0a75a668c33850ebb427b5881358027e5a72c577afd427ad4"
+    }
+  ],
+  "captures": [
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-bottom-phone-dark.png",
+      "sha256": "b092cc16b04129cf1ae12945cb8941444398ed29e4ad2e62e36eb37411b1d7b1"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-dark.png",
+      "sha256": "7f32c9a15465ef71374b418f4228694a8789d349305eb5fb8890d7a61972afde"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-device-light.png",
+      "sha256": "7f32c9a15465ef71374b418f4228694a8789d349305eb5fb8890d7a61972afde"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-phone-dark.png",
+      "sha256": "b092cc16b04129cf1ae12945cb8941444398ed29e4ad2e62e36eb37411b1d7b1"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-reopened-dark.png",
+      "sha256": "c8ae0bcf478e97dcae58bcee5b19f0bef0ffeabc674684014d5204bc36867c40"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-reopened-device-light.png",
+      "sha256": "c8ae0bcf478e97dcae58bcee5b19f0bef0ffeabc674684014d5204bc36867c40"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-accepted-reopened-phone-dark.png",
+      "sha256": "6971440677c272c6aaa77350e6cbe0d4c361e483dfdf0c7a8bd0088e334e699b"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-changed-bottom-phone-dark.png",
+      "sha256": "aee62674df91003c21cf10bb006da66c2c5a374fb66adee5befbd6476b3d00cb"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-changed-dark.png",
+      "sha256": "fd4987ac7a96580fa8e85a1363d63bd0cc484ebc92bcbba8dd4aaac02019d624"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-changed-device-light.png",
+      "sha256": "fd4987ac7a96580fa8e85a1363d63bd0cc484ebc92bcbba8dd4aaac02019d624"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-changed-phone-dark.png",
+      "sha256": "524a7001cd4f03effa39ab6754078903a5bac4887f72c5d4d0989d3c3f92ba57"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-channel-recovery-dark.png",
+      "sha256": "3f191bcdb81f43a180ed50a339e34e2bb22e6a19eb9e55e8fdfe1cc82cc9cdbb"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-channel-recovery-device-light.png",
+      "sha256": "3f191bcdb81f43a180ed50a339e34e2bb22e6a19eb9e55e8fdfe1cc82cc9cdbb"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-channel-recovery-phone-dark.png",
+      "sha256": "0d20b841e373629e3588f72445584718566eb693bb5ff86b90c15c93b9aa2373"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-clear-recovery-dark.png",
+      "sha256": "f475fb03ac0809ae3d33b154fb913998e0a03b632c4a43f60a4b047d2ecd7b61"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-clear-recovery-device-light.png",
+      "sha256": "f475fb03ac0809ae3d33b154fb913998e0a03b632c4a43f60a4b047d2ecd7b61"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-clear-recovery-phone-dark.png",
+      "sha256": "e6b3dda72db94567d2ed5c0bf9174814444621051940ff0b4ec9707b06f9b809"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-component-recovery-dark.png",
+      "sha256": "84d6efc4322963c0f553cc5165c1e745b67e5ba20761b0b7c41d6bfe5386cee7"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-component-recovery-device-light.png",
+      "sha256": "84d6efc4322963c0f553cc5165c1e745b67e5ba20761b0b7c41d6bfe5386cee7"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-component-recovery-phone-dark.png",
+      "sha256": "c548363888108da98c4a519275a400db1e5ed5943d1de2d19cb3d74637df2377"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-original-read-retry-dark.png",
+      "sha256": "7227846158564e090cd8225d3e1f7db10dcb09db02047237236541b4abda9934"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-original-read-retry-device-light.png",
+      "sha256": "7227846158564e090cd8225d3e1f7db10dcb09db02047237236541b4abda9934"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-original-read-retry-phone-dark.png",
+      "sha256": "920f1785cebd5c2a13f3d25e42e5891dbae33d3f53d8f868df50fdc409a67bd9"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-completed-dark.png",
+      "sha256": "38202304fcca94165ebc18820ef85b778def290c40fd7c5423aed4ade87ba5f5"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-completed-device-light.png",
+      "sha256": "38202304fcca94165ebc18820ef85b778def290c40fd7c5423aed4ade87ba5f5"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-completed-phone-dark.png",
+      "sha256": "4abfac715c0a57a43c7af2457a08beb68c39c45a5dd038a4206639c3ba8b57b9"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-completed-dark.png",
+      "sha256": "33ceb3b333c934d5f54eceab7d137bce3b39ee8d2b82274024b071785e580062"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-completed-device-light.png",
+      "sha256": "1f6466bd8df18375f98fc36a7bdf649869e93d110c6fa61391c9233d5c78d655"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-completed-phone-dark.png",
+      "sha256": "916ca487ce7229d93e16eb61bd0bcb711fc65b65abd704865e54bb0cd0152869"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-original-dark.png",
+      "sha256": "b21dd46df7fd2aeec89232b136241234ee14d11b0c512521ca593ca89a6b79ab"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-original-device-light.png",
+      "sha256": "76628ccf29ab198e42cfacc074fe7b07cab300b798ec5ebe3558cb69e6d50a4d"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-main-original-phone-dark.png",
+      "sha256": "a3918b6b63ff2f3b48bf8ffd922cdcda957ad5d6ae53760226bd6f2d3ea4aa56"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-pending-dark.png",
+      "sha256": "9c083aa30875e060e6c6733590535c72b0e3a4bf4672d199a93f39b130aae1b7"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-pending-device-light.png",
+      "sha256": "9c083aa30875e060e6c6733590535c72b0e3a4bf4672d199a93f39b130aae1b7"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-pending-phone-dark.png",
+      "sha256": "810fa197dd0c3444c5db3623715324ac00790cdaa12df54ba5b74674522f8a57"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-reopened-dark.png",
+      "sha256": "2007bf5f701e09aefa8e49f6aa32fcecd54cbf7091a1091f73e850d3d77ca88a"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-reopened-device-light.png",
+      "sha256": "2007bf5f701e09aefa8e49f6aa32fcecd54cbf7091a1091f73e850d3d77ca88a"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-parent-reopened-phone-dark.png",
+      "sha256": "4abfac715c0a57a43c7af2457a08beb68c39c45a5dd038a4206639c3ba8b57b9"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-review-again-dark.png",
+      "sha256": "1a18b427d1f3ea25864a544428c09c554b5adefafb0afeee16895c7888b6eac4"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-review-again-device-light.png",
+      "sha256": "1a18b427d1f3ea25864a544428c09c554b5adefafb0afeee16895c7888b6eac4"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-review-again-phone-dark.png",
+      "sha256": "920f1785cebd5c2a13f3d25e42e5891dbae33d3f53d8f868df50fdc409a67bd9"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unavailable-bottom-phone-dark.png",
+      "sha256": "fc2fa098343f64d52d5b0542228b92c6353825c925aaa52ac24b5a9d14decb83"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unavailable-dark.png",
+      "sha256": "a51264f75e2b041caff2c09f56ff35044ae2a0b6e058fc1734024374a439623a"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unavailable-device-light.png",
+      "sha256": "a51264f75e2b041caff2c09f56ff35044ae2a0b6e058fc1734024374a439623a"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unavailable-phone-dark.png",
+      "sha256": "254b8c86151eb59b2485e1ac942f1c6e1263025f1406f24f005a5699b2e1ecdf"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-bottom-phone-dark.png",
+      "sha256": "949e5a036ddf875ac94f8ed801ef84a8370d814bb1fa9fb8167953920e57fc33"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-dark.png",
+      "sha256": "f610251ae5a202e320b6452618b5a1e3807360c59383e0cb650b96d0f5f506ad"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-device-light.png",
+      "sha256": "f610251ae5a202e320b6452618b5a1e3807360c59383e0cb650b96d0f5f506ad"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-phone-dark.png",
+      "sha256": "949e5a036ddf875ac94f8ed801ef84a8370d814bb1fa9fb8167953920e57fc33"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-reopened-dark.png",
+      "sha256": "0b01f9a2607793bbe1076b933e07960356256ab3dc41cacbb7c8da1488c5ea10"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-reopened-device-light.png",
+      "sha256": "0b01f9a2607793bbe1076b933e07960356256ab3dc41cacbb7c8da1488c5ea10"
+    },
+    {
+      "path": "docs/bpay-next/screen-designs/SCR-29/WB34-unknown-reopened-phone-dark.png",
+      "sha256": "d50169ce0f8c4eba64ea57888eecfc8614b8bfd482bff4a81aed7854c7133fc7"
+    }
+  ],
+  "checks": {
+    "localPG17": "Five exact catalogue definition checks and current browser-isolation DO PASS; schema compilation only",
+    "dbCheck": "385 migrations / 1006 repeatables PASS",
+    "sourceGates": "Direct source gates PASS 1567SQL/31RPC/183routines/39typed; owner SEND4 failing mandatory suites explicitly pending next boundary",
+    "nodeCheck": "All8 Office +2 Broker changed sources PASS",
+    "contractHash": "b5dd4b761cc629ba3121763aa2692f618d7baa747fee66edbfda963bcd838f82",
+    "sealLocal": "PASS",
+    "coupling": "PASS",
+    "businessAcceptance": "AUTHORED_NOT_RUN",
+    "timing": "Moved to TEST after installation, owner10/10/2026"
+  },
+  "next": "Owner4B first-install fixes/integration/newPG17contract/reviewed candidate beforeXD01–03"
+}
