@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
+import { qualifyBpayNextReauthIntent, BPAY_NEXT_PROTECTED_ACTIONS } from '../broker/src/bpay-next-command.js';
 import {
   BPAY_NEXT_OWNER_STATUS_RPC, BPAY_NEXT_OWNER_STATUS_LIMITS,
   normalizeBpayNextOwnerStatus, createBpayNextOwnerStatusRpc,
@@ -180,7 +183,8 @@ test('known NEXT routes and factual banking-id/Source/ordinary routes remain out
     ['POST','/api/banking/pay/bank-name-check/clear-override'],
     ['POST', '/api/timesheets/one/authorise'], ['POST', '/api/timesheets/import'],
     ['PATCH', '/api/candidates/one'], ['POST', '/api/weekly-source/publish'],
-    ['POST','/auth/login'],['POST','/auth/refresh']]) {
+    ['POST','/auth/login'],['POST','/auth/refresh'],
+    ['POST','/auth/reauth/start'],['POST','/auth/reauth/verify']]) {
     assert.equal(isBpayNextLegacyFinancialRoute(method, path), false, path);
   }
 });
@@ -201,13 +205,60 @@ test('old financial routes and unknown NEXT paths do not escape pre-network guar
     ['POST', '/api/timesheets/one/pay-adjustment'], ['POST', '/api/remittances/send'],
     ['POST', '/api/remittances/email-for-candidate'], ['POST', '/api/candidates/one/pay-method-change'],
     ['GET', '/api/candidates/one/pay-method-change-preview'],
-    ['POST','/auth/reauth/start'],['POST','/auth/reauth/verify'],
     ['POST','/api/banking//pay/batch/test/cancel'],
     ['POST','/api//timesheets/test/advance-payment'],
     ['POST','/api//candidates/test/pay-method-change'],
     ['POST','/api//banking/pay/provider-webhook/test/id']]) {
     assert.equal(isBpayNextLegacyFinancialRoute(method, path), true, path);
   }
+});
+
+test('EX01 real reauth handlers reject legacy intent, legacy proofs and invalid NEXT challenges before side effects', async () => {
+  const source=await readFile(new URL('../broker/src/index.js',import.meta.url),'utf8');
+  const extract=(name,next)=>{
+    const start=source.indexOf('async function '+name+'('),end=source.indexOf('\n'+next+'(',start);
+    assert.ok(start>=0&&end>start,'actual handler boundary '+name);
+    return source.slice(start,end);
+  };
+  let body,challenge,active=true,actor={id:'11111111-2222-4333-8444-555555555555',role:'admin'},effects=0;
+  const forbidden=()=>{effects++;assert.fail('No challenge, token, payment, message or native mutation');};
+  const sandbox={Response,TextEncoder,TextDecoder,AbortController,setTimeout,clearTimeout,crypto:webcrypto,
+    preflightIfNeeded:()=>null,requireUser:async()=>actor,parseJSONBody:async()=>body,
+    badRequest:message=>Response.json({message},{status:400}),unauthorized:message=>Response.json({message},{status:401}),
+    sbGetUserById:async()=>({id:actor.id,is_active:active,password_hash:'synthetic-only'}),pbkdf2Verify:async()=>true,
+    loadSettingsDefaults:async()=>({importConfig:{auth_effective:{tfa_max_attempts:10}}}),
+    getClientIp:()=> 'SOURCE_ONLY',sbFetch:async()=>({rows:[challenge]}),
+    qualifyBpayNextReauthIntent,BPAY_NEXT_PROTECTED_ACTIONS,
+    createBpayNextReauthRpc:forbidden,createToken:forbidden,hash2faCode:forbidden,fetch:forbidden,
+    bpayNextOwnerStatusRpc:()=>async()=>status('NEXT'),sessionSecret:()=> 'synthetic-only',
+    hmacVerify:async()=>true,base64UrlToUint8:value=>new Uint8Array(Buffer.from(value,'base64url'))};
+  vm.createContext(sandbox);
+  vm.runInContext(extract('loadBpayNextReauthScope','async function verifyBpayNextActionReauth')+'\n'
+    +extract('verifyBpayNextActionReauth','async function verifyPaymentScheduleReauth')+'\n'
+    +extract('handleAuthReauthStart','function getClientIp')+'\n'
+    +extract('handleAuthReauthVerify','async function verifyPaymentReversalReauth'),sandbox);
+  for(const action of ['PAYMENT_EXECUTE','PAYMENT_SCHEDULE','PAYMENT_REVERSAL']){
+    body={password:'synthetic-only',purpose:'BPAY_NEXT_ACTION',expected_scope_sha256:'a'.repeat(64),intent:{action}};
+    const result=await sandbox.handleAuthReauthStart({},{});
+    assert.equal(result.status,401,action);assert.equal((await result.json()).message,'BPAY_NEXT_REAUTH_REQUIRED');
+  }
+  active=false;
+  assert.equal((await sandbox.handleAuthReauthStart({},{})).status,401);
+  active=true;
+  for(const invalid of [{purpose:'PAYMENT_SCHEDULE',action_kind:'EXECUTE_REQUEST'},
+    {purpose:'BPAY_NEXT_ACTION',action_kind:'PAYMENT_EXECUTE'},
+    {purpose:'BPAY_NEXT_ACTION',action_kind:'EXECUTE_REQUEST',scope_sha256:'bad'}]){
+    body={challenge_id:'11111111-2222-4333-8444-555555555555',code:'123456',purpose:'BPAY_NEXT_ACTION'};
+    challenge={user_id:actor.id,scope_sha256:'a'.repeat(64),...invalid};
+    assert.equal((await sandbox.handleAuthReauthVerify({},{})).status,401);
+  }
+  const validPayload={typ:'reauth',sub:actor.id,purpose:'BPAY_NEXT_ACTION',action_kind:'EXECUTE_REQUEST',
+    scope_sha256:'a'.repeat(64),second_factor_used:true,iat:1,exp:301};
+  const token=payload=>Buffer.from(JSON.stringify(payload)).toString('base64url')+'.synthetic';
+  const proof=await sandbox.verifyBpayNextActionReauth({},token(validPayload),actor,'EXECUTE_REQUEST');
+  assert.ok(proof);assert.equal(proof.action_kind,'EXECUTE_REQUEST');assert.equal(proof.scope_sha256,validPayload.scope_sha256);
+  assert.equal(await sandbox.verifyBpayNextActionReauth({},token({...validPayload,purpose:'PAYMENT_SCHEDULE'}),actor,'EXECUTE_REQUEST'),null);
+  assert.equal(effects,0);
 });
 
 const tables = [

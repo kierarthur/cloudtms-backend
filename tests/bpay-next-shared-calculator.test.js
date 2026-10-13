@@ -66,6 +66,39 @@ function calculatorArguments(text){
   }
   return result;
 }
+// A pure JSON transport groups independent values, not one rate formula.
+// Keep scalar consumers intact; keys and shared-calculator arguments are code too.
+function literalTransportKey(raw){
+  const text=raw.trim().replace(/\s*::\s*(?:pg_catalog\s*\.\s*)?text\s*$/i,'');
+  const ordinary=text.match(/^(?:e)?'([a-z_][a-z0-9_]*)'$/i);
+  if(ordinary)return ordinary[1].toLowerCase();
+  const dollar=text.match(/^\$([a-z_][a-z0-9_]*)?\$([a-z_][a-z0-9_]*)\$([a-z_][a-z0-9_]*)?\$$/i);
+  return dollar&&(dollar[1]??'')===(dollar[3]??'')?dollar[2].toLowerCase():null;
+}
+function transportExpressions(code,raw,depth=0){
+  if(depth>16)return [code];
+  const match=code.match(/^\s*(?:(?:return\s+)|(?:[a-z_][a-z0-9_]*\s*:=\s*))?(?:pg_catalog\s*\.\s*)?jsonb_build_object\s*\(/i);
+  if(!match)return [code];
+  const open=match[0].length-1,end=callEnd(code,open);
+  if(code.slice(end+1).trim())return [code];
+  const spans=[];let start=open+1,nesting=0,squares=0;
+  for(let i=start;i<=end;i++){
+    if(i===end||code[i]===','&&nesting===0&&squares===0){spans.push([start,i]);start=i+1;}
+    else if(code[i]==='(')nesting++;else if(code[i]===')')nesting--;
+    else if(code[i]==='[')squares++;else if(code[i]===']')squares--;
+  }
+  if(nesting||squares||spans.length%2||/\bvariadic\b/.test(code))return [code];
+  const keys=spans.filter((_,i)=>i%2===0).map(([start,end])=>literalTransportKey(raw.slice(start,end)));
+  if(keys.some(key=>key===null))return [code]; // Unknown/dynamic keys keep the original conservative scan.
+  const result=[];
+  for(let i=0;i<spans.length;i+=2){
+    const [ks,ke]=spans[i],[vs,ve]=spans[i+1],key=code.slice(ks,ke),value=code.slice(vs,ve);
+    result.push(key,...transportExpressions(value,raw.slice(vs,ve),depth+1));
+    // Preserve the existing VAT-target evidence when the target is a JSON key.
+    if(/^(?:vat|[a-z_][a-z0-9_]*_vat)$/.test(keys[i/2]))result.push('vat := '+value);
+  }
+  return result;
+}
 export function assertSharedCalculatorSource(source,file){
   for(const part of executableParts(source,file)){
     if(HELPERS.has(part.signature))continue;
@@ -87,7 +120,12 @@ export function assertSharedCalculatorSource(source,file){
     do{added=false;for(const [,name,rhs]of assignments)if(!rateNames.has(name)
       &&!/\b(?:is|and|or|not|exists|jsonb_build_object|jsonb_build_array|to_jsonb)\b|[<>=]/.test(rhs.replace(/->>?|#>>?/g,''))
       &&(rhs.match(/\b[a-z_][a-z0-9_]*\b/g)??[]).some(n=>rateNames.has(n))){rateNames.add(name);added=true;}}while(added);
-    for(const expression of [...arithmetic.split(';'),...calculatorArguments(code).map(hideCalculatorCalls)]){
+    const expressions=[];let offset=0;
+    for(const statement of arithmetic.split(';')){
+      expressions.push(...transportExpressions(statement,part.text.slice(offset,offset+statement.length)));
+      offset+=statement.length+1;
+    }
+    for(const expression of [...expressions,...calculatorArguments(code).map(hideCalculatorCalls)]){
       const rate=(expression.match(/\b[a-z_][a-z0-9_]*\b/g)??[]).some(name=>rateNames.has(name));
       const duplicate=rate&&PATTERNS.arithmetic.test(expression)
         ||PATTERNS.amount.test(expression)&&PATTERNS.copiedFactor.test(expression)
@@ -110,6 +148,31 @@ export function verifySharedCalculatorFinalSources(){
 
 test('CM04 current F04 physical final sources use the shared calculators',()=>{
   assert.ok(verifySharedCalculatorFinalSources()>0);
+});
+test('CM04 trusted case quote transports separate ratios and metadata without hiding scalar formulas',()=>{
+  const source=fs.readFileSync(path.join(repoRoot,'supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql'),'utf8');
+  const start=source.indexOf('create or replace function private.bpay_next_case_channel_quote_v1(');
+  const end=source.indexOf('create or replace function private.bpay_next_case_channel_quotes_v1(',start);
+  assert.ok(start>=0&&end>start);
+  const quote=source.slice(start,end);
+  assert.match(quote,/q:=private\.pay_finance_selected_quote_v1/);
+  assert.doesNotThrow(()=>assertSharedCalculatorSource(quote,'case-quote.sql'));
+  const copied=quote.replace("round((q->>'ex')::numeric/basis,10)",'round(basis*(1+w.erni_pct/100),10)');
+  assert.notEqual(copied,quote);
+  assert.throws(()=>assertSharedCalculatorSource(copied,'case-quote.sql'),/CM04_SHARED_CALCULATOR_REQUIRED/);
+  const wrap=body=>`create function private.bpay_next_cm04_json() returns jsonb language plpgsql as $body$begin null; ${body} end$body$;`;
+  assert.doesNotThrow(()=>assertSharedCalculatorSource(wrap("return jsonb_build_object('quote_operands',jsonb_build_object('target_vat_per_source',round((q->>'vat')::numeric/basis,10),'erni_pct',w.erni_pct::text));"),'json-ratios.sql'));
+  for(const body of [
+    "return jsonb_build_object('vat',p_source_ex_vat*0.2,'erni_pct',w.erni_pct);",
+    "return jsonb_build_object(E'vat',p_source_ex_vat*0.2,'erni_pct',w.erni_pct);",
+    "return jsonb_build_object($key$vat$key$,p_source_ex_vat*0.2,'erni_pct',w.erni_pct);",
+    "return jsonb_build_object('vat'::text,p_source_ex_vat*0.2,'erni_pct',w.erni_pct);",
+    "return jsonb_build_object('quote',jsonb_build_object('ex',p_source_ex_vat/1.15));",
+    "return jsonb_build_object('ex',(jsonb_build_object('r',v_erni_pct)->>'r')::numeric*p_source_ex_vat);",
+    "return jsonb_build_object((v_erni_pct/100)::text,p_source_ex_vat);",
+    "return jsonb_build_object('rows',ARRAY[1,round(p_source_ex_vat*(1+v_erni_pct/100),2)]);",
+    "return jsonb_build_object('quote',private.pay_finance_selected_quote_v1(mode,p_source_ex_vat/(1+v_erni_pct/100),a,b,c,d,e,v_erni_pct,v_vat_rate_pct,true));"
+  ])assert.throws(()=>assertSharedCalculatorSource(wrap(body),'json-formula.sql'),/CM04_SHARED_CALCULATOR_REQUIRED/,body);
 });
 test('CM04 source controls reject copied formulas/wrong value bases, retain caller classification',()=>{
   const wrap=body=>`create function private.bpay_next_cm04_example() returns void language plpgsql as $body$begin ${body} end$body$;`;
