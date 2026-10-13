@@ -43,8 +43,21 @@ export function neutraliseReviewedVerifierEnvelope(unit, review) {
 // Source-only renderer. This module opens no database/network connection.
 // The post-Banking coordinator must supply exact pushed, independently reviewed
 // units, hold SEND_7 before its before probes, and retain it through fresh proof.
-export function renderFullRehearsalUnits(units) {
+export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
   if (!Array.isArray(units) || !units.length) throw Error('REHEARSAL_UNITS_REQUIRED');
+  if (outerIsolation !== undefined && !['READ COMMITTED','REPEATABLE READ','SERIALIZABLE'].includes(outerIsolation)) {
+    throw Error('REHEARSAL_ISOLATION_VALUE_REFUSED');
+  }
+  // Removing a verifier's transaction wrapper must not discard its snapshot
+  // requirement. Do not assume SERIALIZABLE substitutes for an exact native
+  // REPEATABLE READ guard. The coordinator must review one compatible mode.
+  const isolationRequirements = units.flatMap(unit => (unit.envelope ?? [])
+    .filter(item => item.command?.startsWith('BEGIN ISOLATION LEVEL '))
+    .map(item => ({file:unit.file, sourceSqlHash:unit.sourceSqlHash,
+      isolation:item.command.slice('BEGIN ISOLATION LEVEL '.length)})));
+  if (isolationRequirements.some(item => item.isolation !== outerIsolation)) {
+    throw Error('REHEARSAL_ISOLATION_REQUIREMENT_REFUSED');
+  }
   const rendered = [], census = [];
   for (const [index, unit] of units.entries()) {
     const verifier = ['verifier','final_browser_verifier'].includes(unit.kind);
@@ -86,7 +99,8 @@ export function renderFullRehearsalUnits(units) {
       reviewedEnvelope:unit.envelope??[]});
   }
   const sql = rendered.join('\n')+'\n';
-  return {sql, sha256:digest(sql), bytes:Buffer.byteLength(sql), units:census};
+  return {sql, sha256:digest(sql), bytes:Buffer.byteLength(sql), units:census,
+    outerIsolation:outerIsolation??null, isolationRequirements};
 }
 
 // Diagnostics never retain server DETAIL/CONTEXT or arbitrary primary text.

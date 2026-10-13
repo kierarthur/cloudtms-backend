@@ -27,6 +27,30 @@ test('envelope review cannot permit prepared transactions, alternate modes or er
   }
 });
 
+test('removing an exact native snapshot envelope cannot silently downgrade or replace its isolation',()=>{
+  const body="do $native$ begin if current_setting('transaction_isolation') <> 'repeatable read' then raise exception 'NATIVE_SNAPSHOT_REQUIRED'; end if; end; $native$;";
+  const original=unit('begin isolation level repeatable read;\n'+body+'\nrollback;');
+  const neutral=neutraliseReviewedVerifierEnvelope(original,{sourceSqlHash:original.sqlHash,
+    removedCommands:['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']});
+  for(const options of [undefined,{outerIsolation:'READ COMMITTED'},{outerIsolation:'SERIALIZABLE'}]) {
+    assert.throws(()=>renderFullRehearsalUnits([neutral],options),/ISOLATION_REQUIREMENT_REFUSED/);
+  }
+  const rendered=renderFullRehearsalUnits([neutral],{outerIsolation:'REPEATABLE READ'});
+  assert.ok(rendered.sql.includes(body));assert.equal(rendered.outerIsolation,'REPEATABLE READ');
+  assert.deepEqual(rendered.isolationRequirements,[{file:original.file,sourceSqlHash:original.sqlHash,isolation:'REPEATABLE READ'}]);
+});
+test('incompatible verifier modes refuse one outer rehearsal without dropping either native check',()=>{
+  const variants=['REPEATABLE READ','SERIALIZABLE'].map(mode=>{
+    const original=unit('begin isolation level '+mode+';\nselect 1;\nrollback;');
+    return neutraliseReviewedVerifierEnvelope(original,{sourceSqlHash:original.sqlHash,
+      removedCommands:['BEGIN ISOLATION LEVEL '+mode,'ROLLBACK']});
+  });
+  for(const outerIsolation of ['READ COMMITTED','REPEATABLE READ','SERIALIZABLE']) {
+    assert.throws(()=>renderFullRehearsalUnits(variants,{outerIsolation}),/ISOLATION_REQUIREMENT_REFUSED/);
+  }
+  assert.throws(()=>renderFullRehearsalUnits([unit('select 1;')],{outerIsolation:'invalid'}),/ISOLATION_VALUE_REFUSED/);
+});
+
 test('verifier client variable is cleared before and after each complete savepoint, while its native body is retained',()=>{
   const first=unit('\\set weekly_source_verification_outer_transaction on\nselect 1;');
   const second=unit('\\if :{?weekly_source_verification_outer_transaction}\nselect 2;\n\\else\nselect 3;\n\\endif');

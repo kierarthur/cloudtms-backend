@@ -1,0 +1,2333 @@
+{
+  "status": "SOURCE_BACKUP_AND_REHEARSAL_REVIEW_DEPENDENCIES_ONLY_NO_EXECUTION",
+  "sourceCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+  "exactRemoteVerified": true,
+  "retainedFiles": 80,
+  "packages": [
+    {
+      "folder": "cn-a0-creator-census-forward",
+      "manifestSha256": "dd3c0d77e2b7a5edc6641d4de0d8220c187e0b867d8af57c2f1d4c470b4e8d42",
+      "fileCount": 17,
+      "status": "FOCUSED_SOURCE_P2_CORRECTIONS_ACCEPTED_NATIVE_RR_HELD",
+      "gitCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+      "exactRawGitAndSavedBytesMatch": true
+    },
+    {
+      "folder": "report-prepared-output-retention",
+      "manifestSha256": "80a2577cbf5016f1a76e323717809c5553070e47b0b9a80e11b1ef3a0af34c70",
+      "fileCount": 30,
+      "status": "FROZEN_ORIGINAL_P2_ARRAY_FINDING_ACCEPTED_FORWARD",
+      "gitCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+      "exactRawGitAndSavedBytesMatch": true
+    },
+    {
+      "folder": "report-prepared-output-array-forward",
+      "manifestSha256": "efc2881e0863a2bf09954742f8178819cb7e27d3bc30e79a56b92a6944fbd889",
+      "fileCount": 11,
+      "status": "ARRAY_SOURCE_CORRECTION_ACCEPTED_NATIVE_CAPTURE_FINANCIAL_HELD",
+      "gitCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+      "exactRawGitAndSavedBytesMatch": true
+    },
+    {
+      "folder": "strict-qualification-first-use-inventory-forward",
+      "manifestSha256": "e05b9ec2574dcf83c7773171adb50e116f3181d28812ac6e8571dd79fab5c427",
+      "fileCount": 12,
+      "status": "FROZEN_FIRST_USE_INVENTORY_FIX_FURTHER_P2_PATH_CORRECTED_ADJACENT",
+      "gitCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+      "exactRawGitAndSavedBytesMatch": true
+    },
+    {
+      "folder": "strict-qualification-git-path-parser-forward",
+      "manifestSha256": "06645fbf3c215137bf306405d03ce6817a78e5b8ce08948ad834e9e66a26d3d3",
+      "fileCount": 10,
+      "status": "FATAL_PATH_SOURCE_CORRECTION_ACCEPTED_NATIVE_OPERATIONAL_HELD",
+      "gitCommit": "17db6050abb50ba6c4bd77019dfb29c817e35529",
+      "exactRawGitAndSavedBytesMatch": true
+    }
+  ],
+  "original": {
+    "sourceCommit": "547c74da5f0a05b09297c042bc7f3cc0c0105b85",
+    "reviewed": 168,
+    "eligible": 152,
+    "excluded": 16
+  },
+  "current": {
+    "verifiers": 170,
+    "unchangedArchivedClosures": 164,
+    "changedClosures": 4,
+    "newVerifiers": 2,
+    "originalExclusionsRetained": 16
+  },
+  "repeatableReadRequiredSourceRoots": [
+    "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+    "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_correct_final_source_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+    "supabase/verification/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+    "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+    "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql"
+  ],
+  "controllingSourceDelta": [
+    "supabase/release/current-release.json",
+    "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+    "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+    "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+    "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+    "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+    "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+    "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/07_private_acl.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+    "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+    "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+    "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+    "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql"
+  ],
+  "scope": "Unchanged verifier closures do not establish unchanged invoked controlling owners or installed semantics. Re-read changed/new bodies and all changed controlling/native callees against the actual post-Banking composed release. Original exclusions stay closed. Nine repeatable-read envelopes and native snapshot guards require explicit full-run isolation review; do not strip modes as a waiver or alter ordinary isolation. No database, credential, executor, release, fixture or operational acceptance.",
+  "verifiers": [
+    {
+      "index": 0,
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c"
+    },
+    {
+      "index": 1,
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "05e9676d1b3f86f9085ec9355906c37f60aa8965a70acb3590de14fb0650c6c1"
+    },
+    {
+      "index": 2,
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "54efab0b929e2e8da38a161908e3a9ceba88fada326f5296a33f11c703903232"
+    },
+    {
+      "index": 3,
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "1df601877c770cdaae660e514e148a5a6bc77f2f03658f48c8747f59b676e485"
+    },
+    {
+      "index": 4,
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "892fc4ad6be3f99b7c7b40761d7a93514a6312ee582a8b4f2b380c8cde7d9f7a"
+    },
+    {
+      "index": 5,
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e6bc384a3fe7600c9b69f1f85403689108cf6e248d1afe267984cce46a2c7f00"
+    },
+    {
+      "index": 6,
+      "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "482cb73cef2bf0180add7b6a3605ba2f96564a5751e98e509416879c354a89c4"
+    },
+    {
+      "index": 7,
+      "file": "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "6fc8e976fe4d0ceebcd2b14f5035cba4432173f25e817b75675e33cd2f2ddb54"
+    },
+    {
+      "index": 8,
+      "file": "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "e2081a2d69d2e7b0649036800fe09f9f3ae4a32fa174fbafc0356d46ed2f91c2"
+    },
+    {
+      "index": 9,
+      "file": "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "099067d21e9f5110c65f958c67f13f1419b3a52a42919d02e2b1fda34610d994"
+    },
+    {
+      "index": 10,
+      "file": "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "fe7df45348b9ac8a1bfe9fba46cf3067e0b10c8c8d54d0e53fb559d0ee60cff7"
+    },
+    {
+      "index": 11,
+      "file": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e0666765091409704533ed0f471aea4dc0d001801715a5730be00c3697c6dede"
+    },
+    {
+      "index": 12,
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "0c0496dabf3e3a24aeb91909c8ac56f6ad17161ff027c7241dd89663f4dd187c"
+    },
+    {
+      "index": 13,
+      "file": "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "97bec745fcfa91d39d003a64dd632154fa4a437043d2ae6edfc30ec198a38523"
+    },
+    {
+      "index": 14,
+      "file": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "e4f027dc5656d30844312e8b1e99d4ef3dcf37676ddc73faad58318755a64be1"
+    },
+    {
+      "index": 15,
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02"
+    },
+    {
+      "index": 16,
+      "file": "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "efad90585235ed640a51f5ae3cdeec9aed2695714c5cb0f4afc2d53541d0b06b"
+    },
+    {
+      "index": 17,
+      "file": "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "2822fbe2718626863dbe89d5f6058a2e7219715039c643942389562f1f5ea9d6"
+    },
+    {
+      "index": 18,
+      "file": "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "232da03b5625e1dfa69bb1c421dbeff70aec39a09af5a808e468e696a1db64ff"
+    },
+    {
+      "index": 19,
+      "file": "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7b3b12279a152679d5adb63660b190d4e94d5702398f48f4d68d85d69d8ae3d9"
+    },
+    {
+      "index": 20,
+      "file": "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "721074977f0dbadbd9761206f74bdee25b6957ca8e0d2da5cbca0f8bd541682e"
+    },
+    {
+      "index": 21,
+      "file": "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7e07a9ed18275836cf7bb661e9c4d70ac0e51c34529ad140471b14319e592406"
+    },
+    {
+      "index": 22,
+      "file": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "676742eec620099f188fd6ddd0c87246e58a096a51f1a6f3f728a88ac0c19fbf"
+    },
+    {
+      "index": 23,
+      "file": "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "01e6749bbf851ce70f85cef8b552005713bfb86ae273d28051b81241684a454d"
+    },
+    {
+      "index": 24,
+      "file": "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e3a97257a36662fe6c6791c1540ddf261a2f9d70692e94ecfb0e4d1e89bf9419"
+    },
+    {
+      "index": 25,
+      "file": "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "ff54dc1e5b0666776fc8e2e3691752ef41cf8538fdd76f03cca1d3a3a09e3ab2"
+    },
+    {
+      "index": 26,
+      "file": "supabase/verification/31082026_1026_candidate_daily_active_window_projection_readiness_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "b1e9061e6066fbe83151a3c256229099697abb5785e2c47341191c0213adf404"
+    },
+    {
+      "index": 27,
+      "file": "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "9177f72342ee4ff3f43bc4da3e4ad5b28813feda8cadefc027f7c355b1cb5d68"
+    },
+    {
+      "index": 28,
+      "file": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "73842f8c6593f5b37d1886709f489760efb9b90a86e2b3e03d5fc0a33da92e0b"
+    },
+    {
+      "index": 29,
+      "file": "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d8031788eee1fb06cdd82528051889ac1c476f89a639c8300e22bafd203cebd8"
+    },
+    {
+      "index": 30,
+      "file": "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e4fb9311b074e521616fc1c9a8e816d22b64f4c961920289473e5ce4dba5ef4d"
+    },
+    {
+      "index": 31,
+      "file": "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 31,
+        "decision": "EXCLUDE",
+        "reason": "EXCLUDE: invokes candidate_daily_projection_claim_v1 twice with a global target and no Candidate filter, recovering/claiming up to 100 genuine hosted queue rows. Fixture-only completion does not confine the global claim. Root explicitly confirmed exclusion under the no-queue-drain rule."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "9b5515545e4c9a4241ebe9d6139516ac5dca0e5fbb2e145f255ef04bfd29c30b"
+    },
+    {
+      "index": 32,
+      "file": "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "6c8a68077adb2c59c90c96741e5dde5b28877bcbd26bcde824cd1ead1d479774"
+    },
+    {
+      "index": 33,
+      "file": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "6fee715f67c0de76ca0e45cba168a9a4293a3e88c4bf13ec498911878a2eca60"
+    },
+    {
+      "index": 34,
+      "file": "supabase/verification/29082026_0518_banking_pay_replaced_queue_terminal_shape_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "c4bc774476338df50eee3437a3fb0d335e42059238156fe21d104f169c0a5629"
+    },
+    {
+      "index": 35,
+      "file": "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "25746a344a4cc862826c56689710e35acda95bedf113b6106ee5a445041a1c47"
+    },
+    {
+      "index": 36,
+      "file": "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "b4f1895f05a94d5e6ba273471463983d82448e1e8543984519b59f5f1dc35768"
+    },
+    {
+      "index": 37,
+      "file": "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0734bd8a5ce7f41a85d4649a49bd4f394752e2964be649eff9051a5ff67dd617"
+    },
+    {
+      "index": 38,
+      "file": "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "c5012d2476a440824d7e013edeb7ac142a81a266394e1987d87ed223353eab07"
+    },
+    {
+      "index": 39,
+      "file": "tests/29082026_0924_candidate_daily_reconciliation_linked_window_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0640554467f31b374706dfcfced2f7c17e48a0596aa035515c50ed0e3bc359fb"
+    },
+    {
+      "index": 40,
+      "file": "supabase/verification/29082026_1407_candidate_daily_reconciliation_identity_probe_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "81b1c7f5af33729edd6232f51f1ff951e296184610f9a3c592434170eb79e97e"
+    },
+    {
+      "index": 41,
+      "file": "tests/29082026_1408_candidate_daily_reconciliation_identity_probe_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "5833af1d3305aaadb45e5447b5a28c13a6b04f15e87c0e3f4fd599e281261d7b"
+    },
+    {
+      "index": 42,
+      "file": "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "159393c883d534091d42d50951483843c6fd1f9ade5f3bb59c83f05c486445b0"
+    },
+    {
+      "index": 43,
+      "file": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "85e3879cf552e2374aa9a7ed78973fc1b54b19cd87a931d2f720689b22e0c8d9"
+    },
+    {
+      "index": 44,
+      "file": "supabase/verification/29082026_1157_banking_pay_source_refresh_terminal_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3d856d46bddeec29fcb2131816bbccaae05f547ad617aada3971b5c7a3833dba"
+    },
+    {
+      "index": 45,
+      "file": "supabase/verification/29082026_1313_banking_pay_invalid_source_authority_repair_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "a8b062ac19f41febeb0f0c888ef40beb776bd71b3ed37ba644ae1225716e2538"
+    },
+    {
+      "index": 46,
+      "file": "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "305a0e56e35fea90a68746413ecf821f8bfc24c5c05dae241e661daf7c494f71"
+    },
+    {
+      "index": 47,
+      "file": "supabase/verification/31082026_2231_banking_pay_action_required_amount_presentation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "c7b26b54423a8fc10e234723d7bf7b74e5936bf72f174235256e4bcf0a8b2fd3"
+    },
+    {
+      "index": 48,
+      "file": "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "6f4e13b9ac3508bd52a1635b7679ae55a9ef65cf124bcc0a7c9ae1e1247b7d90"
+    },
+    {
+      "index": 49,
+      "file": "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4686588c0fcff6efa30aa3fe539b074a212a51d43b2cce45ded8802de7f57e5c"
+    },
+    {
+      "index": 50,
+      "file": "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "54591ecaf499bf4767f509c424ed5666d9a43b807cbfa9a30e1505ea658fb3a6"
+    },
+    {
+      "index": 51,
+      "file": "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "38bd47904579fe717bf8397aae827a36d4c288a730b64bb20b74e839a18f788b"
+    },
+    {
+      "index": 52,
+      "file": "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "eecae1828f5ac8b25db0832b089610cd3b0f17fc6a9d10bc62f4143151949001"
+    },
+    {
+      "index": 53,
+      "file": "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "717c8b145f77b3f708b64caeedb6aa17b0f111403fb8d3ef558616b98bb98b95"
+    },
+    {
+      "index": 54,
+      "file": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "2a7bca5f00a6ea9540e0655f58c0cb33a5c3babcb089bbef02589c01db2f6ca1"
+    },
+    {
+      "index": 55,
+      "file": "supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "1135b2912a9c36e7019a6503ee59ab1c330f2cc6d8148cadc7640e79739efa40"
+    },
+    {
+      "index": 56,
+      "file": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d54b8f3bd086719186e279658debaaca2daac7fa8ec05906984fe3692dfec03b"
+    },
+    {
+      "index": 57,
+      "file": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "8e8294dbecd274df714ec4f771c55f018b622b4f39c9c0eabaf97c5ed242b6de"
+    },
+    {
+      "index": 58,
+      "file": "supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0277e4251fd48b52fa9e4e6707f7a4e791237ea5a77cb400b1bcbec6d7661bf3"
+    },
+    {
+      "index": 59,
+      "file": "supabase/verification/31082026_0925_candidate_workflow_mutation_receipt_lookup_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "f0b2a398bdbab3fe33df6ae8bf739d62a64066099f9cb0f4bab2058f51b37f8d"
+    },
+    {
+      "index": 60,
+      "file": "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "9948633c9d9a5b36607ab1ca5f19ae5e92fc44274f2143835798e70a0a473977"
+    },
+    {
+      "index": 61,
+      "file": "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 61,
+        "decision": "EXCLUDE",
+        "reason": "Nested selection fixture requires exactly one matching real unfinished APPLYING release outside banking_modal_v2_test; rollback rehearsal cannot create or impersonate that release."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e09a4687a8afd602f3490a6b3f3c83f714e9d19069d6078d0f910e4674c19cd1"
+    },
+    {
+      "index": 62,
+      "file": "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "bdeedbd409687dbf48bef5eab14e36b7da8ba4dd547cbb77bfa9953113d98e60"
+    },
+    {
+      "index": 63,
+      "file": "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7c15efb889771bbe02ff670b67899c23d20219e82b69927506ad9d69735ae3d2"
+    },
+    {
+      "index": 64,
+      "file": "supabase/verification/01092026_2032_candidate_federated_session_family_projection_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "582da91929f7f5746f73f35d05d5539e58f4e9f2e00e2d36386bb70548939d3e"
+    },
+    {
+      "index": 65,
+      "file": "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "d3e38d5e47878c5201e864f7accc157cae10724d73c621baed12313e6acbd620"
+    },
+    {
+      "index": 66,
+      "file": "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 66,
+        "decision": "EXCLUDE",
+        "reason": "Same exact nested APPLYING-release/identity/commit/mode gate as index 61. Reader calls themselves do not execute a payment."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "67ec5062ecab0198b002bfbf66deb9f17732d084a0f968d2bccad8fbe45a06c7"
+    },
+    {
+      "index": 67,
+      "file": "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7c5771d95b3574b74ba1621951f296ca805edaf5c0bb3f6dabcb0220e8d77921"
+    },
+    {
+      "index": 68,
+      "file": "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4ae4200f80de12fc7235312519c8da45d561c2c941151a8a03e4bf5bed47eb83"
+    },
+    {
+      "index": 69,
+      "file": "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "73f65a8c30ec53e0c99164c6f9b7347fc147bcd9e76ec5da5cf15466a4d0e07e"
+    },
+    {
+      "index": 70,
+      "file": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 70,
+        "decision": "EXCLUDE",
+        "reason": "Same nested genuine APPLYING gate, plus actual pay_batch_finalize_reservations_and_markers call on the synthetic Draft. Exclude the whole root; catalogue/pure recovery tests 69/71 remain eligible."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "611243f2050127c7fcbc565e3e47595ff151b1066724eaf98639442d12507f85"
+    },
+    {
+      "index": 71,
+      "file": "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "97e624c284317d59f7206d0697d09f9c18bed80bb471fc5f6c680a6197e52b6f"
+    },
+    {
+      "index": 72,
+      "file": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3dae01af0dc970a5540213c0e95e1cfc86986bbd8b831782311939534145e119"
+    },
+    {
+      "index": 73,
+      "file": "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "65de66c1135816de1de6ba99a26cfffad055a76f56a68a4cb733916e662980a7"
+    },
+    {
+      "index": 74,
+      "file": "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "7a76bac4bc0a7f9105cc57c852021e00dc85425015b04d0d68154a08d08df9ce"
+    },
+    {
+      "index": 75,
+      "file": "supabase/verification/05092026_0311_banking_pay_draft_integrity_setwise_v8_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "e1cf2e5f8215b518a05cf72a3ce289820ab3ce028b394d3c5ea90dc31807a45f"
+    },
+    {
+      "index": 76,
+      "file": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "f126afc09e0efc21adf8db990de9eb508bf2cfb3335a6bcc702e0efc4c501e2c"
+    },
+    {
+      "index": 77,
+      "file": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 77,
+        "decision": "EXCLUDE",
+        "reason": "Executes settled-certificate due_claim/build_start/append/seal and certified Draft operation_start, not merely their definition inspection. Exclude this queue lifecycle; keep separate catalogue verifiers 73/74/75/76/78."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3e6aec635c9f97d2462cf9e531f8591c2f47b094d36ad333bd9eb14f6c4b7dc0"
+    },
+    {
+      "index": 78,
+      "file": "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "17eb4894f0e18d80360939562b924b560531529d758bc755359157352fb08174"
+    },
+    {
+      "index": 79,
+      "file": "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "fc0f9d2930be5f4b5a0f754d9383255ce17351beb17cd3f96664ec98107fb325"
+    },
+    {
+      "index": 80,
+      "file": "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "984d883a0c2be3c71d6bf9d82c0766e9501a0695d7cc4d8b3b2a80225d8dbc85"
+    },
+    {
+      "index": 81,
+      "file": "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "6f8a4c33e4f6c769f505eb2b912ec2f3f62fba48cd0ae7e3cc47cb5f277bc36f"
+    },
+    {
+      "index": 82,
+      "file": "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "fc7aa4649eaf5a6a9d441cc5bba77db500de24783e5c70797e6efddcf49964bf"
+    },
+    {
+      "index": 83,
+      "file": "supabase/verification/28092026_1111_candidate_source_self_entry_break_context_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "10c94dde60b3c38bcf0d5de8aa19ef137c07d8dd75425c0b40440b01c4250328"
+    },
+    {
+      "index": 84,
+      "file": "tests/04092026_0130_candidate_finalisation_lock_budget_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "bff68de405603577a46342c44231822cbbe04582658b825b4b661d41d8c433f2"
+    },
+    {
+      "index": 85,
+      "file": "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4525b8f7d82e47b0b687db83edd2ab2cd14f97c8ee7027f472dee65016be2a10"
+    },
+    {
+      "index": 86,
+      "file": "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0cf9be478318c9f94457300430ee06fc50783e15c3ed04078e775081e97b4328"
+    },
+    {
+      "index": 87,
+      "file": "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "6e22356b38b580733ad4c127c96d519cc69a679b948090f39de01018fc722efc"
+    },
+    {
+      "index": 88,
+      "file": "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "f25f52b22c97f26ea5cb9b26c4dfeaffcf697d7fc82060aedcb2845faf07e887"
+    },
+    {
+      "index": 89,
+      "file": "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "34a686e83b485bece81da5f94bb63ebe6b59ba87bd319e6990cd4bfb7a09e209"
+    },
+    {
+      "index": 90,
+      "file": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [],
+      "sourceSqlHash": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846"
+    },
+    {
+      "index": 91,
+      "file": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "33b46b26124e1f46d4e25f970f5bc5e9231e842f16ddeea90be99d807312b0d5"
+    },
+    {
+      "index": 92,
+      "file": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "8b22c09e81139e3cc3032e71a46206fc77a7e91011fdf651aa5d7da54a064298"
+    },
+    {
+      "index": 93,
+      "file": "supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "540a2ce881326e2db0f31b27e91799d62a5012205329cd7871f1a4849f2a1f1d"
+    },
+    {
+      "index": 94,
+      "file": "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "85598fcd848f15d1d7ac5e0b28e37711c5041596bc88a9f95160222e09738ef2"
+    },
+    {
+      "index": 95,
+      "file": "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d6469494ff2f828cb1b7c3ce1f65a40f22b5d6a43ee94abcc36ebfaef569c35c"
+    },
+    {
+      "index": 96,
+      "file": "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "6536b48249d08d021224321335ee4c73dda6c1fbf72696af6aba6541200d9f75"
+    },
+    {
+      "index": 97,
+      "file": "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e3809e5cd92a6fa4cd17483ac992fbd3eb77c2f0453e63c1895e7a32018ae4ac"
+    },
+    {
+      "index": 98,
+      "file": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 98,
+        "decision": "EXCLUDE",
+        "reason": "Executes email_outbox_claim_ready_batch plus candidate_expense_summary_claim_v1/render_begin/complete. A rollback does not make queue-draining commands eligible under SEND5B. Exclude the whole root."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "86817ae1154349f82e39a25fd03329f7746d158b5764b371f4fb780281a57c39"
+    },
+    {
+      "index": 99,
+      "file": "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "6fdf0ac0ff4a1b3a2d3be662a8a67fb408a36e8eb9fa62b2e9c1b354c69d7206"
+    },
+    {
+      "index": 100,
+      "file": "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "3b0382a1d768dea01b5bc8032c7f786cbef9fb25058759b5ad33cd929990f355"
+    },
+    {
+      "index": 101,
+      "file": "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "af6c0ae67eaddadc7fc92d966bbcf45ed33a54699e56274502a4f5a464a24f99"
+    },
+    {
+      "index": 102,
+      "file": "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "dd577c016084f95792bc235597655d57ed1f057fa54b5150352071829656afde"
+    },
+    {
+      "index": 103,
+      "file": "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "bd19af9ad73649964403bf593d75dd3d9b858b748ec84e121627737cbf0cfa66"
+    },
+    {
+      "index": 104,
+      "file": "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "5987309458ec22ac181af50e0a86611133ca16e958850b569511fa752cd09214"
+    },
+    {
+      "index": 105,
+      "file": "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "5d68c277e982d798f5dd43103602d7c04a61f9237ffa227e9b3ad1274c38ef3f"
+    },
+    {
+      "index": 106,
+      "file": "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "446f69450173160d79f74a57f2c95a0fe77c4300f934404016d2111b01a81d37"
+    },
+    {
+      "index": 107,
+      "file": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "436157abd5c8b4ee980af8705da256b8ee6488f068354d3f458fe744f4d66a2d"
+    },
+    {
+      "index": 108,
+      "file": "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "55d56128944832843dd3e8449ccdd9ed5ec579e80a61c7b5db5928562bee4ab0"
+    },
+    {
+      "index": 109,
+      "file": "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "7e65b7dbe77cdc09156d394fbaf27c9fda12f66d452b626bb3a49eba199afe69"
+    },
+    {
+      "index": 110,
+      "file": "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "fc95f4009bf2507947d99583978181ade0fd49c44f736d3ce63c7aadf15e0826"
+    },
+    {
+      "index": 111,
+      "file": "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "1eb752ba8b04100354ce7dc45b4dd1f005062712af23e0963f8b2f35a9306e34"
+    },
+    {
+      "index": 112,
+      "file": "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e2d14e33d375edfbf078b9b3598d46e85aab94e8d65329fd4254c60625ab688a"
+    },
+    {
+      "index": 113,
+      "file": "supabase/verification/10092026_0835_planned_week_candidate_submission_delete_guard_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "e91e932af400d59698cdbde59560752749a4729d2d7746d18108d7842555529b"
+    },
+    {
+      "index": 114,
+      "file": "supabase/verification/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "63f724b2c04297a309d663b90963c6905f16b3e7291372f64761c74b11fcfed5"
+    },
+    {
+      "index": 115,
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "b00ca0d3214f8fe23e27a98f031bd62ad6bfbc30a6ab0aac0b90785e1fbe76ba"
+    },
+    {
+      "index": 116,
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "840215eb7ab94d2094a606834a06f80a311ec160a77ef241325b08a6d614353c"
+    },
+    {
+      "index": 117,
+      "file": "supabase/verification/15092026_1534_weekly_source_projection_build_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "827cfb72da5f5d9f8daab1ffbff6111e7570deed3112da241525cae357ae99cf"
+    },
+    {
+      "index": 118,
+      "file": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 118,
+        "decision": "EXCLUDE",
+        "reason": "Executed pg_temp claim loops invoke actual Source message command and target claim owners; they can lease real hosted rows before filtering to fixture. This is dispatch queue processing, although SQL rollback prevents durable leases and no Worker sends mail."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091"
+    },
+    {
+      "index": 119,
+      "file": "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 119,
+        "decision": "EXCLUDE",
+        "reason": "Executed paid-fixture helper calls public.pay_workbench_dirty_apply_jobs_chunk, the actual job claim/apply processor. Candidate-bound fixture filtering does not change the prohibited queue-processing action."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7d99a8d00d9221eae2768eee10b1c957a0a1873fa1689e5db260940614131cf0"
+    },
+    {
+      "index": 120,
+      "file": "supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "17274f274bf7ca2b4510f2f6f8313559fea58678b3f0442ace13ba1f846ba66e"
+    },
+    {
+      "index": 121,
+      "file": "supabase/verification/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 121,
+        "decision": "EXCLUDE",
+        "reason": "Includes the complete ordinary-pay-projection verifier (119), which calls the actual Workbench dirty job processor; exclude the containing root too."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d544ab4706400b9f286ccd627b253c423a25daa041664a7937a6c218eb06476f"
+    },
+    {
+      "index": 122,
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 122,
+        "decision": "EXCLUDE",
+        "reason": "Includes the complete ordinary-pay-projection verifier (119), which calls the actual Workbench dirty job processor; exclude the containing root too."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK",
+        "ROLLBACK",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0fe2a8c0569504c7499e33c57c087a7e89e3cb9a8756f74779f77d3b30f838de"
+    },
+    {
+      "index": 123,
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "\\set ON_ERROR_STOP on",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "f17ae759da2b12856137fc25c36d96c9def121aede6d714ad7e1fcbe1915bb04"
+    },
+    {
+      "index": 124,
+      "file": "supabase/verification/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "684b2fa9c7bba139b0c5f602d3f009fa7f42b7dda496c841e754558de9d4cd81"
+    },
+    {
+      "index": 125,
+      "file": "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 125,
+        "decision": "EXCLUDE",
+        "reason": "Executed paid-fixture preparation calls public.pay_workbench_dirty_apply_jobs_chunk; this is the actual queue processor, not a seeded settled evidence row or a read-only phase projection."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0e913d2d1ebb53b2f3f8410169c61995bc1e4cca484d25e4146dbe99f00f28de"
+    },
+    {
+      "index": 126,
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4b22d05688fd59ee20f43a62da2e33495db1c208a1a64c8d36821fc4e04168c6"
+    },
+    {
+      "index": 127,
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "263c8e7870591bdae6942103f718e3540574eb2708fa66f9a4173df3e07ebedd"
+    },
+    {
+      "index": 128,
+      "file": "supabase/verification/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "566d739595c2987ea507d91a353190fa0a1f1c24bec32c9892bac14cae0e4d25"
+    },
+    {
+      "index": 129,
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "75a30a6fde8a533eafd7e82c05cb0f20741e4a00b6c3b97e65c558822d9ec505"
+    },
+    {
+      "index": 130,
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "1cb06489bfd0871f9f82e0bba62c782265d5f97aa07a5754a91cf4a587af64c0"
+    },
+    {
+      "index": 131,
+      "file": "supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3ec090d8f862faafc38d40b7e24342dbdc6e1df80ded73c75f0f941c78785b1e"
+    },
+    {
+      "index": 132,
+      "file": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f"
+    },
+    {
+      "index": 133,
+      "file": "supabase/verification/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "46c5ce919874e95b63ccf9f4be7529c6bde9f65ba507f8c1030a5b15c9eab84d"
+    },
+    {
+      "index": 134,
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sourceStatus": "CHANGED_CLOSURE_REVIEW_REQUIRED",
+      "changedInputs": [
+        "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql"
+      ],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4"
+    },
+    {
+      "index": 135,
+      "file": "supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "94ed2f7f56cdab1a89cac4b45bec41feb116722df9833a0555d0f7c962492266"
+    },
+    {
+      "index": 136,
+      "file": "supabase/verification/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "cc87fe60988a84029a3d7849c80f2c3821ce872edceec1a9abdca0373acad394"
+    },
+    {
+      "index": 137,
+      "file": "supabase/verification/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4b474cac1989e411ad4e2fd03672f3f549af3d03421d207ea02c2ce18fef18b3"
+    },
+    {
+      "index": 138,
+      "file": "supabase/verification/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "1f248fd6ed1aaaf6027683cfcd846700e7e4036ec1edeab2351ace290c10564b"
+    },
+    {
+      "index": 139,
+      "file": "supabase/verification/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4d3e2baa691c7295e683496093c448047810a664782eed1242a00b2746e30e63"
+    },
+    {
+      "index": 140,
+      "file": "supabase/verification/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 140,
+        "decision": "EXCLUDE",
+        "reason": "Includes the complete ordinary-pay-projection verifier (119), which calls the actual Workbench dirty job processor; exclude the containing root too."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK",
+        "ROLLBACK",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK",
+        "ROLLBACK",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "31c5cb42267286b63bd7319f0521cac9cb85e193b3b7a4fad7aa9dcfea1b22da"
+    },
+    {
+      "index": 141,
+      "file": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "sourceStatus": "CHANGED_CLOSURE_REVIEW_REQUIRED",
+      "changedInputs": [
+        "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql"
+      ],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "944aa3f8bce345150fc5cc78d515e2393199a88497dfa68e3dcd0c2c1106f0ee"
+    },
+    {
+      "index": 142,
+      "file": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "sourceStatus": "CHANGED_CLOSURE_REVIEW_REQUIRED",
+      "changedInputs": [
+        "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql"
+      ],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "df570d6718680461903bd17649e47cb0972d63be588e49f3b86766a89482ff10"
+    },
+    {
+      "index": 143,
+      "file": "supabase/verification/17092026_0110_weekly_source_banking_pay_absence_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4ef3f8b67bbfda7014c6c1a14dbdca5fc88d7cae0de92f001e84f50d0cb0c327"
+    },
+    {
+      "index": 144,
+      "file": "supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 144,
+        "decision": "EXCLUDE",
+        "reason": "Executes private.weekly_source_pending_entitlement_release_claim_page_v1 and release apply owners. The claim first runs the native watch page, then leases due native PENDING/RELEASING bundles with SKIP LOCKED and changes state/lease. It is pending-publication queue processing."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "46fa8c72c5ab535e0323cafb61f80d5283d217ac8fc518fddcfe22703307c684"
+    },
+    {
+      "index": 145,
+      "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "sourceStatus": "CHANGED_CLOSURE_REVIEW_REQUIRED",
+      "changedInputs": [
+        "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql"
+      ],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "4f54fc72f00235af7b58c8d1a63b14991e6361b92356b9524c32f51beb1b8611"
+    },
+    {
+      "index": 146,
+      "file": "supabase/verification/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "fcdd174c91e013c600bf283db39521aa2a639619218c80eb747a4b1fe68f88c5"
+    },
+    {
+      "index": 147,
+      "file": "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 147,
+        "decision": "EXCLUDE",
+        "reason": "Executed paid-fixture preparation calls public.pay_workbench_dirty_apply_jobs_chunk, the actual queue claim/apply processor."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "149e6fee548b2cc4bd9e364eb40270995dbd631c23c48a322be48ca57ea2160a"
+    },
+    {
+      "index": 148,
+      "file": "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 148,
+        "decision": "EXCLUDE",
+        "reason": "Executed paid-fixture preparation calls public.pay_workbench_dirty_apply_jobs_chunk. The separately named pg_temp drain helper is only fixture DML, but it does not remove this actual native queue-processor invocation."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN ISOLATION LEVEL REPEATABLE READ",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "03cdb47b0cf60d43ee5f1ad880974197cf7b6cc2f5f30d53563221fd612b3463"
+    },
+    {
+      "index": 149,
+      "file": "supabase/verification/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3787277a15518507fd51dc73983a8f59ebee7f32e33ad1827ac199610c2cbd38"
+    },
+    {
+      "index": 150,
+      "file": "supabase/verification/17092026_1500_weekly_source_row_admission_guards_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "0751479b6351cdf29d6996cbfd3681dd6fc67c267f78559711e16978053518d5"
+    },
+    {
+      "index": 151,
+      "file": "supabase/verification/17092026_0900_weekly_source_installed_writer_census_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "36d8a1d5bb0102e0249c05e4c61d7cf4d6ffe93e0a414e7d408ee7b774328eaa"
+    },
+    {
+      "index": 152,
+      "file": "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": {
+        "index": 152,
+        "decision": "EXCLUDE",
+        "reason": "Executes public.email_outbox_claim_ready_batch for forged/paper/valid copy probes. Even with fixture-first ordering and a sentinel, this is the real generic mail claim owner and therefore excluded dispatch queue processing."
+      },
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "b2664cf469e171b519a35886763a84d677b623f4d3bc9dd6f9e40255e5ea9014"
+    },
+    {
+      "index": 153,
+      "file": "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "31feeb45a4df081327a31ed1f302bec7f3d79c206399042e87e91c5679e656e9"
+    },
+    {
+      "index": 154,
+      "file": "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN READ ONLY",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d63c766ee4a26eed5038b8c10840686eb007334761d2c770d82901e0352a4669"
+    },
+    {
+      "index": 155,
+      "file": "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d30a11f94bd927600c119622a8db9567b6e32cf1c3190377ac547069f50cd1f3"
+    },
+    {
+      "index": 156,
+      "file": "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "2adb60638d56139a776bde3625c18f6cc4602cdcaef992713618d682abfa91c3"
+    },
+    {
+      "index": 157,
+      "file": "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "fd284e10ede8d670cc79b6aad63d8a14a5325e81c87f81c68f8c340ec0e3ab7a"
+    },
+    {
+      "index": 158,
+      "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173"
+    },
+    {
+      "index": 159,
+      "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f"
+    },
+    {
+      "index": 160,
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c"
+    },
+    {
+      "index": 161,
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325"
+    },
+    {
+      "index": 162,
+      "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "c84fc3ab276cc7984345a0f8fa0d0d63418d01582e137ee3c734d9bf5b76ea8b"
+    },
+    {
+      "index": 163,
+      "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "988b0488a96639080167cdebc8f9a33551066fcc36b222e656c1cb724d28ceca"
+    },
+    {
+      "index": 164,
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b"
+    },
+    {
+      "index": 165,
+      "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904"
+    },
+    {
+      "index": 166,
+      "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4"
+    },
+    {
+      "index": 167,
+      "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+      "sourceStatus": "ARCHIVED_VERIFIER_CLOSURE_UNCHANGED_NOT_EXECUTION_APPROVAL",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "sourceSqlHash": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4"
+    },
+    {
+      "index": 168,
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "sourceStatus": "NEW_VERIFIER_REVIEW_REQUIRED",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d"
+    },
+    {
+      "index": 169,
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sourceStatus": "NEW_VERIFIER_REVIEW_REQUIRED",
+      "changedInputs": [],
+      "originalExclusion": null,
+      "envelope": [
+        "\\set ON_ERROR_STOP on",
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "sourceSqlHash": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+    }
+  ]
+}
