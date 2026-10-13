@@ -1,0 +1,199 @@
+-- Common actual stage proof extracted from Local v2, usable before a real
+-- PREPARING receipt exists. It does not create or pretend that receipt exists.
+-- Normalise only the fully proved own K -> K+1 stage increment; every other
+-- byte of the complete current-vs-sealed native I1 inventory must match.
+create or replace function private.weekly_source_staged_publication_context_v1(p_request_id uuid,p_actor_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_exceptional_c1_publication_requests%rowtype;
+  g public.weekly_exceptional_pay_generations%rowtype; prior public.weekly_exceptional_pay_generations%rowtype;
+  family public.weekly_exceptional_pay_target_families%rowtype; run public.weekly_exceptional_orchestration_runs%rowtype;
+  a public.weekly_exceptional_payment_approvals%rowtype; event public.weekly_exceptional_pay_family_events%rowtype;
+  target public.weekly_exceptional_pay_target_events%rowtype; fin public.timesheets_financials%rowtype;
+  stage public.weekly_exceptional_orchestration_steps%rowtype; local_receipt private.weekly_source_local_protected_decision_receipts%rowtype;
+  v_scope jsonb; v_inventory jsonb; v_before jsonb; v_snapshot jsonb; v_context jsonb; v_documents jsonb;
+  v_before_bound bigint; v_stage_hash bytea; v_policy_hash bytea; v_qualification jsonb; v_count integer;
+begin
+  if p_request_id is null or p_actor_id is null then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='22023'; end if;
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select * into strict g from public.weekly_exceptional_pay_generations where id=r.generation_id and family_id=r.family_id;
+  select * into strict family from public.weekly_exceptional_pay_target_families where id=r.family_id;
+  select * into strict run from public.weekly_exceptional_orchestration_runs where id=r.orchestration_run_id and family_id=family.id;
+  select * into strict a from public.weekly_exceptional_payment_approvals
+    where creation_orchestration_run_id=run.id and pay_target_family_id=family.id;
+  v_scope:=private.weekly_source_pay_query_scope_v1(r.root_timesheet_id);
+  if v_scope is null or r.state is distinct from 'READY' or g.lifecycle_state is distinct from 'PENDING_C1'
+    or run.state is distinct from 'RUNNING' or run.requested_by_user_id is distinct from p_actor_id
+    or a.approved_by_user_id is distinct from p_actor_id or a.withdrawn_at_utc is not null
+    or r.agency_id is distinct from family.agency_id or r.candidate_id is distinct from family.candidate_id
+    or r.contract_id is distinct from family.contract_id or r.root_timesheet_id is distinct from family.root_timesheet_id
+    or r.week_ending_date is distinct from family.week_ending_date or family.root_family_booking_id is distinct from v_scope->>'family_booking_id'
+    or v_scope->>'target_family_id' is distinct from family.id::text or v_scope->>'candidate_id' is distinct from family.candidate_id::text
+    or v_scope->>'contract_id' is distinct from family.contract_id::text or v_scope->>'client_id' is distinct from a.client_id::text
+    or v_scope->>'week_ending_date' is distinct from family.week_ending_date::text
+    or a.candidate_id is distinct from family.candidate_id or a.contract_id is distinct from family.contract_id
+    or a.week_ending is distinct from family.week_ending_date
+    or r.c1_operation_id is not null or r.c1_publication_id is not null or r.c1_head_revision is not null or r.c1_receipt_sha256 is not null
+    or family.c1_publication_state is distinct from 'PENDING'
+    or family.current_generation_id is distinct from g.prior_generation_id
+    or family.current_generation_number+1 is distinct from g.generation_number or r.request_sequence is distinct from g.generation_number::bigint
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',g.complete_next_vector_json)
+      is distinct from g.complete_next_vector_hash
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',g.complete_prior_vector_json)
+      is distinct from g.complete_prior_vector_hash then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  -- Automatic reconciliation has a real published predecessor. An empty or
+  -- initial unapproved family cannot invent an I1 before-position here.
+  select * into strict prior from public.weekly_exceptional_pay_generations where id=g.prior_generation_id and family_id=family.id;
+  if prior.lifecycle_state is distinct from 'PUBLISHED' or prior.published_at_utc is null or not isfinite(prior.published_at_utc)
+    or prior.result_hash is null or prior.generation_number is distinct from family.current_generation_number
+    or prior.complete_next_vector_hash is distinct from family.current_complete_target_vector_hash
+    or prior.complete_next_vector_json is distinct from g.complete_prior_vector_json
+    or prior.complete_next_vector_hash is distinct from g.prior_generation_hash then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict event from public.weekly_exceptional_pay_family_events e
+    where e.family_id=family.id and e.evidence_approval_id=a.id and e.durable_work_event_id=a.work_event_id
+      and not exists(select 1 from public.weekly_exceptional_pay_family_events newer where newer.family_id=e.family_id
+        and newer.durable_work_event_id=e.durable_work_event_id and newer.event_sequence>e.event_sequence);
+  if event.office_actor_user_id is distinct from p_actor_id or event.work_date is distinct from a.protected_work_date
+    or (event.start_at_local,event.end_at_local,event.break_minutes) is distinct from
+      (a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_SOURCE_PROPOSAL_V1',event.source_proposal_snapshot_json)
+      is distinct from event.source_proposal_hash
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_SCHEDULE_V1',event.fixed_office_target_snapshot_json)
+      is distinct from a.signed_schedule_fact_hash or event.fixed_office_target_hash is distinct from a.signed_schedule_fact_hash
+    or not exists(select 1 from public.weekly_work_events w where w.id=a.work_event_id and w.candidate_id=family.candidate_id
+      and w.client_id=a.client_id and w.work_date=a.protected_work_date) then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  select count(*) into v_count from public.weekly_exceptional_pay_target_events t
+    where t.family_id=family.id and t.approval_id=a.id and t.financial_generation_id=g.id
+      and t.complete_prior_family_vector_fingerprint=g.complete_prior_vector_hash
+      and t.complete_next_family_vector_fingerprint=g.complete_next_vector_hash
+      and t.fixed_target_component_snapshot=a.approved_target_pay_components_json;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict target from public.weekly_exceptional_pay_target_events
+    where financial_generation_id=g.id and family_id=family.id;
+  select * into strict fin from public.timesheets_financials where id=r.financial_row_id and timesheet_id=r.root_timesheet_id;
+  if not exists(select 1 from public.weekly_exceptional_pay_family_events predecessor
+      where predecessor.family_id=event.family_id and predecessor.event_sequence=event.event_sequence-1
+        and predecessor.event_hash=event.prior_event_hash)
+    or event.event_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_FAMILY_EVENT_V1',jsonb_build_object(
+      'family_id',family.id,'event_sequence',event.event_sequence,'work_event_id',a.work_event_id,'approval_id',a.id,
+      'schedule',event.fixed_office_target_snapshot_json,'source_proposal_hash',encode(event.source_proposal_hash,'hex'),
+      'target_vector_hash',encode(g.complete_next_vector_hash,'hex'),'prior_event_hash',encode(event.prior_event_hash,'hex')))
+    or target.event_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_TARGET_EVENT_V1',jsonb_build_object(
+      'family_id',family.id,'event_sequence',target.event_sequence,'approval_id',a.id,'generation_id',g.id,
+      'prior_vector_hash',encode(g.complete_prior_vector_hash,'hex'),'next_vector_hash',encode(g.complete_next_vector_hash,'hex'),
+      'reason',g.reason,'actor_user_id',p_actor_id))
+    or g.fixed_target_source_state_fingerprint is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_FIXED_SOURCE_STATE_V1',
+      jsonb_build_object('source_cycle_id',a.source_cycle_id,'comparison_revision_id',a.comparison_revision_id,
+        'final_revision_id',a.final_revision_id,'source_proposal_hash',encode(event.source_proposal_hash,'hex'),
+        'financial_row_id',fin.id,'financial_timesheet_version',fin.timesheet_version))
+    or a.approval_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_APPROVAL_V1',jsonb_build_object(
+      'family_id',family.id,'work_event_id',a.work_event_id,'candidate_id',family.candidate_id,'client_id',a.client_id,
+      'contract_id',family.contract_id,'week_ending_date',family.week_ending_date,'schedule_hash',encode(a.signed_schedule_fact_hash,'hex'),
+      'evidence_timesheet_id',a.evidence_timesheet_id,'signed_hash',encode(a.signed_submission_hash,'hex'),
+      'issue_ids_hash',encode(a.contributing_issue_episode_ids_hash,'hex'),
+      'rate_policy_hash',encode(a.contract_rate_policy_source_fingerprint,'hex'),'target_vector_hash',encode(g.complete_next_vector_hash,'hex'),
+      'actor_user_id',p_actor_id,'reason',a.approval_reason)) then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  v_snapshot:=g.complete_next_vector_json#>'{target_snapshot,tsfin_snapshot_json}';
+  if jsonb_typeof(v_snapshot) is distinct from 'object' or v_snapshot is distinct from a.approved_target_pay_components_json->'tsfin_snapshot_json'
+    or a.approved_target_pay_components_json is distinct from g.complete_next_vector_json->'target_snapshot'
+    or v_snapshot->>'timesheet_id' is distinct from r.root_timesheet_id::text
+    or v_snapshot->>'timesheet_version' is distinct from v_scope->>'root_version' then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  v_before:=g.complete_next_vector_json->'prior_effective_inventory';
+  if v_before->>'ok' is distinct from 'true' or v_before#>>'{approval_basis,coverage_complete}' is distinct from 'true'
+    or coalesce(v_before#>>'{approval_basis,scope,family_bound_version}','')!~'^(0|[1-9][0-9]*)$'
+    or v_before#>>'{approval_basis,scope,target_family_id}' is distinct from family.id::text then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  v_before_bound:=(v_before#>>'{approval_basis,scope,family_bound_version}')::bigint;
+  if g.complete_next_vector_json#>>'{protected_component_identity_basis,schema_version}' is distinct from 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_V1'
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,family_id}' is distinct from family.id::text
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,root_timesheet_id}' is distinct from r.root_timesheet_id::text
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,contract_id}' is distinct from family.contract_id::text
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,candidate_id}' is distinct from family.candidate_id::text
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,accepted_schedule_sha256}' is distinct from
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPONENT_ACCEPTED_SCHEDULE_V1',
+        g.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}'),'hex')
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,calculated_segments_sha256}' is distinct from
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPONENT_CALCULATED_SEGMENTS_V1',v_snapshot#>'{invoice_breakdown_json,segments}'),'hex')
+    or g.complete_next_vector_json#>>'{protected_component_identity_basis,approved_components_sha256}' is distinct from
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPONENT_APPROVED_COMPONENTS_V1',v_before->'components'),'hex') then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict stage from public.weekly_exceptional_orchestration_steps
+    where orchestration_run_id=run.id and step_kind='STAGE_C1_REQUEST';
+  v_stage_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_C1_STAGED_STATE_V1',jsonb_build_object(
+    'family_id',family.id,'generation_id',g.id,'publication_request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),
+    'new_bound_version',v_before_bound+1));
+  if stage.outcome is distinct from 'COMPLETE' or stage.completed_at_utc is null or not isfinite(stage.completed_at_utc)
+    or stage.allowlisted_owner_name is distinct from 'public.weekly_exceptional_pay_stage_c1_request_v1'
+    or stage.allowlisted_owner_signature is distinct from 'jsonb->jsonb'
+    or stage.before_state_fingerprint is distinct from run.before_state_fingerprint
+    or octet_length(stage.bounded_request_hash) is distinct from 32
+    or stage.after_state_fingerprint is distinct from v_stage_hash or stage.owner_response_hash is distinct from v_stage_hash
+    or stage.bounded_owner_response_json is distinct from jsonb_build_object('publication_request_id',r.id,'generation_id',g.id,
+      'request_sha256',encode(r.request_sha256,'hex')) or family.bound_version is distinct from v_before_bound+1 then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  v_inventory:=private.weekly_source_effective_inventory_v1(r.root_timesheet_id);
+  v_inventory:=jsonb_set(v_inventory,'{approval_basis,scope,family_bound_version}',
+    v_before#>'{approval_basis,scope,family_bound_version}',false);
+  if v_inventory is distinct from v_before
+    or v_inventory#>>'{approval_basis,scope,root_timesheet_id}' is distinct from r.root_timesheet_id::text
+    or v_inventory#>>'{approval_basis,scope,family_booking_id}' is distinct from v_scope->>'family_booking_id'
+    or v_inventory#>>'{approval_basis,scope,root_version}' is distinct from v_scope->>'root_version'
+    or v_inventory#>>'{approval_basis,scope,candidate_id}' is distinct from v_scope->>'candidate_id'
+    or v_inventory#>>'{approval_basis,scope,client_id}' is distinct from v_scope->>'client_id'
+    or v_inventory#>>'{approval_basis,scope,contract_id}' is distinct from v_scope->>'contract_id'
+    or v_inventory#>>'{approval_basis,scope,week_ending_date}' is distinct from v_scope->>'week_ending_date' then
+    raise exception 'WEEKLY_SOURCE_STAGED_BEFORE_POSITION_CHANGED' using errcode='40001'; end if;
+  v_context:=private.weekly_source_protected_final_source_context_v1(family.id,a.source_cycle_id,a.work_event_id);
+  if v_context->'source_proposal' is distinct from event.source_proposal_snapshot_json then
+    raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_CHANGED' using errcode='40001'; end if;
+  select private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_RATE_POLICY_V1',jsonb_build_object(
+    'contract_id',family.contract_id,'rates_json',contract.rates_json,
+    'policy',private._weekly_source_effective_policy_v1(a.client_id,family.contract_id,a.protected_work_date),
+    'classification',event.rate_classification_json)) into strict v_policy_hash
+    from public.contracts contract where contract.id=family.contract_id;
+  if v_policy_hash is distinct from a.contract_rate_policy_source_fingerprint then
+    raise exception 'WEEKLY_SOURCE_STAGED_RATE_POLICY_CHANGED' using errcode='40001'; end if;
+  -- A receipt is optional here. If one exists, only this real transaction's
+  -- matching PREPARING row can coexist with this unaccepted stage.
+  select * into local_receipt from private.weekly_source_local_protected_decision_receipts where publication_request_id=r.id;
+  if found and (local_receipt.state is distinct from 'PREPARING' or local_receipt.preparing_transaction_id is distinct from pg_current_xact_id()
+    or local_receipt.actor_user_id is distinct from p_actor_id or local_receipt.generation_id is distinct from g.id
+    or local_receipt.family_id is distinct from family.id or local_receipt.root_timesheet_id is distinct from r.root_timesheet_id
+    or local_receipt.request_sha256 is distinct from r.request_sha256 or local_receipt.prior_financial_id is distinct from r.financial_row_id) then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  if exists(select 1 from public.weekly_exceptional_c1_publication_checkpoints where publication_request_id=r.id)
+    or exists(select 1 from public.weekly_exceptional_c1_unknown_outcomes where publication_request_id=r.id) then
+    raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000'; end if;
+  v_documents:=private.weekly_source_staged_source_documents_v1(r.id);
+  if (select count(*) from jsonb_array_elements(v_documents) source where source->>'authority_kind'='ROOT_FINANCIAL')<>1
+    or (select count(*) from jsonb_array_elements(v_documents) source where source->>'authority_kind'='PROVIDER')<>1
+    or (select count(*) from jsonb_array_elements(v_documents) source where source->>'authority_kind'='OFFICE_APPROVAL')<>1
+    or not exists(select 1 from jsonb_array_elements(v_documents) source where source->>'authority_kind'='CLIENT_SOURCE'
+      and source#>>'{document,source_complete}'='true')
+    or exists(select 1 from jsonb_array_elements(v_documents) source where source->>'authority_kind'='ROOT_FINANCIAL'
+      and source#>>'{document,financial_row_id}' is distinct from r.financial_row_id::text) then
+    raise exception 'WEEKLY_SOURCE_STAGED_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+  v_qualification:=jsonb_build_object('schema_version','WEEKLY_SOURCE_STAGED_PUBLICATION_CONTEXT_V1',
+    'publication_request_id',r.id,'generation_id',g.id,'family_id',family.id,'actor_user_id',p_actor_id,'scope',v_scope,
+    'source_cycle_id',a.source_cycle_id,'work_event_id',a.work_event_id,'approval_id',a.id,'family_event_id',event.id,
+    'family_event_sequence',event.event_sequence::text,'request_sha256',encode(r.request_sha256,'hex'),
+    'stage_step_id',stage.id,'stage_step_request_sha256',encode(stage.bounded_request_hash,'hex'),
+    'stage_step_sha256',encode(v_stage_hash,'hex'),'before_bound_version',v_before_bound::text,
+    'staged_bound_version',(v_before_bound+1)::text,'prior_inventory',v_before,'target_snapshot',g.complete_next_vector_json->'target_snapshot',
+    'complete_next_vector_sha256',encode(g.complete_next_vector_hash,'hex'),'policy_fingerprint',encode(v_policy_hash,'hex'),
+    'source_proposal',event.source_proposal_snapshot_json,'next_source_segments',v_context->'next_source_segments','source_documents',v_documents);
+  return v_qualification||jsonb_build_object('qualification_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_STAGED_PUBLICATION_CONTEXT_V1',v_qualification),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_STAGED_OWNERSHIP_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_staged_publication_context_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_staged_publication_context_v1(uuid,uuid) from public,anon,authenticated,service_role;
