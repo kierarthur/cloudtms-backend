@@ -1,0 +1,111 @@
+{
+  "authority": "Owner A4 fixed local display responses only; no database rows/business acceptance or hosted requests.",
+  "context": {
+    "agency_id": "10000000-0000-0000-0000-000000000002",
+    "actor_user_id": "10000000-0000-0000-0000-000000000001",
+    "owner_epoch": "1",
+    "official_pay_date": "2026-10-16",
+    "workbench_revision": "1",
+    "adoption_revision": "1"
+  },
+  "header": {
+    "candidate_count": "1",
+    "item_count": "9",
+    "contribution_count": "7",
+    "segment_count": "6",
+    "payable_count": "7",
+    "selected_count": "0",
+    "snoozed_count": "0",
+    "held_count": "0",
+    "queried_count": "0",
+    "blocked_count": "0",
+    "deduction_item_count": "1",
+    "unknown_amount_count": "0",
+    "unknown_selected_amount_count": "0",
+    "amount": "395.00",
+    "waiting_amount": "40.00",
+    "ready_net_add_amount": "0.00",
+    "waiting_net_add_amount": "0.00",
+    "gross_deduction_balance": "60.00",
+    "net_deduction_balance": "0.00",
+    "approved_amount": "435.00",
+    "paid_credit_amount": "0.00",
+    "reserved_amount": "0.00",
+    "excluded_amount": "0.00",
+    "recovery_amount": "0.00",
+    "selected_amount": "0.00",
+    "has_deduction": true,
+    "selectable_member_count": "7",
+    "selected_candidate_count": null,
+    "selected_member_count": null
+  },
+  "rows": [
+    {
+      "member_no": "1",
+      "owner_no": "1",
+      "candidate_id": "62000000-0000-4000-8000-000000000001",
+      "work_id": "62000000-0000-4000-8000-000000000002",
+      "owner_family": "WORK_BUCKET",
+      "exclusion_code": null,
+      "subject": {
+        "candidate_display_name": "Amelia Hughes",
+        "candidate_reference": "10421",
+        "client_display_name": "Riverside Care Home",
+        "timesheet_reference": "TS 4187",
+        "week_ending_date": "2026-10-11"
+      },
+      "outcome_code": null,
+      "cleared": false,
+      "owner": {
+        "owner_id": "62000000-0000-4000-8000-000000000004",
+        "owner_version": "1",
+        "approved_line_id": "62000000-0000-4000-8000-000000000005",
+        "rate_family": "STANDARD",
+        "rate_code": "DAY",
+        "amount_ex_vat": "274.67",
+        "clear_class": "RESOLVED_AND_CLEARABLE",
+        "exclusion_code": null,
+        "target_pay_channel": "UMBRELLA",
+        "resolution_mode": "MANUAL_REPLACEMENT_RATE",
+        "manual_replacement_rate": "13.75",
+        "manual_amount_ex_vat": null
+      }
+    },
+    {
+      "member_no": "1",
+      "owner_no": "2",
+      "candidate_id": "62000000-0000-4000-8000-000000000001",
+      "work_id": "62000000-0000-4000-8000-000000000002",
+      "owner_family": "WORK_BUCKET",
+      "exclusion_code": null,
+      "subject": {
+        "candidate_display_name": "Amelia Hughes",
+        "candidate_reference": "10421",
+        "client_display_name": "Riverside Care Home",
+        "timesheet_reference": "TS 4187",
+        "week_ending_date": "2026-10-11"
+      },
+      "outcome_code": null,
+      "cleared": false,
+      "owner": {
+        "owner_id": "62000000-0000-4000-8000-000000000006",
+        "owner_version": "1",
+        "approved_line_id": "62000000-0000-4000-8000-000000000007",
+        "rate_family": "STANDARD",
+        "rate_code": "NIGHT",
+        "amount_ex_vat": null,
+        "clear_class": "NOT_CLEARABLE",
+        "exclusion_code": "IN_DRAFT",
+        "target_pay_channel": "UMBRELLA",
+        "resolution_mode": null,
+        "manual_replacement_rate": null,
+        "manual_amount_ex_vat": null
+      }
+    }
+  ],
+  "scope": {
+    "candidate_id": null,
+    "client_id": null,
+    "channel": "ALL"
+  }
+}

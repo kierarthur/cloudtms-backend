@@ -1531,6 +1531,10 @@
       "sha256": "27fa42f6c21758235e1970dc1aa684570636c82822b1a8bdcbb2c249ba232f8d"
     },
     {
+      "path": "supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql",
+      "sha256": "faa8f3c99658fb38f474e08c393a2b32d85d97333f796bd76a035b6ec1892972"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

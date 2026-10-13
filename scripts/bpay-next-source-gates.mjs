@@ -48,6 +48,12 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB28 exact frozen scope and immutable per-unit defaults.
+  "private.bpay_next_selection_remembered_unit_v1(bigint,bigint,boolean,boolean)",
+  "private.bpay_next_selection_reset_matches_v1(uuid,uuid,uuid,uuid,uuid,uuid)",
+  "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)",
+  "private.bpay_next_decisions_clear_result_v1(uuid,jsonb)",
+  "private.bpay_next_decisions_clear_command_v1(uuid,jsonb,boolean)",
   "private.bpay_next_resolution_revision_census_v1(uuid[])",
   "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)",
   "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
@@ -240,6 +246,11 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_selection_remembered_unit_v1(bigint,bigint,boolean,boolean)": [],
+  "private.bpay_next_selection_reset_matches_v1(uuid,uuid,uuid,uuid,uuid,uuid)": [],
+  "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)": ["transaction_timestamp","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_selection_memory_resolve_v1","jsonb_object_keys","octet_length","bool_or","sum","filter","by","distinct"],
+  "private.bpay_next_decisions_clear_result_v1(uuid,jsonb)": ["octet_length","jsonb_object_keys","by","lateral","ord"],
+  "private.bpay_next_decisions_clear_command_v1(uuid,jsonb,boolean)": ["x","upper","jsonb_agg","private.bpay_next_decisions_clear_result_v1","public.bpay_next_workbench_page_v1","private.bpay_next_resolution_offer_context_v1","private.bpay_next_saved_resolution_clear_review_v1","private.bpay_next_treatment_approval_revision_v1","private.bpay_next_resolution_context_v1","private.bpay_next_resolution_command_v1","private.bpay_next_receive_command_v1","jsonb_object_keys","jsonb_set","octet_length","to_jsonb","gen_random_uuid","transaction_timestamp","unnest","filter","sum","by","distinct","lateral"],
   "private.bpay_next_resolution_revision_census_v1(uuid[])": ["cardinality","array_position","unnest","octet_length","to_jsonb"],
   "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)": ["private.bpay_next_bound_source_snapshot_v1","private.bpay_next_source_book_seed_proof_v1","array_agg","cardinality","min"],
   "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)": ["by","current_setting","octet_length","private.bpay_next_resolution_scope_validate_v1","private.bpay_next_assert_candidate_financial_fence_v1","jsonb_array_elements","array_agg","unnest","private.bpay_next_treatment_approval_revision_v1","array_append","private.bpay_next_resolution_revision_census_v1","to_jsonb","cardinality","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_component_resolution_basis_v1","upper","private.bpay_next_resolution_offer_context_v1","private.bpay_next_resolution_context_v1","private.bpay_next_component_resolution_active_v1","private.bpay_next_resolution_live_snooze_v1","private.bpay_next_component_resolution_input_quote_v1","private.bpay_next_resolution_source_seed_plan_v1","repeat","public.timesheet_financial_retention_mark_v1","private.bpay_next_source_disposition_seed_v1","private.bpay_next_bound_source_snapshot_v1","private.bpay_next_stage_treatment_revision_v1","gen_random_uuid","private.bpay_next_publish_staged_revision_v1","transaction_timestamp","jsonb_populate_record","private.bpay_next_workbench_refresh_many_v1"],
@@ -303,14 +314,14 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
   'private.bpay_next_case_allocation_plan_v1(jsonb)':["private.bpay_next_treatment_approval_revision_v1",'private.bpay_next_case_restructure_origin_v1','private.bpay_next_case_restructure_period_free_v1','private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_retry_prepare_job_v1","private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
-  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_resolution_command_v1","private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
+  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_decisions_clear_command_v1","private.bpay_next_resolution_command_v1","private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
   "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
 
   'private.bpay_next_selection_memory_intent_valid_v1(jsonb)': ['octet_length'],
   'private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)': [],
   'private.bpay_next_selection_memory_leaves_v1(jsonb)': [],
-  'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)': ['private.bpay_next_selection_memory_leaves_v1','bool_or','lateral'],
+  'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)': ['private.bpay_next_selection_reset_matches_v1','private.bpay_next_selection_remembered_unit_v1','private.bpay_next_selection_memory_leaves_v1','bool_or','lateral'],
   'private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)': ['private.bpay_next_selection_memory_choices_v1','jsonb_set','split_part','max','sum','filter','octet_length'],
   "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_resolution_context_v1","private.bpay_next_snooze_management_page_v1","private.bpay_next_snooze_context_v1","lateral","generate_subscripts","private.bpay_next_case_allocation_plan_v1","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_source_command_id_v1","private.weekly_source_sha256_jsonb_v1","to_jsonb","jsonb_agg","array_agg","cardinality","max","sum","filter","distinct","date","private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
@@ -591,6 +602,8 @@ export function assertNextExactNumericTypes(source,file){
 }
 
 export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_decisions_clear_result_v1(uuid,jsonb)",
+  "private.bpay_next_decisions_clear_command_v1(uuid,jsonb,boolean)",
   "private.bpay_next_accept_preparation_discard_v1(uuid,uuid,uuid,bigint,text)",
   "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
   "private.bpay_next_discarded_prepare_receipt_v1(uuid)",

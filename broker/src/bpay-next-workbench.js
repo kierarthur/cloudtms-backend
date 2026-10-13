@@ -3,6 +3,7 @@
 import {normalizeSnoozesInput,validateSnoozesResponse} from './bpay-next-snooze-reader.js';
 import {normalizeResolutionInput,validateResolutionResponse,resolutionNativeFault,normalizeResolutionCommand,validateResolutionCommandReceipt,resolutionCommandNativeFault} from './bpay-next-resolution.js';
 import {normaliseBpayNextSnoozeAction,normaliseBpayNextSnoozeMany,validateBpayNextSnoozeContext,validateBpayNextSnoozeReceipt,validateBpayNextSnoozeManyReceipt,BPAY_NEXT_SNOOZE_REFUSALS} from './bpay-next-snooze.js';
+import {normalizeDecisionsClear,validateDecisionsClearReceipt,decisionsClearNativeFault} from './bpay-next-decisions-clear.js';
 export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','CANDIDATE_ESTIMATE','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
@@ -876,6 +877,18 @@ export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},8000);});
   const send=async()=>{
    const body=await readWorkbenchJson(request,controller.signal,32768);
+   if(body?.action==='DECISIONS_CLEAR'){
+    if(!exact(body,['action','readback','args'])||typeof body.readback!=='boolean')throw fail('BPAY_NEXT_DECISIONS_CLEAR_REQUEST_INVALID',400);
+    const args=normalizeDecisionsClear(body.args);if(args.phase==='VIEW'&&!body.readback)throw fail('BPAY_NEXT_DECISIONS_CLEAR_REQUEST_INVALID',400);
+    if(typeof dependencies.workbenchCommandRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+    attempted=!body.readback;
+    const response=await dependencies.workbenchCommandRpc(args,body.readback,{actorUserId:user.id.toLowerCase(),signal:controller.signal,action:'DECISIONS_CLEAR'});
+    if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');const value=await readWorkbenchJson(response,controller.signal,131072);
+    if(!response.ok){const native=decisionsClearNativeFault(value);if(native){attempted=false;throw native;}throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+    const receipt=validateDecisionsClearReceipt(value,args,user.id.toLowerCase());
+    if(!body.readback&&!receipt.received&&!receipt.processing)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    return json(200,{ok:true,action:'DECISIONS_CLEAR',receipt});
+   }
    if(['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(body?.action)){
     if(!exact(body,['action','readback','args'])||typeof body.readback!=='boolean')throw fail('BPAY_NEXT_RESOLUTION_REQUEST_INVALID',400);
     const args=normalizeResolutionCommand(body.action,body.args,user.id.toLowerCase());

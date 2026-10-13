@@ -1,0 +1,197 @@
+{
+  "source": "Sole local PG17 schema catalogue and isolation DO only; no business calls/data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_decisions_clear_evidence_guard_v1()",
+      "file": "supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql",
+      "sourceMd5": "6cea0e7d5341a4597fa1d24955d044ab",
+      "installed": {
+        "bodyMd5": "6cea0e7d5341a4597fa1d24955d044ab",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_selection_remembered_unit_v1(bigint,bigint,boolean,boolean)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "6d494f9af1d25b961fcdc1ddcd5c656c",
+      "installed": {
+        "bodyMd5": "6d494f9af1d25b961fcdc1ddcd5c656c",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "i",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_selection_reset_matches_v1(uuid,uuid,uuid,uuid,uuid,uuid)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "b8ac7379a5e9f86458fccd5b373cab6d",
+      "installed": {
+        "bodyMd5": "b8ac7379a5e9f86458fccd5b373cab6d",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "ace265fcb5cfe301c6fd108e2a93f1f1",
+      "installed": {
+        "bodyMd5": "ace265fcb5cfe301c6fd108e2a93f1f1",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_selection_memory_capture_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "880693bc5a56517f8cbffcb413a417c0",
+      "installed": {
+        "bodyMd5": "880693bc5a56517f8cbffcb413a417c0",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_decisions_clear_result_v1(uuid,jsonb)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "fc2f896d439cbdd1cdef28ddd54e8980",
+      "installed": {
+        "bodyMd5": "fc2f896d439cbdd1cdef28ddd54e8980",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_decisions_clear_command_v1(uuid,jsonb,boolean)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "7136fd173a95b959ab8386c554744a40",
+      "installed": {
+        "bodyMd5": "7136fd173a95b959ab8386c554744a40",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_workbench_command_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "f955df25da1d1036a02ab971eaaa7465",
+      "installed": {
+        "bodyMd5": "f955df25da1d1036a02ab971eaaa7465",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sourceMd5": "d9ba20ab3023d1f649016c60c5014bfe",
+      "installed": {
+        "bodyMd5": "d9ba20ab3023d1f649016c60c5014bfe",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

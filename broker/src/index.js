@@ -199162,10 +199162,12 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
     });
     if (response.ok) {
       const result = await response.clone().json();
-      if (['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(result.action)
+      if ((['RESOLUTION_SAVE','RESOLUTION_CLEAR'].includes(result.action)
+          || result.action === 'DECISIONS_CLEAR' && result.receipt.phase === 'APPLY')
           && result.receipt.received && !result.receipt.replay) {
         // Native publishers sealed the real POSITION_APPLY children. The
-        // existing enroller owns their jobs; this receipt has no fake job ID.
+        // existing enroller owns their jobs and the terminal zero-job clear
+        // receipt; this receipt has no fake job ID.
         const wake = Promise.resolve().then(() => {
           if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
             throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');

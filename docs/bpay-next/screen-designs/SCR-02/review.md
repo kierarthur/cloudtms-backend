@@ -86,3 +86,109 @@ Listed normal PNGs were individually inspected, including both Candidate and Cli
 | FE/index.html | d67ad31b78c1f66de0bd9ece500f64d1496e2c2810179fd4c88f4ce7910d9f91 |
 
 Manual wording source: read-only pack tools/policy.json version1.2. Its neverShow/chatter/20word/2sentence/UK-format rules were checked against the current visible labels and finite loading/error/empty copy; no tool ran. Existing legacy !important CSS is outside new WB11 styles; no new one was added. Actual modal-modernisation support skips only explicitly preformatted exact money, retains marked live-copy placeholders and recognizes this read kind as specialised layout. Unknown values are not hidden zeros. Current-frame/current-actor/positive NEXT checks guard reads, results, child actions and focus restoration.
+
+## WB-28 A4 checkpoint — 13 October 2026
+
+Prior WB11 history above is preserved. All three actual WB28 Filters captures were opened beside the original SCR-02 PNG. P28-03 is OPEN: the radio fieldset is still a raised filled rounded box in actual pixels, while the supplied SCR-02 is flat. The intended scoped transparency does not override native specificity; use the existing exact modal-body scope. The actual filter values differ from the supplied sample and are genuine fixed native replies, not a reason to manufacture matching figures. Final full 42-row WB28 review/hashes will follow corrected replacements. No current WB28 A4 approval is claimed by this checkpoint.
+
+
+## WB-28 final A4 approval — 13 October 2026
+
+**APPROVED: 34 PASS, 0 FAIL, 8 scoped N/A.** Supersedes the WB28 OPEN checkpoint; prior WB11/WB29 records above remain historical.
+
+13 October 2026, final 30 actual native captures. Every PNG listed below was individually opened, with the actual read-only supplied SCR-02 and T04f PNGs displayed for comparison. Final three empty replacements were reopened; the other 27 exact hashes stayed unchanged after the final empty-line repair. Dark/device-light desktops are 1600×1000 and phones 390×844. These are actual native Office frames with fixed local reader replies, not a rendered replacement spec. Thirty saved capture records report zero JavaScript errors. The reviewer ran no renderer, wording tools, browser interaction, SQL, RPC, database/business action, fixture programme or network request.
+
+Item 16 is manual review against the actual `tools/policy.json` wording, including never-show terms, chatter, 20-word sentence/2-sentence limits, vocabulary and UK formatting. Item 25 and the readerAdditions part of 26 are N/A under the explicit owner A4 instruction; genuine field provenance in 26 remains checked. Keyboard/lifetime/recovery statements rely on the independent source review and current narrow source delta, not a new keyboard/business acceptance run. Whole-card joined app/business acceptance remains AUTHORED_NOT_RUN.
+
+The exact owner-required changed-list line, “The list has changed. Refresh and try again.”, is preserved under the later owner literal mapping. It overrides general one-sentence formatting for this exact refusal; no technical code is displayed. Dates are absent before execution.
+
+### Visible comparison and controls
+
+Every visible difference from supplied SCR-02 is accounted for:
+
+- Actual ALL/PAYE + Umbrella, All Clients, 1 Candidate and £395.00 replace illustrated PAYE-only/Riverside/14 Candidates/£9,842.60. The actual sample is a native HEADER/filter scope; copying illustrated financial values would invent data.
+- The total says “ready, as authorised”, the existing native Source-basis qualifier; it is not a chosen-rate or selected-money claim. It maps to the unchanged HEADER amount.
+- Candidate/Client are real native picker buttons, so their empty labels are brighter/bolder and their filled control background differs from the reference's faux input/placeholder. They are full width and have the same purpose; this is genuine existing picker behavior, not an extra free-text financial input.
+- Compact desktop radios remain 24px rows like the supplied picture; at phone width the rows, body reset controls, header Close and footer actions expand to 44px touch targets. Phone padding/wrapping differs because the reference supplies no phone PNG. The frame remains 600px on desktop and full available phone width.
+- The title position, total-card height and button widths differ slightly with native font metrics, actual wording and real control sizes. Native radii, lines, color family, footer and typography remain consistent. The fieldset is now genuinely flat, closing P28-03.
+- The supplied blurred mock parent/main list and white design-caption strip are absent from the actual native capture. Those are reference-board/sample context, not added payroll screen controls; the real native backdrop/parent is retained. No illustrated parent fields are manufactured inside Filters.
+
+Every visible control is needed: channel radios choose the reader filter; Candidate/Client open their existing scoped pickers; Reset selection changes this actor's ticks only after confirmation; Clear all decisions opens frozen agency-shared future-treatment disclosure; Clear filters returns the scope to All; Apply accepts the draft filter; header Close backs out. Reset/Clear are quiet neighbors as the original picture requires. No extra sort, money editor, date or financial action was added. A payroll user sees who/filter/channel/ready amount first, then the natural Apply step.
+
+### All 42 policy checks
+
+| # | Policy check | Verdict | Evidence |
+| --- | --- | --- | --- |
+| 1 | Card capabilities | PASS | Both distinct reset/clear actions are beside each other in Filters; exact-scope confirmations and results are reachable. |
+| 2 | Legacy capabilities | PASS | Existing LUI040–045 filter, picker, clear-filter and reset capabilities remain. |
+| 3 | Required wording | PASS | Actual scope and native Candidate count are named; Reset and Clear remain distinct. |
+| 4 | Prepared/default/frozen behavior | PASS | Filters read prepared native totals; reset is local and prior Draft/snooze facts stay protected. |
+| 5 | Native frame / header Close | PASS | Standard small native frame; Close appears only in its header. |
+| 6 | Tab depth | PASS | No additional tabs. |
+| 7 | Body order / flat grouping | PASS | Flat radio group, pickers, one subject card, quiet reset controls, footer. |
+| 8 | Table / numeric layout | N/A | this filter dialog has no data table. |
+| 9 | Text and status tones | N/A | Filters has no financial status badge; child results are reviewed separately. |
+| 10 | Primary / footer actions | PASS | Apply alone is primary; two quiet body reset actions; Clear filters secondary. |
+| 11 | Native styles / scoped tokens | PASS | Shared native frame/control/type scale; flat exact-scoped fieldset; no new !important. |
+| 12 | Continuous scroll | N/A | filter dialog, not a paged list. |
+| 13 | Whole-list sorting | N/A | dialog/picker sorting exemption; no invented sort control. |
+| 14 | Selection ticks | N/A | actual ticking happens in parent; reset does not add a fake tick list. |
+| 15 | Whole-scope counts / totals | PASS | 1 Candidate and £395.00 come from the full HEADER scope, not loaded-row sums. |
+| 16 | Manual policy.json wording | PASS | Read tools/policy.json manually: no technical terms/chatter, short copy, proper pounds/pence. |
+| 17 | Inline plain errors | PASS | Defined count refusal gives plain inline retry; no popup or exposed code. |
+| 18 | Confirmation consequence / safe choice | PASS | Both child confirmations name the native filter and consequence. |
+| 19 | Empty / loading / failed reads | PASS | Defined native count loading/error disables actions and shows unavailable, not invented zero. |
+| 20 | Payroll vocabulary / no IDs | PASS | No loan, UUID, code, internal revision/date or software vocabulary. |
+| 21 | UK figures / missing values | PASS | Actual £395.00 has pence; genuine missing state is a dash/plain error. |
+| 22 | Keyboard / focus / roles | PASS | Native radio/button semantics, visible focus, standard trap; source reviewed, not keyboard runtime. |
+| 23 | Actual 390px phone | PASS | All controls fit at 390px; radios and buttons have 44px targets. |
+| 24 | Actual device-light | PASS | Individually viewed device-light retains the identical dark palette and geometry. |
+| 25 | Generated design programme | N/A | owner A4 uses actual native PNGs/minimal samples; no generated spec/render work. |
+| 26 | Named reader values | PASS | HEADER candidate_count/amount and actual filter scope labels; readerAdditions part N/A by owner. |
+| 27 | No pre-execution pay date | PASS | No pay date is displayed. |
+| 28 | User eyes: understandable | PASS | Yes: Candidate, Client, channel and ready amount are familiar payroll terms. |
+| 29 | User eyes: action placement | PASS | Yes: local Reset and agency Clear sit together below affected filter count. |
+| 30 | User eyes: next step | PASS | Yes: Apply is the obvious next step for filtering. |
+| 31 | User eyes: real question | PASS | Yes: selected channel/people/client and full ready amount are visible. |
+| 32 | User eyes: blocked-row remedy | N/A | no new Waiting/Blocked/Action required collection in this dialog. |
+| 33 | User eyes: visible result | PASS | Yes: native child result and parent count/selection show the outcome. |
+| 34 | User eyes: necessary content | PASS | Yes: only filter scope, count, amount and the two card-required actions. |
+| 35 | User eyes: consistent names | PASS | Yes: Reset selection/Clear all decisions/Filters/Apply match the supplied naming. |
+| 36 | User eyes: costly mistake prevention | PASS | Yes: destructive clear has a separate complete scope confirmation; reset also asks. |
+| 37 | User eyes: safe exit | PASS | Yes: Close abandons draft filter edits; confirmations offer Cancel. |
+| 38 | User eyes: fewest clicks | PASS | Yes: no unnecessary detour; native pickers and two adjacent controls. |
+| 39 | User eyes: coherent figures | PASS | Yes: 1 Candidate/£395.00/PAYE + Umbrella matches the same fixed HEADER response. |
+| 40 | User eyes: Create Draft confidence | N/A | Create Draft consent is outside this filter/reset card surface. |
+| 41 | User eyes: adverse states / phone / keyboard | PASS | Yes within source/pixel scope: retained native failure mechanics, 390px targets; no stress/runtime claim. |
+| 42 | User eyes: return-later context | PASS | Yes: title, chosen channel and scope card make location/pending Apply clear. |
+
+### Exact final pixel and source evidence
+
+| Individually viewed final PNG | SHA-256 | Verdict |
+| --- | --- | --- |
+| WB28-filters-dark.png | 5C78F07342B6C036FB41EE18884F9EC0A0ED95987492AF410C2B667F1ED21275 | PASS |
+| WB28-filters-device-light.png | 5C78F07342B6C036FB41EE18884F9EC0A0ED95987492AF410C2B667F1ED21275 | PASS |
+| WB28-filters-phone-dark.png | DED66AA145AFF1F93851AAA54176AB909F20017DBDC17DD037848F2C887D1D09 | PASS |
+
+| Final Office source | SHA-256 |
+| --- | --- |
+| js/bpay-next-decisions-clear.js | 97F9B291ED0CF24C7CCB14E73C20189B97C7BA4C961DF8B97220E85AEBE12A4C |
+| js/bpay-next-workbench.js | 83BD53D7CBD721D9A098DE705748EEEC6068C85CE618B78BF7C94FA6C9F8F1CD |
+| js/bpay-next-office.js | 173F02F5FA0CA3B235443BBDCA22B5BAD616AF33E7AA84090BA246C75BF18BBB |
+| css/bpay-next-office.css | A1D16E05192FCEF7380A5746621FA0DBD97A66AF567EDFBDBF54580E16FFEB76 |
+| index.html | 5C1EEEA487008B3FADEB0F154E151A938586542AF3969333F08822ED1FAC3B15 |
+
+Current raw SOURCE PASS is retained for these narrow presentation deltas: native consent header hidden/restored by actual state, success/info/refusal tones, readable scoped body copy, exact native fieldset specificity, reset result status/live marker, safe initial Cancel focus, singular grammar and the existing truthful empty line. Original bytes/identity/financial dispatch/namespace/reset predicates and closed DTOs remain unchanged; no browser pricing or new scope owner was added.
+
+| Read-only supplied source | SHA-256 |
+| --- | --- |
+| SCREEN_DESIGN_POLICY.md | 8BC212B174469236F2B46DBF70EADC3664A946636458321CD3C77B7146323DE5 |
+| tools/policy.json | 45036D841D4568AA2D4D7ADF4F063D6D17B70288E289EE0B285068797A87369D |
+| DESIGN_INDEX.md | CBA0EF6E87C8937D558B20EF9C9EE010FCC9F9A8B479B626351206D07076CFFE |
+| SCR-02_filters.json | 9C442863EE17EA03C60B813858C09EE1C797B4F668B21CDE0A031DF2D92D88DC |
+| T04f_message_patterns.json | 6DE3480DF856D8127908504AF10DBBEE33136343AB25F21734B9AD501BD76BCD |
+| SCR-02_filters_dark.png | BF940AAFEFC8DDBBB8EFC875D988EF35DBE82B2AFC2C42599789EAF34F07148E |
+| T04f_message_patterns_dark.png | D593DAE2AF8DD9D1BA4D49EF1CFA0D561860D4A35F091AAE88FF572F6EF9A075 |
+
+The pack lives at the ordinary backend `codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010`. No pack bytes were changed or copied. DESIGN_INDEX rows 16/32/33 confirm SCR-18/19 reuse SCR-02/T04f; there is no independent SCR-18/19 design PNG to fabricate. SCR-19's inventory specifically adds the T04f confirmation pattern.
+
