@@ -80,6 +80,12 @@ export async function withSharedRehearsalTurn({task,progressPath,work},deps={}){
   return await work({turnConnection:connection,takenAt});
  } finally {
   try{if(taken){const result=await connection.query('select pg_advisory_unlock(20261013, 1);');releaseConfirmed=result.length===1&&result[0]==='t';}}
-  finally{await connection.close();if(taken)log({chat:'HealthRoster',task,status:'RELEASED',takenAt,releasedAt:new Date().toISOString(),explicitUnlockConfirmed:releaseConfirmed,connectionClosed:true,key:TURN_KEY});}
+  finally{
+   await connection.close();
+   if(taken)log({chat:'HealthRoster',task,status:'RELEASED',takenAt,releasedAt:new Date().toISOString(),explicitUnlockConfirmed:releaseConfirmed,connectionClosed:true,key:TURN_KEY});
+   // A successful callback cannot become a proved turn when lock ownership or
+   // explicit unlock disappeared. Retain the false receipt and fail closed.
+   if(taken&&!releaseConfirmed)throw Error('TURN_UNLOCK_CONFIRMATION_FAILED');
+  }
  }
 }
