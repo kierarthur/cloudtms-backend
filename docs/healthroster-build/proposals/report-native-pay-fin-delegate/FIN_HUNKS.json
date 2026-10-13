@@ -1,0 +1,14 @@
+[
+  {
+    "oldText": "  p_prepare_only boolean\n",
+    "newText": "  p_prepare_only boolean,\n  p_report_vat_rounding_variant text\n"
+  },
+  {
+    "oldText": "     or v_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE')\n     or (v_scope_kind='NHSP_REPORT_SCOPE') is distinct from (v_report_scope_id is not null)",
+    "newText": "     or v_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE')\n     or (v_scope_kind in ('NHSP_REPORT_SCOPE','SELF_BILL_REPORT_SCOPE')) is distinct from (v_report_scope_id is not null)"
+  },
+  {
+    "oldText": "  perform private.weekly_source_pay_query_admit_v2();\n",
+    "newText": "  perform private.weekly_source_pay_query_admit_v2();\n\n  -- Internal Report delegate only AFTER unchanged payload/ID/hash/admission.\n  -- This arm writes invoice-only Report authority and acquires no I-1 family\n  -- locks. The native complete ordinary lock ladder below is unchanged.\n  if v_scope_kind='SELF_BILL_REPORT_SCOPE' then\n    select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id;\n    select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;\n    if v_scope.id is null or v_cycle.id is null or v_scope.self_bill_report_id is null\n      or v_scope.source_cycle_id is distinct from v_cycle.id\n      or v_scope.source_group_id is distinct from v_cycle.source_group_id then\n      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_MISMATCH' using errcode='22023'; end if;\n    perform private.weekly_source_office_authority_v1(v_actor,\n      case when p_prepare_only then 'CORRECT_FINAL_SOURCE' else 'FINALISE_WEEK' end,\n      v_cycle.source_group_id,v_scope.client_id,v_cycle.finalisation_week_ending);\n    if p_prepare_only or p_correction_session_id is not null then\n      raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CORRECT_FINAL_UNSUPPORTED' using errcode='55000'; end if;\n    -- NULL is a held operational variant, never an implicit A choice.\n    return private.weekly_source_self_bill_report_finalise_v1(p_request,p_report_vat_rounding_variant);\n  end if;\n"
+  }
+]

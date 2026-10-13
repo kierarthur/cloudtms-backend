@@ -1,0 +1,175 @@
+{
+  "schema_version": "REPORT_NATIVE_WORKER_INPUTS_V1",
+  "inputs": [
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 18365,
+      "sha256": "fba7ef740e4576b0ba7a1ae85ba3167ea7645f36fe063c859ac64ec6ee78c50b"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 49139,
+      "sha256": "17e5026dfdbfb2ebac23cfe525a5448cc02dcc4205b98ae655e592fdcbcc3dee"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+      "bytes": 26367,
+      "sha256": "5260e6c9aecde3ea0dff9dc4d72e4a21ed2edc00ec698b58661afa50d7bd6aea"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "bytes": 67331,
+      "sha256": "42cf28b30ae154724db8450098538c1a9a98cd2940559d307f0887353900d703"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "bytes": 93513,
+      "sha256": "4a9425b79d3ed98579095b9fd09d7ee1eb698f2b1fb5c966ee1277601083557b"
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "bytes": 6275,
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "bytes": 5014,
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "bytes": 8080,
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "bytes": 5649,
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "bytes": 8831,
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "bytes": 6221,
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "bytes": 2786,
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "bytes": 15260,
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "bytes": 7516,
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "bytes": 6379,
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "bytes": 14652,
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "bytes": 11671,
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "bytes": 6387,
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "bytes": 15252,
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "bytes": 8835,
+      "sha256": "783d138fbc36dd3ecf795a981743bab40a7e5333b44de098b6e17059bd28a3f4"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+      "bytes": 26699,
+      "sha256": "50e03822490065314f9e625c1a253f50271279e0c727f305b0cdaa601e13ea3f"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+      "bytes": 19382,
+      "sha256": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+      "bytes": 20146,
+      "sha256": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175"
+    },
+    {
+      "path": "tests/weekly-source/weekly-source-upload-publication-owner.test.mjs",
+      "bytes": 42710,
+      "sha256": "43dc140f964d0c23bbf8222e9e13f401745291c31dee1fcc0df22631630fd7a5"
+    },
+    {
+      "path": "tests/weekly-source/parsers/acacium-report.test.js",
+      "bytes": 5140,
+      "sha256": "10fcc9ad137f59716b9e35de1853bd502828a6a1f1a2a8aae708395fa2c1e98d"
+    }
+  ]
+}

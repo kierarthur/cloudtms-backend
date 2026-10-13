@@ -1,0 +1,63 @@
+{
+  "schema_version": "AUTOMATIC_NATIVE_DELTA_FORWARD_SOURCE_MANIFEST_V1",
+  "status": "FROZEN_SOURCE_ONLY_FOR_ROOT_INDEPENDENT_REVIEW",
+  "authoritative_lane": "healthroster-v2-report-build-13102026",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "artifact_count": 7,
+  "artifacts": [
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "bytes": 18659,
+      "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/CONTROLLING_INPUTS.json",
+      "bytes": 2420,
+      "sha256": "4607ed4eab6377cef2f73a322d073215522dcd65fb990c96bef417eee726cd52"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/REVIEW.md",
+      "bytes": 4078,
+      "sha256": "27e2b13b7787bf3d9c8b700124da7d589147892d65550dbd5e333a6552294403"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/SOURCE_CAS_STAGE_CENSUS.json",
+      "bytes": 7364,
+      "sha256": "2c3c1e68adc8f7f6a43613871d3b29bbc489369079dd0b10ed5ed8b1952c90ad"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/build-forward.mjs",
+      "bytes": 5670,
+      "sha256": "fde276b01c876642fad6ca3093f993ccda19b74b8c4f7db76d3cbbaf498ba002"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/forward-review.test.mjs",
+      "bytes": 3848,
+      "sha256": "bf11474ca32fcd6de754a4009db595fb0e9197499a31b8a80ef161c5ca64ac3e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/automatic-native-delta-forward-review/reference-comparison.mjs",
+      "bytes": 3922,
+      "sha256": "ed8e11167ad37dfe6e249ee3a24fa9b464131ba92c545ac66425ae8977345c57"
+    }
+  ],
+  "package_sha256": "4d6bf238d8888cd3d8f0d61a9e299e6e5c76f60b0e8c964919ad0e182b95a435",
+  "local_checks": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "combined_passed": 62,
+    "node_syntax": "PASS_THREE_CHANGED_WORKER_MODULES",
+    "evidence": "Offline actual-parser/source/hunk/closure/protocol/adversarial checks. Transport stubs are not native acceptance."
+  },
+  "database_compile": "NOT_RUN_LANE_FORBIDDEN",
+  "runtime_native_acceptance": "HELD_ROOT_SEND_7_AFTER_BANK_FIRST_INSTALL",
+  "exposure": "UNMOUNTED",
+  "root_or_frozen_edits": 0,
+  "root_gates": [
+    "Complete forward same-signature owner compile",
+    "Native sealed stage K to K+1 and independent stable-key-only negative vector",
+    "Actual complete Source CAS equality before/after own stage with no real Source authority drift waiver",
+    "Changed additional raw detail/policy/rates and SourceFixedExpense provenance negative vectors"
+  ]
+}

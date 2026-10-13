@@ -1,0 +1,173 @@
+{
+  "schema_version": "AUTOMATIC_SOURCE_CAS_STAGE_CENSUS_V1",
+  "evidence": "SOURCE_ONLY_NOT_STAGE_BEFORE_AFTER_RUNTIME_PROOF",
+  "facts_categories": [
+    "schema_version",
+    "source_cycle_id",
+    "client_ids",
+    "group",
+    "cycles",
+    "clients",
+    "memberships",
+    "client_policies",
+    "client_settings",
+    "contracts",
+    "contract_policies",
+    "global_settings",
+    "resolved_policies",
+    "assignments",
+    "rule_versions",
+    "effective_rules",
+    "profiles",
+    "uploads",
+    "publications",
+    "rows",
+    "resolutions",
+    "economics",
+    "expense_policy_snapshots",
+    "expense_authorities",
+    "expense_cell_evidence",
+    "charge_checks",
+    "charge_acceptances",
+    "invoice_hold_releases",
+    "transitions",
+    "report_scopes",
+    "reports",
+    "report_bindings",
+    "events",
+    "revisions",
+    "snapshots",
+    "lineages",
+    "pay_receipts",
+    "financial_identities",
+    "root_identities"
+  ],
+  "stage_direct_write_relations": [
+    "public.weekly_exceptional_c1_component_records",
+    "public.weekly_exceptional_c1_publication_requests",
+    "public.weekly_exceptional_c1_source_parts",
+    "public.weekly_exceptional_c1_source_records",
+    "public.weekly_exceptional_orchestration_steps",
+    "public.weekly_exceptional_pay_family_events",
+    "public.weekly_exceptional_pay_generations",
+    "public.weekly_exceptional_pay_target_events",
+    "public.weekly_exceptional_pay_target_families",
+    "public.weekly_exceptional_payment_approvals",
+    "public.weekly_exceptional_payment_events",
+    "public.weekly_exceptional_pending_reconciliation_targets"
+  ],
+  "source_facts_referenced_relations": [
+    "public.client_settings",
+    "public.clients",
+    "public.contracts",
+    "public.timesheets",
+    "public.timesheets_financials",
+    "public.weekly_discrepancy_incidents",
+    "public.weekly_expense_authority_generations",
+    "public.weekly_issue_comparison_revisions",
+    "public.weekly_source_billing_movements",
+    "public.weekly_source_charge_acceptances",
+    "public.weekly_source_charge_checks",
+    "public.weekly_source_client_policies",
+    "public.weekly_source_contract_policies",
+    "public.weekly_source_cycles",
+    "public.weekly_source_expense_cell_evidence",
+    "public.weekly_source_final_revisions",
+    "public.weekly_source_final_snapshot_lines",
+    "public.weekly_source_format_profiles",
+    "public.weekly_source_global_settings",
+    "public.weekly_source_group_clients",
+    "public.weekly_source_group_rule_assignments",
+    "public.weekly_source_groups",
+    "public.weekly_source_invoice_hold_releases",
+    "public.weekly_source_ordinary_pay_projection_receipts",
+    "public.weekly_source_projection_publications",
+    "public.weekly_source_report_scopes",
+    "public.weekly_source_row_economic_snapshots",
+    "public.weekly_source_row_expense_policy_snapshots",
+    "public.weekly_source_row_resolutions",
+    "public.weekly_source_row_timesheet_lineages",
+    "public.weekly_source_rule_set_versions",
+    "public.weekly_source_self_bill_report_line_bindings",
+    "public.weekly_source_self_bill_reports",
+    "public.weekly_source_state_transitions",
+    "public.weekly_source_upload_rows",
+    "public.weekly_source_uploads",
+    "public.weekly_work_events"
+  ],
+  "direct_relation_intersection": [],
+  "intersection_scope": "DIRECT_STAGE_BODY_ONLY_NOT_WHOLE_CALLEE_OR_TRIGGER_CLOSURE",
+  "money_callee_census": {
+    "reachable_owner_count": 202,
+    "source_write_candidates": [
+      {
+        "owner": "public.weekly_exceptional_pay_prepare_family_v1",
+        "table": "public.timesheets",
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+        "line": 2
+      },
+      {
+        "owner": "public.weekly_exceptional_pay_prepare_family_v1",
+        "table": "public.weekly_work_events",
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+        "line": 2
+      },
+      {
+        "owner": "public.tsfin_write_current_snapshot_single_bounded",
+        "table": "public.timesheets_financials",
+        "file": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+        "line": 4
+      },
+      {
+        "owner": "public.tsfin_prepare_write",
+        "table": "public.timesheets_financials",
+        "file": "supabase/repeatable/19012026_extras.sql",
+        "line": 89
+      },
+      {
+        "owner": "public.timesheet_authorise_generic_atomic",
+        "table": "public.timesheets",
+        "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+        "line": 8474
+      },
+      {
+        "owner": "public.timesheet_authorise_generic_atomic",
+        "table": "public.timesheets_financials",
+        "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+        "line": 8474
+      }
+    ],
+    "known_intersections": [
+      {
+        "table": "public.weekly_work_events",
+        "owner": "public.weekly_exceptional_pay_prepare_family_v1",
+        "qualification": "Native existing-work-event branch SELECTs the exact Candidate/Client/date event. New OFFICE_PROTECTED_SHIFT INSERT is only its missing-event branch; a bulk eligible claim supplies/revalidates the actual original Source event. That insertion is never authority to bypass a claim or mutate source rows."
+      },
+      {
+        "table": "public.timesheets",
+        "qualification": "Native protected completion may change current lifecycle/economics; Source CAS projects only original immutable root identity, not currentness. Joined actual stage before/after root identity equality remains mandatory."
+      },
+      {
+        "table": "public.timesheets_financials",
+        "qualification": "Native bounded snapshot writer may supersede/create current rows; Source CAS selects only immutable Source receipt-pinned financial IDs and identity, not mutable currentness or newly published protected rows."
+      }
+    ],
+    "root_remaining_proofs": [
+      "Actual native stage K→K+1 and completion compare all fact keys and whole SQL source_cas_sha256 before/after.",
+      "Reconcile dynamic EXECUTE and active trigger DML, including Client rev/timestamps and state-transition projection lifecycle; static literal intersection is not their execution proof.",
+      "Prove real Source changes in any retained category still refuse40001; never remove categories merely to make own-stage equality pass.",
+      "Original full Client census is sealed before first claim and never shrinks after completion."
+    ]
+  },
+  "indirect_delegates": [
+    "private.weekly_source_query_current_publication_v1",
+    "private.weekly_source_checking_client_scope_v1",
+    "private._weekly_source_effective_policy_v1",
+    "private.weekly_source_effective_rule_set_v1"
+  ],
+  "indirect_effects": "Native protected caller graph has Timesheet/TSFIN lifecycle writes and prepare-family missing Source event branch; root same-transaction all-category equality required",
+  "runtime_equality": "HELD_ROOT_NATIVE_C03",
+  "mutable_protection_rows_selected": false,
+  "mutable_timesheet_financial_lifecycle_selected": false,
+  "financial_identity_authority": "Immutable Source ordinary pay receipt movement identity/hash; actual Contract candidate identity"
+}
