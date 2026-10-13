@@ -1,0 +1,134 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "HR_REPORT_M1_FIXED_PROJECTION_DEFINITION_NULL_ONLY_2",
+  "sqlSha256": "67dafd391127a2ebf62cecaa9d067dc94a5cbeecba404fe247b5b357d6441234",
+  "statementCount": 9,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "compiled_owner",
+        "canonical_definition_sha256"
+      ],
+      "rows": [
+        {
+          "compiled_owner": "REPORT",
+          "canonical_definition_sha256": "2621a75d7a461da4ced5eda77faf5a581c3c1136ff3cc95b4e2ac2be137d6994"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "compiled_owner",
+        "canonical_definition_sha256"
+      ],
+      "rows": [
+        {
+          "compiled_owner": "M1",
+          "canonical_definition_sha256": "0cadd57420a32f77bf096e859659f9e4dba7592290226bd1596dd2ac9d125175"
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "installed_definition_restored",
+          "identity_test",
+          "module"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "installed_definition_restored": true,
+            "identity_test": true,
+            "module": "LEGACY:1"
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ],
+  "status": "NATIVE_DEFINITION_AND_NULL_GUARDS_PASS",
+  "sourceCommit": "c82efd3f6ad2cb8afc4a80464fc7541df5f01ae4",
+  "turnBackendPid": 472797,
+  "sourceCandidateSha256": "67d6be33c4099036b8be0295fabc6d4073b690b8305cf8e05baf82a4c3869f88",
+  "nativeAcceptance": "Two complete committed definitions, NULL22023 refusals and canonical hashes only. Financial/real-row/API/app/NEXT/render acceptance remains held."
+}
