@@ -1,0 +1,269 @@
+-- S18b uses native approved vectors. Root supplies the qualified capability
+-- and full-component delta assertion; their mere presence never certifies £0.
+create or replace function private.weekly_source_automatic_reconcile_capability_assert_v1(p_cycle_id uuid)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ready boolean;
+begin
+  if to_regprocedure('private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)') is null
+    or to_regprocedure('private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)') is null then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_automatic_reconcile_producer_ready_v1($1)' into v_ready using p_cycle_id;
+  if v_ready is distinct from true then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_capability_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_capability_assert_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_automatic_reconcile_selection_v1(p_cycle_id uuid,p_event_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid; v_cycle public.weekly_source_cycles%rowtype; v_work public.weekly_work_events%rowtype;
+  v_wait jsonb; v_rules jsonb; v_facts jsonb; v_source jsonb; v_segment jsonb; v_count integer;
+  v_start timestamp; v_end timestamp; v_selection jsonb; v_cas jsonb; v_inventory jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict v_work from public.weekly_work_events where id=p_event_id and first_source_group_id=v_cycle.source_group_id;
+  v_wait:=private.weekly_source_protected_wait_witness_v1(v_work.id,v_cycle.id);
+  if v_wait is null then return jsonb_build_object('eligible',false,'code','NO_QUALIFIED_WAIT'); end if;
+  if not private.weekly_source_is_import_authoritative_v1(v_work.client_id,(v_wait->>'contract_id')::uuid,v_work.work_date) then
+    return jsonb_build_object('eligible',false,'code','OUTSIDE_IMPORT_AUTHORITY'); end if;
+  v_rules:=private.weekly_source_effective_rule_set_v1(v_work.client_id,v_cycle.id);
+  if v_rules#>>'{values,invoice_sender}' is distinct from 'CLIENT_SELF_BILL'
+    or v_rules#>>'{values,equal_protected_hours}' is distinct from 'CLEAR_AUTOMATICALLY' then
+    return jsonb_build_object('eligible',false,'code','AUTOMATIC_CLEAR_NOT_ENABLED'); end if;
+  v_facts:=private.weekly_source_shift_on_self_bill_v1(v_work.id,v_cycle.id);
+  if jsonb_typeof(v_facts) is distinct from 'object'
+    or not(v_facts ?& array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected'])
+    or exists(select 1 from unnest(array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected']) k
+      where jsonb_typeof(v_facts->k) is distinct from 'boolean') then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_FACTS_UNAVAILABLE' using errcode='55000'; end if;
+  if not (v_facts->>'bound_to_finalised_export')::boolean
+    or not coalesce(((v_rules#>>'{values,self_bill_source}'='SAME_FILE' and (v_facts->>'s25_pay_selected')::boolean)
+      or (v_rules#>>'{values,self_bill_source}'='SEPARATE_FINAL_REPORT' and (v_facts->>'on_accepted_report')::boolean)),false) then
+    return jsonb_build_object('eligible',false,'code','SELF_BILL_NOT_BOUND_TO_FINAL_SOURCE'); end if;
+  v_source:=private.weekly_source_protected_final_source_context_v1((v_wait->>'family_id')::uuid,v_cycle.id,v_work.id);
+  if v_source#>>'{source_proposal,source_present}' is distinct from 'true'
+    or coalesce(v_source#>>'{source_proposal,source_hash}','') !~ '^[0-9a-f]{64}$'
+    or nullif(v_source#>>'{source_proposal,source_revision}','') is null
+    or jsonb_typeof(v_source->'source_segments') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+  select count(*),jsonb_agg(item)->0 into v_count,v_segment from jsonb_array_elements(v_source->'source_segments') item
+    where item->>'work_event_id'=v_work.id::text;
+  if v_count<>1 or v_segment->>'date' is distinct from v_work.work_date::text
+    or coalesce(v_segment->>'start','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    or coalesce(v_segment->>'end','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    or coalesce(v_segment->>'break_mins','') !~ '^[0-9]+$' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_UNAVAILABLE' using errcode='55000'; end if;
+  v_start:=v_work.work_date+(v_segment->>'start')::time;
+  v_end:=v_work.work_date+(v_segment->>'end')::time;
+  if v_end<=v_start then v_end:=v_end+interval '1 day'; end if;
+  if (v_start,v_end,(v_segment->>'break_mins')::integer,(v_source#>>'{source_proposal,source_minutes}')::integer)
+    is distinct from ((v_wait->>'protected_start_at_local')::timestamp,(v_wait->>'protected_end_at_local')::timestamp,
+      (v_wait->>'protected_break_minutes')::integer,(v_wait->>'protected_net_minutes')::integer) then
+    return jsonb_build_object('eligible',false,'code','PROTECTED_SOURCE_HOURS_DIFFER',
+      'reason','Hours differ — decide individually'); end if;
+  select automatic_reconcile_actor_user_id into strict v_actor from public.weekly_source_global_settings where singleton;
+  if v_actor is null or not private.weekly_source_pay_actor_allowed_v1(v_actor) then
+    return jsonb_build_object('eligible',false,'code','AUTOMATIC_ACTOR_UNAVAILABLE',
+      'reason','Hours match — Accept source hours and reconcile'); end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',v_cycle.source_group_id,v_work.client_id,v_work.work_date);
+  v_inventory:=private.weekly_source_effective_inventory_v1((v_wait->>'root_timesheet_id')::uuid);
+  if v_inventory->>'ok' is distinct from 'true' or v_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'
+    or v_inventory#>>'{approval_basis,scope,root_timesheet_id}' is distinct from v_wait->>'root_timesheet_id'
+    or v_inventory#>>'{approval_basis,scope,target_family_id}' is distinct from v_wait->>'family_id'
+    or v_inventory#>>'{approval_basis,scope,candidate_id}' is distinct from v_work.candidate_id::text
+    or v_inventory#>>'{approval_basis,scope,client_id}' is distinct from v_work.client_id::text then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1(v_cycle.id,array[v_work.client_id]);
+  v_selection:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1','eligible',true,
+    'actor_user_id',v_actor,'source_cycle_id',v_cycle.id,'work_event_id',v_work.id,'qualified_wait',v_wait,
+    'rule_set_version_id',v_rules->'rule_set_version_id','rule_values_sha256',v_rules->'values_sha256',
+    'source_proposal',v_source->'source_proposal','self_bill_facts',v_facts,'source_cas',v_cas,
+    'approved_inventory_basis',v_inventory->'approval_basis');
+  return v_selection||jsonb_build_object('selection_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1',v_selection),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
+-- Called before the stage appends its unaccepted ACCEPTED_SOURCE event.
+create or replace function private.weekly_source_automatic_reconcile_stage_replay_assert_v1(p_request_id uuid,p_stage_request jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_vector jsonb; v_hash bytea; v_proof jsonb;
+begin
+  select generation.complete_next_vector_json,generation.complete_next_vector_hash into strict v_vector,v_hash
+    from public.weekly_exceptional_c1_publication_requests request
+    join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id and generation.family_id=request.family_id
+    where request.id=p_request_id;
+  v_proof:=v_vector->'automatic_reconcile_proof';
+  if not(p_stage_request ? 'automatic_reconcile_selection_sha256') and not(v_vector ? 'automatic_reconcile_proof') then return; end if;
+  if not(p_stage_request ? 'automatic_reconcile_selection_sha256') or not(v_vector ? 'automatic_reconcile_proof')
+    or v_proof->>'selection_sha256' is distinct from p_stage_request->>'automatic_reconcile_selection_sha256'
+    or v_proof->>'actor_user_id' is distinct from p_stage_request->>'actor_user_id'
+    or v_proof->>'source_cycle_id' is distinct from p_stage_request->>'source_cycle_id'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1',v_proof-'selection_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'selection_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_vector) is distinct from v_hash then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REPLAY_CONFLICT' using errcode='23505'; end if;
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_automatic_reconcile_stage_proof_v1(p_stage_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_selection jsonb; v_run public.weekly_exceptional_orchestration_runs%rowtype;
+begin
+  perform private.weekly_source_automatic_reconcile_capability_assert_v1((p_stage_request->>'source_cycle_id')::uuid);
+  select * into strict v_run from public.weekly_exceptional_orchestration_runs where id=(p_stage_request->>'orchestration_run_id')::uuid;
+  v_selection:=private.weekly_source_automatic_reconcile_selection_v1((p_stage_request->>'source_cycle_id')::uuid,(p_stage_request->>'work_event_id')::uuid);
+  if v_selection->>'eligible' is distinct from 'true' or v_run.request_kind is distinct from 'RECONCILE'
+    or v_run.state is distinct from 'RUNNING' or v_run.requested_by_user_id::text is distinct from v_selection->>'actor_user_id'
+    or p_stage_request->>'actor_user_id' is distinct from v_selection->>'actor_user_id'
+    or p_stage_request->>'family_id' is distinct from v_selection#>>'{qualified_wait,family_id}'
+    or p_stage_request->>'expected_family_bound_version' is distinct from v_selection#>>'{qualified_wait,family_bound_version}'
+    or p_stage_request->'source_proposal' is distinct from v_selection->'source_proposal'
+    or p_stage_request->>'automatic_reconcile_selection_sha256' is distinct from v_selection->>'selection_sha256'
+    or p_stage_request ? 'bulk_signed_selection_proof' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_CHANGED' using errcode='40001'; end if;
+  return v_selection;
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_automatic_reconcile_certificate_v1(p_request_id uuid,p_actor_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_certificate jsonb; v_generation public.weekly_exceptional_pay_generations%rowtype; v_proof jsonb;
+begin
+  perform private.weekly_source_automatic_reconcile_capability_assert_v1(p_cycle_id);
+  select generation.* into strict v_generation from public.weekly_exceptional_c1_publication_requests request
+    join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id and generation.family_id=request.family_id
+    where request.id=p_request_id;
+  v_proof:=v_generation.complete_next_vector_json->'automatic_reconcile_proof';
+  if v_proof->>'actor_user_id' is distinct from p_actor_id::text or v_proof->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_proof->>'eligible' is distinct from 'true'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1',v_proof-'selection_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'selection_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_generation.complete_next_vector_json)
+      is distinct from v_generation.complete_next_vector_hash then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_automatic_reconcile_delta_assert_v1($1,$2)' into v_certificate using p_request_id,p_actor_id;
+  if not private.weekly_exceptional_json_keys_exact_v1(v_certificate,array['schema_version','publication_request_id','actor_user_id',
+      'prior_inventory_digest','complete_next_vector_sha256','delta_pay_ex_vat','qualification_sha256'])
+    or not(v_certificate ?& array['schema_version','publication_request_id','actor_user_id','prior_inventory_digest',
+      'complete_next_vector_sha256','delta_pay_ex_vat','qualification_sha256'])
+    or v_certificate->>'schema_version' is distinct from 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_V1'
+    or v_certificate->>'publication_request_id' is distinct from p_request_id::text
+    or v_certificate->>'actor_user_id' is distinct from p_actor_id::text
+    or v_certificate->>'prior_inventory_digest' is distinct from v_generation.complete_next_vector_json#>>'{prior_effective_inventory,inventory_digest}'
+    or v_certificate->>'complete_next_vector_sha256' is distinct from encode(v_generation.complete_next_vector_hash,'hex')
+    or v_certificate->>'delta_pay_ex_vat' is distinct from '0.00'
+    or coalesce(v_certificate->>'qualification_sha256','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  return v_certificate;
+end;
+$function$;
+alter function private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
+
+-- No route/dispatcher is mounted by this package. Trusted Worker preflight
+-- runs before preparation. Only a native PUBLISHED completion claims clearing.
+create or replace function public.weekly_source_automatic_reconcile_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_cycle uuid; v_event uuid; v_actor uuid; v_selection jsonb; v_mode text; v_count integer;
+  r public.weekly_exceptional_c1_publication_requests%rowtype; g public.weekly_exceptional_pay_generations%rowtype;
+  run public.weekly_exceptional_orchestration_runs%rowtype; v_proof jsonb; v_gate jsonb; v_lock jsonb;
+  v_source_group uuid; v_certificate jsonb; v_result jsonb; v_replay jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if jsonb_typeof(p_request) is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REQUEST_INVALID' using errcode='22023'; end if;
+  if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['source_cycle_id','work_event_id','mode','publication_request_id','request_sha256'])
+    or not(p_request ?& array['source_cycle_id','work_event_id','mode']) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REQUEST_INVALID' using errcode='22023'; end if;
+  v_cycle:=(p_request->>'source_cycle_id')::uuid; v_event:=(p_request->>'work_event_id')::uuid; v_mode:=p_request->>'mode';
+  if v_cycle is null or v_event is null or v_mode is null or v_mode not in ('PREVIEW','COMPLETE') then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REQUEST_INVALID' using errcode='22023'; end if;
+  perform private.weekly_source_automatic_reconcile_capability_assert_v1(v_cycle);
+  select automatic_reconcile_actor_user_id into strict v_actor from public.weekly_source_global_settings where singleton;
+  if v_actor is null or not private.weekly_source_pay_actor_allowed_v1(v_actor) then
+    return jsonb_build_object('ok',false,'eligible',false,'code','AUTOMATIC_ACTOR_UNAVAILABLE',
+      'reason','Hours match — Accept source hours and reconcile'); end if;
+  if v_mode='PREVIEW' then
+    if p_request ? 'publication_request_id' or p_request ? 'request_sha256' then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REQUEST_INVALID' using errcode='22023'; end if;
+    select count(*) into v_count from public.weekly_exceptional_c1_publication_requests request
+      join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id
+      where request.state='READY' and generation.lifecycle_state='PENDING_C1'
+        and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,actor_user_id}'=v_actor::text
+        and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,source_cycle_id}'=v_cycle::text
+        and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,work_event_id}'=v_event::text;
+    if v_count>1 then raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+    if v_count=1 then
+      select request.* into strict r from public.weekly_exceptional_c1_publication_requests request
+        join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id
+        where request.state='READY' and generation.lifecycle_state='PENDING_C1'
+          and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,actor_user_id}'=v_actor::text
+          and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,source_cycle_id}'=v_cycle::text
+          and generation.complete_next_vector_json#>>'{automatic_reconcile_proof,work_event_id}'=v_event::text;
+      return jsonb_build_object('ok',true,'pending_stage',jsonb_build_object('publication_request_id',r.id,'request_sha256',encode(r.request_sha256,'hex')));
+    end if;
+    return jsonb_build_object('ok',true,'selection',private.weekly_source_automatic_reconcile_selection_v1(v_cycle,v_event));
+  end if;
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=(p_request->>'publication_request_id')::uuid;
+  select * into strict g from public.weekly_exceptional_pay_generations where id=r.generation_id and family_id=r.family_id;
+  v_proof:=g.complete_next_vector_json->'automatic_reconcile_proof';
+  if r.request_sha256 is distinct from private.weekly_exceptional_hex_sha256_v1(p_request->>'request_sha256')
+    or v_proof->>'work_event_id' is distinct from v_event::text or v_proof->>'source_cycle_id' is distinct from v_cycle::text
+    or v_proof->>'actor_user_id' is distinct from v_actor::text then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_REQUEST_INVALID' using errcode='22023'; end if;
+  select audit.after_json into v_replay from public.audit_events audit
+    where audit.object_type='weekly_source_automatic_reconcile' and audit.object_id_text=r.id::text
+      and audit.action='WEEKLY_SOURCE_AUTOMATIC_RECONCILE_CLEARED' and audit.event_sequence_is_authoritative
+      and audit.after_json->>'source_cycle_id'=v_cycle::text and audit.after_json->>'work_event_id'=v_event::text
+      and audit.after_json->>'request_sha256'=p_request->>'request_sha256'
+      and audit.after_json#>>'{delta_certificate,actor_user_id}'=v_actor::text
+    order by audit.event_sequence desc limit 1;
+  if v_replay is not null then return jsonb_build_object('ok',true,'cleared',true,'idempotent_replay',true,
+    'native_result',v_replay->'native_result','delta_certificate',v_replay->'delta_certificate'); end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  v_gate:=private.weekly_source_candidate_serial_gate_v1(r.candidate_id,'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',r.id,'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  if v_gate->>'ok' is distinct from 'true' then return v_gate; end if;
+  if not exists(select 1 from public.timesheets sheet join public.contracts contract on contract.id=sheet.contract_id
+    where sheet.timesheet_id=r.root_timesheet_id and contract.candidate_id=r.candidate_id) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  v_lock:=private.weekly_source_lock_family_rows_v1(array[r.root_timesheet_id],null);
+  if v_lock->>'ok' is distinct from 'true' then return v_lock; end if;
+  select source_group_id into strict v_source_group from public.weekly_source_cycles where id=v_cycle;
+  perform 1 from public.weekly_source_groups where id=v_source_group and active for update;
+  perform 1 from public.weekly_source_cycles where id=v_cycle and source_group_id=v_source_group for update;
+  if not found then raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SOURCE_CHANGED' using errcode='40001'; end if;
+  select * into strict run from public.weekly_exceptional_orchestration_runs where id=r.orchestration_run_id and family_id=r.family_id;
+  if run.request_kind is distinct from 'RECONCILE' or run.requested_by_user_id is distinct from v_actor then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  v_certificate:=private.weekly_source_automatic_reconcile_certificate_v1(r.id,v_actor,v_cycle);
+  v_result:=public.weekly_exceptional_pay_complete_local_v1(jsonb_build_object('schema_version','WEEKLY_PROTECTED_LOCAL_COMPLETE_V1',
+    'actor_user_id',v_actor,'publication_request_id',r.id,'expected_request_sha256',p_request->>'request_sha256',
+    'idempotency_key',run.idempotency_key||':local-complete'));
+  if v_result->>'ok' is distinct from 'true' or v_result->>'outcome' is distinct from 'PUBLISHED' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_NOT_PUBLISHED' using errcode='55000'; end if;
+  perform public._audit_insert('weekly_source_automatic_reconcile',r.id::text,'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_CLEARED',null,
+    jsonb_build_object('work_event_id',v_event,'source_cycle_id',v_cycle,'publication_request_id',r.id,
+      'request_sha256',p_request->>'request_sha256','native_result',v_result,'delta_certificate',v_certificate),'Cleared automatically · hours matched',v_actor);
+  return jsonb_build_object('ok',true,'cleared',true,'native_result',v_result,'delta_certificate',v_certificate);
+end;
+$function$;
+alter function public.weekly_source_automatic_reconcile_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_automatic_reconcile_atomic_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_automatic_reconcile_atomic_v1(jsonb) to service_role;

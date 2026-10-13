@@ -1,0 +1,441 @@
+{
+  "schema_version": "HEALTHROSTER_CHANGED_VERIFIER_SOURCE_SAFETY_V1",
+  "sourceCommit": "b9e2cbfcdf061a4e8fe07044e658c2daf043a362",
+  "status": "ADJACENT_SOURCE_REVIEW_NOT_NATIVE_EXECUTION",
+  "oldReviewInputs": [
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/VERIFIER_SAFETY_0_55.json",
+      "bytes": 110743,
+      "sha256": "69a0a143a311391b57a3339e19ea42a35e4c02cf2eb02fd3fba5974730cd2b5c"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/VERIFIER_SAFETY_56_111.json",
+      "bytes": 67021,
+      "sha256": "d3bd6cbf3933ad29b74380b68c37085efb85ab26fb3b3022ffde142f0164136f"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/VERIFIER_SAFETY_112_167.json",
+      "bytes": 115139,
+      "sha256": "bbc58892f6d0aa3435532bcb9d561b480c329cd53de6d06ad44ae1f1f657fb0e"
+    },
+    {
+      "path": "docs/healthroster-build/rehearsals/13102026/FULL_REHEARSAL_EXECUTION_MANIFEST.json",
+      "bytes": 1213683,
+      "sha256": "b0fd269f27da2aa2440a17ee2bf0832c7f0a17a66f27cf0437dde178ea617a52"
+    }
+  ],
+  "oldCountsPreserved": {
+    "verifiers": 168,
+    "eligible": 152,
+    "excluded": 16
+  },
+  "oldExclusionsChanged": false,
+  "verifiers": [
+    {
+      "path": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "bytes": 159408,
+      "sha256": "d7a29d27d5b1022cd933d3f568dd0eb0a976e6e0867a05204de68bd5462b888b",
+      "closureHash": "5b34396759516a9a0c368b2de07e76b0ddf89a1540cb1a6369828c0d80af2e5c",
+      "decision": "INCLUDE_ONLY_WITH_PINNED_OUTER_ROLLBACK_CONTRACT",
+      "fixturePrefix": "b7000000-0000-4000-8000-",
+      "category": "ROLLBACK_CONTAINED_FIXTURES",
+      "fences": [
+        "Fixture actor/Client/Contract/week/Timesheet/batch/transfer/advance/invoice identities use b7000000... constants or closed fixture world lookup.",
+        "Included key capture derives quoted primary-key attributes from pg_index/pg_attribute, watches the seven explicit regclass inputs, and rejects UPDATE/DELETE of noninserted captured keys and every TRUNCATE.",
+        "drain_workbench_jobs performs direct UPDATE only on job IDs in pg_temp.ws_verify_keys for public.banking_pay_workbench_jobs; it never calls a queue processor.",
+        "force_withdrawal_failure is deliberately unconditional. Its temporary trigger is attached to Source root authorisations only around the single withdrawal for b700...0312 and dropped immediately; it is not falsely described as an ID-checking function.",
+        "Named head/receipt/component constraints are deferred only during construction, forced IMMEDIATE for each finished fixture, then restored DEFERRED; no SET CONSTRAINTS ALL.",
+        "Schema-seed entitlement receipt/head fixture facts are not accepted financial/manager/transport proof. Real lifecycle calls and exact rollback/refusal/security assertions remain intact."
+      ],
+      "exceptions": [
+        "settings_defaults id=1 is an explicit shared singleton rollback fixture; its settings-authority trigger may touch existing Contract settings/outbox intent. This is not claimed to be prefix isolated. Captured-job guards can therefore expose a fixture incompatibility rather than silently changing existing jobs.",
+        "Synthetic financial and ISSUED invoice rows deliberately exercise refusal readers/guards; setting those row fields does not invoke payment/provider/settlement/send owners."
+      ],
+      "actualNativeTopLevelCalls": [
+        "private.weekly_source_first_authorise_core_v1",
+        "private.weekly_source_lock_and_resolve_families_v1",
+        "public._pay_rail_state_money_movement_classify",
+        "public.timesheet_authorise_generic_atomic",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.timesheet_unauthorise_atomic",
+        "public.weekly_source_first_authorisation_withdraw_available_v1",
+        "public.weekly_source_first_authorisation_withdraw_v1",
+        "public.weekly_source_first_authorise_v1"
+      ],
+      "expectedFailureSqlAndDynamicStatements": [
+        {
+          "line": 125,
+          "sql": "UPDATE",
+          "preceding": "key_expression into strict expr from pg_temp.ws_verify_relations where rel=tg_relid; if tg_op in (",
+          "sqlSha256": "6cb78ab1c6bdad2815633292caac2d1fc296f0b416b8b64e867f4563d4d6b1ae"
+        },
+        {
+          "line": 125,
+          "sql": "DELETE",
+          "preceding": "ssion into strict expr from pg_temp.ws_verify_relations where rel=tg_relid; if tg_op in ('UPDATE',",
+          "sqlSha256": "65daeb378bdec35d90224389f6e10917bcc0b94c90c489014ba156dd6cbf9350"
+        },
+        {
+          "line": 126,
+          "sql": "select pg_catalog.jsonb_build_array(",
+          "preceding": " pg_temp.ws_verify_relations where rel=tg_relid; if tg_op in ('UPDATE','DELETE') then execute ",
+          "sqlSha256": "a572776e07f44fcd04db79d9e07c058eb26dbd1fa32deb0b03d03b943a163c0b"
+        },
+        {
+          "line": 131,
+          "sql": "INSERT",
+          "preceding": "TING_ROW_MUTATION: %.% %',tg_table_schema,tg_table_name,tg_op; end if; end if; if tg_op in (",
+          "sqlSha256": "014413c294c5ac3baae43fc07f76edad47ade0562b00324b023a65585667f2dc"
+        },
+        {
+          "line": 131,
+          "sql": "UPDATE",
+          "preceding": "MUTATION: %.% %',tg_table_schema,tg_table_name,tg_op; end if; end if; if tg_op in ('INSERT',",
+          "sqlSha256": "6cb78ab1c6bdad2815633292caac2d1fc296f0b416b8b64e867f4563d4d6b1ae"
+        },
+        {
+          "line": 132,
+          "sql": "select pg_catalog.jsonb_build_array(",
+          "preceding": "chema,tg_table_name,tg_op; end if; end if; if tg_op in ('INSERT','UPDATE') then execute ",
+          "sqlSha256": "a572776e07f44fcd04db79d9e07c058eb26dbd1fa32deb0b03d03b943a163c0b"
+        },
+        {
+          "line": 135,
+          "sql": "UPDATE",
+          "preceding": "ew_key::text)>2048 then raise exception 'WS_VERIFY_KEY_TOO_LARGE'; end if; end if; if tg_op in (",
+          "sqlSha256": "6cb78ab1c6bdad2815633292caac2d1fc296f0b416b8b64e867f4563d4d6b1ae"
+        },
+        {
+          "line": 135,
+          "sql": "DELETE",
+          "preceding": "ext)>2048 then raise exception 'WS_VERIFY_KEY_TOO_LARGE'; end if; end if; if tg_op in ('UPDATE',",
+          "sqlSha256": "65daeb378bdec35d90224389f6e10917bcc0b94c90c489014ba156dd6cbf9350"
+        },
+        {
+          "line": 138,
+          "sql": "INSERT",
+          "preceding": " delete from pg_temp.ws_verify_keys where rel=tg_relid and key=old_key; end if; if tg_op in (",
+          "sqlSha256": "014413c294c5ac3baae43fc07f76edad47ade0562b00324b023a65585667f2dc"
+        },
+        {
+          "line": 138,
+          "sql": "UPDATE",
+          "preceding": "e from pg_temp.ws_verify_keys where rel=tg_relid and key=old_key; end if; if tg_op in ('INSERT',",
+          "sqlSha256": "6cb78ab1c6bdad2815633292caac2d1fc296f0b416b8b64e867f4563d4d6b1ae"
+        },
+        {
+          "line": 142,
+          "sql": "INSERT",
+          "preceding": "id,new_key); end if; update pg_temp.ws_verify_relations set inserts=inserts+case when tg_op=",
+          "sqlSha256": "014413c294c5ac3baae43fc07f76edad47ade0562b00324b023a65585667f2dc"
+        },
+        {
+          "line": 143,
+          "sql": "UPDATE",
+          "preceding": " inserts=inserts+case when tg_op='INSERT' then 1 else 0 end, updates=updates+case when tg_op=",
+          "sqlSha256": "6cb78ab1c6bdad2815633292caac2d1fc296f0b416b8b64e867f4563d4d6b1ae"
+        },
+        {
+          "line": 144,
+          "sql": "DELETE",
+          "preceding": " updates=updates+case when tg_op='UPDATE' then 1 else 0 end, deletes=deletes+case when tg_op=",
+          "sqlSha256": "65daeb378bdec35d90224389f6e10917bcc0b94c90c489014ba156dd6cbf9350"
+        },
+        {
+          "line": 167,
+          "sql": "create trigger ws_verify_capture after insert or update or delete on %s for each row execute function pg_temp.ws_verify_capture()",
+          "preceding": "nto pg_temp.ws_verify_relations(rel,key_expression) values(p_rel,expr); execute pg_catalog.format(",
+          "sqlSha256": "10fa8096e2132b0bf433e15348b851654a73e881bc7a6b1ae38380283b95de9d"
+        },
+        {
+          "line": 168,
+          "sql": "create trigger ws_verify_no_truncate before truncate on %s for each statement execute function pg_temp.ws_verify_capture()",
+          "preceding": " %s for each row execute function pg_temp.ws_verify_capture()',target); execute pg_catalog.format(",
+          "sqlSha256": "6778ff05eb3547ff8889762bdf8b5bc3dc5b3165366aaae88a2d569052d993dd"
+        },
+        {
+          "line": 1719,
+          "sql": "update public.weekly_source_root_authorisations",
+          "preceding": " (pg_catalog.length(v_definition) -pg_catalog.length(pg_catalog.replace(v_definition, ",
+          "sqlSha256": "d6485470987e9d70ee6bfd1a80833f9472cb2840efb8a2a13bfe3b08b634684f"
+        },
+        {
+          "line": 1720,
+          "sql": "update public.weekly_source_root_authorisations",
+          "preceding": "_definition, 'update public.weekly_source_root_authorisations',''))) /pg_catalog.length(",
+          "sqlSha256": "d6485470987e9d70ee6bfd1a80833f9472cb2840efb8a2a13bfe3b08b634684f"
+        },
+        {
+          "line": 1724,
+          "sql": "update public\\.weekly_source_root_authorisations.*?;",
+          "preceding": " ||'public.weekly_source_root_authorisations'); v_update:=pg_catalog.substring(v_definition, ",
+          "sqlSha256": "8cc20e048314ddc2ad0054dfbf007888739f915888c3c593dd8059a8411e9b32"
+        },
+        {
+          "line": 2349,
+          "sql": "drop trigger wp07_force_failure on public.weekly_source_root_authorisations",
+          "preceding": "on_detail; v_message:=v_message||' :: '||coalesce(v_detail,''); end if; end; execute ",
+          "sqlSha256": "9a2ccf15aa6a8220bd00fd48f4c93541f8e152303f14dbef0087759ddaf221ce"
+        },
+        {
+          "line": 2743,
+          "sql": "call to public.timesheet_unauthorise_atomic.  The fixture withdrawal of ",
+          "preceding": "ached (' ||v_guard_triggers||'), so the withdrawal marks must be written BEFORE the ' ||",
+          "sqlSha256": "20efb8c42d554a082a66f9cd80a55daadcf0a766129e7a0f80447635ac6ee59f"
+        }
+      ],
+      "nestedSourceOwnerCount": 341,
+      "nestedBodiesAndTriggers": "SOURCE_CENSUS.json conservativeCalleeClosure owners/edges includes all executable schema-qualified and recognised unqualified native references, literal EXECUTE targets and DML trigger candidates; all source bytes/hash-bound.",
+      "requiresGenuineApplyingRelease": false,
+      "containsActualQueueProcessorCall": false,
+      "invokesPaymentProviderSettlementNetworkOrEmailSend": false,
+      "executed": false
+    },
+    {
+      "path": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "bytes": 66894,
+      "sha256": "df570d6718680461903bd17649e47cb0972d63be588e49f3b86766a89482ff10",
+      "closureHash": "be56f6a14dc28bd2cbfaaf3b2de3a775a2927e3ea3ef3502dd9cb71441cc4f96",
+      "decision": "INCLUDE_ONLY_WITH_PINNED_OUTER_ROLLBACK_CONTRACT",
+      "fixturePrefix": "c7000000-0000-4000-8000-",
+      "category": "ROLLBACK_CONTAINED_FIXTURES",
+      "fences": [
+        "Fixture world and effects loop 2..12 derive Candidate/root/Contract/batch/item/transfer/operation UUIDs solely from c7000000... constants.",
+        "drain_workbench_jobs changes QUEUED/RUNNING rows only where dedupe_key contains the full c7000000-0000-4000-8000- prefix. It does not claim, execute or submit those jobs.",
+        "assert_refused executes only the closed literal/format statements supplied by this verifier against fixture roots; no externally supplied SQL.",
+        "publish_head constructs the complete SCHEMA seed bundle/component/receipt relation with exact named deferred guards flushed IMMEDIATE after the finished unit.",
+        "Seeded provider-attempt, settlement/remittance/transfer scope and PAYMENT_EXECUTE values are forensic refusal inputs; no native provider/payment/settlement executor is called."
+      ],
+      "exceptions": [
+        "settings_defaults id=1 is shared transactional settings setup, not a fixture-prefix key. Native settings changes/dirty-enqueue intent remain SQL in the rolled-back frame.",
+        "Direct dedupe-prefix drain is not proof that a genuine native Workbench job would finish. First-use positive financial/HEAD acceptance remains held."
+      ],
+      "actualNativeTopLevelCalls": [
+        "private.weekly_source_publication_request_digest_v1",
+        "private.weekly_source_root_authorisation_signature_v1",
+        "public.timesheet_lifecycle_guard_signature_v1",
+        "public.weekly_source_first_authorisation_withdraw_available_v1",
+        "public.weekly_source_first_authorisation_withdraw_request_v1",
+        "public.weekly_source_first_authorisation_withdraw_v1",
+        "public.weekly_source_first_authorise_v1"
+      ],
+      "expectedFailureSqlAndDynamicStatements": [
+        {
+          "line": 372,
+          "sql": "SELECT",
+          "preceding": "g.has_table_privilege('anon', 'private.weekly_source_first_authorisation_withdrawal_receipts',",
+          "sqlSha256": "6e4261695ad1aa36aac75303151674266d135fc12c26f8dc64bba0546d4238f2"
+        },
+        {
+          "line": 374,
+          "sql": "SELECT",
+          "preceding": "le_privilege('authenticated', 'private.weekly_source_first_authorisation_withdrawal_receipts',",
+          "sqlSha256": "6e4261695ad1aa36aac75303151674266d135fc12c26f8dc64bba0546d4238f2"
+        },
+        {
+          "line": 376,
+          "sql": "SELECT",
+          "preceding": "ble_privilege('service_role', 'private.weekly_source_first_authorisation_withdrawal_receipts',",
+          "sqlSha256": "6e4261695ad1aa36aac75303151674266d135fc12c26f8dc64bba0546d4238f2"
+        }
+      ],
+      "nestedSourceOwnerCount": 341,
+      "nestedBodiesAndTriggers": "SOURCE_CENSUS.json conservativeCalleeClosure owners/edges includes all executable schema-qualified and recognised unqualified native references, literal EXECUTE targets and DML trigger candidates; all source bytes/hash-bound.",
+      "requiresGenuineApplyingRelease": false,
+      "containsActualQueueProcessorCall": false,
+      "invokesPaymentProviderSettlementNetworkOrEmailSend": false,
+      "executed": false
+    },
+    {
+      "path": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "bytes": 91862,
+      "sha256": "4f54fc72f00235af7b58c8d1a63b14991e6361b92356b9524c32f51beb1b8611",
+      "closureHash": "ae3cdc755c675c8009ae0af5cb7ab59a13f4104b33d336fdf727ccaa0d80ad7f",
+      "decision": "INCLUDE_ONLY_WITH_PINNED_OUTER_ROLLBACK_CONTRACT",
+      "fixturePrefix": "17092026-0800-4000-8000-",
+      "category": "ROLLBACK_CONTAINED_FIXTURES_WITH_SOURCE_SCHEMA_CORRUPTION_NEGATIVES",
+      "fences": [
+        "Only real Workbench seam invocations are economic_occurrence_page and timesheet_input_fingerprint readers over the synthetic obsolete build/unit/Timesheet world.",
+        "walk/walk_n use only fixture build/unit/Timesheet selectors and bounded limits; expected-failure SQL arguments are closed literal/format fixture inputs.",
+        "Section6 temporarily removes two Source-head unique indexes, three Source immutable/root-identity triggers, three Source-head NOT NULL requirements, two Source-head self-FKs and only CHECKs on the fixed Source-head regclass that mention publication_receipt_digest or scope_change_tx_token.",
+        "Dynamic ALTER uses a fixed Source-head table and %I catalogue constraint name, never a supplied relation or executable business callback.",
+        "Corruption UPDATEs use exact fixture head IDs. Final DELETE of components is restricted to heads of v_ts; final head DELETE is root_timesheet_id=v_ts. No global head purge.",
+        "No Banking definition or guard is replaced/disabled; the ordinary no-head byte equality, complete/zero/ambiguous/foreign identity, paging and fingerprint assertions remain."
+      ],
+      "exceptions": [
+        "A settings_finance_windows row for the fixture date is inserted only if no existing covering window exists; no existing window is overwritten.",
+        "Source schema-corruption DDL is eligible only inside an outer transaction with guaranteed rollback and fresh catalogue restoration, never as an install verifier executed outside that frame."
+      ],
+      "actualNativeTopLevelCalls": [
+        "private.pay_workbench_timesheet_input_fingerprint_v1",
+        "private.pay_workbench_unit_economic_occurrence_page_v1"
+      ],
+      "expectedFailureSqlAndDynamicStatements": [
+        {
+          "line": 1187,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "blic.weekly_source_entitlement_head_receipt_assert deferred; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1324,
+          "sql": "alter table public.weekly_source_entitlement_heads drop constraint %I",
+          "preceding": "g.pg_get_constraintdef(con.oid), 'scope_change_tx_token')>0) loop execute format(",
+          "sqlSha256": "dbc08e15dd2926e916c9a0ff9e69486f672838033210fcacdfc5950cff5b56a1"
+        },
+        {
+          "line": 1359,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": ", superseded_by_head_id=v_second where id=v_zero; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1385,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "TTED_CURRENT'),2, '6b two committed heads really exist'); perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1399,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "t_heads set root_timesheet_version=99 where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1406,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "_family_booking_id=v_booking||'-REPOINTED' where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1417,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "ce_entitlement_heads set component_count=2 where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1422,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "t component_count=0,certified_zero=true where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1435,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "s set publication_receipt_digest=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1447,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "_heads set scope_change_tx_token=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1464,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": " set component_kind='ADJUSTMENT' where head_id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1470,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "nent_kind='EXPENSE',expense_code=null where head_id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1476,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "TIONAL_UNIT',additional_code_raw=null where head_id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1493,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "ent_heads set entitlement_digest=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1502,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "ement_heads set inventory_digest=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1511,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": "ads set source_generation_digest=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1527,
+          "sql": "select count(*) from pg_temp.walk()",
+          "preceding": ",certified_zero=true,inventory_digest=null where id=v_second; perform pg_temp.expect_failure( ",
+          "sqlSha256": "7a3aa5abdd76dd5486acf97c73c08ef59405e3019f1a8551b1d1228cb30876af"
+        },
+        {
+          "line": 1584,
+          "sql": "select count(*) from private.pay_workbench_unit_economic_occurrence_page_v1(%L,%L,%L,%L,null,25)",
+          "preceding": "e two refusals the function already had are unchanged. perform pg_temp.expect_failure( format(",
+          "sqlSha256": "70c860bba6b6d24e77fac5d828698e14966aca8406214c0da6a9bba16b59f2fd"
+        },
+        {
+          "line": 1588,
+          "sql": "select count(*) from private.pay_workbench_unit_economic_occurrence_page_v1(%L,%L,%L,%L,null,25)",
+          "preceding": "SOR_INVALID','pre-existing cursor refusal unchanged'); perform pg_temp.expect_failure( format(",
+          "sqlSha256": "70c860bba6b6d24e77fac5d828698e14966aca8406214c0da6a9bba16b59f2fd"
+        }
+      ],
+      "nestedSourceOwnerCount": 223,
+      "nestedBodiesAndTriggers": "SOURCE_CENSUS.json conservativeCalleeClosure owners/edges includes all executable schema-qualified and recognised unqualified native references, literal EXECUTE targets and DML trigger candidates; all source bytes/hash-bound.",
+      "requiresGenuineApplyingRelease": false,
+      "containsActualQueueProcessorCall": false,
+      "invokesPaymentProviderSettlementNetworkOrEmailSend": false,
+      "executed": false
+    },
+    {
+      "path": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "bytes": 2308,
+      "sha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "closureHash": "7227bf694e59d77cb3116175550c025c363c47752cd7adaad52fcf76457331c0",
+      "decision": "INCLUDE_ONLY_WITH_PINNED_OUTER_ROLLBACK_CONTRACT",
+      "fixturePrefix": null,
+      "category": "CATALOGUE_AND_MISSING_AUTHORITY_READ_ONLY",
+      "fences": [
+        "The three signatures are inspected via to_regprocedure/catalogue ACL/owner/security/search_path/default checks; FIN is never invoked.",
+        "The only executed Source calls are pay_authority(NULL) and compact pay_witness(NULL). Detailed authority SELECT binding WHERE id=NULL cannot match; NOT FOUND returns NULL before other reads/helpers. Compact witness delegates and returns NULL.",
+        "No DML, fixtures, stage, pay orchestration, report FIN, A/B selection, release fabrication or feature activation."
+      ],
+      "exceptions": [
+        "Null refusal and catalogue security do not qualify native ordinary/protected Report pay readiness, actual A/B renderer admission or API availability."
+      ],
+      "actualNativeTopLevelCalls": [
+        "private.weekly_source_self_bill_report_pay_authority_v1",
+        "private.weekly_source_self_bill_report_pay_witness_v1"
+      ],
+      "expectedFailureSqlAndDynamicStatements": [],
+      "nestedSourceOwnerCount": 42,
+      "nestedBodiesAndTriggers": "SOURCE_CENSUS.json conservativeCalleeClosure owners/edges includes all executable schema-qualified and recognised unqualified native references, literal EXECUTE targets and DML trigger candidates; all source bytes/hash-bound.",
+      "requiresGenuineApplyingRelease": false,
+      "containsActualQueueProcessorCall": false,
+      "invokesPaymentProviderSettlementNetworkOrEmailSend": false,
+      "executed": false
+    }
+  ],
+  "method": "Full verifier/include bytes plus complete controlling native function bodies and conservative DML trigger traversal. Actual dynamic EXECUTE and pg_temp closed expected-failure SQL are reviewed separately from definition/signature string inspection. No keyword-only safety inference.",
+  "dynamicNativeReview": [
+    "Current Workbench dirty/summary trigger dynamic SQL is fixed temporary context SELECT/UPDATE/DELETE, owner/schema/transaction-bound; it records/enqueues SQL intent, never claims or drains a queue.",
+    "Approval basis/candidate-head dynamic reads target fixed retained chosen-detail relations after exact relation-existence guards.",
+    "extensions.digest is the pgcrypto cryptographic primitive, not a network/business executor; unresolved relation constructors are excluded from routine calls."
+  ],
+  "runtimePrerequisites": [
+    "Root acquires SEND_7 turn lock before fingerprints; no protected release/phone test overlap.",
+    "Actual TEST identity, LEGACY:1 and exact commit/closure verification before invoking native fixtures.",
+    "One outer rollback transaction, per-verifier savepoint isolation and no nested COMMIT/ROLLBACK escapes; preserve each original psql conditional semantics.",
+    "psql variable state is independent of DB savepoint rollback. Preserve/restore caller variable definedness/value per unit; do not silently force a global outer-mode setting.",
+    "Fresh post-rollback marker absence and exact ledgers/catalogue fingerprints; newly installed Bank native owners require re-review/isolated rerun, not assumption from this source census."
+  ],
+  "databaseCalls": false,
+  "networkCalls": false,
+  "secretsRead": false
+}

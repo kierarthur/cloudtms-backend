@@ -1,0 +1,109 @@
+{
+  "contract": "HEALTHROSTER_A0_LOCK_SOURCE_CHECKS_V1",
+  "status": "PASS_SOURCE_ONLY_NATIVE_HELD",
+  "tests": {
+    "suites": [
+      "tests/healthroster-cn-a0-callbacks.test.mjs",
+      "tests/healthroster-cn-a0-producers.test.mjs",
+      "tests/healthroster-cn-a0-clock-scope.test.mjs",
+      "tests/healthroster-cn-a0-lock-fence.test.mjs"
+    ],
+    "tests": 75,
+    "pass": 75,
+    "fail": 0,
+    "new": 9
+  },
+  "syntax": {
+    "files": [
+      "audit-writer-inputs.mjs",
+      "build-current-root-composition.mjs",
+      "build-lock-successor.mjs",
+      "build-schema-census.mjs",
+      "exact-request-a0-weekly-clock-arm.mjs",
+      "freeze-lock-packet.mjs",
+      "native-correction-snapshot-producers.mjs",
+      "native-daily-role-helpers.mjs",
+      "native-weekly-correction-dispatch.mjs",
+      "timesheet-correction-orchestrator.mjs"
+    ],
+    "count": 10,
+    "pass": true
+  },
+  "rootApplyCheck": {
+    "patches": [
+      "COMBINED_APPROVAL_ROOT.diff",
+      "ADAPTER_ROOT.diff",
+      "WORKER_ROOT.diff"
+    ],
+    "pass": true,
+    "mutatedRoot": false
+  },
+  "rootInputs": {
+    "count": 65,
+    "allExact": true
+  },
+  "frozenPackets": {
+    "files": 135,
+    "allByteIdentical": true,
+    "manifests": [
+      {
+        "path": "docs/healthroster-build/PROTECTION_SOURCE_MANIFEST.json",
+        "sha256": "2d0947db59f875da1fd4aeed4b49c6566174b19cc244c41785670248c3fd1070"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/f4-ai/F4_AI_SOURCE_MANIFEST.json",
+        "sha256": "6de00fa2d72625b8b3d39b38b14dd4765ab76989ae297abfcf2c97b7ae5010a8"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/cn-a0-native-normalisation/A0_SOURCE_MANIFEST.json",
+        "sha256": "f04bd3656846b5ba1e395095b64689fef839ada1e4dcc0102aa7f030cb16709e"
+      }
+    ]
+  },
+  "schema": {
+    "explicitRelations": 23,
+    "explicitFields": 62,
+    "namedFkSources": 16,
+    "missing": 0,
+    "native": false
+  },
+  "writerCensus": {
+    "exactBodies": 41,
+    "workerEntries": 4,
+    "foreignKeys": 75,
+    "triggers": 130,
+    "uncovered": [
+      {
+        "owner": "public.timesheet_validations INSERT/repoint",
+        "source": "current-contract.json + actual HR Weekly/Daily writers",
+        "reason": "No Timesheet FK exists on timesheet_validations. Existing rows receive NOWAIT locks and the exact normal Worker read is fingerprinted/compared, but absent-row insertion is not fenced by the Timesheet parent. Every actual active validation creator must prove the same native family admission, or receive a narrowly integrated native writer guard. No invented FK or table lock is asserted."
+      },
+      {
+        "owner": "public.invoice_lines INSERT/repoint",
+        "source": "current-contract.json + native invoice owner boundary",
+        "reason": "No Timesheet FK exists on invoice_lines.timesheet_id; only invoice_id is FK-backed. Existing lines receive NOWAIT locks, but a concurrent first line may not be excluded by the Timesheet parent alone. The normal native invoice creator/issued-parent contract must separately qualify its exact shared family/Candidate admission before this A0 route can be exposed. No invoice calculator or global invoice table mutex is introduced."
+      },
+      {
+        "owner": "public.tsfin_load_context_batch",
+        "source": "21072026_1235_36",
+        "reason": "Candidate alias/key matching may involve foreign Candidate rows. Selected Candidate row lock alone does not fence foreign alias mutations. Native weekly Contract/FIN identity preservation through final authorisation requires joined first-use/alias-race proof; no global Candidate table mutex invented."
+      },
+      {
+        "owner": "timesheets_financials trigger closure",
+        "source": "current-contract.json trigger list",
+        "reason": "Native bpay_clock_changed_v1, bpay_next_ordinary_authorisation_trigger_v1, pay_workbench_mark_candidate_dirty, summary/invoice-revision/retention/document and expense sync leaves remain call-only. This package does not certify complete Banking late-hook lock/operation/GUC cleanup graph."
+      },
+      {
+        "owner": "public.timesheets booking family creation",
+        "source": "native route/Candidate/import writers",
+        "reason": "Native I-1 advisory fence covers cooperating canonical booking writers. A new raw booking sibling with NULL/foreign Contract is not protected by the selected Contract FK alone; no raw service DML/unsupported producer may be admitted as a qualified A0 family creator without native gate proof."
+      }
+    ]
+  },
+  "noNativeTests": true,
+  "noSqlCompile": true,
+  "noDatabaseCalls": true,
+  "noBuildDeploy": true,
+  "noHostedSideEffects": true,
+  "retainedGates": "All five unsupported writer/late-hook holds and all prior signed/source/rule/claim/agency/financial/official-document/NEXT/phone/installed-role gates. Source tests are not financial/concurrency readiness."
+}

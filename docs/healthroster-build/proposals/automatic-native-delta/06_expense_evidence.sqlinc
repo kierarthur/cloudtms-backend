@@ -1,0 +1,98 @@
+-- Point-read immutable expense authorities selected by real approved evidence.
+-- The existing complete native movement assertion owns lineage, policy hashes,
+-- arithmetic and movement admission. This reader never reprices an expense.
+create or replace function private.weekly_source_expense_authority_evidence_v1(p_root_id uuid,p_authority_ids jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_id jsonb; a public.weekly_expense_authority_generations%rowtype;
+  p public.weekly_source_row_expense_policy_snapshots%rowtype; v_scope jsonb; m record;
+  v_result jsonb:='[]'; v_policy jsonb; v_count integer; v_family uuid[];
+begin
+  v_scope:=private.weekly_source_pay_query_scope_v1(p_root_id);
+  v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(p_root_id);
+  if v_scope is null or cardinality(v_family) is null or cardinality(v_family)=0
+    or jsonb_typeof(p_authority_ids) is distinct from 'array'
+    or exists(select 1 from jsonb_array_elements(p_authority_ids) x group by x having count(*)<>1) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  for v_id in select value from jsonb_array_elements(p_authority_ids) loop
+    select * into strict a from public.weekly_expense_authority_generations where id=(v_id#>>'{}')::uuid;
+    select * into strict p from public.weekly_source_row_expense_policy_snapshots where id=a.row_expense_policy_snapshot_id;
+    if a.contract_id::text is distinct from v_scope->>'contract_id' or a.source_expense_pence<=0
+      or a.source_observation_kind is distinct from 'ROW_PRESENT' or a.work_event_id is distinct from p.work_event_id
+      or p.candidate_id::text is distinct from v_scope->>'candidate_id' or p.client_id::text is distinct from v_scope->>'client_id'
+      or p.contract_id is distinct from a.contract_id then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+    select count(*) into v_count from public.weekly_source_billing_movements movement
+      join public.weekly_source_manifest_movements membership on membership.billing_movement_id=movement.id
+      where movement.expense_authority_generation_id=a.id and movement.final_revision_id=a.final_revision_id
+        and movement.invoice_timesheet_id=any(v_family) and movement.movement_role in ('EXPENSE_POSITIVE','EXPENSE_REPLACEMENT')
+        and movement.source_line_kind='SOURCE_FIXED_EXPENSE';
+    if v_count<>1 then raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+    select movement.*,membership.client_manifest_id into strict m from public.weekly_source_billing_movements movement
+      join public.weekly_source_manifest_movements membership on membership.billing_movement_id=movement.id
+      where movement.expense_authority_generation_id=a.id and movement.final_revision_id=a.final_revision_id
+        and movement.invoice_timesheet_id=any(v_family) and movement.movement_role in ('EXPENSE_POSITIVE','EXPENSE_REPLACEMENT')
+        and movement.source_line_kind='SOURCE_FIXED_EXPENSE';
+    if private.weekly_source_ordinary_projection_expense_movement_assert_v1(m.id,m.final_revision_id,
+        m.finalisation_cycle_id,m.client_manifest_id,m.invoice_timesheet_id) is distinct from true then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+    -- Remove only storage/version/transport identities. Preserve every frozen
+    -- policy value and the economic owner scope. Raw authority and raw policy
+    -- remain in the qualification digest as separate immutable provenance.
+    v_policy:=to_jsonb(p)-array['id','row_resolution_id','upload_row_id','generation','snapshot_hash','created_at_utc'];
+    v_result:=v_result||jsonb_build_array(jsonb_build_object('work_event_id',a.work_event_id,
+      'authority_id',a.id,'authority_hash',encode(a.authority_hash,'hex'),'movement_id',m.id,
+      'final_revision_id',a.final_revision_id,'policy_snapshot_id',p.id,'policy',v_policy,
+      'authority',to_jsonb(a)-array['state','created_at_utc'],'policy_snapshot',to_jsonb(p),
+      'source_observation_kind',a.source_observation_kind,'candidate_reimbursement_ex_vat',a.candidate_reimbursement_ex_vat,
+      'client_charge_ex_vat',a.client_charge_ex_vat));
+  end loop;
+  if exists(select 1 from jsonb_array_elements(v_result) x group by x->>'work_event_id' having count(*)<>1) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  return (select coalesce(jsonb_agg(x order by x->>'work_event_id'),'[]') from jsonb_array_elements(v_result) x);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_expense_authority_evidence_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_expense_authority_evidence_v1(uuid,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_approved_expense_evidence_v1(p_root_id uuid,p_inventory jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_origin jsonb:=p_inventory#>'{approval_basis,origin}'; v_ids jsonb; v_result jsonb;
+  v_source jsonb; v_components jsonb:=p_inventory->'components';
+begin
+  -- The complete native approval basis is required even for an empty expense set.
+  if p_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'
+    or private.weekly_source_inventory_approval_basis_v2(p_root_id,p_inventory) is distinct from p_inventory->'approval_basis' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  if v_origin->>'kind'='INITIAL_AUTHORISED_TSFIN_V1' then
+    select coalesce(jsonb_agg(m.expense_authority_generation_id order by m.expense_authority_generation_id),'[]') into v_ids
+      from public.weekly_source_expense_pay_materialisations m where m.root_timesheet_id=p_root_id
+        and m.candidate_timesheet_financial_id=(v_origin->>'financial_snapshot_id')::uuid;
+  elsif v_origin->>'kind'='COMMITTED_SOURCE_HEAD_V1' then
+    v_source:=v_origin->'source_revision';
+    if v_source->>'origin_kind'='PROTECTED_LOCAL_DECISION_V1' then
+      select coalesce(jsonb_agg(x#>'{document,source_expense_id}' order by x#>>'{document,source_expense_id}'),'[]') into v_ids
+        from jsonb_array_elements(private.weekly_source_staged_source_documents_v1((v_source->>'publication_request_id')::uuid)) x
+        where x->>'authority_kind'='SOURCE_EXPENSE';
+    elsif v_source->>'final_revision_id' is not null and coalesce(v_source->>'origin_kind','CURRENT_FINAL_SOURCE_V1')='CURRENT_FINAL_SOURCE_V1' then
+      select coalesce(jsonb_agg(x->'expense_authority_generation_id' order by x->>'expense_authority_generation_id'),'[]') into v_ids
+        from jsonb_array_elements(private.weekly_source_ordinary_projection_current_expenses_v1(
+          p_root_id,(v_source->>'final_revision_id')::uuid)) x;
+    else raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  else raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  v_result:=private.weekly_source_expense_authority_evidence_v1(p_root_id,v_ids);
+  if jsonb_array_length(v_result)<>(select count(*) from jsonb_array_elements(v_components) x where x->>'component_kind'='SOURCE_FIXED_EXPENSE')
+    or exists(select 1 from jsonb_array_elements(v_components) c where c->>'component_kind'='SOURCE_FIXED_EXPENSE'
+      and (select count(*) from jsonb_array_elements(v_result) e where e->>'work_event_id'=c->>'component_member_identity'
+        and e->>'source_observation_kind'=c->>'expense_code'
+        and (e->>'candidate_reimbursement_ex_vat')::numeric=(c->>'pay_ex_vat')::numeric
+        and (e->>'client_charge_ex_vat')::numeric=(c->>'charge_ex_vat')::numeric)<>1) then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_EXPENSE_UNAVAILABLE' using errcode='55000'; end if;
+  return v_result;
+end;
+$function$;
+alter function private.weekly_source_approved_expense_evidence_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_approved_expense_evidence_v1(uuid,jsonb) from public,anon,authenticated,service_role;

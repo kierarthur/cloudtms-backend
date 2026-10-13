@@ -1,0 +1,33 @@
+{
+  "status": "FROZEN_EVIDENCE_PRESERVED_NO_RUNTIME_INTEGRATION",
+  "packets": [
+    {
+      "folder": "protected-source-qualification",
+      "manifestSha256": "92761006ed24966678f98a28c3988143873c70acf69a9df9d4c720dd64b57aa7",
+      "artifactCount": 24,
+      "status": "SOURCE_CRITIC_REJECTS_OPERATIONAL_ACTIVATION_AS_WRITTEN"
+    },
+    {
+      "folder": "cn-a0-lock-fence",
+      "manifestSha256": "0c1c69391c772ec5fda1b2945094fdd14128159e6514fa02772fcdc71383ec1d",
+      "artifactCount": 35,
+      "status": "UNMOUNTED_NATIVE_CREATOR_PHANTOM_AND_LATE_HOOK_HOLDS"
+    },
+    {
+      "folder": "automatic-native-delta-root-b9e2-review",
+      "manifestSha256": "e413b82d44e2b417f0b1a270150b17d4db2da418f3b645532c9ab8b9e64790fa",
+      "artifactCount": 16,
+      "status": "SOURCE_REVIEW_NATIVE_CAS_FINANCIAL_API_GATES_PENDING"
+    },
+    {
+      "folder": "automatic-native-delta",
+      "manifestSha256": "8c640b781800532e562405dd8bcbf818b1ec9f8a07f7352dd68fefc95381d939",
+      "artifactCount": 23,
+      "status": "FROZEN_SOURCE_PREDECESSOR_FORWARD_STABLE_KEY_REPAIR_REQUIRED"
+    }
+  ],
+  "files": 103,
+  "criticSha256": "6baa6d226e9e57848ee62f03d3e2737cad65933b8d986eb6769619516b8ba9ba",
+  "sourceCorrectionDisposition": "All three critic findings accepted for forward correction; pendingV2 activation rejected. Source-only frameworks do not constitute runtime or full PartB sign-off.",
+  "runtimeFilesChanged": 0
+}

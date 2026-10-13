@@ -1,0 +1,35 @@
+{
+  "schema_version": "PROTECTED_SOURCE_ROLLBACK_QUALIFICATION_NATIVE_JOURNEYS_V1",
+  "status": "SOURCE_ONLY_ALL_NATIVE_GATES_HELD",
+  "batch": {"database":"cloudtms_test_clone","sql_byte_limit":2000000,"statement_limit":250,"maximum_native_steps":64,"transaction":"one root-owned BEGIN/ROLLBACK","turn":"separate root connection pg_try_advisory_lock(20261013,1) before fingerprints; release after fresh verification"},
+  "prerequisites": [
+    "Real protected disabled-first R1 VERIFIED with exact generated contract and catalogue digest",
+    "Root-reviewed original Client/root/date scope and exact setup/vacancy manifest",
+    "Complete directly invoked native owner and active trigger external-effect review",
+    "Genuine published export/comparison and actual signed Candidate/manager/document owner evidence",
+    "Actual published compatible Banking/NEXT installation for NEXT-specific proof"
+  ],
+  "closed_operations": ["BULK_PREVIEW","BULK_ADMIT","BULK_ROUND","BULK_APPLY","PREPARE_FAMILY","PREPARE_ACTION","ACTION_CONTEXT","STAGE_C1_REQUEST","COMPLETE_LOCAL","AUTOMATIC_PREVIEW","AUTOMATIC_COMPLETE"],
+  "gates": [
+    {"gate":"SOURCE_CAS_NATIVE","calls":["qualification_census_v1","bulk_source_facts_v1","qualification_step_v1(BULK_PREVIEW/ADMIT/ROUND/APPLY)"],"assertions":["all 39 exact categories re-derived","two Clients survive first completed round","native own stage changes none of those Source categories","each Source category change and external root growth refuses40001"]},
+    {"gate":"NATIVE_PROTECTION","calls":["bulk_signed_claim_v1","prepare_family_v1","prepare_action_v1","action_context_v1","stage_c1_request_v1","complete_local_v1"],"assertions":["genuine immutable signed claim","actual unchanged native context/composer outputs","one actual K-to-K+1 stage","real same-family and cross-Candidate rounds/recovery/replay","no fabricated target or financial READY"]},
+    {"gate":"SECURITY","calls":["qualification_begin_v1","qualification_assert_v1","qualification_step_v1","existing active-admin/Office/service owners"],"assertions":["owner session only; browser/service denied","forged audit or arbitrary caller without dispatcher refused","lost turn/xid/backend/day/VERIFIED/actor/group/date/root/CAS refused","operational readiness and public availability remain false"]},
+    {"gate":"LEGACY_PAY","calls":["native complete_local_v1 and retained LEGACY entitlement/TSFIN writers"],"assertions":["actual LEGACY control","exact ordinary Source pay receipt identity/amount unchanged","native protected amount/structural identity","no payment/provider/settlement/send/queue drain"]},
+    {"gate":"NEXT_PAY","calls":["native Candidate gate/I-1/NEXT composers and publication owners via actual installed path"],"assertions":["genuine published NEXT installation","complete sorted family census and empty/growth fencing","unchanged native hooks","no module-control toggle"],"hold":"BANKING_FIRST_INSTALL_AND_JOINED_NATIVE_PROOF"},
+    {"gate":"CLIENT_API","calls":["owner-private qualification dispatcher -> actual public native command","unchanged trusted Worker payload/parser/error-order core"],"assertions":["closed trusted actor/payload core","native preview/admit/round/apply and partial receipts","source CAS error order","full HTTP replay expressly not claimed"],"post_activation_required":"actual authenticated HTTP preview/commit/retry and UI/deep-link journeys"},
+    {"gate":"DOCUMENT","calls":["native Source snapshot/admission/allocation/issue/FINAL_ISSUE model","existing actual document renderer"],"assertions":["actual source bytes/hash/authority","qualified immutable report/rounding membership","zero pending authority omitted only by exact suppression proof","actual native renderer/pay exclusion A and B separately"],"hold":"GENUINE_SIGNATURE_BYTES_RENDERER_APP_PREREQUISITES"},
+    {"gate":"OWN_STAGE_CAS","calls":["bulk_own_stage_v1","bulk_own_stage_context_v1","root1745 four-fact context","qualification_step_v1(STAGE_C1_REQUEST/BULK_ROUND/APPLY)"],"assertions":["only exact own native pending event excluded","no foreign/partial/tampered WAIT bypass","full original Client census retained","all 39 categories unchanged before/after native stage"]},
+    {"gate":"SOURCE_ROUTING","calls":["same private non-self-bill admission owner","actual native Source prepare/action/context/stage/complete"],"assertions":["actual legally configured non-self-bill import authority without policy rewrite","NULL-rule/legacy/signed/NHSP negatives","same genuine source revision/cycle/hash and original-only pay admission","no earlier-window fake cycle/movement"],"hold":"LEGAL_CURRENT_SCOPE_AND_LAWFUL_UPLOAD_DATE_REQUIRED"},
+    {"gate":"AUTOMATIC_COMPONENT_DELTA","optional":true,"calls":["actual enabled S18b rule","credit-owned native staged delta assertion","automatic capability admission and native completion"],"assertions":["literal full components/segment identities","actual before/after equality","money and structural zero","mismatch manual only"],"hold":"ACTUAL_ENABLED_RULE_NATIVE_DATE_NEXT_AND_DELTA_PROOF"}
+  ],
+  "financial_oracles": [
+    {"case":"declared TEST 8hDAY","pay_pence":16000,"net_pence":24000,"vat_pence":4800,"gross_pence":28800},
+    {"case":"M1 whole overnight NIGHT","pay_pence":12000,"net_pence":18000,"vat_pence":3600,"gross_pence":21600,"source_total_cost":"ignored"},
+    {"case":"opposite VAT errors mixed immutable choices","line_net_pence":[10000,10000],"raw_vat_pence":[2002,1998],"admitted_vat_pence":[2000,1998],"rounding_pence":2,"invoice_vat_pence":4000,"invoice_gross_pence":24000},
+    {"case":"report A native parser static oracle","net_pence":3301,"vat_pence":660,"gross_pence":3961},
+    {"case":"report B native parser static oracle","net_pence":3301,"vat_pence":661,"gross_pence":3962}
+  ],
+  "date_guards": {"actual_local_date":"2026-10-13","legacy_control_sunday":"2026-10-11","first_future_F1_sunday":"2026-10-18","coverage_floor":"2026-10-12","default_enabled_upload_earliest":"2026-10-22 Europe/London","old_2025_corpus":"static oracle only, never retagged"},
+  "fresh_verification": ["scope audit object IDs/action marker absent","exact fixture namespace IDs/names/codes/emails and descendants absent","exact original four catalogue/ledger fingerprints","TEST identity LEGACY:1 restored","no sender/provider/network/queue-drain invocation"],
+  "r2_channel": {"input":"fixed committed prerequisite bundle with R1-only identities","identity":"actual source-gated R2 HEAD and protected manifest","equality":"all literal native Git blobs plus actual same verified installed contract/catalogue","replay":"same evidence allowed, replacement conflict refused","operational_acceptance":"all six obligations still required after lawful activation"}
+}

@@ -1,0 +1,119 @@
+{
+  "schema_version": "AUTOMATIC_B9E2_ADJACENT_REVIEW_MANIFEST_V1",
+  "status": "REVIEWED_SOURCE_ONLY_NATIVE_COMPILE_EXECUTION_AND_EXPOSURE_HELD",
+  "baseline": "b9e2cbfcdf061a4e8fe07044e658c2daf043a362",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "artifacts": [
+    {
+      "path": "12_complete_private_registry_union.sqlinc",
+      "bytes": 35662,
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+    },
+    {
+      "path": "13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "path": "14_complete_acl_verifier_union.sqlinc",
+      "bytes": 68399,
+      "sha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4"
+    },
+    {
+      "path": "15_final_automatic_private_acl.sqlinc",
+      "bytes": 2578,
+      "sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c"
+    },
+    {
+      "path": "16_proposed_root.sqlinc",
+      "bytes": 1357,
+      "sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da"
+    },
+    {
+      "path": "CONTROLLING_INPUTS.json",
+      "bytes": 47997,
+      "sha256": "6c9c9f67c6c46cc405a78ebbdf572596693b81a4c99365b687e81902e3f07da8"
+    },
+    {
+      "path": "INTEGRATION_PLAN.md",
+      "bytes": 7449,
+      "sha256": "d82f6a7fe226be953750c6156bd5fa34a6c8a97eb256330841d43fcc40f16c06"
+    },
+    {
+      "path": "INTEGRATION_RECEIPT_PROPOSAL.json",
+      "bytes": 25731,
+      "sha256": "d0daa9c25f63ba6c0d107d979101211ed5628350649dc353dd39aa7a2369305e"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 7269,
+      "sha256": "dd0a63437b5f3acdfd5c0d193d4982d559168b68c08a5f689b1084617eb5cb1f"
+    },
+    {
+      "path": "SOURCE_CENSUS.json",
+      "bytes": 1729301,
+      "sha256": "aed8f0f14c5538865cb487d74f7d9125b40b1b83f7225f6892222be975d43685"
+    },
+    {
+      "path": "VERIFIER_SAFETY_REREVIEW.json",
+      "bytes": 26740,
+      "sha256": "420e001d511f1d457b53332d8da7b0622b5d503a028bb45df8081a322476c881"
+    },
+    {
+      "path": "build-census.mjs",
+      "bytes": 3609,
+      "sha256": "78b8f2d39434d610ba08e6c2d820c7774f279679843b882ed3688fa0588b841b"
+    },
+    {
+      "path": "build-review.mjs",
+      "bytes": 22840,
+      "sha256": "53d2a62da0fa8896fb0fad757d278fb61c8b8ee7ca51a59627069766e3dbc2b1"
+    },
+    {
+      "path": "freeze-source.mjs",
+      "bytes": 2156,
+      "sha256": "c1829408c961c9bc9e83ca139932bd080638eb552a5e2f27c595838c3b3f8a1d"
+    },
+    {
+      "path": "read-source.mjs",
+      "bytes": 9463,
+      "sha256": "73e7f4d90519568adfd4517d8f52410432f3ddfea2df6296d1d78b2be83a4f3a"
+    },
+    {
+      "path": "review.test.mjs",
+      "bytes": 11137,
+      "sha256": "974e73b24e405436945c08fa88a9a923d15e66cd3b3f9727a885194898b48563"
+    }
+  ],
+  "artifact_count": 16,
+  "package_sha256": "4ac038caf93da538965828e71a5955b5c439f712158bc61d68888b2d717da9cf",
+  "local_checks": {
+    "original_automatic": 31,
+    "stable_key_forward": 5,
+    "adjacent_review": 13,
+    "total": 49,
+    "pass": 49,
+    "fail": 0,
+    "skip": 0,
+    "command": "node --test tests/weekly-source/automatic-native-delta-proposal.test.mjs docs/healthroster-build/proposals/automatic-native-delta-forward-review/forward-review.test.mjs docs/healthroster-build/proposals/automatic-native-delta-root-b9e2-review/review.test.mjs",
+    "qualification": "Real source/hash/reverse-proof/native-carrier and adversarial comparison checks; official SQL packaging scanner only, no PostgreSQL semantic compilation or native acceptance."
+  },
+  "unchanged": {
+    "rootFiles": true,
+    "frozenAutomatic23": true,
+    "frozenStableKey7": true,
+    "frozenReport53": true,
+    "frozenFixture16": true,
+    "old168SafetyReviews": true,
+    "old152Eligible16Exclusions": true
+  },
+  "databaseCalls": false,
+  "networkBusinessCalls": false,
+  "APIExposure": false,
+  "root_gates": [
+    "Actual latest capability/Bank ACL union and generated contract.",
+    "SEND_7 isolated native fixture reruns and complete K->K+1 component/receipt/Source-CAS proof.",
+    "Post-Banking NEW/UPGRADE rehearsal and exact release/native/API evidence.",
+    "Report public FIN dispatch/operational A/B remains held; no pay or settlement inferred."
+  ]
+}

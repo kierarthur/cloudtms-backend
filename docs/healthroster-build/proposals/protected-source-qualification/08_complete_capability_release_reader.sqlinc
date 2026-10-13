@@ -1,0 +1,67 @@
+create or replace function private.weekly_source_protected_capability_release_evidence_v1(
+  p_group_id uuid,p_from date,p_to date,p_expected_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare g public.weekly_source_groups%rowtype; r private.cloudtms_database_releases%rowtype;
+  q jsonb; entry jsonb; count_rows integer; needed text[]; cap text;
+begin
+  select * into strict g from public.weekly_source_groups where id=p_group_id and active and source_family='ROSTER';
+  select * into r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if not found or r.status<>'VERIFIED' or r.completed_at_utc is null
+    or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or g.environment<>'TEST' or current_database()<>'cloudtms_test_clone'
+    or not exists(select 1 from private.cloudtms_database_identity where singleton and environment=g.environment)
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from g.environment
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or jsonb_typeof(r.evidence_json->'weekly_source_protected_capability_qualifications') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  select count(*),jsonb_agg(value)->0 into count_rows,q
+    from jsonb_array_elements(r.evidence_json->'weekly_source_protected_capability_qualifications') value
+    where value->>'source_group_id'=g.id::text and value->>'effective_from_week_ending'=p_from::text
+      and value->>'effective_to_week_ending' is not distinct from p_to::text;
+  if count_rows=1 and q->>'schema_version'='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2' then
+    return private.weekly_source_protected_prerequisite_release_assert_v2(q,p_group_id,p_from,p_to,p_expected_sha256);
+  end if;
+  if count_rows<>1 or not private.weekly_exceptional_json_keys_exact_v1(q,array[
+      'schema_version','release_id','git_commit','contract_sha256','agency_id','environment','source_group_id',
+      'effective_from_week_ending','effective_to_week_ending','capabilities','gate_receipts','qualification_sha256'])
+    or not(q ?& array['schema_version','release_id','git_commit','contract_sha256','agency_id','environment','source_group_id',
+      'effective_from_week_ending','effective_to_week_ending','capabilities','gate_receipts','qualification_sha256'])
+    or q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1'
+    or q->>'release_id' is distinct from r.release_id or q->>'git_commit' is distinct from r.git_commit
+    or q->>'contract_sha256' is distinct from r.installed_contract_sha256
+    or q->>'agency_id' is distinct from g.agency_id::text or q->>'environment' is distinct from g.environment
+    or coalesce(q->>'qualification_sha256','') !~ '^[0-9a-f]{64}$'
+    or q->>'qualification_sha256' is distinct from p_expected_sha256
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1',q-'qualification_sha256'),'hex')
+      is distinct from q->>'qualification_sha256'
+    or jsonb_typeof(q->'capabilities') is distinct from 'array' or jsonb_array_length(q->'capabilities') not between 1 and 2
+    or exists(select 1 from jsonb_array_elements(q->'capabilities') value where jsonb_typeof(value)<>'string'
+      or value#>>'{}' not in ('BULK_SIGNED','AUTOMATIC_RECONCILE'))
+    or (select count(distinct value) from jsonb_array_elements(q->'capabilities') value)<>jsonb_array_length(q->'capabilities')
+    or (q->'capabilities' @> '["AUTOMATIC_RECONCILE"]'::jsonb and not(q->'capabilities' @> '["BULK_SIGNED"]'::jsonb))
+    or jsonb_typeof(q->'gate_receipts') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','SECURITY','LEGACY_PAY','NEXT_PAY','CLIENT_API','DOCUMENT','OWN_STAGE_CAS','SOURCE_ROUTING'];
+  if q->'capabilities' @> '["AUTOMATIC_RECONCILE"]'::jsonb then needed:=array_append(needed,'AUTOMATIC_COMPONENT_DELTA'); end if;
+  if jsonb_array_length(q->'gate_receipts')<>cardinality(needed)
+    or (select count(distinct value->>'gate') from jsonb_array_elements(q->'gate_receipts') value)<>cardinality(needed) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  for entry in select value from jsonb_array_elements(q->'gate_receipts') value loop
+    if not private.weekly_exceptional_json_keys_exact_v1(entry,array['gate','status','execution','database','receipt_id','receipt_sha256',
+        'source_commit','contract_sha256','source_group_id','agency_id','environment'])
+      or not(entry ?& array['gate','status','execution','database','receipt_id','receipt_sha256',
+        'source_commit','contract_sha256','source_group_id','agency_id','environment'])
+      or not(coalesce(entry->>'gate','')=any(needed)) or entry->>'status' is distinct from 'PASS'
+      or entry->>'execution' is distinct from 'AGENCY_TEST_NATIVE' or entry->>'database' is distinct from current_database()
+      or entry->>'source_commit' is distinct from r.git_commit or entry->>'contract_sha256' is distinct from r.installed_contract_sha256
+      or entry->>'source_group_id' is distinct from g.id::text or entry->>'agency_id' is distinct from g.agency_id::text
+      or entry->>'environment' is distinct from g.environment or nullif(btrim(entry->>'receipt_id'),'') is null
+      or char_length(entry->>'receipt_id')>256 or coalesce(entry->>'receipt_sha256','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  end loop;
+  return q;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;
