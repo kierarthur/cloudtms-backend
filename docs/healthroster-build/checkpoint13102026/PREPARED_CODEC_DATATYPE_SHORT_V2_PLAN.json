@@ -1,0 +1,28 @@
+{
+  "status": "PREPARED_ONLY_OWNED_SEND7_TURN_AND_EXACT_ABSENCE_REQUIRED",
+  "sourceCommit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/proposals/report-prepared-output-array-forward/02_complete_codec_array_forward.sqlinc",
+      "gitBlobSha256": "eea1f99feef1117dad7913139636b28178dbc191cb41a0622f0518a259288769"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-prepared-output-retention/CODEC_FIELDS.json",
+      "gitBlobSha256": "87fae1af68fb75d23d1c625300abedcaadde1922bed02250213de96505b51fe5"
+    },
+    {
+      "file": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "gitBlobSha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-prepared-output-array-forward/NATIVE_ARRAY_DATA_CASES.sqlinc",
+      "gitBlobSha256": "53848d9a8c2068edd37fbf3c6b046c7156e754dd7ac9f31d5f966ee3b8b94ba7"
+    }
+  ],
+  "bytes": 41860,
+  "statements": 10,
+  "sqlSha256": "43fc288e0a9046cfe2c6b41a0a46c90b83895d0f937899df2bd53a2b7bcb5e61",
+  "signature": "private.weekly_source_report_prepared_financial_codec_v1(public.timesheets_financials)",
+  "scope": "Exact single new codec definition plus native datatype/typed NON-PERSISTED composites, exact security/config and NULL/nonfinite typed refusal/restoration only. No table, business row, financial writer, receipt, signature, publication, capability, queue or external action. Synthetic zero/text/id/timestamps are type samples, not accepted money/date/actor evidence. Retained reader, capture/trigger/financial/contract/API qualification remains held.",
+  "freshVerification": "Complete public/private function fingerprint and original array_nulls equal; exact codec absent; physicalTEST/LEGACY:1."
+}
