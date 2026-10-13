@@ -10,10 +10,10 @@ function pathPattern(path) {
 
 function closedPolicy() {
   if (candidateOperationPolicy?.version !== 2
-      || candidateOperationPolicy?.operation_count !== 68
+      || candidateOperationPolicy?.operation_count !== 72
       || candidateOperationPolicy?.routing_authority !== 'SERVER_OWNED_ONLY'
       || !Array.isArray(candidateOperationPolicy.operations)
-      || candidateOperationPolicy.operations.length !== 68) {
+      || candidateOperationPolicy.operations.length !== 72) {
     throw new Error('CANDIDATE_OPERATION_POLICY_INVALID');
   }
   const ids = new Set();
@@ -37,7 +37,7 @@ function closedPolicy() {
 export const CANDIDATE_OPERATION_POLICY = closedPolicy();
 export const CANDIDATE_OPERATION_POLICY_VERSION = candidateOperationPolicy.version;
 export const CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256 =
-  '69b712d3b9dd1cf0ca948a3fa1ce530b20de1aa9da91fe63f035f29abb0f4515';
+  '9b7416efd74aef0e037f0a195f5f7afacb7799db2dd83b0617118496e2d8bb5c';
 
 const BY_ID = new Map(CANDIDATE_OPERATION_POLICY.map((entry) => [entry.operation_id, entry]));
 

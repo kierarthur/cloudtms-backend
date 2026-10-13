@@ -117,7 +117,7 @@ import {
   displayedTimesheetRouteLabel
 } from './timesheet-route-sort.js';
 import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
-import { createCandidateDailySpecialist } from './candidate-daily-specialist.js';
+import { createCandidateDailySpecialist, createCandidateDailyProjectionWake } from './candidate-daily-specialist.js';
 import {
   CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
   handleCandidateManagerEmailE2EProof
@@ -198675,6 +198675,7 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
     routeAudience,
     rpc: candidateRpc,
     candidateDailySpecialist: createCandidateDailySpecialist(env, candidateRpc, ctx),
+    wakeCandidateDailyProjection: createCandidateDailyProjectionWake(env, ctx),
     controlPlaneRpc: (schema, functionName, args) =>
       managerControlPlaneRpc(env, schema, functionName, args),
     requireOfficeUser: (request, roles) => requireUser(env, request, roles),

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { canonical, digest, exactAtomicBody, literal, MANAGED_RELEASE_LOCK,
   MANAGED_RELEASE_VERSION, managedManifestHash, readManagedClosure, scanManagedSql } from './cloudtms-managed-release-sql.mjs';
 import { BOOTSTRAP_PIN, BASELINE_MIGRATION_PREFIX, MANAGED_EXCEPTIONS, executionPolicy } from './cloudtms-managed-execution-policy.mjs';
 import { READER_PREPARATION, readerReleasePhases, readerActivationSql } from './weekly-source-reader-release.mjs';
-import { logicalPostgresExecutablePolicy } from './cloudtms-db-release-lib.mjs';
-import { closeFinalDefinerSelection } from './bpay-next-final-definers.mjs';
+import { logicalPostgresExecutablePolicy, mapExecutableSqlSource } from './cloudtms-db-release-lib.mjs';
+import { closeFinalDefinerSelection, routineDefinitions } from './bpay-next-final-definers.mjs';
 
 const json = value => `${literal(JSON.stringify(value))}::jsonb`;
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -20,6 +21,27 @@ export const OWNER_RLS_ENVELOPE = Object.freeze({
   closureSha256: '8f09eabdcba2d936db4aebf87fa2ed59dd1b0b5b91c0375dbfdbc7ba117f3790',
   schema: 'public', table: 'candidate_manager_email_template_versions',
   policy: 'cloudtms_managed_installer_owner_seed', expectedPolicyCount: 0,
+});
+// Two immutable migrations name this existing table-free guard before the
+// normal repeatable phase. Declare its exact authority in their atomic packet;
+// never replay the whole guards file early or use a permissive trigger shim.
+export const IMMUTABLE_GUARD_DEPENDENCY = Object.freeze({
+  version: 'CLOUDTMS_IMMUTABLE_GUARD_DEPENDENCY_V1',
+  source: 'supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql',
+  sourceSha256: 'd29decd59c88c2620fe658b5d96f0deace19063cd0eaddf150ea7cf09c7b60af',
+  sourceClosureSha256: '82ac1db0302dd5d77c1acbe6b708edc811a64dd8ac5f99dbe441a0cb5f7a180c',
+  signature: 'private.bpay_next_effect_immutable_v1()',
+  statementSha256: 'b73804883751b33d8f200643319ebd95309292b6b3cdf8ae1d8f9fcb6121052b',
+  consumers: Object.freeze({
+    'supabase/migrations/11102026_2129_banking_pay_next_case_hold_audit.sql': Object.freeze({
+      contentSha256: '41b429dd1447d1dbc4e63f72a91bddbde3d8916772a0dcc73feca177518ba91e',
+      closureSha256: 'ee3378237e29e49f6b9ad5854afac300be42b72ea0024b94f3403106ffbcdd8d',
+    }),
+    'supabase/migrations/12102026_0645_banking_pay_next_confirm_refresh_membership.sql': Object.freeze({
+      contentSha256: '28785f633847c5fecfd937793d8cdc841299f7847975da779b8019a89a345763',
+      closureSha256: '430ccb09bed6de441a5f150b2422d20a1c37f2293c2a8a3c9a1bab2e7ed89186',
+    }),
+  }),
 });
 export const emptySchemaSql = `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');`;
 export const acquireWriterSql = `select pg_catalog.pg_try_advisory_lock(pg_catalog.hashtextextended(${literal(MANAGED_RELEASE_LOCK)},0));`;
@@ -55,6 +77,7 @@ export function managedEvidence(context, extra = {}) {
   validateContext(context);
   return { managed_release: { version: MANAGED_RELEASE_VERSION, manifest_sha256: context.manifestHash,
     owner_rls_envelope_version: OWNER_RLS_ENVELOPE.version,
+    immutable_guard_dependency_version: IMMUTABLE_GUARD_DEPENDENCY.version,
     expected_database: context.expectedDatabase, environment: context.environment, customer_key: context.customerKey,
     bootstrap_complete: context.mode === 'NEW' }, ...extra };
 }
@@ -129,6 +152,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
   const expected = kind === 'migration' ? digest(closure.ordered[0].source) : closure.closureHash;
   if (expected !== item.sha256) throw Error(`MANAGED_SOURCE_CHANGED: ${item.path}`);
   const ownerRlsEnvelope = ownerRlsEnvelopeFor(closure, kind);
+  const immutableGuardDependency = immutableGuardDependencyFor(closure, kind, root);
   // Dollar bodies remain opaque to the packaging lexer. This conservative
   // refusal is additional guard integrity, not a claim that arbitrary DO
   // effects were proved safe by their statement head.
@@ -148,8 +172,69 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
     }
     return { item, kind, closure, exception, script: `\\ir ${quotePsqlPath(executable)}\n` };
   }
-  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope }; }
+  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency }; }
   catch (error) { throw Error(`MANAGED_EXECUTION_ENVELOPE_UNCLASSIFIED: ${item.path} (${error.message})`); }
+}
+
+function immutableGuardDependencyFor(closure, kind, root) {
+  const scope = IMMUTABLE_GUARD_DEPENDENCY.consumers[closure.path];
+  if (!scope) return null;
+  if (kind !== 'migration' || closure.files.size !== 1 || closure.ordered.length !== 1
+      || closure.files.get(closure.path) !== scope.contentSha256 || closure.closureHash !== scope.closureSha256) {
+    throw Error('MANAGED_IMMUTABLE_GUARD_CONSUMER_SOURCE_MISMATCH');
+  }
+  const source = readManagedClosure(IMMUTABLE_GUARD_DEPENDENCY.source, root);
+  if (source.files.size !== 1 || source.ordered.length !== 1
+      || source.files.get(source.path) !== IMMUTABLE_GUARD_DEPENDENCY.sourceSha256
+      || source.closureHash !== IMMUTABLE_GUARD_DEPENDENCY.sourceClosureSha256) {
+    throw Error('MANAGED_IMMUTABLE_GUARD_SOURCE_MISMATCH');
+  }
+  const text = source.ordered[0].source;
+  const statements = scanManagedSql(text).statements.map(row => text.slice(row.start, row.end))
+    .filter(statement => routineDefinitions(statement, source.path).includes(IMMUTABLE_GUARD_DEPENDENCY.signature));
+  if (statements.length !== 1 || digest(statements[0]) !== IMMUTABLE_GUARD_DEPENDENCY.statementSha256) {
+    throw Error('MANAGED_IMMUTABLE_GUARD_STATEMENT_MISMATCH');
+  }
+  return { scope, statement: statements[0] };
+}
+
+function immutableGuardDependencySql(unit) {
+  const scope = IMMUTABLE_GUARD_DEPENDENCY.consumers[unit.item.path];
+  const dependency = unit.immutableGuardDependency;
+  if (!scope || unit.kind !== 'migration' || unit.exception || unit.ownerRlsEnvelope || dependency?.scope !== scope
+      || unit.item.sha256 !== scope.contentSha256 || unit.closure.files.size !== 1 || unit.closure.ordered.length !== 1
+      || digest(unit.closure.ordered[0].source) !== scope.contentSha256
+      || unit.closure.files.get(unit.item.path) !== scope.contentSha256 || unit.closure.closureHash !== scope.closureSha256
+      || unit.body !== exactAtomicBody(unit.closure.expanded)
+      || unit.body !== exactAtomicBody(mapExecutableSqlSource(unit.closure.ordered[0].source,unit.item.path))
+      || digest(dependency.statement) !== IMMUTABLE_GUARD_DEPENDENCY.statementSha256) {
+    throw Error('MANAGED_IMMUTABLE_GUARD_SCOPE_INVALID');
+  }
+  const tag = '$function$',start = dependency.statement.indexOf('as '+tag)+3+tag.length;
+  const body = dependency.statement.slice(start,dependency.statement.lastIndexOf(tag));
+  const bodyMd5 = createHash('md5').update(body).digest('hex');
+  const declaration = mapExecutableSqlSource(dependency.statement+`
+alter function private.bpay_next_effect_immutable_v1() owner to postgres;
+revoke all on function private.bpay_next_effect_immutable_v1() from public, anon, authenticated, service_role;
+`, IMMUTABLE_GUARD_DEPENDENCY.source);
+  return `do $managed_immutable_dependency$
+  declare v_guard oid := pg_catalog.to_regprocedure('private.bpay_next_effect_immutable_v1()');
+  begin
+    if v_guard is null then
+      ${declaration}
+    elsif not exists(select 1 from pg_catalog.pg_proc p
+      join pg_catalog.pg_language l on l.oid=p.prolang
+      where p.oid=v_guard and p.proowner=current_user::regrole::oid
+        and l.lanname='plpgsql' and p.prorettype='pg_catalog.trigger'::regtype
+        and p.prokind='f' and p.pronargs=0 and not p.proretset and not p.prosecdef
+        and not p.proisstrict and not p.proleakproof and p.provolatile='v' and p.proparallel='u'
+        and pg_catalog.md5(p.prosrc)=${literal(bodyMd5)}
+        and p.proconfig=array['search_path=pg_catalog, private']::text[]
+        and not exists(select 1 from pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+          where a.grantee<>p.proowner or a.privilege_type<>'EXECUTE')) then
+      raise exception 'MANAGED_IMMUTABLE_GUARD_PREDECESSOR_MISMATCH' using errcode='23514';
+    end if;
+  end $managed_immutable_dependency$;`;
 }
 
 function ownerRlsEnvelopeFor(closure, kind) {
@@ -253,6 +338,9 @@ export function quotePsqlPath(file) {
 
 export function unitCheckpointSql(unit, context) {
   const ledger = unit.kind === 'migration' ? migrationLedgerSql(unit.item,context) : repeatableLedgerSql(unit.item,context);
+  if (unit.immutableGuardDependency || Object.hasOwn(IMMUTABLE_GUARD_DEPENDENCY.consumers,unit.item.path)) {
+    return `begin;\n${assertWriterSql}\n${immutableGuardDependencySql(unit)}\n${unit.body}\n${assertWriterSql}\n${ledger}\ncommit;`;
+  }
   if (unit.ownerRlsEnvelope || unit.item.path === OWNER_RLS_ENVELOPE.path) {
     return `begin;\n${assertWriterSql}\n${ownerRlsEnvelopeSql(unit)}\n${assertWriterSql}\n${ledger}\ncommit;`;
   }
@@ -323,6 +411,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
   const result = { ...context, manifestHash: managedManifestHash({root,current,release,
     executionPolicy: { bootstrap:BOOTSTRAP_PIN, baselinePrefix, exceptions:MANAGED_EXCEPTIONS,
       ownerRlsEnvelope: OWNER_RLS_ENVELOPE,
+      immutableGuardDependency: IMMUTABLE_GUARD_DEPENDENCY,
       logicalOwnerMapping: logicalPostgresExecutablePolicy() }}) };
   validateContext(result); return result;
 }

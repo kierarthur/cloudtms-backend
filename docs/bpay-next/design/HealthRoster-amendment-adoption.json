@@ -1,0 +1,137 @@
+{
+  "decision": "BD177",
+  "date": "13/10/2026",
+  "adoptionBaseCommit": "863c6dfc82e4c35ca371fb5432f4acae83126dd0",
+  "approval": "Owner SEND1, subsequent SEND4/SEND4B",
+  "manifestSha256": "9a91e5a3636aa48f253dbcb03f5061f010c4dea63400f5bee1ad254ca1b3ca01",
+  "payload": [
+    {
+      "path": "AMENDMENT_CARDS.md",
+      "sha256": "5feac71272e37cb8545c2c7b1fba26129cc357b00a059cf8e29c184972ed8d78"
+    },
+    {
+      "path": "CHECKLIST_ROWS_NEW.csv",
+      "sha256": "90099e8a7c15187d94c3bd62035ec5b11a9e86c6ca8bb5604127888d8a4027d0"
+    },
+    {
+      "path": "CHECKLIST_ROWS_REOPEN.csv",
+      "sha256": "3b9e9b9b9dd0df3c60b2b26a3740ed22f1ea640c005602e5e664c3f948121a58"
+    },
+    {
+      "path": "SEQUENCE_INSERTIONS.md",
+      "sha256": "538167b9bf3096d6169c23eea0de593c336b93e29b59eebaa9bbc3493363cfc2"
+    },
+    {
+      "path": "TRACEABILITY.csv",
+      "sha256": "f6981e7d8884d62fac0628c6c51afe18449395ebfd1854f8d6f51186927492c8"
+    },
+    {
+      "path": "MERGE_INSTRUCTIONS_FOR_BUILDER.md",
+      "sha256": "c443809b1d536a194567f722b7c5645d9b85e89830fb8ce7ad504475f63112e7"
+    },
+    {
+      "path": "validate_amendment.py",
+      "sha256": "1864e286a67570c8f177094a53ed66608551ecbe7601b8c1a9fd9ba0a8748ead"
+    },
+    {
+      "path": "merge_checklist_preview.py",
+      "sha256": "e910feb86b535ebf40a4e8cd6b18413b01f71aa129c0b7084192bc8b51ca178c"
+    },
+    {
+      "path": "AMENDMENT_MODEL.json",
+      "sha256": "56051822c08c452c26b566aaeafe251e03d27646b91f41396014f66ed8cd423f"
+    },
+    {
+      "path": "SOURCE_SCHEMA_SNAPSHOT.json",
+      "sha256": "c8e6a25ba09290f1c108d3e6d0043154ddc4a89cacda91e67f30b1614ea267a8"
+    }
+  ],
+  "originalRowCount": 2571,
+  "appendedRowCount": 49,
+  "originalCsvBytePrefixSha256": "f2b868983fd6743b1845b54924a38ad2d74a1bec6ac623e36e4c89965a61ac1e",
+  "original29CellPreservation": true,
+  "originalMarkdownNarrativePreservedAsPrefix": true,
+  "counts": {
+    "ITEM": 299,
+    "DELIVERABLE": 1663,
+    "CONTEXT": 654,
+    "STEP": 4
+  },
+  "historicalBuiltReviewedItems": 116,
+  "openOwners": [
+    "F-14",
+    "SP-03",
+    "SP-04",
+    "SP-06",
+    "SP-13"
+  ],
+  "blockedGroup": [
+    "HR-06",
+    "HR-01",
+    "HR-03",
+    "HR-04",
+    "HR-07"
+  ],
+  "blockedChildren": [
+    "F-14-D03x-HR",
+    "SP-03-D05x-HR",
+    "SP-04-D06x-HR",
+    "SP-06-D06x-HR",
+    "SP-13-D04x-HR"
+  ],
+  "externalProducer": "HealthRosterWP-PP25 private.weekly_source_pay_actor_allowed_v1 and Worker helper reviewed compatible published commit/version/SHA required",
+  "overlay": {
+    "early": {
+      "afterOriginalSequence": 148,
+      "beforeOriginalItem": "XD-03",
+      "order": [
+        "HR-06",
+        "HR-01",
+        "HR-03",
+        "HR-04",
+        "HR-07"
+      ],
+      "status": "BLOCKED-ON-HEALTHROSTER"
+    },
+    "later": [
+      [
+        "HR-10",
+        179,
+        "EX-03"
+      ],
+      [
+        "HR-08",
+        218,
+        "PS-05"
+      ],
+      [
+        "HR-02",
+        234,
+        "SP-01"
+      ],
+      [
+        "HR-05",
+        268,
+        "CM-15"
+      ],
+      [
+        "HR-11",
+        286,
+        "S1"
+      ],
+      [
+        "HR-09",
+        286,
+        "S1"
+      ]
+    ]
+  },
+  "businessAcceptance": "AUTHORED_NOT_RUN",
+  "conflictsForTheirCardBoundary": [
+    "R217 historical Authorise pin versus current2223, never revert currentowner",
+    "HR10 requested quorum fit remains nongating; no silent waiver",
+    "HR01 no parkedF25producer revival"
+  ],
+  "currentAmendmentRequiredChildAggregate": 111,
+  "rawAllChildCheckedItems": 79
+}

@@ -17,6 +17,19 @@ const candidateId = '00000000-0000-4000-8000-000000000101';
 const generationId = '00000000-0000-4000-8000-000000000102';
 const sessionId = '00000000-0000-4000-8000-000000000103';
 const commandId = '00000000-0000-4000-8000-000000000104';
+test('legacy apply and recovery accept the historical MyTMS-primary rejection without opening the contract', () => {
+  const result = { request_receipt_id: commandId,
+    outcomes: [{ date: '2026-10-12', applied: false, reason: 'MYTMS_PRIMARY' }] };
+  const apply = { ok: true, result, correlation_id: correlationId };
+  const normalize = (operationId, body) => rebuildCandidateDailySuccessBody({ operationId }, 200, body, correlationId);
+  assert.deepEqual(normalize('googleAvailabilityLegacyApply', apply), apply);
+  const status = { ok: true, result: { request_id: commandId, state: 'COMPLETED', terminal_response: apply }, correlation_id: correlationId };
+  assert.deepEqual(normalize('googleAvailabilityLegacyStatus', status), status);
+  assert.equal(normalize('googleAvailabilityLegacyApply', { ...apply,
+    result: { ...result, outcomes: [{ ...result.outcomes[0], reason: 'ARBITRARY_REASON' }] } }), null);
+  assert.equal(normalize('googleAvailabilityLegacyApply', { ...apply,
+    result: { ...result, secret: 'unexpected' } }), null);
+});
 const access = {
   session_id: sessionId,
   selected_candidate_id: candidateId,

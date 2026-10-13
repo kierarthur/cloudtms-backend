@@ -2,10 +2,32 @@ import fs from 'node:fs';
 import './bpay-next-shared-calculator.test.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,assertNextQueueShapes,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
+import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,assertNextQueueShapes,verifyBpayNextSourceGates,specialConstructViolations,firstInstallIncomingHazards } from '../scripts/bpay-next-source-gates.mjs';
 
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
+});
+
+test('integrated TEST native point classifications reject changed bytes, scope and duplicate reads',()=>{
+  const files=['supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql',
+    'supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql',
+    'supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql'];
+  for(const file of files){
+    const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8').replaceAll('\r\n','\n');
+    assert.doesNotThrow(()=>assertSpecialConstructs(source,file,firstInstallIncomingHazards(source,file)));
+    const crlf=source.replaceAll('\n','\r\n');
+    assert.doesNotThrow(()=>assertSpecialConstructs(crlf,file,firstInstallIncomingHazards(crlf,file)));
+    assert.throws(()=>assertSpecialConstructs(source,'source.sql',firstInstallIncomingHazards(source,'source.sql')),/BPAY_NEXT_SQL_/);
+    const rows=specialConstructViolations(source,file),statement=JSON.parse(rows[0].key)[2];
+    const mutations=[source.replace(statement,()=>statement+'\n'+statement),
+      source.replace(statement,()=>statement.replace(/\bwhere\b/i,'where true or')),source+'\nselect min(gen_random_uuid());\n',
+      source+"\ndo $bad$begin execute 'select 1';end$bad$;\n"];
+    for(const changed of mutations){
+      assert.notEqual(changed,source);
+      assert.throws(()=>firstInstallIncomingHazards(changed,file),/BPAY_NEXT_FIRST_INSTALL_SOURCE_CLASSIFICATION_CHANGED/);
+      assert.throws(()=>assertSpecialConstructs(changed,file,firstInstallIncomingHazards(source,file)),/BPAY_NEXT_SQL_/);
+    }
+  }
 });
 test('catalog predecessor dollar metadata is data while actual dynamic execution stays refused',()=>{
   const metadata="if (select pg_catalog.pg_get_constraintdef(c.oid) from pg_catalog.pg_constraint c where c.conrelid='private.bpay_next_net_projection'::pg_catalog.regclass and c.conname='bpay_next_projection_case_cash') is distinct from $expected$CHECK (cash_amount=0)$expected$ then raise exception using errcode='23514',message='BPAY_NEXT_PREDECESSOR_MISMATCH'; end if;";

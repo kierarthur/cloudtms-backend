@@ -1287,6 +1287,10 @@
       "sha256": "f6f1d5b75c5ee3050e269eb38ea35403663c89e0471b6566ff458989e77bf232"
     },
     {
+      "path": "supabase/migrations/10102026_1622_candidate_notification_management.sql",
+      "sha256": "609cc16166e72d5e73977f7debeaeb11d67c88a2fd5427f4d0451087deeab991"
+    },
+    {
       "path": "supabase/migrations/10102026_1634_banking_pay_next_workbench_read_indexes_v1.sql",
       "sha256": "886cdd1d4333b05ec92ff6cf39b775bfe0a9f3225b02a8da2e237673b794b4b2"
     },

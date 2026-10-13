@@ -494,6 +494,10 @@ begin
   -- DR-10 rederived the same catalogue after its existing public intake/page
   -- successors: no public definer added/removed and no browser grant changed.
   -- Browser executable identities are empty; existing 76 omissions unchanged.
+  -- 13 October first-install integration: clean PG17 rederived the same
+  -- 839/76/0/338226c4e9b878c5aa92fc8e319dd7bf inventory. The two new
+  -- Candidate notification entry points are covered by the separate exact
+  -- Candidate-named verifier; neither belongs to this general inventory.
   if v_count<>839 or v_service_missing<>76 or v_browser_executable<>0
      or v_hash<>'338226c4e9b878c5aa92fc8e319dd7bf' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',

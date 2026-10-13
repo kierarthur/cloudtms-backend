@@ -4,10 +4,38 @@ import test from 'node:test';
 
 import {
   candidateDailySpecialistInternals,
-  createCandidateDailySpecialist
+  createCandidateDailySpecialist,
+  createCandidateDailyProjectionWake
 } from '../broker/src/candidate-daily-specialist.js';
 
 const correlationId = '01K2ABCDEF0123456789ABCDEF';
+test('post-commit projection wake is retained, payload-free and cannot hold or fail the save', async () => {
+  const originalFetch = globalThis.fetch; const originalLog = console.log;
+  const retained = []; const logs = []; let finish; let sent;
+  globalThis.fetch = async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return new Promise(resolve => { finish = () => resolve(new Response(JSON.stringify({
+      ok: true, request_id: sent.request_id, result: { claimed: 1, completed: 1, busy: false, uncertain: false }
+    }))); });
+  };
+  console.log = value => logs.push(JSON.parse(value));
+  try {
+    const wake = createCandidateDailyProjectionWake(environment(), { waitUntil: work => retained.push(work) });
+    assert.equal(wake(correlationId), undefined);
+    await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(retained.length, 1);
+    assert.equal(sent.operation, 'AVAILABILITY_PROJECTION_WAKE'); assert.deepEqual(sent.payload, {});
+    assert.equal(sent.effect_key, undefined); assert.ok(sent.signature);
+    finish(); await retained[0]; assert.equal(logs[0].status, 'WAKE_COMPLETED');
+    globalThis.fetch = async () => { throw new Error('network fixture failure'); };
+    wake(correlationId); await retained[1]; assert.equal(logs[1].status, 'FALLBACK_SCHEDULED');
+    const before = retained.length;
+    createCandidateDailyProjectionWake(environment({ CANDIDATE_APP_ENVIRONMENT: 'LIVE' }), { waitUntil: work => retained.push(work) })(correlationId);
+    assert.equal(retained.length, before);
+    assert.equal(createCandidateDailyProjectionWake(environment())(correlationId), undefined);
+    assert.doesNotMatch(JSON.stringify(logs), /secret|candidate_id|availability|signature|nonce/);
+  } finally { globalThis.fetch = originalFetch; console.log = originalLog; }
+});
 test('real private candidate entry supplies the execution context to the specialist', () => {
   const privateEntry=readFileSync(new URL('../broker/src/candidate-private-worker.js',import.meta.url),'utf8');
   const dependencies=readFileSync(new URL('../broker/src/index.js',import.meta.url),'utf8');

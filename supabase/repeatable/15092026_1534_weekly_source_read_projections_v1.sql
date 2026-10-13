@@ -1496,6 +1496,8 @@ begin
         'outreach_eligible',query.outreach_eligible,
         'manager_eligible',query.manager_eligible,
         'candidate_app_available',query.candidate_app_available,
+        'contact_policy',private.weekly_source_office_contact_policy_v1(v_cycle.id,
+          to_jsonb(query)||jsonb_build_object('projection_publication_id',v_publication.id)),
         'children',coalesce((
           select pg_catalog.jsonb_agg(
             (child.value-'actions')||pg_catalog.jsonb_build_object(

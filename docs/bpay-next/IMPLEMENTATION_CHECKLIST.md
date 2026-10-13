@@ -8470,3 +8470,1677 @@ This is the R2 final plan acceptance checklist, not R9/R10 historical acceptance
 LEGACY_PARITY_ACCEPTANCE.md maps every retained staff capability and shared seam to its owning card. These are cross-check references, not duplicate implementation tasks. Use the final approved technical charts and card outcomes when collecting joined results. Installation/security permission checks remain separate from business testing.
 
 Owner11October boundary correction: WB44 ITEM/D12 BUILT/REVIEWED ticks withdrawn pending A2 stale worker-basis snooze CANCELLED audit. Previous a33796fd source retained. WB39 remains unfinished and cannot close before that successor. Whole74/288 BUILT74/288 REVIEWED after this owner-required reopening.
+
+## Approved HealthRoster amendment — adopted13/10/2026
+
+Original source history is retained: 116/299 ITEM records Built/Reviewed. Five owner aggregates (F-14, SP-03, SP-04, SP-06, SP-13) are OPEN because their appended required child is unfinished. The amendment-required-child aggregate is 111/299 (116 historical minus the five reopened owners). The separate raw all-child checkbox scan is 79/299 because original open parts and authored/NOT_RUN future checks remain; this does not reopen any further owner. Original ticks are historical evidence, never silently unticked. New11ITEM/33DELIVERABLE plus5reopenchildren; totals299ITEM/1663delivery-check/654CONTEXT/4STEP,2620rows. The exact approved manifest and original29-cell preservation receipt are in design/HealthRoster-amendment-adoption.json.
+
+Execution overlay is refreshed after closedWB34seq146: earlyHR06→HR01→HR03→HR04→HR07 deferred BLOCKED-ON-HEALTHROSTER before first still-open affected frozen own/external allocation consumerXD03seq149 (after148). Owner4B first-install preparation/publication precedesXD01–03; the external producer does not hold that candidate. No SP14 reopen; retained per-shift hold and original F25RuleB objects stay binding. Later overlay boundaries remainafter179/beforeEX03(HR10),after218/beforePS05(HR08),after234/beforeSP01(HR02),after268/beforeCM15(HR05),after286/beforeS1(HR11→HR09).
+
+These are rendered from the live appended CSV, not a PREVIEW. Each stable row below carries all29 fields. BLOCKED and AUTHORED_NOT_RUN are not completion/installed/app receipts.
+
+### HR-01 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 293 |
+| Row kind | ITEM |
+| Item ID | HR-01 |
+| Deliverable ID |  |
+| Title | Versioned HealthRoster frozen incident provenance |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:19 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | review/R5.md |
+| Exact remaining change | Owner D1/R-079 retains built SP-14 per-shift manual hold: same-event typed SOURCE_HOURS_DIFFER manual review excludes that shift only (five40→160 pay/40 held). Add versioned frozen incident/qualified WAIT/root/revision/segment provenance and replay without an SP-14 reopen or new hold policy. Unavailable/unbound provenance retains native fail-closed handling. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-12; SP-13; SP-14; HR-06 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-01-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 293 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-01 |
+| Deliverable ID | HR-01-D01 |
+| Title | Versioned HealthRoster frozen incident provenance |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-01_HEALTHROSTER_QUERY_COMPOSITION.md (proposed); existing 11102026_2223 helper and 13102026_0016 Create |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":18,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":577,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql","line":16,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Define exact origin discriminator, accepted revision/root/version, incident ID/work_event/family/state, latest qualified WAIT, stable segment identity, deliberate new version/digest compatibility and native-scope partition. Never append arrays to the closed five-field legacy gate. Demonstrate SP-14/OR-44 lawful composition before code. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-12; SP-13; SP-14; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD-C; Owner rules=R-007,R-079,R-176,R-190,R-207;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-01-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 293 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-01 |
+| Deliverable ID | HR-01-D02 |
+| Title | Versioned HealthRoster frozen incident provenance |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql:18,32,39,52; 13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql:577; 05102026_0308_weekly_source_pay_query_gate_v1.sql:16 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":18,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":577,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql","line":16,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Add only the versioned frozen provenance on existing exclusion/Create owners, preserving every built SP-14 scope/cut/retry receipt and typed segment behavior. Owner D1 supersedes C19 whole-root design for the bound same-shift manual case; no hold-policy rebuild. Unrelated WAIT cannot release a disputed event; unavailable/ambiguous provenance retains native fail-closed handling. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-12; SP-13; SP-14; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD-C; Owner rules=R-007,R-079,R-176,R-190,R-207;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-01-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 293 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-01 |
+| Deliverable ID | HR-01-D03 |
+| Title | Versioned HealthRoster frozen incident provenance |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | Owner D1/R-079 native per-shift manual hold plus frozen incident provenance oracle |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":18,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":577,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql","line":16,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-12; SP-13; SP-14; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD-C; Owner rules=R-007,R-079,R-176,R-190,R-207;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-02 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 294 |
+| Row kind | ITEM |
+| Item ID | HR-02 |
+| Deliverable ID |  |
+| Title | Report-scope CURRENT selector and zero-pay hook integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:66 |
+| Existing work status | MISSING |
+| Evidence | review/R5.md |
+| Exact remaining change | Add only SELF_BILL_REPORT_SCOPE CURRENT-pointer admission on the existing selector. Bind exact CURRENT upload/projection publication; retain report-correction refusal. Invoice-only report revisions contain no transitions, expense-policy snapshots or NHSP physical movements. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-08; SP-12; SP-14 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove exact current pointer/publication success, stale/missing mismatch refusal, report correction refusal, and finalisation invokes neither pay capture nor expense observation. £100/£20 invoice report, invoice-only rebill/unwind and standalone negative report each give £0 pay/recovery. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-02-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 294 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-02 |
+| Deliverable ID | HR-02-D01 |
+| Title | Report-scope CURRENT selector and zero-pay hook integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-02_REPORT_CURRENT_CONTRACT.md (proposed) |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":233,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":54,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":343,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Record SELF_BILL_REPORT_SCOPE scope/current_final_revision_id/revision and matching CURRENT projection publication contract. Report correction still returns WEEKLY_SOURCE_SELF_BILL_REPORT_CORRECTION_NOT_SUPPORTED. No PREPARED correction policy. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-08; SP-12; SP-14 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove exact current pointer/publication success, stale/missing mismatch refusal, report correction refusal, and finalisation invokes neither pay capture nor expense observation. £100/£20 invoice report, invoice-only rebill/unwind and standalone negative report each give £0 pay/recovery. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-6,NX-7,G10; Owner rules=R-115,R-151,R-179,R-190,R-240;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-02-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 294 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-02 |
+| Deliverable ID | HR-02-D02 |
+| Title | Report-scope CURRENT selector and zero-pay hook integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql:54; 04102026_0505_banking_pay_next_source_current_hooks_v1.sql:233,301,343,352 |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":233,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":54,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":343,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Extend current scope selector with the exact SELF_BILL_REPORT_SCOPE arm and reuse strict publication lookup. Preserve qualified CYCLE expense observation and NHSP-only physical capture; no automatic broadening, expense snapshot manufacture or report pay head. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-08; SP-12; SP-14 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove exact current pointer/publication success, stale/missing mismatch refusal, report correction refusal, and finalisation invokes neither pay capture nor expense observation. £100/£20 invoice report, invoice-only rebill/unwind and standalone negative report each give £0 pay/recovery. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-6,NX-7,G10; Owner rules=R-115,R-151,R-179,R-190,R-240;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-02-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 294 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-02 |
+| Deliverable ID | HR-02-D03 |
+| Title | Report-scope CURRENT selector and zero-pay hook integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | SP-01 / SP-26 report CURRENT and X-12 zero-pay integration |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":233,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":54,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":343,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-02 static existing NOT YET BUILT report arm; PARTLY MET hooks contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Prove exact current pointer/publication success, stale/missing mismatch refusal, report correction refusal, and finalisation invokes neither pay capture nor expense observation. £100/£20 invoice report, invoice-only rebill/unwind and standalone negative report each give £0 pay/recovery. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-08; SP-12; SP-14 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove exact current pointer/publication success, stale/missing mismatch refusal, report correction refusal, and finalisation invokes neither pay capture nor expense observation. £100/£20 invoice report, invoice-only rebill/unwind and standalone negative report each give £0 pay/recovery. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-6,NX-7,G10; Owner rules=R-115,R-151,R-179,R-190,R-240;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-03 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 295 |
+| Row kind | ITEM |
+| Item ID | HR-03 |
+| Deliverable ID |  |
+| Title | Atomic whole correction chain across ordinary Works |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:142 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | review/R5.md |
+| Exact remaining change | Admit exact agency-issued and manager-signed A0/A/B/C/D WHOLE chains, weekly and DAILY/null Contract, through existing ordinary publisher/admission and atomic pair-unit owners. HealthRoster creates P0 at Send and whole R0 at atomic Authorise both; Banking consumes approval facts. Preserve T0 and its paid financial_snapshot/physical TSFIN. WP-0 physical coexistence is an explicit prerequisite, never presumed separate bookings. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-03; WB-06; DY-04; HR-06 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-03-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 295 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-03 |
+| Deliverable ID | HR-03-D01 |
+| Title | Atomic whole correction chain across ordinary Works |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-03_WHOLE_CHAIN_ADMISSION.md (proposed); WB-01/WB-03/DY-04 interfaces |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":280,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Name exact producer/admission/position ownership, T0 root, awc:<T0>:<decision>, parent links and reversed_timesheet_id (T0 first, latest P0 thereafter), physical booking/TSFIN current partition and economic candidate/date/work_event identity. Include empty P0, cancellation, A0 triple and weekly/null-Contract DAILY schemas. If WP-0 fit is unapproved or ambiguous, BLOCKED. Census current built WB-29 quote/display/readers (0113/0117/0132), WB-30 WORK/PROTECTED_WORK + PROTECTED reader (0201), built WB-31 native component reader (0314), and built WB-32 channel reader (0452), built WB-33 saved-owner Clear review/context/qualified family guard (0537) plus its closed broker resolution DTO. The new clear arm preserves immutable/current saved-owner tuples, both original replay checks and one native WORK_BUCKET/GROSS family; no frozen repricing or duplicate saved decision. Built WB-28 Clear all0721 and immutable-evidence migration0725/closed decisions-clear transport now join the census: freeze exact scoped future decisions, exclude IN_DRAFT, call existing native W2 per-member Clear, then reset only precise actor/agency/epoch/date future defaults; no captured-offer/paid record rewrite. First open affected owner is WB-34 Seq146; preserve closed WB-28/33 history. Native service-role/active-admin Workbench scope remains unchanged and is not a new equivalent pay-permission W-site. Preserve recognised component/economic conventions and saved decisions across T0→P0; extend an exact reader only on demonstrated mismatch, no re-offer/duplicate saved resolution. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-03; WB-06; DY-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-3,NX-CHK; Owner rules=R-205,R-213,R-214,R-230,R-240,R-242,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-03-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 295 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-03 |
+| Deliverable ID | HR-03-D02 |
+| Title | Atomic whole correction chain across ordinary Works |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql:280; 11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql:44; 11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql:34 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":280,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Extend only the ordinary WHOLE chain admission arms for AGENCY_INVOICE_CORRECTION after issue and SIGNED_TIMESHEET_CORRECTION every A0/A/B/C/D state. Reject unsigned P0, partial chains, selective reversal, stale/ambiguous root/economic/TSFIN witnesses. Do not waive DAILY integrity globally or independently publish full negative/positive Works. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-03; WB-06; DY-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-3,NX-CHK; Owner rules=R-205,R-213,R-214,R-230,R-240,R-242,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-03-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 295 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-03 |
+| Deliverable ID | HR-03-D03 |
+| Title | Atomic whole correction chain across ordinary Works |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | WORKER ROUTE |
+| Exact object | WB-03 / DY-04 ordinary Authorise caller; existing single/bulk pair-unit adapter (HealthRoster R-253) |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":280,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Integrate the approved atomic approval receipt: R0 created inside Authorise both, then R0/P0 (and T0 in A0) all or none; either member/both bulk counted once. Cancel pending P0 leaves T0 untouched. Guard all entry points from unsigned replacement or ordinary unauthorise bypass; retain operation actor/replay/errors. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-03; WB-06; DY-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: JS syntax; [ ] actual caller/source checks; [ ] exact typed request/response/error/idempotency contract; [ ] actor/owner/epoch/containment negatives. Preserve refusal and replay semantics. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: WORKER ROUTE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-3,NX-CHK; Owner rules=R-205,R-213,R-214,R-230,R-240,R-242,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-03-D04
+
+| Live field | Value |
+|---|---|
+| Seq | 295 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-03 |
+| Deliverable ID | HR-03-D04 |
+| Title | Atomic whole correction chain across ordinary Works |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | HR whole-chain A0/A/B/C/D weekly/DAILY joined oracle; FC-15/SP-10 conserved native amount consumers |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":280,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-03 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-03; WB-06; DY-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Prove unpaid £160−£160+£140 = £140 only/£0 debt; fully paid £160→£140 = one £20 difference/no £140 new pay; repeated £150 outcomes, actual recovered/held branches and preserved paid T0 snapshot. Scoped CN −£105.02/−£21/−£126.02 leaves other worker £200/£40/£240 and both pay positions unchanged unless separate effective approval. Gate every applicable correction state, not only issued. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-3,NX-CHK; Owner rules=R-205,R-213,R-214,R-230,R-240,R-242,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-04 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 296 |
+| Row kind | ITEM |
+| Item ID | HR-04 |
+| Deliverable ID |  |
+| Title | Ordinary pay-only protected shift and cross-Work reconciliation |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:231 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | review/R5.md |
+| Exact remaining change | Add genuine ordinary pay-only protection admission using the existing position/collection engines and candidate/date/work_event across Works. Existing SOURCE-only PROTECTED_WORK remains scoped. Preserve protection outside Timesheet/booking/segment/Request Id identity and its actual original money basis. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-06; FC-15; SP-10; HR-03 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-04-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 296 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-04 |
+| Deliverable ID | HR-04-D01 |
+| Title | Ordinary pay-only protected shift and cross-Work reconciliation |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-04_ORDINARY_PROTECTED_SHIFT.md (proposed) |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql","line":2593,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Specify private.weekly_source_check_only_shift_protections input and logical PROTECTED:SHIFT:<YYYY-MM-DD>:<work_event_id>; existing native component convention may adapt only with identical economic identity. Prove empty-T0 authorised revision or lawful independent position admission in WP-0. No invented Source HEAD or independent advance/ledger. Census current built WB-29 quote/display/readers (0113/0117/0132), WB-30 WORK/PROTECTED_WORK + PROTECTED reader (0201), built WB-31 native component reader (0314), and built WB-32 channel reader (0452), built WB-33 saved-owner Clear review/context/qualified family guard (0537) plus its closed broker resolution DTO. The new clear arm preserves immutable/current saved-owner tuples, both original replay checks and one native WORK_BUCKET/GROSS family; no frozen repricing or duplicate saved decision. Built WB-28 Clear all0721 and immutable-evidence migration0725/closed decisions-clear transport now join the census: freeze exact scoped future decisions, exclude IN_DRAFT, call existing native W2 per-member Clear, then reset only precise actor/agency/epoch/date future defaults; no captured-offer/paid record rewrite. First open affected owner is WB-34 Seq146; preserve closed WB-28/33 history. Native service-role/active-admin Workbench scope remains unchanged and is not a new equivalent pay-permission W-site. Preserve recognised component/economic conventions and saved decisions across T0→P0; extend an exact reader only on demonstrated mismatch, no re-offer/duplicate saved resolution. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-06; FC-15; SP-10; HR-03 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-6; Owner rules=R-213,R-218,R-222,R-227,R-230;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-04-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 296 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-04 |
+| Deliverable ID | HR-04-D02 |
+| Title | Ordinary pay-only protected shift and cross-Work reconciliation |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql:2587; ordinary publisher 12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql","line":2593,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Extend existing authority with a separately typed ORDINARY protection arm. ACTIVE protection controls agreed taxable shift entitlement; Wait unchanged. Accept source/unprotect changes entitlement only by difference and nets across T0/T1/P0/families with preserved realised/held witnesses. Never place an unfinalised protection on the invoiceable T0 or double-pay after segment/key rotation. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-06; FC-15; SP-10; HR-03 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-6; Owner rules=R-213,R-218,R-222,R-227,R-230;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-04-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 296 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-04 |
+| Deliverable ID | HR-04-D03 |
+| Title | Ordinary pay-only protected shift and cross-Work reconciliation |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | WORKER ROUTE |
+| Exact object | WB-01/WB-06 ordinary publishing plus approved HealthRoster Protect/Amend/Unprotect/Accept source receipt |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql","line":2593,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Consume exact audited protection/decision/Work/revision links via shared active(admin OR authoriser OR golden) operation scope. Complete/replay once after accepted publication. Refused/review shape remains explicit; Office business decrease cannot be lost by automatic collection failure. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-06; FC-15; SP-10; HR-03 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: JS syntax; [ ] actual caller/source checks; [ ] exact typed request/response/error/idempotency contract; [ ] actor/owner/epoch/containment negatives. Preserve refusal and replay semantics. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: WORKER ROUTE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-6; Owner rules=R-213,R-218,R-222,R-227,R-230;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-04-D04
+
+| Live field | Value |
+|---|---|
+| Seq | 296 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-04 |
+| Deliverable ID | HR-04-D04 |
+| Title | Ordinary pay-only protected shift and cross-Work reconciliation |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | Ordinary protection actual settlement/lawful-unissued-discard/reconciliation oracle |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql","line":2593,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql","line":736,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql","line":45,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql","line":33,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0452_banking_pay_next_channel_resolver_ready_review_v1.sql","line":58,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql","line":9,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-resolution.js","line":1,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/migrations/13102026_0725_banking_pay_next_frozen_decisions_clear.sql","line":7,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":194,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":16,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":199165,"proves":"HR-04 static existing NOT YET BUILT contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | WB-01; WB-06; FC-15; SP-10; HR-03 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 protected paid then £160 final = £0; £170 = £10 top-up; £140 = £20 difference. £80 paid/£80 frozen held then £140: exact settlement→retained£160/debt£20; legally permitted discard of exact unissued artifact before execution under native owner→retained£80/available£60. Issued, in-flight or unknown outcomes require native settlement authority and are not assumed discardable. Later approval cannot reprice/block frozen artifacts. Same-day unrelated £40 event independent. Replay/order/key rotation gives one position and one liability; no invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-6; Owner rules=R-213,R-218,R-222,R-227,R-230;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-05 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 297 |
+| Row kind | ITEM |
+| Item ID | HR-05 |
+| Deliverable ID |  |
+| Title | All-origin exact difference collection and retained-state proof |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:294 |
+| Existing work status | PARTLY_DONE |
+| Evidence | review/R5.md |
+| Exact remaining change | Close only HealthRoster all-origin/cross-Work/held/ordinary-Umbrella composition within FC/CM owners. Keep existing exact manual-recording support and qualification boundaries. One net-difference liability survives repeated correction, actual cash recovery and held disposition; unbound auto basis still preserves visible Office/manual decision. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | FC-11; FC-15; SP-10; CM-02; CM-12; CM-13a; CM-13; CM-14; HR-03; HR-04 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-05-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 297 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-05 |
+| Deliverable ID | HR-05-D01 |
+| Title | All-origin exact difference collection and retained-state proof |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-05_COLLECTION_ORIGIN_COMPOSITION.md (proposed); FC-11/FC-15/CM origin contracts |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":981,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":244,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":1125,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Bind worker/economic key, original/current source and target A/R/H, channel/tax/policy/window, approval/retained/recovered/held/write-off facts. Catalogue precise supported automatic vs manual-review shapes; never guess historical NULL basis. If native forgiveness/held policy cannot compose, BLOCKED with binding clauses, not new policy. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | FC-11; FC-15; SP-10; CM-02; CM-12; CM-13a; CM-13; CM-14; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-REC,G4; Owner rules=R-115,R-205,R-213,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-05-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 297 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-05 |
+| Deliverable ID | HR-05-D02 |
+| Title | All-origin exact difference collection and retained-state proof |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql:887,981,1041,1086,1161,1221; 13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql:244 |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":981,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":244,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":1125,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Extend/reconcile only required admitted origin shapes in existing collection owner. Persist one complete net difference and original basis even when automatic offset cannot qualify. Preserve current PAYE qualification and native Umbrella/VAT targets; never treat held recovery/write-off as cash received, create full-original debt or refuse approved decrease merely to avoid recording it. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | FC-11; FC-15; SP-10; CM-02; CM-12; CM-13a; CM-13; CM-14; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-REC,G4; Owner rules=R-115,R-205,R-213,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-05-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 297 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-05 |
+| Deliverable ID | HR-05-D03 |
+| Title | All-origin exact difference collection and retained-state proof |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | SCREEN |
+| Exact object | Existing FC/CM Work-linked case detail / Timesheet pay-block server view, not Payment Summary cash rows |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":981,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":244,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":1125,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Expose exact worker/Work/date/key/original policy, approval and actual outstanding/recovered/reserved/forgiven distinctions with decision/action links. Manual record exists immediately without fabricating actual cash or per-Timesheet PAYE NET. No second collection case or generic Recorded-no-payment Summary section. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | FC-11; FC-15; SP-10; CM-02; CM-12; CM-13a; CM-13; CM-14; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: UI source checks against approved server schema; [ ] shared renderer and labels, filter/CSV/print parity. Joined browser receipts are later. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: SCREEN. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-REC,G4; Owner rules=R-115,R-205,R-213,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-05-D04
+
+| Live field | Value |
+|---|---|
+| Seq | 297 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-05 |
+| Deliverable ID | HR-05-D04 |
+| Title | All-origin exact difference collection and retained-state proof |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | PN-8 / OV / PN / PR HealthRoster origin, repeated-correction and frozen-artifact oracle |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":981,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":244,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql","line":1125,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-05 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | FC-11; FC-15; SP-10; CM-02; CM-12; CM-13a; CM-13; CM-14; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→£140 debt20→£150 with actual recovery0/5/10/15/20 yields debt10/5/0/0/0 and top-up0/0/0/5/10. If recovery£20 is frozen in an accepted Draft before later£150 approval: before settlement actual recovery0/retained160 and exact reservation20/frozen deduction/case inputs unchanged; exact settlement20→retained140/next eligible top-up10/debt0; legally permitted discard of exact unissued artifact before execution under native owner→recovery0/retained160/next liability10/top-up0. Issued, in-flight and unknown outcomes require native outcome resolution, never assumed discard/repricing or approval-based blocking of old Draft. A never-frozen reservation may reconcile under its existing owner as a distinct state. £80 paid/£80 original frozen held: exact settlement→retained160/debt20 at140 or10 at150; lawful unissued discard before execution→retained80/available60 at140 or70 at150, never assign discard to issued/in-flight/unknown outcome. Preserve native write-off policy as forgiveness, not recovered cash; test replay/mixed channels from original vectors. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-REC,G4; Owner rules=R-115,R-205,R-213,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-06 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 298 |
+| Row kind | ITEM |
+| Item ID | HR-06 |
+| Deliverable ID |  |
+| Title | Shared operation-scoped HealthRoster approval and protected actor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:374 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | review/R5.md |
+| Exact remaining change | BLOCKED until HealthRoster WP-PP §25 publishes the reviewed compatible NEW-JUSTIFIED Source actor successor and Worker helper commit/version/SHA. They are NOT YET BUILT in committed source; Banking does not independently author them. Then consume the producer at exact first-authorise/unauthorise/protected/WAIT/status/publish/completion callers and replay; preserve unrelated native actors. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-14; SP-03; SP-04; SP-06; SP-13 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-06-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 298 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-06 |
+| Deliverable ID | HR-06-D01 |
+| Title | Shared operation-scoped HealthRoster approval and protected actor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-06_ACTOR_SCOPE_ADOPTION.md (proposed); HealthRoster WP-PP §25 producer of private.weekly_source_pay_actor_allowed_v1 and broker/src/payment-actor-permission.js |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Before Banking work, require actual published compatible HealthRoster WP-PP producer SQL/helper commit/version/SHA, reviewed final-definer/include-order and closed interface; NOT YET BUILT now, so record BLOCKED producer dependency. Banking is consumer only under OR-38. Active AND(admin OR payment_authoriser OR payment_golden_key), one person; configured automatic actor qualifies or Office fallback; no global native actor rewrite. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-14; SP-03; SP-04; SP-06; SP-13 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-06-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 298 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-06 |
+| Deliverable ID | HR-06-D02 |
+| Title | Shared operation-scoped HealthRoster approval and protected actor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql:169; 04102026_0345_banking_pay_next_protected_source_v1.sql:233; 11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql:2427,2922,3364 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Use the shared Source predicate at first-authorise/return and replace the three final inline protected status/publish/local-complete owners with scoped helper calls. Final WAIT already shared: verify correct successor applies on first call and replay. Preserve all receipt/revision/Work/audit/idempotency checks and unrelated admin/quorum rules. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-14; SP-03; SP-04; SP-06; SP-13 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-06-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 298 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-06 |
+| Deliverable ID | HR-06-D03 |
+| Title | Shared operation-scoped HealthRoster approval and protected actor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | SP-03/SP-04/SP-06/SP-13 actor first/replay proof and exact Worker → PostgREST route |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-14; SP-03; SP-04; SP-06; SP-13 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-07 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 299 |
+| Row kind | ITEM |
+| Item ID | HR-07 |
+| Deliverable ID |  |
+| Title | HealthRoster ordinary eligibility and accepted capture integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:432 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | review/R5.md |
+| Exact remaining change | Prove actual preset/classifier/TSFIN and publication/capture integration by origin; make only exact failing scope changes. Agency check-only unsigned preset stays ordinary without Source lineage; signed weekly/DAILY/null-Contract ordinary pay has no HR validation hold. Genuine initial SOURCE may be headless; Direct PROTECTED is conditional and distinct. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-08; SP-12; SP-14; WB-01; WB-02; WB-03; WB-06; DY-04; HR-01; HR-03; HR-04; HR-06 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Four finalised £40 + absent unprotected shift → £160; missing candidate Timesheet does not add shift or refuse approval. Ordinary four matched £40 + disputed fifth → £160; paid day40→35 = £5 difference, other120 not repaid. Signed authorised160 READY_FOR_HR remains pay160/invoice waits. Initial160 and identicalHEAD adds0. Required Direct protected160 admits once or feature stays gated. All correction states use HR-03/05; no HR no-hold code alone opens correction. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-07-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 299 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-07 |
+| Deliverable ID | HR-07-D01 |
+| Title | HealthRoster ordinary eligibility and accepted capture integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-07_PRESET_CAPTURE_INTERFACE.md (proposed); WB-01/02/03/06, DY-04 and SP-08/09/12/14 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":2010,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":531,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql","line":187,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":108,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":92,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":352,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Record exact dated preset/lineage/classifier/TSFIN/current approval inputs and Source vs ORDINARY partition. No TARGET_MANAGED fabrication. Define flag/time edit publication and protection exclusion against same-day work_event identity, plus initial SOURCE versus HEAD versus Direct PROTECTED conditions. Unused conditional path must be proved unreachable, not marked passed. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-08; SP-12; SP-14; WB-01; WB-02; WB-03; WB-06; DY-04; HR-01; HR-03; HR-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Four finalised £40 + absent unprotected shift → £160; missing candidate Timesheet does not add shift or refuse approval. Ordinary four matched £40 + disputed fifth → £160; paid day40→35 = £5 difference, other120 not repaid. Signed authorised160 READY_FOR_HR remains pay160/invoice waits. Initial160 and identicalHEAD adds0. Required Direct protected160 admits once or feature stays gated. All correction states use HR-03/05; no HR no-hold code alone opens correction. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD,NX-1,NX-AI-1,NX-AI-5,NX-CHK,G6,G9; Owner rules=R-021,R-024,R-078,R-079,R-190,R-197,R-207,R-213,R-217,R-218,R-230,R-242,R-243,R-245,R-246,R-247,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-07-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 299 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-07 |
+| Deliverable ID | HR-07-D02 |
+| Title | HealthRoster ordinary eligibility and accepted capture integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql:92,104,352,890,916; 11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql:44,70,108; 11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql:43,2010; 13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql:342,531,577,628 |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":2010,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":531,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql","line":187,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":108,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":92,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":352,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Reuse correct ordinary eligibility, stable component and typed missing/nonfinalised exemptions. Add only actual new-preset admission/publication integration failing exact owner input. Time change recomputes current TSFIN, flag-only retains economic identity; ordinary eligible unauthorise/re-authorise only, signed correction uses HR-03. Frozen cut prevents retroactive repricing, not future approval. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-08; SP-12; SP-14; WB-01; WB-02; WB-03; WB-06; DY-04; HR-01; HR-03; HR-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Four finalised £40 + absent unprotected shift → £160; missing candidate Timesheet does not add shift or refuse approval. Ordinary four matched £40 + disputed fifth → £160; paid day40→35 = £5 difference, other120 not repaid. Signed authorised160 READY_FOR_HR remains pay160/invoice waits. Initial160 and identicalHEAD adds0. Required Direct protected160 admits once or feature stays gated. All correction states use HR-03/05; no HR no-hold code alone opens correction. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD,NX-1,NX-AI-1,NX-AI-5,NX-CHK,G6,G9; Owner rules=R-021,R-024,R-078,R-079,R-190,R-197,R-207,R-213,R-217,R-218,R-230,R-242,R-243,R-245,R-246,R-247,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-07-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 299 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-07 |
+| Deliverable ID | HR-07-D03 |
+| Title | HealthRoster ordinary eligibility and accepted capture integration |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | X-8/X-9, PS-1…PS-6/PR-1…PR-4, initial/head/direct actual joined capture receipts |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":2010,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":531,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql","line":187,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":108,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":92,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":352,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":104,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql","line":44,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql","line":34,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-07 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Four finalised £40 + absent unprotected shift → £160; missing candidate Timesheet does not add shift or refuse approval. Ordinary four matched £40 + disputed fifth → £160; paid day40→35 = £5 difference, other120 not repaid. Signed authorised160 READY_FOR_HR remains pay160/invoice waits. Initial160 and identicalHEAD adds0. Required Direct protected160 admits once or feature stays gated. All correction states use HR-03/05; no HR no-hold code alone opens correction. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | SP-03; SP-08; SP-12; SP-14; WB-01; WB-02; WB-03; WB-06; DY-04; HR-01; HR-03; HR-04; HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Four finalised £40 + absent unprotected shift → £160; missing candidate Timesheet does not add shift or refuse approval. Ordinary four matched £40 + disputed fifth → £160; paid day40→35 = £5 difference, other120 not repaid. Signed authorised160 READY_FOR_HR remains pay160/invoice waits. Initial160 and identicalHEAD adds0. Required Direct protected160 admits once or feature stays gated. All correction states use HR-03/05; no HR no-hold code alone opens correction. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD,NX-1,NX-AI-1,NX-AI-5,NX-CHK,G6,G9; Owner rules=R-021,R-024,R-078,R-079,R-190,R-197,R-207,R-213,R-217,R-218,R-230,R-242,R-243,R-245,R-246,R-247,R-248,R-249,R-250,R-253,R-255,R-258;  Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-08 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 300 |
+| Row kind | ITEM |
+| Item ID | HR-08 |
+| Deliverable ID |  |
+| Title | Cash-only Payment Summary genuine HealthRoster origins |
+| Review lane | R6 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:567 |
+| Existing work status | PARTLY_DONE |
+| Evidence | review/R6.md |
+| Exact remaining change | Extend approved AUTH-PS origin/reason drilldown only for genuine correction/protection/chain cash facts; preserve built cash/frozen-history architecture and PS-12 vocabulary. No recorded-debt or £0 Summary row and no invented Timesheet NET allocation. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | PS-01; PS-02; PS-03; PS-04; PS-07; PS-08; PS-11; PS-14; PS-15; HR-03; HR-04 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→140→150 with none recovered: Summary cash160 only; case owes10. Actual20 recovery+10topup: cash events original160/recovery20/pay10, retained150. Held recovery creates no cash row; CN−126.02 and equal protection netting no row. Return/reissue keeps earnings/collection and links without duplicate recovery; forgiveness not cash. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-08-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 300 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-08 |
+| Deliverable ID | HR-08-D01 |
+| Title | Cash-only Payment Summary genuine HealthRoster origins |
+| Review lane | R6 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-08_PAYMENT_SUMMARY_ORIGIN.md (proposed); AUTH-PS and PS-05/06/12/13 |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_0653_banking_pay_next_ps_c16_indexed_history_v1.sql","line":75,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql","line":5,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql","line":110,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Bind real cash event/date, server-frozen original client/Contract/channel/hours/basis and source-supplied protection/chain/case reason/link. Exact signed-correction reason extension must be approved; CORRECTION_AFTER_INVOICE must not label un-invoiced origins. Source R0 is not a standalone staff payment and P0 explains T0 replacement. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | PS-01; PS-02; PS-03; PS-04; PS-07; PS-08; PS-11; PS-14; PS-15; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→140→150 with none recovered: Summary cash160 only; case owes10. Actual20 recovery+10topup: cash events original160/recovery20/pay10, retained150. Held recovery creates no cash row; CN−126.02 and equal protection netting no row. Return/reissue keeps earnings/collection and links without duplicate recovery; forgiveness not cash. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-PS; Owner rules=R-229,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-08-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 300 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-08 |
+| Deliverable ID | HR-08-D02 |
+| Title | Cash-only Payment Summary genuine HealthRoster origins |
+| Review lane | R6 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | SCREEN |
+| Exact object | supabase/repeatable/10102026_0653_banking_pay_next_ps_c16_indexed_history_v1.sql:75,86,87,90,91,92,93,94; 11102026_1005_banking_pay_next_frozen_client_origin_v1.sql:5; 13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql:110; existing PS-05/06/12/13 view/UI/CSV/print |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_0653_banking_pay_next_ps_c16_indexed_history_v1.sql","line":75,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql","line":5,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql","line":110,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Reuse server cash/frozen objects and add approved genuine origin/reason links consistently in detail/filter/CSV/print. Member contributions remain not Timesheet allocation. Display recorded/unrecovered liability and £0 protection netting in Timesheet/case; actual recovery cash only in Summary. No browser economics or parallel cash ledger. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | PS-01; PS-02; PS-03; PS-04; PS-07; PS-08; PS-11; PS-14; PS-15; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: UI source checks against approved server schema; [ ] shared renderer and labels, filter/CSV/print parity. Joined browser receipts are later. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→140→150 with none recovered: Summary cash160 only; case owes10. Actual20 recovery+10topup: cash events original160/recovery20/pay10, retained150. Held recovery creates no cash row; CN−126.02 and equal protection netting no row. Return/reissue keeps earnings/collection and links without duplicate recovery; forgiveness not cash. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: SCREEN. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-PS; Owner rules=R-229,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-08-D03
+
+| Live field | Value |
+|---|---|
+| Seq | 300 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-08 |
+| Deliverable ID | HR-08-D03 |
+| Title | Cash-only Payment Summary genuine HealthRoster origins |
+| Review lane | R6 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | AUTH-PS cash/return/reissue/write-off and HealthRoster source-origin acceptance |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/10102026_0653_banking_pay_next_ps_c16_indexed_history_v1.sql","line":75,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql","line":5,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql","line":110,"proves":"HR-08 static existing PARTLY MET contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | £160 paid→140→150 with none recovered: Summary cash160 only; case owes10. Actual20 recovery+10topup: cash events original160/recovery20/pay10, retained150. Held recovery creates no cash row; CN−126.02 and equal protection netting no row. Return/reissue keeps earnings/collection and links without duplicate recovery; forgiveness not cash. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | PS-01; PS-02; PS-03; PS-04; PS-07; PS-08; PS-11; PS-14; PS-15; HR-03; HR-04 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | £160 paid→140→150 with none recovered: Summary cash160 only; case owes10. Actual20 recovery+10topup: cash events original160/recovery20/pay10, retained150. Held recovery creates no cash row; CN−126.02 and equal protection netting no row. Return/reissue keeps earnings/collection and links without duplicate recovery; forgiveness not cash. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-PS; Owner rules=R-229,R-230;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-09 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 301 |
+| Row kind | ITEM |
+| Item ID | HR-09 |
+| Deliverable ID |  |
+| Title | Published compatibility and joined HealthRoster dependency receipts |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:613 |
+| Existing work status | MISSING |
+| Evidence | review/R5.md |
+| Exact remaining change | Prepare exact compatibility/feature-gate receipt plan before the final F-23 run, then close installed/joined columns only during separately authorised release/readback/testing. NEXT imports are already wired. No owner activation inferred from commit, compile, generated contract, baseline checkbox or this amendment. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-09; F-10; F-23; HR-01; HR-02; HR-03; HR-04; HR-05; HR-06; HR-07; HR-08 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Under later exact release/test authority verify final bodies/ACLs in actual profiles, NEXT sole active owner, compatible modules/screens and ordered queued first-authorise/Create/settlement/recovery/browser receipts. NX-8 retain old event NO_CHANGE pay once160, SP-20 fixed expense25 native PAYE25/0 or qualified Umbrella25/5/30 once. G10/R-177 bounded Surrey25/06/2026 commission exception remains invoice-only and Source-owned agreed3559.38 against3559.39 remittance, no global VAT/source-money change, no other-line alteration and zero Banking pay/recovery effect; no query snapshot implements it. Whole-chain A0/A/B/C/D and frozen settlement/lawful-unissued-discard oracles required for their features. X-8/X-9/X-12 are NEXT receipts, not LEGACY or local-only observations. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-09-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 301 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-09 |
+| Deliverable ID | HR-09-D01 |
+| Title | Published compatibility and joined HealthRoster dependency receipts |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-09_PUBLISHED_COMPATIBILITY_RECEIPTS.md (proposed); F-23/F-24/PF-15/PF-16 release owners; broker/src/index.js:46–57 |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":46,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"docs/bpay-next/IMPLEMENTATION_CHECKLIST.md","line":8322,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":336,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql","line":438,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":890,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":655,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Record intended GitHub-published merge-compatible backend/Office identities, both branch histories, final defining/include order, generated contract and exact owner/epoch installed identities. Add every applicable correction-state/protection/query/expense/report feature receipt to existing final-run/readback workflow. Preparatory document completion is distinct from later installed/business proof. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-09; F-10; F-23; HR-01; HR-02; HR-03; HR-04; HR-05; HR-06; HR-07; HR-08 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Under later exact release/test authority verify final bodies/ACLs in actual profiles, NEXT sole active owner, compatible modules/screens and ordered queued first-authorise/Create/settlement/recovery/browser receipts. NX-8 retain old event NO_CHANGE pay once160, SP-20 fixed expense25 native PAYE25/0 or qualified Umbrella25/5/30 once. G10/R-177 bounded Surrey25/06/2026 commission exception remains invoice-only and Source-owned agreed3559.38 against3559.39 remittance, no global VAT/source-money change, no other-line alteration and zero Banking pay/recovery effect; no query snapshot implements it. Whole-chain A0/A/B/C/D and frozen settlement/lawful-unissued-discard oracles required for their features. X-8/X-9/X-12 are NEXT receipts, not LEGACY or local-only observations. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-0,NX-B1,NX-8,SP-20,G4,G6,G9,G10; Owner rules=R-004,R-007,R-100,R-141,R-151,R-164,R-175,R-177,R-179,R-190,R-217;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-09-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 301 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-09 |
+| Deliverable ID | HR-09-D02 |
+| Title | Published compatibility and joined HealthRoster dependency receipts |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | F-23 final run Seq288; F-24 Seq289; PF-15 Seq290; PF-16 Seq291; R2 final checks Seq292 |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":46,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"docs/bpay-next/IMPLEMENTATION_CHECKLIST.md","line":8322,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":336,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql","line":438,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":890,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql","line":655,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0117_banking_pay_next_chosen_display_read_barrier_v1.sql","line":668,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":140,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql","line":916,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql","line":49,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql","line":333,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql","line":301,"proves":"HR-09 static existing NOT YET BUILT release proof; PARTLY MET wiring contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Under later exact release/test authority verify final bodies/ACLs in actual profiles, NEXT sole active owner, compatible modules/screens and ordered queued first-authorise/Create/settlement/recovery/browser receipts. NX-8 retain old event NO_CHANGE pay once160, SP-20 fixed expense25 native PAYE25/0 or qualified Umbrella25/5/30 once. G10/R-177 bounded Surrey25/06/2026 commission exception remains invoice-only and Source-owned agreed3559.38 against3559.39 remittance, no global VAT/source-money change, no other-line alteration and zero Banking pay/recovery effect; no query snapshot implements it. Whole-chain A0/A/B/C/D and frozen settlement/lawful-unissued-discard oracles required for their features. X-8/X-9/X-12 are NEXT receipts, not LEGACY or local-only observations. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-09; F-10; F-23; HR-01; HR-02; HR-03; HR-04; HR-05; HR-06; HR-07; HR-08 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Under later exact release/test authority verify final bodies/ACLs in actual profiles, NEXT sole active owner, compatible modules/screens and ordered queued first-authorise/Create/settlement/recovery/browser receipts. NX-8 retain old event NO_CHANGE pay once160, SP-20 fixed expense25 native PAYE25/0 or qualified Umbrella25/5/30 once. G10/R-177 bounded Surrey25/06/2026 commission exception remains invoice-only and Source-owned agreed3559.38 against3559.39 remittance, no global VAT/source-money change, no other-line alteration and zero Banking pay/recovery effect; no query snapshot implements it. Whole-chain A0/A/B/C/D and frozen settlement/lawful-unissued-discard oracles required for their features. X-8/X-9/X-12 are NEXT receipts, not LEGACY or local-only observations. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-0,NX-B1,NX-8,SP-20,G4,G6,G9,G10; Owner rules=R-004,R-007,R-100,R-141,R-151,R-164,R-175,R-177,R-179,R-190,R-217;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-10 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 302 |
+| Row kind | ITEM |
+| Item ID | HR-10 |
+| Deliverable ID |  |
+| Title | Separate single-admin batch authorisation fit |
+| Review lane | R4 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:722 |
+| Existing work status | MISSING |
+| Evidence | review/R4.md |
+| Exact remaining change | Resolve requested active-admin-alone batch approval against existing execution/quorum owners before EX-03. Permission eligibility is not proof of single-person quorum. This is requested only and never a HealthRoster activation gate; if lawful composition is unavailable, BLOCKED with exact governing clauses for owner decision. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | EX-01; EX-02 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Only after owner approves an exact lawful fit, prove admin-only single approval and all applicable Golden Key/quorum/duplicate actor/maker/re-auth/bank safety negatives through approved owners. Authority changes no money; this proposed documentation makes no execution approval and must not block HealthRoster go-live. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-10-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 302 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-10 |
+| Deliverable ID | HR-10-D01 |
+| Title | Separate single-admin batch authorisation fit |
+| Review lane | R4 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-10_BATCH_ADMIN_QUORUM_FIT.md (proposed); EX-03/EX-04 and original r3 quorum/Golden Key rulings |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"docs/bpay-next/IMPLEMENTATION_CHECKLIST.md","line":5288,"proves":"HR-10 static existing NOT YET BUILT requested fit contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | State existing one-to-five distinct approver/quorum/maker/reauthentication rules alongside R-211/R-235 round12Q7, round19. Demonstrate a lawful operation-scoped single-admin fit or record precise BLOCKED decision. Do not replace quorum with a generic active(admin OR flags) test or silently change native policies. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | EX-01; EX-02 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Only after owner approves an exact lawful fit, prove admin-only single approval and all applicable Golden Key/quorum/duplicate actor/maker/re-auth/bank safety negatives through approved owners. Authority changes no money; this proposed documentation makes no execution approval and must not block HealthRoster go-live. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-4; Owner rules=R-211,R-235;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-10-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 302 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-10 |
+| Deliverable ID | HR-10-D02 |
+| Title | Separate single-admin batch authorisation fit |
+| Review lane | R4 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | docs/bpay-next/IMPLEMENTATION_CHECKLIST.md:5286,5296,5297,5300,5342; EX-03 approval and EX-04 preview contracts |
+| Existing work status | MISSING |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"docs/bpay-next/IMPLEMENTATION_CHECKLIST.md","line":5288,"proves":"HR-10 static existing NOT YET BUILT requested fit contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Only after owner approves an exact lawful fit, prove admin-only single approval and all applicable Golden Key/quorum/duplicate actor/maker/re-auth/bank safety negatives through approved owners. Authority changes no money; this proposed documentation makes no execution approval and must not block HealthRoster go-live. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | EX-01; EX-02 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Only after owner approves an exact lawful fit, prove admin-only single approval and all applicable Golden Key/quorum/duplicate actor/maker/re-auth/bank safety negatives through approved owners. Authority changes no money; this proposed documentation makes no execution approval and must not block HealthRoster go-live. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AI-4; Owner rules=R-211,R-235;  |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-11 ITEM
+
+| Live field | Value |
+|---|---|
+| Seq | 303 |
+| Row kind | ITEM |
+| Item ID | HR-11 |
+| Deliverable ID |  |
+| Title | Equivalent Banking Worker permission helper reuse |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type |  |
+| Exact object | AMENDMENT_CARDS.md:761 |
+| Existing work status | PARTLY_DONE |
+| Evidence | review/R5.md |
+| Exact remaining change | Converge only behavior-equivalent Banking Worker sites on the HealthRoster helper when owner-authorised. Re-establish the twelve original provenance labels at this commit before editing: eight current named declarations plus separate cancellation helper are evidence, not a complete 12-site closure census. Unrelated permissions and NX-AI-4 behavior stay separate. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-10 |
+| Admission and shared safety | See card and exact deliverable contract |
+| Design note required | Y |
+| Build checks | Separate per-deliverable checks |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | The exact twelve-site map resolves every original label and equivalent helper call; inactive actors refuse and all existing response/replay semantics remain unchanged. No cash movement or activation gate. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Card is not complete until every required deliverable and owner gate is satisfied. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-11-D01
+
+| Live field | Value |
+|---|---|
+| Seq | 303 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-11 |
+| Deliverable ID | HR-11-D01 |
+| Title | Equivalent Banking Worker permission helper reuse |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | docs/bpay-next/design/HR-11_WORKER_PERMISSION_SITE_MAP.md (proposed); original handoff W1–W12 labels; broker/src/index.js |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":23619,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":544,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":31,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Map original offsets25076,26010,44558,44898,51705,53127,53288,53504,53677,55090,93622,184820 to exact current handler/site or superseded/merged disposition. Current anchors23619,24553,51662,52039,52212,53625,92220,183714 and cancellation50242–50245 are bounded evidence. Record operation, equivalent predicate/errors and helper/version SHA; no claimed complete twelve census until mapped. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-10 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | The exact twelve-site map resolves every original label and equivalent helper call; inactive actors refuse and all existing response/replay semantics remain unchanged. No cash movement or activation gate. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=W1–W12; Owner rules=R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### HR-11-D02
+
+| Live field | Value |
+|---|---|
+| Seq | 303 |
+| Row kind | DELIVERABLE |
+| Item ID | HR-11 |
+| Deliverable ID | HR-11-D02 |
+| Title | Equivalent Banking Worker permission helper reuse |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | WORKER ROUTE |
+| Exact object | broker/src/payment-actor-permission.js — proposed NEW-JUSTIFIED HealthRoster WP-PP §25 producer, NOT YET BUILT; equivalent broker/src/index.js sites above |
+| Existing work status | PARTLY_DONE |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"broker/src/index.js","line":23619,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql","line":544,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-workbench.js","line":880,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"broker/src/bpay-next-decisions-clear.js","line":31,"proves":"HR-11 static existing PARTLY MET existing behavior contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Wait for the actual published compatible HealthRoster producer helper commit/version/SHA; Banking does not independently author it. Then consume only equivalent active admin/authoriser/golden checks preserving responses/errors/operation semantics/replay. Inactive refused; admin-only/authoriser-only/golden-only eligibility unchanged; no Workbench/execution/quorum widening. This conditional reuse request is nongating. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | F-10 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: JS syntax; [ ] actual caller/source checks; [ ] exact typed request/response/error/idempotency contract; [ ] actor/owner/epoch/containment negatives. Preserve refusal and replay semantics. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | The exact twelve-site map resolves every original label and equivalent helper call; inactive actors refuse and all existing response/replay semantics remain unchanged. No cash movement or activation gate. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: WORKER ROUTE. Existing object status/evidence is not a completion tick for the revised target. Requests=W1–W12; Owner rules=R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### F-14-D03x-HR
+
+| Live field | Value |
+|---|---|
+| Seq | 11 |
+| Row kind | DELIVERABLE |
+| Item ID | F-14 |
+| Deliverable ID | F-14-D03x-HR |
+| Title | Merge the protected-action orchestrator's NEXT route onto the current upstream — finite HealthRoster successor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | WORKER ROUTE |
+| Exact object | Protected orchestrator / preview operation-scoped actor adoption |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Adopt exact Source shared actor successor/receipt contract for the specified HealthRoster operations only; retain routing/ownership/security and unrelated native policy. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: JS syntax; [ ] actual caller/source checks; [ ] exact typed request/response/error/idempotency contract; [ ] actor/owner/epoch/containment negatives. Preserve refusal and replay semantics. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: WORKER ROUTE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Existing ITEM and all original children/progress/evidence are preserved byte-for-byte in meaning; this new required child reopens only the listed scope. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### SP-03-D05x-HR
+
+| Live field | Value |
+|---|---|
+| Seq | 39 |
+| Row kind | DELIVERABLE |
+| Item ID | SP-03 |
+| Deliverable ID | SP-03-D05x-HR |
+| Title | Source first Authorise publishes to NEXT (seam S1) — finite HealthRoster successor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | First-authorise shared Source predicate first/replay |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Preserve existing missing/nonfinalised exemptions, publication and initial binding. Verify changed shared actor scope admin-only/authoriser-only/golden-only and inactive negatives through actual first-authorise/replay. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Preserve existing missing/nonfinalised exemptions, publication and initial binding. Verify changed shared actor scope admin-only/authoriser-only/golden-only and inactive negatives through actual first-authorise/replay. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Existing ITEM and all original children/progress/evidence are preserved byte-for-byte in meaning; this new required child reopens only the listed scope. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### SP-04-D06x-HR
+
+| Live field | Value |
+|---|---|
+| Seq | 138 |
+| Row kind | DELIVERABLE |
+| Item ID | SP-04 |
+| Deliverable ID | SP-04-D06x-HR |
+| Title | Route ordinary and bulk Unauthorise of Source-managed weeks to the Source withdrawal (seam S6) — finite HealthRoster successor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | CHECK |
+| Exact object | Unauthorise/return shared Source actor first/replay |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Preserve completed withdrawal guards, Source current retraction, ordered cut, Worker/bulk result handling and all history. Verify only specified new shared actor scope/replay on lawful withdrawal; no blanket unissue/ordinary correction bypass. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Author positive/negative, order/replay and money controls against exact approved objects; [ ] record future published joined receipts separately. Documentation validation here executes none of those product tests. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Preserve completed withdrawal guards, Source current retraction, ordered cut, Worker/bulk result handling and all history. Verify only specified new shared actor scope/replay on lawful withdrawal; no blanket unissue/ordinary correction bypass. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: CHECK. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Existing ITEM and all original children/progress/evidence are preserved byte-for-byte in meaning; this new required child reopens only the listed scope. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### SP-06-D06x-HR
+
+| Live field | Value |
+|---|---|
+| Seq | 40 |
+| Row kind | DELIVERABLE |
+| Item ID | SP-06 |
+| Deliverable ID | SP-06-D06x-HR |
+| Title | Protected actions under NEXT: Office editor and Timesheet card handle NEXT receipts (seams S4, S5) — finite HealthRoster successor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | REPEATABLE |
+| Exact object | Final protected status/publisher/local completion inline actor replacement |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql","line":169,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql","line":233,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql","line":2427,"proves":"HR-06 static existing CONFLICTS predicate; PARTLY MET callers contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Replace exactly final inline status233 and publisher2427/local-complete2922 predicates via shared scoped helper; preserve every completed Source/NEXT receipt, publication, financial and UI contract. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | HR-06 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules. BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. |
+| Design note required | Y |
+| Build checks | [ ] Later authorised build: db:check; [ ] exact local PG17 compile/first-use; [ ] final defining body/include order; [ ] signatures/config/grants and browser/service ACL negatives; [ ] contract/seal/coupling for actual contracted change. Hosted acceptance remains separate. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Admin-only, authoriser-only and golden-only active users pass required operations; inactive, missing and neither-flags non-admin refuse with no artifacts. Configured ineligible automatic actor falls back to Office. £160 protected plus WAIT remains £160, no invoice/debt movement. Prove native Workbench and batch quorum unchanged. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: REPEATABLE. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-AUTH,NX-WAIT; Owner rules=R-195,R-201,R-216; BLOCKED: HealthRoster WP-PP §25 must first publish reviewed compatible SQL/Worker helper commit/version/SHA; NOT YET BUILT in committed source; Banking consumer only. Existing ITEM and all original children/progress/evidence are preserved byte-for-byte in meaning; this new required child reopens only the listed scope. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |
+
+### SP-13-D04x-HR
+
+| Live field | Value |
+|---|---|
+| Seq | 43 |
+| Row kind | DELIVERABLE |
+| Item ID | SP-13 |
+| Deliverable ID | SP-13-D04x-HR |
+| Title | Pay Query gate reader, digest, scope and ReceiptV3 lanes (seams S7, S8) — finite HealthRoster successor |
+| Review lane | R5 |
+| Batch | HR HealthRoster integration |
+| Deliverable type | DOC |
+| Exact object | HealthRoster origin-specific versioned query provenance composition |
+| Existing work status | BLOCKED-ON-HEALTHROSTER |
+| Evidence | [{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql","line":18,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql","line":577,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"},{"copy":"COMMITTED_NEXT","path":"supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql","line":16,"proves":"HR-01 static existing PARTLY MET provenance; native per-shift hold retained contract only; proposed remaining changes are not implemented or accepted.","checkoutHead":"497fb059f186de97ae7df4d5fc7558ff229c0b9f"}] |
+| Exact remaining change | Retain completed QueryScopeV2/ReceiptV3/PAY_QUERY_STATE_V3 native shape. Add separately versioned HealthRoster full per-incident/qualified WAIT/root/revision/segment snapshot contract without silently adding arrays to legacy gate. Owner D1 retains built SP-14 per-shift manual hold; no SP-14 reopen. |
+| Successor-chain position | HealthRoster ordered successor overlay; preserve native master-chain order |
+| Depends on | HR-01 |
+| Admission and shared safety | OR-45 and R-215: reuse actual Source/NEXT owners, no parallel payer, cash ledger, correction engine or LEGACY parity project. TEST-only. Preserve current admission, security, immutable approval/source/TSFIN and realised/held history. New contract/version changes require final-definer/include-order, ACL/verifier, seal/coupling and exact commit review. No build, install, payment or release authority from this proposed package. Policy X / OR-44 unchanged: approvals accepted before Create's ordered cut finish first; accepted later changes affect the next run only. Preserve every frozen Draft figure, held artifact, TS_DAY bucket, original basis and realised witness. A pending Source decision is not effective approval. No blanket open-Draft veto. Execution bank safety retains its own rules.  |
+| Design note required | Y |
+| Build checks | [ ] Verify exact owner clauses, interface signatures, compatibility digest/version, evidence pin, dependency and count projections. No execution acceptance inferred. |
+| BUILT revised deliverable | [ ] |
+| REVIEWED implementation | [ ] |
+| INSTALLED revised deliverable | [ ] |
+| TESTED in app | [ ] |
+| Acceptance journey | Five £40 shifts, Tuesday same-event typed hours-differ manual review→£160 pay/£40 excluded, approval200 unchanged. Two same-day shifts approve80/one excluded40→40 available; already-paid40 decision/no fictitious hold; genuine positive residual10 only held. Prove unavailable/unbound native refusal, pre/post-cut open/close and identical frozen per-incident/WAIT replay. SP-14 original ticks unchanged; no query debt or invoice delta. Future published joined acceptance AUTHORED_NOT_RUN. |
+| Notes | Raw deliverable type: DOC. Existing object status/evidence is not a completion tick for the revised target. Requests=NX-HOLD-C; Owner rules=R-007,R-079,R-176,R-190,R-207;  Existing ITEM and all original children/progress/evidence are preserved byte-for-byte in meaning; this new required child reopens only the listed scope. Owner SEND1/SEND4: deferred until HealthRoster WP-PP25 publishes reviewed compatible private.weekly_source_pay_actor_allowed_v1 and Worker helper commit/version/SHA. Banking consumes only; no second producer. No original owner tick/evidence is changed. |
+| Implementation commit |  |
+| Implementation date |  |
+| Implementation evidence |  |
+| Independent review evidence |  |
+| TEST installed evidence |  |
+| In-app result evidence |  |

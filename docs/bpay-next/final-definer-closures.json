@@ -103,19 +103,23 @@
     },
     {
       "signature": "private._candidate_daily_freshness_v1(text,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
-      "finalPhysical": "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
-        "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql"
+        "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql"
+        "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+        "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql"
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -629,15 +633,16 @@
     },
     {
       "signature": "private._candidate_home_summary_v1(text,uuid,uuid,jsonb,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/26082026_1537_candidate_home_draft_identity_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/25082026_1616_candidate_home_daily_read_v1.sql",
         "supabase/repeatable/25082026_2024_candidate_nullif_runtime_correction_v1.sql",
         "supabase/repeatable/25082026_2043_candidate_home_notification_runtime_v1.sql",
         "supabase/repeatable/25082026_2255_candidate_home_actionable_timesheet_count_v1.sql",
         "supabase/repeatable/26082026_1432_candidate_home_draft_counts_v1.sql",
-        "supabase/repeatable/26082026_1537_candidate_home_draft_identity_v1.sql"
+        "supabase/repeatable/26082026_1537_candidate_home_draft_identity_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/25082026_1616_candidate_home_daily_read_v1.sql",
@@ -646,12 +651,15 @@
         "supabase/repeatable/25082026_2255_candidate_home_actionable_timesheet_count_v1.sql",
         "supabase/repeatable/26082026_1432_candidate_home_draft_counts_v1.sql",
         "supabase/repeatable/26082026_1537_candidate_home_draft_identity_v1.sql",
-        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql"
+        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8114,25 +8122,27 @@
     },
     {
       "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
         "supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
-        "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql"
+        "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql",
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
         "supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql",
         "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
-        "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B first-install current TEST integration",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8263,19 +8273,23 @@
     },
     {
       "signature": "public.candidate_daily_legacy_availability_apply_atomic_v1(jsonb,text,uuid,text,jsonb,text)",
-      "finalRoot": "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
-        "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql"
+        "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql",
+        "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql"
+        "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+        "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql",
+        "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/26082026_1059_candidate_daily_hybrid_availability_authority_v1.sql"
+        "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8297,21 +8311,25 @@
     },
     {
       "signature": "public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text)",
-      "finalRoot": "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql",
-      "finalPhysical": "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
         "supabase/repeatable/29082026_0922_candidate_daily_reconciliation_linked_window_v1.sql",
-        "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql"
+        "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql",
+        "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
-        "supabase/repeatable/29082026_0922_candidate_daily_reconciliation_linked_window_v1.sql"
+        "supabase/repeatable/29082026_0922_candidate_daily_reconciliation_linked_window_v1.sql",
+        "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql",
+        "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql"
+        "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8371,15 +8389,16 @@
     },
     {
       "signature": "public.candidate_daily_tiles_get_v1(jsonb,date,integer)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
         "supabase/repeatable/25082026_1616_candidate_home_daily_read_v1.sql",
         "supabase/repeatable/25082026_2024_candidate_nullif_runtime_correction_v1.sql",
         "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql",
         "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
-        "supabase/repeatable/28082026_1950_candidate_daily_action_target_v1.sql"
+        "supabase/repeatable/28082026_1950_candidate_daily_action_target_v1.sql",
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
@@ -8388,12 +8407,15 @@
         "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/28082026_1320_candidate_daily_calendar_freshness_v1.sql",
         "supabase/repeatable/28082026_1950_candidate_daily_action_target_v1.sql",
-        "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql"
+        "supabase/repeatable/29082026_0012_candidate_daily_active_window_entry_v1.sql",
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
+        "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8880,22 +8902,27 @@
     },
     {
       "signature": "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
         "supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql",
         "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
-        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql"
+        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+        "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
         "supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql",
         "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
-        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql"
+        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
-      "finalClosures": [],
-      "owner": "SP-12 actual first locking entry; NEXT admission only, original owner retained",
+      "finalClosures": [
+        "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql"
+      ],
+      "owner": "SP-12 actual first locking entry; NEXT admission only, original owner retained; owner SEND4/SEND4B first-install current TEST integration",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -8972,15 +8999,16 @@
     },
     {
       "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
         "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
         "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
         "supabase/repeatable/28082026_1913_candidate_daily_submission_admission_v1.sql",
         "supabase/repeatable/28082026_2210_candidate_daily_handoff_recovery_v1.sql",
-        "supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql"
+        "supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql",
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
@@ -8991,12 +9019,13 @@
         "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
         "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
         "supabase/repeatable/06092026_0337_candidate_sequential_expense_manager_approval_gate_v1.sql",
-        "supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B first-install current TEST integration",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12258,19 +12287,23 @@
     },
     {
       "signature": "public.weekly_source_message_dispatch_target_claim_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
-      "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
       "allowedPhysical": [
-        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
-        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12292,19 +12325,23 @@
     },
     {
       "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
-      "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
       "allowedPhysical": [
-        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
-        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -17823,6 +17860,79 @@
         "supabase/repeatable/13102026_0926_banking_pay_next_resolution_changed_evidence_v1.sql"
       ],
       "owner": "WB-34 seq146 D06 BD176: native stale-read evidence and bounded same-parent refresh anchors; W2 merges0721, W1 merges0117, kind_page merges0132; private0537 money/quote and Source producers unchanged."
+    },
+    {
+      "signature": "private._expense_approval_policy_v1(uuid,uuid,date,text)",
+      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "owner": "Owner SEND4/SEND4B preserve TEST imported-expense QR approval helper",
+      "baselineSource": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92"
+    },
+    {
+      "signature": "private._expense_approval_route_v1(uuid,uuid,text)",
+      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+      ],
+      "owner": "Owner SEND4/SEND4B preserve TEST imported-expense QR approval helper",
+      "baselineSource": "e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92"
+    },
+    {
+      "signature": "private.candidate_notification_visible_v1(public.candidate_notifications,timestamp with time zone,text)",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
+      ],
+      "owner": "BD178 first-install current Candidate runtime; native physical definition unchanged"
+    },
+    {
+      "signature": "public.candidate_app_notifications_page_v1(uuid,text,integer,integer,timestamp with time zone,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
+      ],
+      "owner": "BD178 first-install current Candidate runtime; native physical definition unchanged"
+    },
+    {
+      "signature": "public.candidate_app_notifications_manage_v1(uuid,text,integer,text,jsonb,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
+      ],
+      "owner": "BD178 first-install current Candidate runtime; native physical definition unchanged"
     }
   ],
   "editorChains": [

@@ -183,6 +183,21 @@ export function changedSourcePaths() {
 }
 
 export function verifyFinalDefiners({ changed = changedSourcePaths(), selectedRoots = null, selectedMigrations = null } = {}) {
+  // The default source gate verifies the actual managed changed-only envelope.
+  // A changed predecessor can require an unchanged final closure; Git diff alone
+  // does not describe the installed selection. Explicit selections remain strict.
+  if (selectedRoots === null && selectedMigrations === null) {
+    const current = inventory();
+    const source = definerInventory(current);
+    const changedRoots = new Set(source.roots.filter(row => row.includes.some(file => changed.has(file))).map(row => row.path));
+    const changedMigrations = new Set(source.migrationRoots.filter(row => row.includes.some(file => changed.has(file))).map(row => row.path));
+    const closed = closeFinalDefinerSelection({
+      migrations: current.migrations.filter(row => changedMigrations.has(row.path)),
+      repeatables: current.repeatables.filter(row => changedRoots.has(row.path)),
+    }, current);
+    selectedRoots = closed.repeatables.map(row => row.path);
+    selectedMigrations = closed.migrations.map(row => row.path);
+  }
   const registry = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/bpay-next/final-definer-closures.json'), 'utf8'));
   if (registry.formatVersion !== 1 || !Array.isArray(registry.chains)) throw Error('BPAY_NEXT_FINAL_DEFINER_REGISTRY_INVALID');
   const { roots, routines, migrationRoots } = definerInventory();

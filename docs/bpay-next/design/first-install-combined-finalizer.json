@@ -1,0 +1,22 @@
+{
+  "decision": "BD178",
+  "authority": "Owner SEND4/SEND4B first-install integration",
+  "previousFile": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+  "incomingFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+  "finalFile": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+  "signature": "public.candidate_submission_finalize_atomic_v1(uuid,text,uuid,integer,text,text,timestamp with time zone,jsonb)",
+  "previousFileSha256": "7fdddc57b5f1ca6aff196567a10dd09b393185b17efdfe9b58bb766aea7e847b",
+  "incomingFileSha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+  "previousFunctionSha256": "f8bc14a44998db6606d4e116ab3f43607ba2bfec776ffde2e323dbcc12c96343",
+  "incomingFunctionSha256": "391dc6f1f0f30f32f93f3ac935f9f53b132855716a2eedd800c42f862288593c",
+  "combinedFunctionSha256": "ef64ee3c3ab65347ec801ca3d3d0edbfcb3b0264c59dceb5d7dda650a7345c03",
+  "admissionSha256": "7c2d1c6f6c050f83a5ef9a47c5c9d20d99fa17de8634c87e81b5d2b64251a5ca",
+  "importedExpenseInverseExact": true,
+  "ownerConfigSignatureAclPreserved": true,
+  "change": "Only exact0931 early NEXT session admission inserted into complete1347 finalizer before first workflow FOR UPDATE",
+  "contract": "168bd9fccdb69e4dcc3bdea19d6ef852a8c771d7801891989169d55655f29959",
+  "cleanPg17Schema": "NEW compiled on sole local PostgreSQL17.11; native runtime reload successor subsequently compiled through CHANGED",
+  "installedNativeOwners": "Sixteen exact source bodies, owner/security/configuration/volatility/ACL matches in first-install-native-owner-catalogue.json",
+  "contractSealAndCoupling": "PASS",
+  "hostedInstallation": "NOT_RUN"
+}

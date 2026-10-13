@@ -8,7 +8,7 @@ declare
   v_today date:=(clock_timestamp() at time zone 'Europe/London')::date;
   v_date date; v_midnight timestamptz; v_next timestamptz;
   v_days jsonb; v_result jsonb; v_generation uuid; v_original_date date;
-  v_candidate_context jsonb; v_before bigint;
+  v_candidate_context jsonb; v_before bigint; v_booking_before jsonb; v_old_outbox uuid;
   v_context jsonb:=jsonb_build_object('policy','SIGNED_SYSTEM_SYNC','environment','TEST',
     'system_auth_verified',true,'nonce_consumed',true,'environment_trusted',true,
     'stable_operation_identity',true,'approved_source_mapping',true,'source_scope_ready',true,
@@ -154,6 +154,89 @@ begin
      or (select count(*) from public.candidate_daily_sheet_projection_outbox
        where candidate_id=v_candidate and availability_date=v_today)<>1 then
     raise exception 'ROTA_CALENDAR_PROOF: current date edit did not commit its exact projection';
+  end if;
+  -- A genuine committed command may queue its Sheet copy without disabling
+  -- canonical reads or the next version-checked edit. Cursors stay truthful.
+  v_result:=private._candidate_daily_freshness_v1('TEST',v_candidate,clock_timestamp());
+  if v_result->>'ready' is distinct from 'true'
+     or (v_result->>'required_visible_cursor')::bigint<=
+       (v_result->>'effective_visible_cursor')::bigint then
+    raise exception 'ROTA_CALENDAR_PROOF: expected background copy blocked canonical availability';
+  end if;
+  update public.candidate_daily_sheet_projection_outbox set state='CLAIMED',
+    lease_owner='rota-calendar-projector-proof',lease_token=repeat('e',64),
+    lease_expires_at_utc=now()+interval '120 seconds'
+    where candidate_id=v_candidate and availability_version=v_before+1
+    returning outbox_id into v_old_outbox;
+  v_result:=public.candidate_daily_availability_apply_atomic_v1(v_candidate_context,
+    'rota-calendar-proof-consecutive-0001',v_before+1,
+    jsonb_build_array(jsonb_build_object('date',v_today,'availability','LONG_DAY')),
+    '01K2ABCDEFGHJKMNPQRSTVWXYZ');
+  if v_result->>'availability_version' is distinct from (v_before+2)::text
+     or (select count(*) from public.candidate_daily_sheet_projection_outbox
+       where candidate_id=v_candidate and availability_date=v_today)<>2 then
+    raise exception 'ROTA_CALENDAR_PROOF: second save lost either exact projection';
+  end if;
+  v_result:=public.candidate_daily_projection_complete_atomic_v1(v_context,
+    '00000000-0000-4000-8000-00000000e962','rota-calendar-old-copy-complete-0001',
+    jsonb_build_array(jsonb_build_object('outbox_id',v_old_outbox,'lease_token',repeat('e',64),
+      'outcome','DELIVERED','observed_sheet_revision','rota-calendar-old-copy-v1')),
+    '01K2ABCDEFGHJKMNPQRSTVWXYZ');
+  if v_result#>>'{outcomes,0,accepted}' is distinct from 'true'
+     or not exists(select 1 from public.candidate_daily_availability_days
+       where candidate_id=v_candidate and availability_date=v_today
+         and preference='LONG_DAY' and availability_version=v_before+2)
+     or not exists(select 1 from public.candidate_daily_sheet_projection_outbox
+       where candidate_id=v_candidate and availability_version=v_before+2 and state='PENDING') then
+    raise exception 'ROTA_CALENDAR_PROOF: older Sheet acknowledgement replaced the newer choice';
+  end if;
+  update private.candidate_daily_sync_state set required_visible_cursor=v_before+3
+    where environment='TEST' and candidate_id=v_candidate;
+  v_result:=private._candidate_daily_freshness_v1('TEST',v_candidate,clock_timestamp());
+  if v_result->>'ready' is distinct from 'false' then
+    raise exception 'ROTA_CALENDAR_PROOF: unknown copy gap bypassed';
+  end if;
+  update private.candidate_daily_sync_state set required_visible_cursor=v_before+2
+    where environment='TEST' and candidate_id=v_candidate;
+  v_result:=public.candidate_daily_availability_apply_atomic_v1(v_candidate_context,
+    'rota-calendar-proof-stale-0001',v_before+1,
+    jsonb_build_array(jsonb_build_object('date',v_today,'availability','NIGHT')),
+    '01K2ABCDEFGHJKMNPQRSTVWXYZ');
+  if v_result->>'error_code' is distinct from 'AVAILABILITY_VERSION_CONFLICT' then
+    raise exception 'ROTA_CALENDAR_PROOF: background copy weakened version conflict';
+  end if;
+  -- A newly received booking still owns the day, including while prior
+  -- availability copies wait. Availability cannot update/delete its facts.
+  update public.candidate_daily_rota_days set booked=true,booking_id='rota-copy-booking-proof',
+    shift_starts_at=(v_today::timestamp at time zone 'Europe/London')+interval '8 hours',
+    shift_ends_at=(v_today::timestamp at time zone 'Europe/London')+interval '16 hours'
+    where generation_id=v_generation and rota_date=v_today;
+  select to_jsonb(d) into v_booking_before from public.candidate_daily_rota_days d
+    where generation_id=v_generation and rota_date=v_today;
+  v_result:=public.candidate_daily_availability_apply_atomic_v1(v_candidate_context,
+    'rota-calendar-proof-booked-0001',v_before+2,
+    jsonb_build_array(jsonb_build_object('date',v_today,'availability','NOT_AVAILABLE')),
+    '01K2ABCDEFGHJKMNPQRSTVWXYZ');
+  if v_result->>'error_code' is distinct from 'AVAILABILITY_DATE_NOT_EDITABLE'
+     or (select to_jsonb(d) from public.candidate_daily_rota_days d
+       where generation_id=v_generation and rota_date=v_today) is distinct from v_booking_before
+     or not exists(select 1 from public.candidate_daily_availability_days
+       where candidate_id=v_candidate and availability_date=v_today and preference='LONG_DAY') then
+    raise exception 'ROTA_CALENDAR_PROOF: availability overwrote a new booking';
+  end if;
+  update private.candidate_daily_authority_scopes set transition_in_progress=true
+    where environment='TEST' and candidate_id=v_candidate;
+  v_result:=private._candidate_daily_freshness_v1('TEST',v_candidate,clock_timestamp());
+  if v_result->>'ready' is distinct from 'false' or not(v_result->'reasons' ? 'PROJECTION_LAG') then
+    raise exception 'ROTA_CALENDAR_PROOF: background copy bypassed transition barrier';
+  end if;
+  update private.candidate_daily_authority_scopes set transition_in_progress=false
+    where environment='TEST' and candidate_id=v_candidate;
+  update public.candidate_daily_sheet_projection_outbox set state='TERMINAL'
+    where candidate_id=v_candidate and availability_version=v_before+2;
+  v_result:=private._candidate_daily_freshness_v1('TEST',v_candidate,clock_timestamp());
+  if v_result->>'ready' is distinct from 'false' then
+    raise exception 'ROTA_CALENDAR_PROOF: actual projection failure was treated as ordinary copy lag';
   end if;
   -- A falsely complete header cannot hide a missing day; no real row is touched.
   delete from public.candidate_daily_rota_days where generation_id=v_generation and rota_date=v_today+13;

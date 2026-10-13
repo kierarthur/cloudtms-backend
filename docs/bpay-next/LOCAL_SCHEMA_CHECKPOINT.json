@@ -3,18 +3,18 @@
   "status": "LOCAL_SCHEMA_COMPILED",
   "context": {
     "expectedDatabase": "banking_modal_v2_test",
-    "releaseId": "bpay-next-local-schema-8eadb2e204ae33ca43f0cbb95bf2a734d727e130",
-    "gitCommit": "8eadb2e204ae33ca43f0cbb95bf2a734d727e130",
-    "expectedHash": "b05d6b9c15b5ed01d32260557bb6ee582e3ccb7097b6458d5ae1eaface157a5a",
+    "releaseId": "bpay-next-local-schema-93cfbe5433231be4915592e40665fde3ba3f1265",
+    "gitCommit": "93cfbe5433231be4915592e40665fde3ba3f1265",
+    "expectedHash": "674538b4ef303c8958fe0edf5cb881b82cb2ad0afaa6ec5db006dac67ca98b45",
     "environment": "TEST",
     "customerKey": "",
     "mode": "NEW",
-    "manifestHash": "61a746595b7983f697d26475d57f12a579fd771ac347cc2eb3afecde6b02168c"
+    "manifestHash": "63c788ea5cf3fccc789958c4fd6c63ee24234afbd5c165da192263d7b720acd5"
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "497fb059f186de97ae7df4d5fc7558ff229c0b9f",
-  "compiledAtUtc": "2026-10-13T10:23:57.342Z",
+  "sourceCommit": "93cfbe5433231be4915592e40665fde3ba3f1265",
+  "compiledAtUtc": "2026-10-13T13:21:01.989Z",
   "inventory": {
     "migrations": [
       {
@@ -1300,6 +1300,10 @@
       {
         "path": "supabase/migrations/10102026_1621_banking_pay_next_selection_page_skip_receipts_v1.sql",
         "sha256": "f6f1d5b75c5ee3050e269eb38ea35403663c89e0471b6566ff458989e77bf232"
+      },
+      {
+        "path": "supabase/migrations/10102026_1622_candidate_notification_management.sql",
+        "sha256": "609cc16166e72d5e73977f7debeaeb11d67c88a2fd5427f4d0451087deeab991"
       },
       {
         "path": "supabase/migrations/10102026_1634_banking_pay_next_workbench_read_indexes_v1.sql",
@@ -6330,7 +6334,7 @@
           "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
           "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc"
         ],
-        "sha256": "ff756d7d2694ea71cd7a2b98b6cfc2a98accf6a2d5147787cca20d7b73c92296"
+        "sha256": "7633e0905557de734af6ebd76944c9fa6259705c7e62d0eccb1d6e3f1e5ff444"
       },
       {
         "path": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
@@ -7724,6 +7728,13 @@
         "sha256": "956cb3e27fdfa10bcad0f4f18bd2164dcf6003f52119634f4b72a244c60a04c4"
       },
       {
+        "path": "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql"
+        ],
+        "sha256": "a20ace011c98040d62d38f7ffef01a03fe69b9a2bd13ae9f9ba0f61db602bd72"
+      },
+      {
         "path": "supabase/repeatable/10102026_0821_banking_pay_next_protected_wait_permission_v1.sql",
         "paths": [
           "supabase/repeatable/10102026_0821_banking_pay_next_protected_wait_permission_v1.sql"
@@ -7836,6 +7847,13 @@
         "sha256": "96e5f2d8ff972c4085800ad0252cf8c499c5f036682c9c539ffa07b880f64c8c"
       },
       {
+        "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+        ],
+        "sha256": "171d41d8ed2f958cb75ae65573bb0c51fd54de1c0f87e46c82f594d2484fb03b"
+      },
+      {
         "path": "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql",
         "paths": [
           "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql"
@@ -7890,6 +7908,20 @@
           "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql"
         ],
         "sha256": "43a42f3c6207b87100338d7fad6068869c5203adee2aaf0fd3e5ca62123eadd1"
+      },
+      {
+        "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+        ],
+        "sha256": "6f040f4f01873d40c7ab5da74d9a39a4e099c50f4df77a64e2985eec4a34ff68"
+      },
+      {
+        "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql"
+        ],
+        "sha256": "a1acea2ef659191b63553256eab57919c5b7460e2c2f7dcb63813ecc43828daf"
       },
       {
         "path": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
@@ -8697,6 +8729,13 @@
         "sha256": "1f7602da9dbdaccfd9f36f18668b4aa7646abcb2b56138ba596eafe92bfcb08b"
       },
       {
+        "path": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql"
+        ],
+        "sha256": "dcc2f0dd4ff89b645d7f6947a154b27e5c7048631191fd2f347eb323a6351f2b"
+      },
+      {
         "path": "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql",
         "paths": [
           "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql"
@@ -8900,6 +8939,13 @@
         "sha256": "f3b2adf9f07906af21a07ef6391ed255f5c1ba1b6ff68acaf57b35b7a5d239ea"
       },
       {
+        "path": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql"
+        ],
+        "sha256": "a5b981cda8b50b3be8eb147aee054f9e565f14f71b4e1d4d8006b188ca9ca282"
+      },
+      {
         "path": "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql",
         "paths": [
           "supabase/repeatable/13102026_0045_banking_pay_next_current_selected_resolution_quote_v1.sql"
@@ -8998,11 +9044,37 @@
         "sha256": "7e0fd811e5852d255cf142967655214a9cbc68c861dca65fc505b857faedbfa8"
       },
       {
+        "path": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
+        ],
+        "sha256": "6ead9a4c4bb9be021f91a23af4e41bda188504d4136bcc60d0bc10c9bd0a4091"
+      },
+      {
         "path": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
         "paths": [
           "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql"
         ],
         "sha256": "924bb48ff053c0394619758962765c1ee077be33fb2cf7b0e91dc7edd2c9ad0b"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql"
+        ],
+        "sha256": "2409f7690db6e6207085f941129e714dfafd7e7fea492c8c2bf3291ec795db16"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+        "paths": [
+          "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+          "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+          "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
+        ],
+        "sha256": "06ee379760f437ae18dc8f965acd4920775d0571e7da74e160f2592ec67a8a72"
       },
       {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
@@ -9038,11 +9110,16 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
+        "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
         "paths": [
-          "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql"
+          "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+          "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+          "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql"
         ],
-        "sha256": "924bb48ff053c0394619758962765c1ee077be33fb2cf7b0e91dc7edd2c9ad0b"
+        "sha256": "06ee379760f437ae18dc8f965acd4920775d0571e7da74e160f2592ec67a8a72"
       }
     ]
   },

@@ -1138,21 +1138,25 @@ create temporary table wp18_dynamic_sql_acknowledged (
 insert into wp18_dynamic_sql_acknowledged
   (schema_name, routine_name, identity_arguments, definition_sha256) values
 -- BEGIN EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
--- Thirteen fixed-query readers: reviewed saved bodies equal the actual RELEASE8
--- catalogue. These are exact installed-definition hashes, not source-file hashes.
+-- Fifteen fixed-query readers: original RELEASE8 acknowledgements retained;
+-- five current Banking reader bodies rederived from clean PG17 on 13 October.
+-- Their full source/callee review is recorded in first-install-census-dynamic-
+-- readers-review.md. These are installed-definition hashes, not file hashes.
 -- No prefix exemption or arbitrary-SQL permission; acknowledgement is NOT proof
 -- that dynamic SQL cannot write evidence. Existing scanner/refusal stays intact.
   ('private','bpay_next_current_case_page_v1','p_candidate_id uuid, p_after_case_id uuid, p_limit integer','68d98f65f4ed6a9033c3066136d6f04ee99967cd85a1277616abbf3181f87df6'),
   ('private','bpay_next_current_stored_credit_page_v1','p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer','0b450bf8cce85f2df493206827fa04f0097987f02bab4a7df133c41465bfa955'),
   ('private','bpay_next_current_work_page_v1','p_candidate_id uuid, p_after_week date, p_after_work_id uuid, p_limit integer','b4ed30958ceda2b5f985bbc988392bd78bc9402d25d4a8ef38ce3e631ba7502d'),
   ('private','bpay_next_return_cash_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','58829da8c927cba024275c7f1671c00f9c669b503ce645605754a5b104b2f76e'),
-  ('private','bpay_next_worker_status_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','0deaa3a4e8837bbf589c96da1b7c0c816293136389cd254904dd8c64b170ac16'),
+  ('private','bpay_next_workbench_kind_page_v1','p_kind text, p_scope jsonb, p_after jsonb, p_limit integer','3da92df9dc98041fb351b55d27124c612016462a408dae1db9226d646f9bf61c'),
+  ('private','bpay_next_worker_status_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','06d21f0a05447f14f84eeca97fbd42bf1c28c21821b3f8cd75751d9057135a8c'),
   ('private','weekly_source_candidate_head_hours_v2','p_root_timesheet_id uuid','b9efe6c24313518405e74f44e76c10e8004cfb2180380067c9fb2775aeb18705'),
   ('private','weekly_source_inventory_approval_basis_v2','p_root_timesheet_id uuid, p_inventory jsonb','31f8d99baef2085b88b2c8aaf98af4c144f3e8840d7827e0bac8ca2fa9dbc027'),
   ('private','weekly_source_office_next_owner_v1','','001751c12bc8813cb2072ca66f086d6c6446899c676f8b02399f5dd32f6e801a'),
   ('private','weekly_source_office_next_paid_evidence_page_v1','p_actor_user_id uuid, p_root_timesheet_id uuid, p_kind text, p_context_id uuid, p_after jsonb, p_limit integer','157e793c64dd7f77f48bf66f0c122a3700c5c25080d2eddb2b76b98390f3e666'),
-  ('public','bpay_next_frozen_detail_page_v1','p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','4de2038c498221730a7198238380c99c55b35d72d1e19dda4d1d9060c7edc82a'),
-  ('public','bpay_next_original_csv_advice_page_v1','p_actor_user_id uuid, p_instruction_id uuid, p_kind text, p_run_work_id uuid, p_run_line_id uuid, p_shift_detail_id uuid, p_after_work_id uuid, p_after_member_no bigint, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','ee1586e2b496f5ea44b2654064c5816c001d48fbf1d24e1e2af168b030630329'),
+  ('public','bpay_next_frozen_detail_page_v1','p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','d1e4953789854e0fd6e7f27b47d56672ff7efa22c24dba2a145cf0c24d35f675'),
+  ('public','bpay_next_original_csv_advice_page_v1','p_actor_user_id uuid, p_instruction_id uuid, p_kind text, p_run_work_id uuid, p_run_line_id uuid, p_shift_detail_id uuid, p_after_work_id uuid, p_after_member_no bigint, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','c59c6f8b7deed671a063642c0f89405a8e563191729c96e4ee7cbb4a580da596'),
+  ('public','bpay_next_payment_history_page_v1','p_request jsonb','8e6ed1aa10cd21b7a744d6cf562216f3d636f7d3a3c6c362563959d60ce3c0ca'),
   ('public','bpay_next_source_paid_evidence_page_v1','p_request jsonb','be406d7689b0c10d08538797125488265eaaf32b6c13d7d0bee851ace6f41ca1'),
   ('private','bpay_next_channel_worker_page_v1','p_run_id uuid, p_pay_channel text, p_after_candidate_id uuid, p_limit integer','9266c9d46ebf05d5b4684794991c53ab38c5f262bcc0bbd12765c6274a0e59e3'),
 -- END EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
@@ -1163,10 +1167,12 @@ insert into wp18_dynamic_sql_acknowledged
   ('private','pay_workbench_correction_held_dirty_job_resolve_v1','p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_route_results_json jsonb, p_options_json jsonb','ba11e89120decf5cfabca5ec2cfdfdc2a416cb9fb2c426548e25d6e4adbd6337'),
   ('private','pay_workbench_financial_scope_dirty_transition_v1','','1add84673ed8baed0023f39af4b7d6cd3346a16d6f5ff7a2aae3066d53e0e6eb'),
   ('private','pay_sync_overpayments_from_workbench_workspace_v1','p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]','e52dc227b42a6c1825be6c2766de795bc5b1640e5ff118cbd5f5a70755f27fef'),
-  -- The changed candidate-question eligibility predicate follows the current
-  -- comparison on an already-open request. Dynamic SQL and write paths are
-  -- unchanged; this remains an acknowledgement, not a safety proof.
-  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','37a3ad3358c8780c0cd8c8a3bd04aed3baeb70c6f1092b26692e8314ad81cb19'),
+  -- 10 October: expense-only import QR admission uses purpose-scoped policy
+  -- and route resolvers, and preparation records its current policy hash.
+  -- The complete prior-to-current diff preserves both dynamic EXECUTE bodies
+  -- and every financial write path. This exact installed-definition pin is
+  -- still drift acknowledgement, not proof of dynamic-SQL safety.
+  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df'),
   ('public','codex_debug_exec_sql','p_sql text, p_statement_timeout_ms integer, p_lock_timeout_ms integer','8366f2d4db00a039928e39fd53876b6dea6f471e51c7b21c160d7e0ed4e44a70'),
   ('public','codex_debug_explain_sql','p_sql text, p_analyze boolean, p_statement_timeout_ms integer, p_lock_timeout_ms integer','561524dc2ea5ce6138561b85162dc479777dc0a6f7802f70551535fbe4c284e6'),
   ('public','codex_debug_pg_stat_statements_snapshot','p_terms text[], p_limit integer','db679b5746ebe9ebddcc3333c21795705944f7a545e903d20c6b9184da58f500'),
@@ -1284,6 +1290,7 @@ do $identifier_integrity$
 declare
   offending text;
   factual_oid oid;
+  readiness_oid oid;
   factual_unicode_literal text := $factual_unicode_literal$U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'$factual_unicode_literal$;
 begin
   -- BEGIN EXACT FACTUAL EMAIL NON-WRITER CLASSIFICATION
@@ -1334,6 +1341,48 @@ begin
     raise exception using errcode='55000',message='WEEKLY_SOURCE_FACTUAL_EMAIL_NON_WRITER_CHANGED';
   end if;
   -- END EXACT FACTUAL EMAIL NON-WRITER CLASSIFICATION
+  -- BEGIN EXACT READINESS MARKER NON-WRITER CLASSIFICATION
+  -- F-18's immutable SQL helper reads only its four input strings. Its one
+  -- exact U& trim string is not an escaped identifier. Validate the complete
+  -- existing authority/posture before excluding only this OID from 8f.
+  readiness_oid := pg_catalog.to_regprocedure(
+    'private.bpay_next_readiness_marker_v1(pg_catalog.text,pg_catalog.text,pg_catalog.text,pg_catalog.text)');
+  if readiness_oid is null or not exists (
+    select 1 from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    join pg_catalog.pg_language l on l.oid=p.prolang
+    where p.oid=readiness_oid
+      and n.nspname='private' and p.proname='bpay_next_readiness_marker_v1'
+      and p.prokind='f' and l.lanname='sql'
+      and p.prorettype='pg_catalog.text'::regtype and not p.proretset
+      and p.provolatile='i' and p.proparallel='u'
+      and not p.prosecdef and not p.proisstrict and not p.proleakproof
+      and p.proowner=current_user::regrole::oid
+      and p.proconfig is not distinct from array['search_path=pg_catalog, private']::text[]
+      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+        pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid),chr(13)||chr(10),chr(10)),
+        'UTF8')),'hex')='620f34f16bd48a082f1e8d3ae00c7458060ad065580771a782617e0fa6bc395e'
+      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+        pg_catalog.replace(p.prosrc,chr(13)||chr(10),chr(10)),
+        'UTF8')),'hex')='06bcfd367722f866b3efd1dc2164c922f9baaa5488dcc7e33e332df09da6644a'
+      and pg_catalog.array_length(pg_catalog.string_to_array(p.prosrc,factual_unicode_literal),1)=2
+      and pg_catalog.replace(p.prosrc,factual_unicode_literal,'') !~ '[Uu]&'
+      and p.prosrc !~ '[Uu]&"'
+      and (select pg_catalog.count(*) from pg_catalog.aclexplode(
+        coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))))=1
+      and not exists (
+        select 1 from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where a.privilege_type<>'EXECUTE' or a.is_grantable
+          or a.grantor<>p.proowner or a.grantee<>p.proowner)
+      and exists (
+        select 1 from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where a.grantee=p.proowner and a.privilege_type='EXECUTE')
+  ) then
+    raise exception using errcode='55000',message='WEEKLY_SOURCE_READINESS_MARKER_NON_WRITER_CHANGED';
+  end if;
+  -- END EXACT READINESS MARKER NON-WRITER CLASSIFICATION
   select pg_catalog.string_agg(distinct
            def.schema_name || '.' || def.routine_name || '(' || def.identity_arguments || ')',
            E'\n  ')
@@ -1349,7 +1398,7 @@ begin
         and inventory_row.routine_name = def.routine_name
         and inventory_row.identity_arguments = def.identity_arguments
     )
-    and def.oid<>factual_oid;
+    and def.oid<>factual_oid and def.oid<>readiness_oid;
 
   if offending is not null then
     raise exception E'WEEKLY_SOURCE_EVIDENCE_IDENTIFIER_NOT_CANONICAL:\n  %\nThis routine carries a Unicode-escape identifier introducer, or a quoted identifier in a write target list, that section 2 could not reduce to a bare relation name. A lexical scan cannot prove what relation it targets. Classify it by hand in section 1 or rewrite the identifier plainly.', offending;

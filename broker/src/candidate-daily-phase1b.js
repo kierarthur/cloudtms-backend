@@ -670,7 +670,11 @@ export async function handleCandidateDailyPhase1bRequest(request, access, env, d
       }
       if (typeof raw.error_code === 'string') throw new Error(raw.error_code);
       const cleaned = cleanReplay(raw);
-      return successResponse(route, correlationId, cleaned.result, cleaned.replay);
+      const response = successResponse(route, correlationId, cleaned.result, cleaned.replay);
+      // Never hold or change a committed save receipt for a Google copy. A
+      // replay may safely wake the same outbox; it cannot replay the mutation.
+      try { deps?.wakeCandidateDailyProjection?.(correlationId); } catch { /* Scheduled fallback. */ }
+      return response;
     }
 
     // Phase 1B freezes typed specialist seams without creating a generic Google proxy.

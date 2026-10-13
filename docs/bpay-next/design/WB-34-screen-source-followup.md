@@ -72,4 +72,25 @@ Source SHA-256 at this read: Rates 0B8821D5621F8010AAD5786CB69DD3E615E056CEF4537
 
 The initial 43 A4 images were independently viewed and yielded P34-01–03; root is recapturing these repairs. **SOURCE PASS does not approve A4**. The final pixel receipt in SCR-29/review.md must independently close every visual failure against current PNG bytes.
 
-**S34-06 OPEN — recovery heading field bound:** the new `record.header` text limit is 4096 UTF-8 bytes, but the existing native header validators in `js/bpay-next-resolution.js` allow 8192 for Candidate name/reference and Client name. Legal native labels of 4097–8192 bytes would fail local prepare/persist before SAVE. Use the original 8192 limit while retaining the 524288 whole-cache cap. This is one bound alignment within the same presentation cache; no request/receipt/reader change is required. Root was notified immediately. S34-01–05 remain closed; complete current source approval requires S34-06 closure.
+**S34-06 CLOSED — final recovery heading bound:** root aligned the presentation-cache text fields with the native 8192 UTF-8-byte label bound, retaining the exact four-key nullable header, original-root week equality and 524288-byte whole-cache cap. No request, receipt or reader shape changed. S34-01–06 are now closed; scoped SOURCE PASS is retained.
+
+## Final A4/source receipt amendment
+
+All 52 final native images were independently viewed beside the supplied originals. SCR-29/review.md now records FINAL A4 PASS, all 42 policy rows (41 PASS, row 25 N/A; readerAdditions only N/A within 26), P34-01–05 closure, exact differences/control purposes and full image/record/source hashes. Source header £279.00 remains distinct from chosen Work £291.38; fresh Day 8.00 matches the requalified offer. Clear's final scoped native header grid places the known subtitle below title. The latest qualified-acceptance copy preserves known saved/removed status when a follow-up check is unavailable; it does not change financial authority or geometry.
+
+Final current FE SHA-256:
+
+| File | SHA-256 |
+| --- | --- |
+| js/bpay-next-rates.js | 5DE0BF8D8AF1F9E4E76C30E80E69C5A71D6E6D77A979D647F34BB9A8505B9E53 |
+| js/bpay-next-component-choice.js | 0D889317F7523057998808368F057BD909AEC5B2FFFEEFAD0971579EE8A01AA7 |
+| js/bpay-next-pay-channel.js | B79069D12E902FAF6331859F47146847A77F2FB65B5570D67F087CAD76AF30DF |
+| js/bpay-next-clear-choice.js | 4F36E14377AE1A4F20B39539795F498610F75818BE1DCA604AE4E6C149C3D9E8 |
+| js/bpay-next-resolution-adoption.js | 992C116865783C1FE63FB1AC83B40A785C2C035971AFD2551522690B1AC639A0 |
+| js/bpay-next-workbench.js | 56C51B761FF5DFCC902E7DF2E8FFC461C6583D6A07639820656B903F88653D6C |
+| js/bpay-next-office.js | 3808B4B9EE2778C54B3179217BEFC42D6973EDAB963D42A5D460F44A25C70323 |
+| js/bpay-next-resolution.js | 4A77056945AF568BEF19B1EBF05A520B39EDCC6E3DFC843C06F78EC86CC43143 |
+| css/bpay-next-office.css | 8BB10D13368C19DC4B3AD76C8F6EC293C92ABA49FD6F0480A42A8D1BA0E2DE67 |
+| index.html | EDDA7E76704446D9A2A7DDB0D5518D8CD0FF2011DAB5F996B507045CC91E5DED |
+
+This closes the screen-support source receipt only. No SQL/RPC, hosted/business acceptance, fixture/test execution, product or pack edits were performed by the reviewer.

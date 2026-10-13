@@ -849,7 +849,7 @@ function normalizeCandidateDailyResult(operationId, source) {
         || !Array.isArray(source.outcomes) || source.outcomes.length < 1 || source.outcomes.length > 14) return null;
     const outcomes = source.outcomes.map((item) => exactObjectKeys(item, ['date', 'applied', 'reason'], ['date', 'applied'])
       && DATE_RE.test(item.date) && typeof item.applied === 'boolean'
-      && (item.reason === undefined || ['INVALID_VALUE', 'DUPLICATE_DATE', 'OUTSIDE_WINDOW', 'BOOKED', 'BLOCKED', 'NOT_EDITABLE'].includes(item.reason))
+      && (item.reason === undefined || ['INVALID_VALUE', 'DUPLICATE_DATE', 'OUTSIDE_WINDOW', 'BOOKED', 'BLOCKED', 'NOT_EDITABLE', 'MYTMS_PRIMARY'].includes(item.reason))
       ? { ...item } : null);
     return outcomes.some((item) => item === null) ? null : { ...source, outcomes };
   }
