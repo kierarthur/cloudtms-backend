@@ -1,0 +1,16 @@
+# Provisional OFF fixture prerequisite — unpinned and held
+
+Root's Money lane reports these proposed owner-private signatures. The packet is unfinished; no source hash, definition, installed signature or executable authority is asserted here:
+
+- `private.weekly_source_rule_qualification_authorization_v1(uuid cycle,uuid actor,text purpose)`
+- `private.weekly_source_rule_qualification_scope_assert_v1(jsonb actualAuthorization,uuid actor,boolean initialOpen default false)`
+- `private.weekly_source_rule_qualification_context_v1(uuid client,uuid cycle)`
+- `private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)`
+- `private.weekly_source_rule_qualification_execute_v1(jsonb)`
+- `private.weekly_source_rule_qualification_status_v1(jsonb)`
+
+The proposed controlling public F1 owner dispatches `OFF_RULE_OPEN/CLOSE/REVOKE/STATUS/COMMAND`. `SOURCE_FIXTURE_SETUP` requires an actual disabled dated immutable F1 version with `CLIENT_SELF_BILL`, exact fixture agency/group/Client/Contract/Candidate census, current installed VERIFIED release and actual Banking/control evidence. Each nested command has an audit-owned XID/PID frame and revalidates its actual authorization. Normal assignment/readiness stay OFF. Genuine revision insertion freezes the actual qualified version. Coverage derives from genuine OPEN audit exposure/floor; original upload/calendar gates remain. First OPEN is future/unfinalised and references that assignment's first Sunday. On actual 14 October this can be Sunday18/floor12 with default earliest Thursday22. A finalised past fixture and future activation remain separate actual assignments. Namespace and entity identifiers are the owner's actual `WSQ_TEST_` / `CLI-913013xx` / `CCR-913013xx` values, not caller aliases.
+
+The later short `AUTOMATIC_JOURNEY` authority opens after genuine frozen FIN/ordinary pay and exact Source CAS; it does not create Report fixtures. A permission flag, guessed context, helper-presence boolean, fabricated native receipt, backdated activation/upload time or `p_now` override cannot replace these guards.
+
+Root must review/hash/integrate the final Money owner and exact Report predicate/loader support before R1 can execute while OFF. Current native Report rules predicates require actual enabled assignment, so the real owner must resolve that purpose-bound OFF path explicitly; this packet makes no invented fallback. The complete `05_complete_feature_setup.sqlinc` is a reverse-proof successor of the frozen Q owner. **It cannot overwrite a later Money OFF dispatch.** Apply only its exact reviewed binding hunks to the actual final controlling F1 owner, preserve the complete OFF arms/gates, regenerate the full successor/reverse proof and final private union, then commit the full tree before real R1. Until then, Report R1/A/B/financial/native/API/activation acceptance is HELD.

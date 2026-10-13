@@ -1,0 +1,160 @@
+{
+  "schema_version": "REPORT_AB_CONTROLLING_SOURCE_INPUTS_V1",
+  "root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "runtime_base": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "status": "SOURCE_ONLY_NO_NATIVE_ACCEPTANCE",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+      "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+      "bytes": 102228
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+      "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+      "bytes": 38619
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "bytes": 103685
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "bytes": 23242
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "bytes": 1071
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "sha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "bytes": 67349
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b",
+      "bytes": 154709
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "bytes": 101268
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+      "bytes": 9252
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "bytes": 35662
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "bytes": 58831
+    },
+    {
+      "path": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "bytes": 7115
+    },
+    {
+      "path": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "1eb863f9be8021e93c1f6de149660fbb843b1ce3c00409d83bb83feee0d5bd60",
+      "bytes": 28936
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "bytes": 7853
+    },
+    {
+      "path": "scripts/cloudtms-db-release.mjs",
+      "sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "bytes": 25506
+    },
+    {
+      "path": "supabase/release/current-release.json",
+      "sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "bytes": 34534
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334",
+      "bytes": 6333208
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "bytes": 20026
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "bytes": 6266
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "bytes": 2849
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "bytes": 20906
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/14_complete_managed_release.mjs",
+      "sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "bytes": 38220
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/15_complete_current_release_caller.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "bytes": 26150
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
+      "bytes": 17634
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "bytes": 381
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-git-path-parser-forward/weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "bytes": 11842
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "bytes": 18377
+    },
+    {
+      "path": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "bytes": 18453
+    }
+  ],
+  "preserve": [
+    "Frozen Prepared30/array11/Report/Automatic/CN/A0 inputs",
+    "All root dirty evidence",
+    "All Banking worktree/source bytes"
+  ],
+  "native_admission": "Existing exact Source pay-query guard body/call retained; no downstream Banking definition changed or followed.",
+  "execution_equivalence": "Runtime byte equality is not whole-tree equivalence. Real qualification must compare every tracked object at actual R1/R2 using the final strict forward."
+}

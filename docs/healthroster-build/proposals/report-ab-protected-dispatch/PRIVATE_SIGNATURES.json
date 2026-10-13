@@ -1,0 +1,15 @@
+{
+  "schema_version": "REPORT_AB_OWNER_ONLY_SIGNATURE_DELTA_V1",
+  "signatures": [
+    "private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_strategy_v1(uuid)",
+    "private.weekly_source_report_fin_dispatch_v1(jsonb)"
+  ],
+  "root_base_private": 232,
+  "current_only_proposal_private": 237,
+  "table_count": 105,
+  "service_count": 142,
+  "warning": "These complete current-root unions are reverse-proof inputs, not the future Q/A0/Prepared union. Root must merge literal sets with every later retained owner before installation."
+}

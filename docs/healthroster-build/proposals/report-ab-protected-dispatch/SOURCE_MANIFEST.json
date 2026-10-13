@@ -1,0 +1,175 @@
+{
+  "schema_version": "REPORT_AB_PROTECTED_DISPATCH_SOURCE_PACKAGE_V1",
+  "root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "status": "REVIEWED_WIP_SAME_INSTALL_RECORDER_CONTRACT_PENDING_NO_SELECTED_VARIANT",
+  "new_private_signatures": [
+    "private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_strategy_v1(uuid)",
+    "private.weekly_source_report_fin_dispatch_v1(jsonb)"
+  ],
+  "private_union": "Five new owner-only signatures; complete future Q/A0/Prepared/later union is root-owned, not current-only 237.",
+  "tests": {
+    "offline_cases": 25,
+    "passed": 25,
+    "node_syntax": "PASS",
+    "database_compile": "NOT_RUN",
+    "financial_ab": "NOT_RUN",
+    "exposure": "HELD",
+    "release_design": "Distinct-release draft held; authoritative same-Install2 recorder/reader/F1 contract pending; no third release."
+  },
+  "package_sha256": "a007d0391ce8577b354d9b1ad6b5f76704ff8652b9f42814ded633aa18802305",
+  "artifacts": [
+    {
+      "path": "01_certificate.sqlinc",
+      "sha256": "4a4bd7c1fe2b7891bd69fa911f740d019f3f0e94a75cc57db99a8c74272e7737",
+      "bytes": 13115
+    },
+    {
+      "path": "02_release_feature_strategy.sqlinc",
+      "sha256": "313ccd4974b432db7cfdc3cd04898d0bccab9eafa65003ae9fe36e457ed56dd4",
+      "bytes": 7995
+    },
+    {
+      "path": "03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142",
+      "bytes": 3217
+    },
+    {
+      "path": "04_complete_fin.sqlinc",
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e",
+      "bytes": 103480
+    },
+    {
+      "path": "05_complete_feature_setup.sqlinc",
+      "sha256": "87e8ca8d11a1dbea62b691e049c0a8b53b5fc2cefe31e45b7879759f23decb05",
+      "bytes": 22033
+    },
+    {
+      "path": "06_complete_managed_release.mjs",
+      "sha256": "2e02dd38dea88db67d35c367986e03b97e91fa8f634b6e365d671a993fd86ce5",
+      "bytes": 38964
+    },
+    {
+      "path": "07_owner_acl.sqlinc",
+      "sha256": "80fc0105c3f7b266400095d0db6b60d5f9a040b139e50398be2a57949f65b7e2",
+      "bytes": 1398
+    },
+    {
+      "path": "08_datafree_verifier.sqlinc",
+      "sha256": "2a5e64f05f12b07f1f5fe92964c9f56d26a92ec6c664e62d026033f9bbcd7b6b",
+      "bytes": 2942
+    },
+    {
+      "path": "09_complete_operational_evidence.mjs",
+      "sha256": "b63ecd610935c684d5bb1d48734e9982eb229db8ecbee3f9c981aa4cdf1566e5",
+      "bytes": 17862
+    },
+    {
+      "path": "10_complete_current_release_caller.mjs",
+      "sha256": "6ea217ba99632cb4e3f8dac1e02c152a9c6e980547a2ea6068355d7fd498dac2",
+      "bytes": 26345
+    },
+    {
+      "path": "11_complete_registry_current_union.sqlinc",
+      "sha256": "0f183e01e8089f81f75d4fb4be4c16f42b919cd84df1e8a2a0453bc911b6cb90",
+      "bytes": 36039
+    },
+    {
+      "path": "12_complete_acl_current_union.sqlinc",
+      "sha256": "1f81063c6ad9fc386cbbaffba28f02671b4946620e95ae8ddeaf2ed3429b4d8d",
+      "bytes": 59208
+    },
+    {
+      "path": "CONTROLLING_INPUTS.json",
+      "sha256": "c220659e7845b0a29f51c30a789636f330e06e7c9bb104f58bd22ed80bcc583d",
+      "bytes": 7405
+    },
+    {
+      "path": "FULL_REVERSE_RECEIPT.json",
+      "sha256": "21ef0821e48eb5aa0ea42693bc107243c64e4550a5b958c65b818073c903f08e",
+      "bytes": 13206
+    },
+    {
+      "path": "METADATA_PIN_FORWARD_AND_LEXICAL_RECEIPT.json",
+      "sha256": "777fa55fb58f14d2effab2909eb51947cb2b9c4bc5a8301afc11666950738479",
+      "bytes": 16544
+    },
+    {
+      "path": "NATIVE_PROOF_RECIPE.md",
+      "sha256": "9623c4cddf63a5ee653cd2cb02983d864012abd5791663dc71959904a3babf13",
+      "bytes": 6717
+    },
+    {
+      "path": "OFF_CONTEXT_PREREQUISITE.md",
+      "sha256": "dc39ba748d406359e00a80fd7d7e659647a67f9291d46bae5a1eeb3dcaf38c42",
+      "bytes": 2854
+    },
+    {
+      "path": "PRIVATE_SIGNATURES.json",
+      "sha256": "c6d91bb3fec5ca5a8aa1dccf1551887f0e83b6bb6a49e92d2dd728cf6937e98d",
+      "bytes": 764
+    },
+    {
+      "path": "README.md",
+      "sha256": "08f9c043ca41ebeac09ce0952252118a6c8d81b71d5a4a7176e6e39f3a1e7d3e",
+      "bytes": 10169
+    },
+    {
+      "path": "ROOT_CLOSURE_TEMPLATE.sqlinc",
+      "sha256": "75399e658a9187f43eb49cdf9116fca962c7fe665b2a7edb7c732d9d6830b7d3",
+      "bytes": 718
+    },
+    {
+      "path": "SOURCE_TEST_RESULTS.txt",
+      "sha256": "5927bbf6853b56826aa4fa0ccabc7c43cc46cb6973023f3dbbc07677b11c21d0",
+      "bytes": 1943
+    },
+    {
+      "path": "TWO_INSTALL_RECONCILIATION.md",
+      "sha256": "7e7d941d9b05deba5bcb6744ee031eed9baeaec1501b2d1460bee05cec768236",
+      "bytes": 5128
+    },
+    {
+      "path": "build-proposal.mjs",
+      "sha256": "a15532e37ed6d665e92e956fe4f8f2e61cd5ad145a7e24472ec7a4eca25f7749",
+      "bytes": 11875
+    },
+    {
+      "path": "freeze.mjs",
+      "sha256": "6f3451aba26a07004d4349133cf744d5ec670c2d1f7897dd48a3c5c6a97be27c",
+      "bytes": 5217
+    },
+    {
+      "path": "pin-inputs.mjs",
+      "sha256": "fe7fd2193a507f0e2bcecac8de00f43d9ae8401f96556f791a67cab6b72f1487",
+      "bytes": 3663
+    },
+    {
+      "path": "report-ab-dispatch.test.mjs",
+      "sha256": "2a9db21e5a3970728027d161f8aba72d3dbb2f46381bb99f0be861b9537f96f6",
+      "bytes": 11315
+    },
+    {
+      "path": "verify-source.mjs",
+      "sha256": "67943f4e4d5bb13c3bf1933fe065b5db9779ac9480c3a4b87524aca92f1ab634",
+      "bytes": 2309
+    },
+    {
+      "path": "weekly-source-protected-execution-tree.mjs",
+      "sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "bytes": 11842
+    },
+    {
+      "path": "weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311
+    },
+    {
+      "path": "weekly-source-report-fin-ab-evidence.mjs",
+      "sha256": "d6f991e589fe4646b7cae98a783db98b182be4e9edf53b5fce2d5489ca2dddc5",
+      "bytes": 19032
+    }
+  ]
+}
