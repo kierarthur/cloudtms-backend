@@ -1,0 +1,139 @@
+{
+  "proof": "LINEAGE_OWN_NEW_ROOT_DEFINITION_NULL_ACL_ONLY",
+  "sourceCommit": "a2ea9322e8f3ae65422ddbd24843d991c8fe53b6",
+  "sourceBranch": "codex/healthroster-v2-backend-13102026",
+  "sharedTurn": {
+    "takenAt": "2026-10-13T19:37:55.495Z",
+    "releasedAt": "2026-10-13T19:40:41.283Z",
+    "key": [
+      20261013,
+      1
+    ],
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "scope": "Complete proposed native definition, NULL input SQLSTATE 22023, effective browser/service ACL, fresh exact installed definition restoration. No positive business-row, financial, concurrency, API, install or capability proof.",
+  "result": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "HR_LINEAGE_FORWARD_COMPILE_NULL_ACL_SEND7",
+    "sqlSha256": "d558d285b08572886c3b04d2668513b67f16a6b8425831a498333e9ce83a220a",
+    "statementCount": 9,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "original_definition_restored"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "original_definition_restored": true
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "expected_effective_acl"
+        ],
+        "rows": [
+          {
+            "expected_effective_acl": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "original_definition_restored"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "original_definition_restored": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  }
+}
