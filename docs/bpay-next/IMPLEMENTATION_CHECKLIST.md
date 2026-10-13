@@ -4225,7 +4225,7 @@ A case with Day and Sun buckets shows two rows in Day, Sun order with current an
 
 ## WB-31 — Single-component choices: suggested rate, manual rate with reason, manual amount, gross total
 
-Seq 142; Rates · WB-R; reviewer R2; current requested-feature status MISSING.
+Seq 142; Rates · WB-R; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Shared owner's rate-bearing versus amount-led mode restrictions; explicit preview/zero and typed decisions.
 
@@ -4233,7 +4233,7 @@ Dependencies: WB-29, F-16, WB-45; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-31-D05 | SCREEN: Amount-led/manual rate/suggestion decision window | MISSING | Actual shared mode restrictions, explicit zero/manual reason/stale evidence; server Preview/Apply only, no typing calculation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-31-D05 | SCREEN: Amount-led/manual rate/suggestion decision window | BUILT_REVIEWED | Actual shared mode restrictions, explicit zero/manual reason/stale evidence; server Preview/Apply only, no typing calculation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -4249,6 +4249,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 Rate-bearing 8h manual £18 with reason produces server £144; manual amount on that owner is refused. An actual amount-led owner may accept £150 with reason. Zero is explicit, missing remains unavailable, linked scope is opt-in, stale save refuses with inputs retained and exact evidence. No typing-time money/network.
+
+13 October final source completion: WB31 whole ITEM and assigned D05 BUILT_REVIEWED. BE 0e5c4db14cc56f4f8b438d403101791997bcfe47; FE 4bee1d4f65bb79ddea514c1e86802add1889e6d6. Native real mode/effect/charge/margin and exact linked/zero/save/recovery; independent full-card SOURCE and seven full42-row A4 receipts. Sole local schema/catalogue compilation only. Hosted installation and all joined business acceptance remain NOT_RUN. Later WB32–34 owners stay in plan order.
 
 ## WB-32 — Pay-channel decisions and the taxable-channel restructure link
 
