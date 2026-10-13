@@ -1,0 +1,415 @@
+{
+  "contract": "HEALTHROSTER_A0_LOCK_SOURCE_SCHEMA_CENSUS_V1",
+  "status": "SOURCE_NAMES_ONLY_NOT_COMPILED_OR_INSTALLED",
+  "inputs": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    }
+  ],
+  "explicitNativeFieldChecks": [
+    {
+      "relation": "private.timesheet_correction_requests",
+      "columns": [
+        "id",
+        "state",
+        "origin",
+        "reversed_financial_id",
+        "frozen_original_json",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "root_timesheet_id",
+        "reversed_timesheet_id",
+        "replacement_timesheet_id",
+        "replacement_week_id"
+      ],
+      "missing": [],
+      "source": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql"
+    },
+    {
+      "relation": "public.timesheets",
+      "columns": [
+        "timesheet_id",
+        "candidate_workflow_id",
+        "booking_id",
+        "contract_id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.weekly_source_group_clients",
+      "columns": [
+        "source_group_id",
+        "client_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.weekly_source_groups",
+      "columns": [
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.clients",
+      "columns": [
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.candidates",
+      "columns": [
+        "id",
+        "umbrella_id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.umbrellas",
+      "columns": [
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.tms_users",
+      "columns": [
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.contracts",
+      "columns": [
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.weekly_source_group_rule_assignments",
+      "columns": [
+        "source_group_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "relation": "public.weekly_source_client_policies",
+      "columns": [
+        "client_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.client_settings",
+      "columns": [
+        "client_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.candidate_submission_workflows",
+      "columns": [
+        "target_timesheet_id",
+        "anchor_timesheet_id",
+        "id",
+        "contract_week_id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.contract_weeks",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.candidate_approval_requests",
+      "columns": [
+        "workflow_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.candidate_submission_components",
+      "columns": [
+        "workflow_id",
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.nhsp_shifts",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.candidate_expense_components",
+      "columns": [
+        "owning_timesheet_id",
+        "workflow_id",
+        "expense_component_id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.timesheet_evidence",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.timesheet_validations",
+      "columns": [
+        "timesheet_id",
+        "id",
+        "status",
+        "reason_code",
+        "validated_at_utc",
+        "updated_at"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    },
+    {
+      "relation": "public.invoice_lines",
+      "columns": [
+        "timesheet_id",
+        "id"
+      ],
+      "missing": [],
+      "source": "supabase/release/current-contract.json"
+    }
+  ],
+  "exactFkSourceChecks": [
+    {
+      "child": "public.timesheets_financials",
+      "name": "timesheets_financials_timesheet_id_fkey",
+      "childColumn": "timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE CASCADE",
+      "installed": false
+    },
+    {
+      "child": "public.nhsp_shifts",
+      "name": "nhsp_shifts_timesheet_id_fkey",
+      "childColumn": "timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_expense_components",
+      "name": "candidate_expense_components_owning_timesheet_id_fkey",
+      "childColumn": "owning_timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (owning_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL",
+      "installed": false
+    },
+    {
+      "child": "public.weekly_source_row_timesheet_lineages",
+      "name": "weekly_source_row_timesheet_lineages_timesheet_id_fkey",
+      "childColumn": "timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.weekly_source_group_clients",
+      "name": "weekly_source_group_clients_client_id_fkey",
+      "childColumn": "client_id",
+      "parent": "public.clients",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.weekly_source_group_clients",
+      "name": "weekly_source_group_clients_source_group_id_fkey",
+      "childColumn": "source_group_id",
+      "parent": "public.weekly_source_groups",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.weekly_source_client_policies",
+      "name": "weekly_source_client_policies_client_id_fkey",
+      "childColumn": "client_id",
+      "parent": "public.clients",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.client_settings",
+      "name": "client_settings_client_id_fkey",
+      "childColumn": "client_id",
+      "parent": "public.clients",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE",
+      "installed": false
+    },
+    {
+      "child": "public.weekly_source_group_rule_assignments",
+      "name": "weekly_source_group_rule_assignments_source_group_id_fkey",
+      "childColumn": "source_group_id",
+      "parent": "public.weekly_source_groups",
+      "parentColumn": "id",
+      "source": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_approval_requests",
+      "name": "candidate_approval_requests_workflow_id_fkey",
+      "childColumn": "workflow_id",
+      "parent": "public.candidate_submission_workflows",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_submission_components",
+      "name": "candidate_submission_components_workflow_id_fkey",
+      "childColumn": "workflow_id",
+      "parent": "public.candidate_submission_workflows",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_submission_components",
+      "name": "candidate_submission_components_timesheet_id_fkey",
+      "childColumn": "timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.timesheet_evidence",
+      "name": "timesheet_evidence_timesheet_id_fkey",
+      "childColumn": "timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE CASCADE",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_submission_workflows",
+      "name": "candidate_submission_workflows_target_timesheet_id_fkey",
+      "childColumn": "target_timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (target_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.candidate_submission_workflows",
+      "name": "candidate_submission_workflows_anchor_timesheet_id_fkey",
+      "childColumn": "anchor_timesheet_id",
+      "parent": "public.timesheets",
+      "parentColumn": "timesheet_id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (anchor_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT",
+      "installed": false
+    },
+    {
+      "child": "public.contract_weeks",
+      "name": "contract_weeks_contract_id_fkey",
+      "childColumn": "contract_id",
+      "parent": "public.contracts",
+      "parentColumn": "id",
+      "source": "supabase/release/current-contract.json",
+      "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE",
+      "installed": false
+    }
+  ],
+  "noTimesheetForeignKey": [
+    "public.timesheet_validations.timesheet_id",
+    "public.invoice_lines.timesheet_id"
+  ],
+  "physicalTimesheets": {
+    "candidate_id": false,
+    "family_booking_id": false,
+    "booking_id": true,
+    "contract_id": true
+  },
+  "limitation": "Reviewed explicit fields of the two new owners against exact current generated contract/new source migrations. Function-return record fields are bound to exact native reader bodies in WRITER_LOCK_CENSUS. This is not a PostgreSQL syntax/enum/catalogue/RI/role proof. Root must qualify every native dependency and all five writer holds before exposure."
+}

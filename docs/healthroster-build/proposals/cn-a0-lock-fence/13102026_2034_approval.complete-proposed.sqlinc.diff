@@ -1,0 +1,29 @@
+@@ -286,7 +286,8 @@ begin
+     -- Exact server-owned scope participates in the native PREPARE/CAS hash.
+     -- Missing A0 never silently changes Source/Rule/ordinary pricing origin.
+     v_context:=v_context||jsonb_build_object('original_a0_clock_scope',
+-      private.timesheet_correction_a0_clock_scope_v1(v_request.id));
++      private.timesheet_correction_a0_clock_scope_v1(v_request.id),
++      'original_a0_native_input_witness',private.timesheet_correction_a0_native_input_witness_v1(v_request.id));
+   end if;
+   v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');
+   -- Internal service DTO only. Original frozen snapshot and exact P0 context
+@@ -309,10 +310,17 @@ declare
+   v_request private.timesheet_correction_requests%rowtype; v_prepare jsonb; v_original jsonb; v_leg jsonb;
+   v_r uuid; v_p uuid; v_items jsonb; v_result jsonb; v_write jsonb; v_receipt jsonb; v_now timestamptz:=coalesce(p_now_utc,now());
+   v_original_before jsonb; v_original_fin_before jsonb; v_after_fin jsonb; v_t0_authorise boolean; v_version integer;
+-  v_claim jsonb; v_batch_result record; v_reversal_snapshot jsonb;
++  v_claim jsonb; v_batch_result record; v_reversal_snapshot jsonb; v_a0_lock_fence jsonb;
+ begin
+   perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+   select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id;
++  if v_request.state='WAITING' and v_request.origin='SIGNED_TIMESHEET_CORRECTION'
++    and v_request.reversed_financial_id is null
++    and v_request.frozen_original_json#>>'{timesheet,sheet_scope}'='WEEKLY' then
++    -- Immutable request branch, never inferred from a concurrent current FIN.
++    -- Complete native gate/I-1 precedes every established business row lock.
++    v_a0_lock_fence:=private.timesheet_correction_a0_native_lock_fence_v1(v_request.id,p_actor_user_id);
++  end if;
+   perform 1 from public.invoices i where i.id in(v_request.original_invoice_id,v_request.return_invoice_id) order by i.id for update;
+   perform pg_advisory_xact_lock(hashtextextended('CORRECTION_CHAIN|'||v_request.root_timesheet_id::text,21072026));
+   select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id for update;

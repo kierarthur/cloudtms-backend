@@ -1,0 +1,11 @@
+@@ -35,6 +35,10 @@ begin
+     -- zero. A separate native claim materialisation journey is required.
+     or exists(select 1 from public.candidate_expense_components e
+       where e.removed_at_utc is null and (e.owning_timesheet_id=v_ts.timesheet_id
++        or (e.owning_timesheet_id is null and e.workflow_id in(
++          select w.id from public.candidate_submission_workflows w
++          where w.target_timesheet_id in(v_ts.timesheet_id,v_request.replacement_timesheet_id)
++            or w.anchor_timesheet_id in(v_ts.timesheet_id,v_request.replacement_timesheet_id)))
+         or (e.owning_timesheet_id=v_request.replacement_timesheet_id
+           and not exists(select 1 from public.timesheets_financials pf
+             where pf.timesheet_id=v_request.replacement_timesheet_id and pf.is_current))))

@@ -1,0 +1,76 @@
+{
+  "contract": "HEALTHROSTER_A0_NATIVE_LOCK_JOURNEYS_V1",
+  "status": "ALL_NATIVE_VECTORS_HELD_NOT_RUN",
+  "owner": "root",
+  "vectors": [
+    {
+      "case": "CANDIDATE_GATE_BUSY",
+      "setup": "Hold the actual native Candidate serial gate on another session.",
+      "expect": "A0 refuses before I-1, business rows or financial write; no fabricated gate/lease."
+    },
+    {
+      "case": "COMPONENT_TS_INVERSION",
+      "setup": "Actual expense owner holds an existing component or TS and waits on the native family boundary.",
+      "expect": "Bounded A0 I-1/NOWAIT refusal rolls back the whole unit promptly, releases its acquired gates and restores previous lock_timeout; expense owner can progress."
+    },
+    {
+      "case": "WF_TS_INVERSION",
+      "setup": "Actual Candidate submit/finalise/withdraw owner holds WF/CW/TS before the family boundary.",
+      "expect": "A0 cannot accumulate an inverse waiting cycle; bounded refusal and full rollback, no mutation to pinned Candidate owner."
+    },
+    {
+      "case": "CONTRACT_RATE_OR_CHANNEL_EDIT",
+      "setup": "Actual Contract or Candidate/channel PATCH owns the selected row, including its native derived recheck.",
+      "expect": "A0 refuses busy or context/CAS changed before any write; unchanged exact native rates/channel/settings input on successful unit."
+    },
+    {
+      "case": "INSERTED_FIN_IMPORT_CLAIM_LINEAGE",
+      "setup": "Competing actual native creator inserts/repoints each qualified FK child while A0 owns the native Timesheet parent FOR UPDATE.",
+      "expect": "Creator blocks at real RI key-share boundary until A0 completes/rolls back; A0 sees no phantom. Named constraints/columns/RI trigger enablement proved from actual catalogue."
+    },
+    {
+      "case": "REACTIVATE_CANCELLED_REMOVED_NONCURRENT",
+      "setup": "Competing owner changes a previously inactive/history child without changing its FK.",
+      "expect": "ALL existing child row locks protect it; NOWAIT contention or fresh scope/context CAS refuses, never an invented empty source."
+    },
+    {
+      "case": "GROUP_CLIENT_MEMBERSHIP_ASSIGNMENT",
+      "setup": "Actual F1/Client Save changes membership group/dates, enables/disables/reranges assignments, or inserts new dated settings/policies.",
+      "expect": "Sorted group/Client parent and all history row fences protect new/updated scopes; changed/grown plain discovery refuses40001 without a second lock set."
+    },
+    {
+      "case": "SIGNATURE_GENERATION_AND_CLAIM_OWNER",
+      "setup": "Actual manager/evidence owner changes WF/approval/components or an unresolved NULL-owner expense.",
+      "expect": "All exact WF generation rows and RI parents fenced; fresh signed witness remains exact; unknown expense ownership remains unavailable."
+    },
+    {
+      "case": "VALIDATION_ABSENT_ROW_WITHOUT_FK",
+      "setup": "Invoke each actual HR Weekly/Daily validation insertion owner against an absent exact Original/P0 validation row after atomic re-PREPARE, concurrently with A0.",
+      "expect": "Route remains HELD until every admitted owner proves the same complete native family or parent admission; captured input/empty read and existing-row NOWAIT are insufficient. No invented Timesheet FK."
+    },
+    {
+      "case": "INVOICE_LINE_ABSENT_ROW_WITHOUT_FK",
+      "setup": "Invoke the actual current invoice-generation/admission/edit boundary for a first Original/P0 line after atomic re-PREPARE, concurrently with A0.",
+      "expect": "Route remains HELD until exact native invoice owner admission excludes the phantom; only invoice_id is FK-backed. Preserve normal invoice/P0 and financial flags; no global invoice table lock."
+    },
+    {
+      "case": "NATIVE_INPUT_ABA",
+      "setup": "Change Candidate/channel/policy/native context after PREPARE, attempt calculation, then restore original value before atomic call.",
+      "expect": "Producer's prepared-input comparison refuses before calculation; no forged unchanged fingerprint can authorise a calculation from another context."
+    },
+    {
+      "case": "FOREIGN_ALIAS_AND_UNCOOPERATING_BOOKING",
+      "setup": "Actual other-Candidate alias mutation or any discovered raw sibling creator outside native I-1.",
+      "expect": "No exposure until exact native Contract/FIN binding and creator protocol are proved or narrowly repaired. No global lock/fallback or guessed identity."
+    },
+    {
+      "case": "FULL_NATIVE_WRITE_AND_LATE_HOOKS",
+      "setup": "Actually qualified same-unit Original materialisation, stored reread/R0 sign-copy/P0 write/3-member approval with all current native Bank/expense/invoice/retention/document hooks.",
+      "expect": "Exact full-component money/VAT/policy/signature/claim preservation, joined lock/operation/GUC cleanup, actual rollback on every failure and official document/NEXT/phone agreement."
+    }
+  ],
+  "lane_database_calls": false,
+  "source_tests_are_native_acceptance": false,
+  "no_fabricated_applying_or_verified_release": true,
+  "turn_boundary": "Root alone holds SEND7 shared turn; no full HealthRoster rehearsal before recorded Banking first install. No payment/provider/settlement/email/network/drain trial."
+}

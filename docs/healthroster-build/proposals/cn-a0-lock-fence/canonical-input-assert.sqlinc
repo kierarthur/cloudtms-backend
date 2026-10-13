@@ -1,0 +1,24 @@
+-- Native calculators omit is_stale. The existing single writer supplies false
+-- only when this field is absent. Accept that omission at INPUT, never at the
+-- stored-row boundary. No financial input is changed or published here.
+create or replace function private.timesheet_correction_canonical_input_assert_v1(
+  p_snapshot jsonb,p_timesheet_id uuid,p_version integer,p_candidate uuid,p_client uuid
+) returns void language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+begin
+  if jsonb_typeof(p_snapshot) is distinct from 'object'
+    or (p_snapshot?'is_stale' and p_snapshot->'is_stale' is distinct from 'false'::jsonb)
+    or p_snapshot->'has_rate_issue' is distinct from 'false'::jsonb
+    or p_snapshot->'has_pay_channel_issue' is distinct from 'false'::jsonb then
+    raise exception 'CORRECTION_CANONICAL_INPUT_INVALID' using errcode='55000';
+  end if;
+  -- Validation projection only: reuse the complete existing identity/lifecycle
+  -- assertion after separately qualifying the allowed native omission.
+  perform private.timesheet_correction_snapshot_identity_assert_v1(
+    p_snapshot||jsonb_build_object('is_stale',false),p_timesheet_id,p_version,p_candidate,p_client);
+end;
+$function$;
+alter function private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)
+  from public,anon,authenticated,service_role;
