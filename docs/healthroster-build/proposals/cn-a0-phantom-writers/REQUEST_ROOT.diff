@@ -1,0 +1,12 @@
+--- a/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc
++++ b/supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc
+@@ -133,6 +133,9 @@ begin
+     return jsonb_build_object('ok',true,'request_id',v_existing.id,'state',v_existing.state,
+       'replacement_timesheet_id',v_existing.replacement_timesheet_id,'state_revision',v_existing.state_revision,'replayed',true);
+   end if;
++  -- New missing-A0 purpose acquires canonical native Candidate/I-1 before
++  -- the existing invoice/chain/workflow/TS order. All other arms return unchanged.
++  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);
+   -- Lock every existing invoice first, using the same authority as all credit writers.
+   perform i.id from public.invoices i where i.id in(select distinct l.invoice_id from public.invoice_lines l
+     where l.timesheet_id=v_id) order by i.id for update;

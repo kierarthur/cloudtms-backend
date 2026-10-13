@@ -1,0 +1,73 @@
+-- Exact missing-original-finance SEND arm only; no ordinary authorisation,
+-- pricing, signature, invoice or financial producer is replaced.
+create or replace function private.timesheet_correction_a0_send_family_fence_v1(p_timesheet_id uuid)
+returns void language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  t public.timesheets%rowtype; c public.contracts%rowtype; v_chain jsonb; v_after_chain jsonb;
+  v_ids uuid[]; v_before jsonb; v_after jsonb; v_gate jsonb; v_lock jsonb; v_timeout text:=current_setting('lock_timeout');
+  v_context jsonb; v_context_count integer; v_signed jsonb;
+begin
+  select ts.* into t from public.timesheets ts where ts.timesheet_id=p_timesheet_id;
+  if not found then return; end if;
+  -- This invocation is an exact new correction purpose. Existing finance,
+  -- ordinary, Daily and unsigned agency commands retain their native body.
+  if t.sheet_scope::text<>'WEEKLY' or exists(select 1 from public.timesheets_financials f where f.timesheet_id=t.timesheet_id)
+    or private.timesheet_correction_origin_v1(t.timesheet_id) is distinct from 'SIGNED_TIMESHEET_CORRECTION' then return; end if;
+  -- Reuse the exact native immutable manager-pair admission before this new
+  -- purpose fence. An unsigned record retains its existing signature refusal.
+  v_signed:=private.timesheet_correction_signed_witness_v1(t.timesheet_id,false);
+  -- Saved endpoint source does not force transaction snapshot isolation. Do
+  -- not substitute a stale RR snapshot for fresh postlock missing-A0 truth.
+  if current_setting('transaction_isolation')<>'read committed' then
+    raise exception 'CORRECTION_A0_TRANSACTION_SNAPSHOT_UNPROVED' using errcode='55000'; end if;
+  select contract.* into c from public.contracts contract where contract.id=t.contract_id;
+  if not found or c.candidate_id is null or c.client_id is null then
+    raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+  v_chain:=public.timesheet_correction_chain_scope_v1(t.timesheet_id,false,32,100);
+  if v_chain->'valid' is distinct from 'true'::jsonb or v_chain->>'latest_positive_timesheet_id' is distinct from t.timesheet_id::text then
+    raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+  select array_agg(distinct x.id order by x.id) into v_ids from unnest(array[t.timesheet_id,(v_chain->>'root_timesheet_id')::uuid]) x(id);
+  select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id) into v_before
+    from public._pay_timesheet_rotation_scope(v_ids) s;
+  begin
+    perform set_config('lock_timeout','1ms',true);
+    v_gate:=private.weekly_source_candidate_serial_gate_v1(c.candidate_id,'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',
+      t.timesheet_id,'CORRECTION_A0_SEND_FIRST_ADMISSION');
+    if v_gate->'ok' is distinct from 'true'::jsonb or v_gate->>'gate' is distinct from 'GRANTED' then
+      raise exception 'CORRECTION_A0_AUTHORITY_BUSY' using errcode='55P03'; end if;
+    perform set_config('lock_timeout','1ms',true);
+    v_lock:=private.weekly_source_lock_family_rows_v1(v_ids,c.candidate_id);
+    if v_lock->'ok' is distinct from 'true'::jsonb then
+      raise exception 'CORRECTION_A0_WRITER_SCOPE_UNPROVED' using errcode='55000'; end if;
+    perform set_config('lock_timeout',v_timeout,true);
+  exception when others then perform set_config('lock_timeout',v_timeout,true); raise; end;
+  select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id) into v_after
+    from public._pay_timesheet_rotation_scope(v_ids) s;
+  v_after_chain:=public.timesheet_correction_chain_scope_v1(t.timesheet_id,false,32,100);
+  if v_before is null or v_after is distinct from v_before or v_after_chain is distinct from v_chain
+    or private.timesheet_correction_signed_witness_v1(t.timesheet_id,false) is distinct from v_signed then
+    raise exception 'CORRECTION_A0_WRITER_SCOPE_CHANGED' using errcode='40001'; end if;
+  -- A raw null/foreign-Contract sibling committed before SEND is not valid
+  -- missing-A0 family evidence. Refuse this purpose, never guess its history.
+  if exists(select 1 from public._pay_timesheet_rotation_scope(v_ids) s
+    join public.timesheets m on m.timesheet_id=s.family_timesheet_id
+    left join public.contracts mc on mc.id=m.contract_id
+    where m.contract_id is null or mc.candidate_id is distinct from c.candidate_id or mc.client_id is distinct from c.client_id) then
+    raise exception 'CORRECTION_A0_FAMILY_IDENTITY_UNPROVED' using errcode='55000'; end if;
+  if exists(select 1 from public.timesheets_financials f where f.timesheet_id=t.timesheet_id)
+    or not exists(select 1 from public.timesheets current_ts where current_ts.timesheet_id=t.timesheet_id and current_ts.is_current
+      and current_ts.version=t.version and current_ts.booking_id=t.booking_id and current_ts.contract_id=t.contract_id)
+    or private.timesheet_correction_origin_v1(t.timesheet_id) is distinct from 'SIGNED_TIMESHEET_CORRECTION' then
+    raise exception 'CORRECTION_A0_WRITER_SCOPE_CHANGED' using errcode='40001'; end if;
+  select count(*),jsonb_agg(to_jsonb(ctx))->0 into v_context_count,v_context
+    from public.tsfin_load_context_batch(array[t.timesheet_id]) ctx;
+  if v_context_count<>1 or v_context->>'effective_timesheet_id' is distinct from t.timesheet_id::text
+    or v_context#>>'{out_candidate,id}' is distinct from c.candidate_id::text
+    or v_context->>'out_client_id' is distinct from c.client_id::text
+    or v_context->'out_cur_fin' is distinct from 'null'::jsonb then
+    raise exception 'CORRECTION_A0_FAMILY_IDENTITY_UNPROVED' using errcode='55000'; end if;
+end;
+$function$;
+alter function private.timesheet_correction_a0_send_family_fence_v1(uuid) owner to postgres;
+revoke all on function private.timesheet_correction_a0_send_family_fence_v1(uuid) from public,anon,authenticated,service_role;
