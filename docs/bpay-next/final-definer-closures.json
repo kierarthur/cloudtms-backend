@@ -17553,25 +17553,27 @@
     },
     {
       "signature": "private.bpay_next_resolution_context_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
-      "finalPhysical": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
+        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
+        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
         "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
         "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
         "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql",
         "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2241_banking_pay_next_resolution_context_v1.sql",
-        "supabase/repeatable/12102026_2302_banking_pay_next_resolution_live_snooze_v1.sql",
-        "supabase/repeatable/13102026_0201_banking_pay_next_bucket_resolution_review_v1.sql",
-        "supabase/repeatable/13102026_0314_banking_pay_next_single_component_review_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
       ],
-      "owner": "WB32 exact channel review; complete0314 explicit/context/bucket/component owners retained"
+      "owner": "WB33 exact saved-owner clear discovery / post-receipt single native CLEAR family; complete0417 authority retained"
     },
     {
       "signature": "private.bpay_next_resolution_live_snooze_v1(uuid,uuid,text)",
@@ -17614,19 +17616,21 @@
     },
     {
       "signature": "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
-      "finalRoot": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
-      "finalPhysical": "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+      "finalRoot": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
+        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql",
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql",
         "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/12102026_2320_banking_pay_next_component_resolution_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/13102026_0417_banking_pay_next_channel_resolution_review_v1.sql"
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
       ],
-      "owner": "WB32 required CLEAR result class only; complete2320 writer/replay/guards/money unchanged"
+      "owner": "WB33 exact saved-owner clear discovery / post-receipt single native CLEAR family; complete0417 authority retained"
     },
     {
       "signature": "private.bpay_next_captured_component_resolution_quote_v1(uuid,text)",
@@ -17724,6 +17728,19 @@
         "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql"
       ],
       "owner": "WB29 Ready display; native pending-refresh seam and exact component census; BD168"
+    },
+    {
+      "signature": "private.bpay_next_saved_resolution_clear_review_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql"
+      ],
+      "owner": "WB33 bounded exact saved-owner amount/scope and opt-in linked Clear disclosure"
     }
   ],
   "editorChains": [
