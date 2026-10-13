@@ -1,0 +1,184 @@
+{
+  "schema_version": "PROTECTED_SOURCE_ROLLBACK_QUALIFICATION_REVIEW_PACKAGE_V1",
+  "status": "FROZEN_SOURCE_PROPOSAL_NATIVE_UNEXECUTED",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/00_complete_current_catalogue.sqlinc",
+      "bytes": 14686,
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/03_complete_cas_admission.sqlinc",
+      "bytes": 2028,
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/04_complete_non_self_bill_admission.sqlinc",
+      "bytes": 2234,
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/05_complete_automatic_admission.sqlinc",
+      "bytes": 1034,
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/06_owner_only_acl.sqlinc",
+      "bytes": 2900,
+      "sha256": "b795ecc64f5f3b188cfe89fb20c52a3630d4b6d03feda7b3889876ec37ae4331"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/08_complete_capability_release_reader.sqlinc",
+      "bytes": 6111,
+      "sha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/09_complete_managed_release.mjs",
+      "bytes": 33466,
+      "sha256": "e8091382bdac0c9eec34dee4300e6aee8494637dc48098e90154d85dcb7cdc1c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/10_complete_release_caller.mjs",
+      "bytes": 25745,
+      "sha256": "6273e9cc5556657d1bfa484a08e3858185eec2bd3a63ebf0365c8af2d5d2bdf4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/11_complete_protected_release_workflow.yml",
+      "bytes": 9589,
+      "sha256": "6486bcfaed865b615396cc2394307446e9923d1b7c69a6433dcad79e3f536fc1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/NATIVE_JOURNEYS.json",
+      "bytes": 6741,
+      "sha256": "edaf722a62e184b0a10711af40a18709a3a2f780ddf6d4e08f356cd0b2fd9c73"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/OWN_STAGE_NULLABLE_IDENTITY_AUDIT.md",
+      "bytes": 4819,
+      "sha256": "b9fdf180e31dbb7462335535ec85e87333dcfe1be2bc10d221e871742052524a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_NATIVE_OWNER_DELTA.json",
+      "bytes": 10572,
+      "sha256": "f46ef4080c09db30128ee749b3e44269978ed51ffe9c81e8556fca20b84ad5f8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_R2_READER.sqlinc",
+      "bytes": 10132,
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_SCOPE.sqlinc",
+      "bytes": 19844,
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/README.md",
+      "bytes": 10468,
+      "sha256": "ae4812628b39cee2a4e60d5e3cf3446b675642b1357672feac8ca50a8393035a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/REPORT_BINDING_REUSE.md",
+      "bytes": 2702,
+      "sha256": "7d6fe683049e8d54a97ffe2b57413fb9775a96b7b0db7704777fe94a2d162889"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/freeze-qualification.mjs",
+      "bytes": 2926,
+      "sha256": "5885b4e837e91c580d3d3e8e79dcd416034fddc28f82d439fd2eb014091b2c0b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/generate-qualification-owners.mjs",
+      "bytes": 15058,
+      "sha256": "18872df5e30575fb7608a6c4ba40b4e3134898c7f96a5adf5dc67da9685f5f84"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/prerequisite-evidence.mjs",
+      "bytes": 19857,
+      "sha256": "03537b6683c687364c2c72a57db876887223cce0853e14c0b96bb187b2d8bf69"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/qualification.test.mjs",
+      "bytes": 8277,
+      "sha256": "f7c93652606c9fcb2933307fb3481eb5e36e5ae1af301fa145bd6bba78a7ead5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 19852,
+      "sha256": "4f3f7b52bb9286d11f1a4a7c3c6d95412f1d6949251e969fb7eef46e18df7eb7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/write-qualification-recipe.mjs",
+      "bytes": 2431,
+      "sha256": "c6f5b41cca1cbc669be9753e82dcea9c59d07ada1c6f1a62a5d214fe7e11b986"
+    }
+  ],
+  "previous": [
+    {
+      "file": "docs/healthroster-build/F5_INTEGRATION_MANIFEST.json",
+      "sha256": "555eb549d02e19401051903cae80f9179b8741c3965378d8354fc23cd2a2fc6e",
+      "inputs_verified": 28
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/REVIEW_MANIFEST.json",
+      "sha256": "c343deb47ec16d476612d34e16c48815b806cfe4438fdf852299f62cba22e92e",
+      "inputs_verified": 10
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/REVIEW_MANIFEST.json",
+      "sha256": "12a605ad6e2b7d5fb2a46d0d8b898bd66d9784ca5ac91695aabd8608252f875d",
+      "inputs_verified": 11
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/REVIEW_MANIFEST.json",
+      "sha256": "b57c4601fd792b3489e5fab6178ad325819b829e4fde36d517ed3af9132045c7",
+      "inputs_verified": 34
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/REVIEW_MANIFEST.json",
+      "sha256": "6c30256b4d12d0c76a95db3b0c013055cc362d5cc11fa21f3b34513afbeb96d3",
+      "inputs_verified": 33
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_FIXTURE_REVIEW_MANIFEST.json",
+      "sha256": "8a4381e977af3ccfd1d6f5236e7b64486c3c47e9d44e8f31aacb4ab1a7a85a4e",
+      "inputs_verified": 44
+    }
+  ],
+  "new_owner_private_signatures": 8,
+  "new_tables": 0,
+  "new_columns": 0,
+  "new_public_rpcs": 0,
+  "new_service_grants": 0,
+  "tests": {
+    "passing": 27,
+    "type": "Pure protocol/source/literal vectors only; no certificate inputs",
+    "javascript_syntax": "PASS"
+  },
+  "source_worktree": "healthroster-v2-money-build-13102026",
+  "operational_ready_owners_edited": false,
+  "frozen_inputs_edited": false,
+  "root_worktree_edited": false,
+  "database_calls": 0,
+  "docker_calls": 0,
+  "network_service_calls": 0,
+  "root_gates": [
+    "Actual generated contract/schema/SQL/provider normalization compilation",
+    "Owner/session/caller-frame/shared-turn/xid refusal proof",
+    "Lawful installed disabled-first R1 then exact actual native prerequisite flows",
+    "39-category own-stage Source CAS equality and root census",
+    "Genuine signature/document/renderer and published NEXT prerequisites",
+    "R1/R2 actual protected artifact/history/catalogue/replay proof",
+    "Lawful activation followed by all actual operational API/UI/app/native replay obligations"
+  ]
+}
