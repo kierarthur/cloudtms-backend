@@ -2329,6 +2329,17 @@ export function verifyBpayNextSourceGates(){
   if(createHash('sha256').update(read(dr15OldFile)).digest('hex')!=='183a17cb1800e4980945e0e348d249bc07d0829945f6a30c95414ba82c478955')throw Error('BPAY_NEXT_DR15_PREDECESSOR_CHANGED');
   const dr15OldHazards=new Map(baselineHazards);
   dr15OldHazards.set(JSON.stringify(['public.bpay_next_preparation_page_v1(uuid,text,jsonb)','ROWTYPE_SELECT:V_ISSUE_RUN_ROW:PRIVATE . BPAY_NEXT_PAY_RUN','select * into v_issue_run_row from private.bpay_next_pay_run where id=v_issue_run;']),1);
+  // WB29: the sole chosen-prefix EX alias is scalar NUMERIC subtraction of
+  // two explicit numeric casts. Classify only this exact native CTE and MIN;
+  // a changed producer or a second aggregate still fails source admission.
+  const readyReaderFile='supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql';
+  const readyPrefix="with prefixes as materialized(select x,ordinality,\n                (x->'quote'->>'ex')::numeric-coalesce(lag((x->'quote'->>'ex')::numeric) over(order by ordinality),0) ex\n                from jsonb_array_elements(v_quote->'prefix_targets') with ordinality p(x,ordinality))\n              select count(*),min(ex) into v_prefix_count,v_chosen_leaf from prefixes\n                where x->>'approved_segment_id'=v_native.approved_segment_id::text and x->>'segment_key'=v_native.segment_key;";
+  const readyReaderSource=read(readyReaderFile).replaceAll('\r\n','\n');
+  const readyReaderSignature='private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)';
+  const readyReaderParts=executableParts(readyReaderSource,readyReaderFile).filter(part=>part.signature===readyReaderSignature);
+  if(readyReaderParts.length!==1||sqlWithoutComments(readyReaderParts[0].text).split(readyPrefix).length!==2||(sqlWithoutComments(readyReaderSource).match(/\b(?:min|max)\s*\(\s*ex\s*\)/gi)??[]).length!==1)
+    throw Error('BPAY_NEXT_READY_PREFIX_TYPE_UNCLASSIFIED');
+  const readyPrefixColumns=new Map([['EX','NUMERIC']]);
   const sourceFailures=[];
   for(const file of sources){
     const source=read(file);assertSqlWriteBoundaries(source,file);assertNextExactNumericTypes(source,file);
@@ -2339,6 +2350,13 @@ export function verifyBpayNextSourceGates(){
           const text=normalized.slice(statement.start,statement.end);
           const isProjection=routineDefinitions(text,file).includes('private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)');
           assertSpecialConstructs(text,file,file===discardRowFile?discardRowHazards:baselineHazards,isProjection?projectionMembershipColumns:new Map());
+        }
+      } else if(file===readyReaderFile){
+        const normalized=source.replaceAll('\r\n','\n');
+        for(const statement of scanManagedSql(normalized).statements){
+          const text=normalized.slice(statement.start,statement.end);
+          const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
+          assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
       } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:baselineHazards);assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}

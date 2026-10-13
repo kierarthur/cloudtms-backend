@@ -1,0 +1,52 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "previousReadyDisplayCommit": "16d1d76bb67b1e1f8d9df2b4f0ff63c7a691554a",
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql",
+      "sha256": "fbb3936c4d74a6ab8d2c58eca5336811e8b63331369e9898b55752b10e305968"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "03e3638c2acdc449fc7553a18aed2690cf626a65c1d87eeba62031eb5cb8577e"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "e5c799713ed2ec090088eeb90c6373d591167e6574e13e928b8c379eaef7aa2e"
+    }
+  ],
+  "reviews": [
+    {
+      "path": "WB-29-ready-reader-design-review.md",
+      "sha256": "e31c177cc8bdeca9c1bbb595502c099f693fff151cf9dbad6bde4e54457cb73a"
+    },
+    {
+      "path": "WB-29-ready-reader-source-review.md",
+      "sha256": "0fca8a2d7fd33745ba4ffc3d990389c0e486a39bd59411e3f2db03ee4e4ff022"
+    },
+    {
+      "path": "WB-29-ready-DTO-presenter-source-review.md",
+      "sha256": "70cd8ed407b463cdd084c43df7f71dda4585c9166ec3c4484c8d44b978a86f68"
+    },
+    {
+      "path": "WB-29-ready-reader-registry-contract-review.md",
+      "sha256": "dd5e1b9886f26ad0234a76aa47b39a253aaaa1ca03e4c5ac8085e95d45fde0be"
+    }
+  ],
+  "builderDecisions": [
+    "BD169"
+  ],
+  "checks": {
+    "dbCheck": "384 migrations/997 repeatables PASS",
+    "sourceGates": "1557 SQL/31 RPC roots/171 routine-work signatures/37 typed transports PASS",
+    "localPG17": "0 migrations/4 repeatable closures; schema compile only PASS",
+    "catalogue": "exact private kind body/config/owner/ACL/volatility PASS; public membership unchanged 839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both isolation DO PASS",
+    "nodeCheck": "changed Worker/source gate/Office syntax PASS",
+    "contractSealAndCoupling": "25717a10a932938360964678518334267dc439159585720ed77536bc8e712dc2 PASS"
+  },
+  "screen": "Real local fixed-read captures produced; independent A4 review pending. FE changes not yet committed.",
+  "businessAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; full-card reconciliation and screen closure remain"
+}

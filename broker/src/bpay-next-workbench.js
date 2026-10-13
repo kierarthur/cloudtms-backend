@@ -402,6 +402,9 @@ export const ROWS=Object.freeze({
     "reason_priority": "small"
   ,"physical_revision_id":"uuid?","physical_timesheet_version":"positive?","source_kind":"sourceKind?","source_head_id":"uuid?","source_root_timesheet_id":"uuid?","source_root_timesheet_version":"positive?","source_week_ending_date":"date?"}
 });
+// WB29 output-only chosen values; Source selection facts remain unchanged.
+Object.assign(ROWS.GROUP_LINES,{chosen_component_ready_amount:'decimal?',chosen_leaf_amount:'decimal?',rate_set_pay_channel:'channel?'});
+Object.assign(ROWS.CANDIDATE_GROUPS,{rate_set_pay_channel:'channel?'});
 const MEMORY_ROWS={default_selected:'boolean',selection_eligible:'boolean',new_changed:'boolean',choice_member_count:'integer',choice_selected_count:'integer',selection_basis:'memoryBasis?'};
 Object.assign(ROWS.HEADER,{selection_memory:'selectionMemory',selection_mode:'memoryMode',remembered_intent:'choiceIntent?'});
 Object.assign(ROWS.EXPORT_ROWS,{candidate_default_pay_selected:'boolean'});
@@ -616,6 +619,14 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     if(Object.hasOwn(row,'group_key')){if(!field(row.group_key,'groupKey')||(row.work_id!==null)===(row.case_id!==null)||row.group_key!==(row.work_id!==null?'WORK:'+row.work_id:row.group_key.startsWith('ROW:')?'ROW:'+row.case_component_id:'CASE:'+row.case_id))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}
     if(kind==='EXPORT_ROWS'&&(row.export_key.at(-1)!==row.item_id||row.work_id===null&&[row.approved_line_id,row.physical_timesheet_id,row.job_title,row.band_label,row.shift_start,row.shift_finish].some(v=>v!==null)||row.choice_eligible&&(!row.selectable||row.section!=='READY')))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(kind==='GROUP_LINES'){
+      const chosen=['chosen_component_ready_amount','chosen_leaf_amount','rate_set_pay_channel'];
+      if(chosen.some(k=>row[k]===null)&&chosen.some(k=>row[k]!==null)||row.rate_set_pay_channel!==null&&(
+        !['PAYE','UMBRELLA'].includes(row.rate_set_pay_channel)||row.rate_set_pay_channel!==row.target_pay_channel
+        ||row.work_id===null||row.approved_line_id===null||row.revision_id===null||row.section!=='READY'
+        ||row.tax_treatment!=='TAXABLE'||row.direction!=='PAYMENT'||!row.selectable||row.is_selected||!row.amount_known
+        ||row.component_amount_known!==true||row.component_ready_amount===null||!['AVAILABLE','ZERO'].includes(row.portion_kind)
+        ||!['WORK_COMPONENT','WORK_SEGMENT'].includes(row.member_kind)||row.pay_hold===true||row.snooze_id!==null
+        ||row.progress_state!=='CURRENT'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
       const facts=['approved_line_no','job_title','band_label','original_work_ref','original_timesheet_id','is_adjustment','component_amount_known','component_ready_amount','component_waiting_amount','component_reserved_amount'];
       if(row.work_id===null&&facts.some(k=>row[k]!==null)||(row.shift_detail_id===null)!==(row.shift_detail_no===null)||row.approved_segment_id===null&&row.shift_detail_id!==null||row.original_timesheet_id===null&&row.original_work_ref!==null||row.component_amount_known!==true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]!==null)||row.component_amount_known===true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]===null))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     }
@@ -628,6 +639,10 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
         ||['SOURCE','PROTECTED'].includes(row.source_kind)&&row.source_week_ending_date===null)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     }
     if(kind==='CANDIDATE_GROUPS'){
+      if(row.rate_set_pay_channel!==null&&(!['PAYE','UMBRELLA'].includes(row.rate_set_pay_channel)
+        ||row.rate_set_pay_channel!==row.target_pay_channel||row.group_kind!=='WORK'||row.work_id===null
+        ||row.section!=='READY'||row.group_amount===null||!row.complete||row.dirty||row.progress_state!=='CURRENT'))
+        throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
       if(row.group_key!==row.group_kind+':'+row.presentation_id||row.parent_group_key!==(row.work_id!==null?'WORK:'+row.work_id:'CASE:'+row.case_id)||(row.group_kind==='ROW')!==(row.case_component_id!==null)||row.group_kind==='ROW'&&row.presentation_id!==row.case_component_id||(row.accepted_run_id===null)!==(row.accepted_command_id===null)||(row.accepted_run_id===null)!==(row.accepted_module_epoch===null)||['ready_net_add_amount','gross_deduction_balance','net_deduction_balance','waiting_amount','waiting_net_add_amount'].some(k=>(row[k]===null)!==(row.group_amount===null)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     }
     if(kind==='CANDIDATE_GROUPS'&&row.selectable&&(!row.complete||row.dirty||row.progress_state!=='CURRENT'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');

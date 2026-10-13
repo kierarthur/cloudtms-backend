@@ -1,0 +1,38 @@
+{
+  "source": "Sole local PG17 schema catalogue and isolation DO only; no business calls/data",
+  "rows": [
+    {
+      "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "file": "supabase/repeatable/13102026_0132_banking_pay_next_ready_chosen_member_reader_v1.sql",
+      "sourceMd5": "fcd9af8ccf62d509b0f9c4982ae844f1",
+      "installed": {
+        "bodyMd5": "fcd9af8ccf62d509b0f9c4982ae844f1",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "configuration": [
+          "search_path=pg_catalog, private, public",
+          "statement_timeout=5s"
+        ],
+        "volatility": "s",
+        "ownerExecute": true,
+        "serviceExecute": false,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "publicExecute": false
+      },
+      "matches": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}
