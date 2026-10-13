@@ -1,0 +1,956 @@
+[
+  {
+    "index": 0,
+    "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+    "bytes": 8958,
+    "sha256": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c",
+    "calls": [
+      "public.candidate_daily_availability_days",
+      "public.candidate_daily_command_receipts",
+      "public.candidate_daily_reconciliation_apply_atomic_v1",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 1,
+    "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+    "bytes": 8443,
+    "sha256": "05e9676d1b3f86f9085ec9355906c37f60aa8965a70acb3590de14fb0650c6c1",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_batch_receipts",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_legacy_availability_apply_atomic_v1",
+      "public.candidate_daily_rota_days",
+      "public.candidate_daily_rota_generations",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 2,
+    "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+    "bytes": 15672,
+    "sha256": "54efab0b929e2e8da38a161908e3a9ceba88fada326f5296a33f11c703903232",
+    "calls": [
+      "private._candidate_home_summary_v1",
+      "private.candidate_notification_visible_v1",
+      "public.candidate_app_accounts",
+      "public.candidate_app_notifications_manage_v1",
+      "public.candidate_app_notifications_page_v1",
+      "public.candidate_app_sessions",
+      "public.candidate_expense_component_events",
+      "public.candidate_expense_components",
+      "public.candidate_expense_operations",
+      "public.candidate_notifications",
+      "public.candidate_submission_workflows",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts"
+    ],
+    "includes": []
+  },
+  {
+    "index": 3,
+    "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+    "bytes": 18471,
+    "sha256": "1df601877c770cdaae660e514e148a5a6bc77f2f03658f48c8747f59b676e485",
+    "calls": [
+      "private._candidate_sha256_jsonb_v1",
+      "private._expense_approval_policy_v1",
+      "private._expense_approval_route_v1",
+      "public.candidate_app_accounts",
+      "public.candidate_app_sessions",
+      "public.candidate_app_timesheet_detail_v1",
+      "public.candidate_paper_manifest_v2_promote_v1",
+      "public.candidate_submission_components",
+      "public.candidate_weekly_paper_prepare_atomic_v1",
+      "public.candidate_workflow_transition_atomic_v1",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.expense_carrier_resolve_or_create_atomic_v1",
+      "public.timesheets",
+      "public.timesheets_financials"
+    ],
+    "includes": []
+  },
+  {
+    "index": 4,
+    "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+    "bytes": 1184,
+    "sha256": "892fc4ad6be3f99b7c7b40761d7a93514a6312ee582a8b4f2b380c8cde7d9f7a",
+    "calls": [
+      "private.weekly_source_office_contact_policy_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 5,
+    "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+    "bytes": 8395,
+    "sha256": "a34b3f5687c57d9c60a6f8010436fee2e0f7b302ec90ebf9a32108f4551eee01",
+    "calls": [
+      "pg_temp.ws_verify_full_relation_fingerprint",
+      "pg_temp.ws_verify_watch",
+      "public.client_settings",
+      "public.clients",
+      "public.contracts",
+      "public.tms_users",
+      "public.weekly_source_client_settings_get_v1",
+      "public.weekly_source_client_settings_save_atomic_v1",
+      "public.weekly_source_groups"
+    ],
+    "includes": [
+      {
+        "file": "supabase/verification/support/06102026_1818_source_verifier_snapshot_guard.sql",
+        "bytes": 753,
+        "sha256": "14325718fa6297b78dae4b914e178a322b3dcc7b7e057296f4c2763541072972",
+        "calls": []
+      },
+      {
+        "file": "supabase/verification/support/06102026_1117_source_workbench_fixture_isolation.sql",
+        "bytes": 3475,
+        "sha256": "07a5931f76f9a4bbf57aeefe5927b61bd944dff486be4fe65980c97ea108d1e6",
+        "calls": [
+          "pg_temp.ws_verify_other_jobs_fingerprint",
+          "pg_temp.ws_verify_watch",
+          "pg_temp.ws_verify_workbench_fingerprint"
+        ]
+      },
+      {
+        "file": "supabase/verification/support/22092026_1850_source_fixture_capture.sql",
+        "bytes": 4053,
+        "sha256": "fcadfe617ce40a2eb29476df1cc9ba31af6ca1796697be54dbdaa08ccc6f34f8",
+        "calls": [
+          "pg_temp.ws_verify_capture",
+          "pg_temp.ws_verify_count",
+          "pg_temp.ws_verify_relations",
+          "pg_temp.ws_verify_watch",
+          "pg_temp.ws_verify_writes"
+        ]
+      },
+      {
+        "file": "supabase/verification/support/06102026_1410_source_full_row_fingerprints.sql",
+        "bytes": 1097,
+        "sha256": "701511e00b8b5561374d7088f1b847d07960d808457ec42550200f5c75e9e100",
+        "calls": [
+          "pg_temp.ws_verify_full_relation_fingerprint"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+    "bytes": 26474,
+    "sha256": "84b081908ff837103c907e2e4032ce52264735403a92598bfdffd7e5018bf0ba",
+    "calls": [
+      "pg_temp.assert_true",
+      "public.candidate_app_accounts",
+      "public.candidate_app_global_membership_links",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.settings_defaults",
+      "public.timesheets",
+      "public.tms_users",
+      "public.weekly_source_charge_checks",
+      "public.weekly_source_client_policies",
+      "public.weekly_source_combined_finalise_workspace_v1",
+      "public.weekly_source_combined_review_workspace_v1",
+      "public.weekly_source_cycles",
+      "public.weekly_source_group_clients",
+      "public.weekly_source_groups",
+      "public.weekly_source_projection_publications",
+      "public.weekly_source_report_scopes",
+      "public.weekly_source_row_resolutions",
+      "public.weekly_source_upload_rows",
+      "public.weekly_source_uploads",
+      "public.weekly_source_workspace_scopes_v1",
+      "public.weekly_work_events"
+    ],
+    "includes": [
+      {
+        "file": "supabase/verification/support/06102026_1818_source_verifier_snapshot_guard.sql",
+        "bytes": 753,
+        "sha256": "14325718fa6297b78dae4b914e178a322b3dcc7b7e057296f4c2763541072972",
+        "calls": []
+      },
+      {
+        "file": "supabase/verification/support/06102026_1117_source_workbench_fixture_isolation.sql",
+        "bytes": 3475,
+        "sha256": "07a5931f76f9a4bbf57aeefe5927b61bd944dff486be4fe65980c97ea108d1e6",
+        "calls": [
+          "pg_temp.ws_verify_other_jobs_fingerprint",
+          "pg_temp.ws_verify_watch",
+          "pg_temp.ws_verify_workbench_fingerprint"
+        ]
+      },
+      {
+        "file": "supabase/verification/support/22092026_1850_source_fixture_capture.sql",
+        "bytes": 4053,
+        "sha256": "fcadfe617ce40a2eb29476df1cc9ba31af6ca1796697be54dbdaa08ccc6f34f8",
+        "calls": [
+          "pg_temp.ws_verify_capture",
+          "pg_temp.ws_verify_count",
+          "pg_temp.ws_verify_relations",
+          "pg_temp.ws_verify_watch",
+          "pg_temp.ws_verify_writes"
+        ]
+      },
+      {
+        "file": "supabase/verification/support/06102026_1410_source_full_row_fingerprints.sql",
+        "bytes": 1097,
+        "sha256": "701511e00b8b5561374d7088f1b847d07960d808457ec42550200f5c75e9e100",
+        "calls": [
+          "pg_temp.ws_verify_full_relation_fingerprint"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "file": "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
+    "bytes": 16282,
+    "sha256": "6fc8e976fe4d0ceebcd2b14f5035cba4432173f25e817b75675e33cd2f2ddb54",
+    "calls": [
+      "private._candidate_daily_emergency_token_v1",
+      "private._candidate_daily_specialist_shift_v1",
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_batch_receipts",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_effect_claim_candidate_v1",
+      "public.candidate_daily_effect_complete_candidate_v1",
+      "public.candidate_daily_rota_days",
+      "public.candidate_daily_rota_generations",
+      "public.candidate_daily_specialist_read_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 8,
+    "file": "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+    "bytes": 3300,
+    "sha256": "e2081a2d69d2e7b0649036800fe09f9f3ae4a32fa174fbafc0356d46ed2f91c2",
+    "calls": [
+      "private.weekly_source_accepted_publication_action_record_v1",
+      "private.weekly_source_accepted_publication_action_verify_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 9,
+    "file": "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+    "bytes": 3397,
+    "sha256": "099067d21e9f5110c65f958c67f13f1419b3a52a42919d02e2b1fda34610d994",
+    "calls": [
+      "public.weekly_exceptional_pay_complete_local_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 10,
+    "file": "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+    "bytes": 30718,
+    "sha256": "fe7df45348b9ac8a1bfe9fba46cf3067e0b10c8c8d54d0e53fb559d0ee60cff7",
+    "calls": [
+      "private._candidate_sha256_jsonb_v1",
+      "private._invoice_document_advance_batch",
+      "private._invoice_processor_limits",
+      "public.candidate_app_accounts",
+      "public.candidate_app_sessions",
+      "public.candidate_component_prepare_atomic_v1",
+      "public.candidate_paper_manifest_v2_promote_v1",
+      "public.candidate_paper_return_pack_complete_v2",
+      "public.candidate_paper_return_proof_validate_v2",
+      "public.candidate_submission_components",
+      "public.candidate_submission_workflows",
+      "public.candidate_weekly_paper_prepare_atomic_v1",
+      "public.candidate_weekly_paper_target_prepare_v1",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.invoice_document_versions",
+      "public.invoice_operation_chunks",
+      "public.invoice_operations"
+    ],
+    "includes": []
+  },
+  {
+    "index": 11,
+    "file": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+    "bytes": 44815,
+    "sha256": "e0666765091409704533ed0f471aea4dc0d001801715a5730be00c3697c6dede",
+    "calls": [
+      "private.banking_pay_workbench_economic_build_facts",
+      "private.banking_pay_workbench_economic_build_scope",
+      "private.banking_pay_workbench_economic_builds",
+      "private.pay_workbench_finance_effect_normalise_row_v1",
+      "private.pay_workbench_sealed_rate_component_projection_v1",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 12,
+    "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+    "bytes": 31174,
+    "sha256": "0c0496dabf3e3a24aeb91909c8ac56f6ad17161ff027c7241dd89663f4dd187c",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 13,
+    "file": "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
+    "bytes": 2656,
+    "sha256": "97bec745fcfa91d39d003a64dd632154fa4a437043d2ae6edfc30ec198a38523",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 14,
+    "file": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+    "bytes": 9720,
+    "sha256": "e4f027dc5656d30844312e8b1e99d4ef3dcf37676ddc73faad58318755a64be1",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 15,
+    "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+    "bytes": 4393,
+    "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 16,
+    "file": "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
+    "bytes": 4413,
+    "sha256": "efad90585235ed640a51f5ae3cdeec9aed2695714c5cb0f4afc2d53541d0b06b",
+    "calls": [
+      "public.candidate_manager_email_settings_get_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 17,
+    "file": "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
+    "bytes": 1013,
+    "sha256": "2822fbe2718626863dbe89d5f6058a2e7219715039c643942389562f1f5ea9d6",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 18,
+    "file": "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
+    "bytes": 9169,
+    "sha256": "232da03b5625e1dfa69bb1c421dbeff70aec39a09af5a808e468e696a1db64ff",
+    "calls": [
+      "private._candidate_manager_authoriser_effective_v2",
+      "private._candidate_manager_email_allowed_v1",
+      "public.client_manager_authoriser_policy_update_v1",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_manager_authoriser_policy_update_v1",
+      "public.contracts"
+    ],
+    "includes": []
+  },
+  {
+    "index": 19,
+    "file": "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+    "bytes": 7060,
+    "sha256": "7b3b12279a152679d5adb63660b190d4e94d5702398f48f4d68d85d69d8ae3d9",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_batch_receipts",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_source_links",
+      "private.candidate_daily_sync_state",
+      "public.candidate_app_accounts",
+      "public.candidate_app_global_membership_links",
+      "public.candidate_daily_rota_days",
+      "public.candidate_daily_rota_generations",
+      "public.candidate_daily_system_policy_activate_ready_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 20,
+    "file": "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
+    "bytes": 1021,
+    "sha256": "721074977f0dbadbd9761206f74bdee25b6957ca8e0d2da5cbca0f8bd541682e",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 21,
+    "file": "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
+    "bytes": 5213,
+    "sha256": "7e07a9ed18275836cf7bb661e9c4d70ac0e51c34529ad140471b14319e592406",
+    "calls": [
+      "private._candidate_timesheet_summary_approval_revision_trg_v1",
+      "private._candidate_timesheet_summary_mail_revision_trg_v1",
+      "private._candidate_timesheet_summary_revision_upsert_v1",
+      "private._candidate_timesheet_summary_workflow_revision_trg_v1",
+      "public.candidate_timesheet_summary_cursor_v1",
+      "public.rpc_changes_ping"
+    ],
+    "includes": []
+  },
+  {
+    "index": 22,
+    "file": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+    "bytes": 1801,
+    "sha256": "676742eec620099f188fd6ddd0c87246e58a096a51f1a6f3f728a88ac0c19fbf",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 23,
+    "file": "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
+    "bytes": 3469,
+    "sha256": "01e6749bbf851ce70f85cef8b552005713bfb86ae273d28051b81241684a454d",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 24,
+    "file": "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+    "bytes": 7482,
+    "sha256": "e3a97257a36662fe6c6791c1540ddf261a2f9d70692e94ecfb0e4d1e89bf9419",
+    "calls": [
+      "public.candidate_daily_legacy_availability_apply_atomic_v1",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 25,
+    "file": "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
+    "bytes": 18164,
+    "sha256": "ff54dc1e5b0666776fc8e2e3691752ef41cf8538fdd76f03cca1d3a3a09e3ab2",
+    "calls": [
+      "private._candidate_daily_capability_v1",
+      "private._candidate_daily_freshness_v1",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_sync_state",
+      "public.candidate_daily_availability_apply_atomic_v1",
+      "public.candidate_daily_projection_complete_atomic_v1",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidate_daily_tiles_get_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 26,
+    "file": "supabase/verification/31082026_1026_candidate_daily_active_window_projection_readiness_verification.sql",
+    "bytes": 5546,
+    "sha256": "b1e9061e6066fbe83151a3c256229099697abb5785e2c47341191c0213adf404",
+    "calls": [
+      "private._candidate_daily_refresh_sync_state_v1",
+      "public.candidate_daily_command_receipts",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidate_daily_sheet_projection_outbox",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 27,
+    "file": "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
+    "bytes": 23585,
+    "sha256": "9177f72342ee4ff3f43bc4da3e4ad5b28813feda8cadefc027f7c355b1cb5d68",
+    "calls": [
+      "pg_temp.rota_removal_preserved_rows",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_external_effect_receipts",
+      "public.candidate_app_accounts",
+      "public.candidate_app_global_membership_links",
+      "public.candidate_daily_command_receipts",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidate_daily_sheet_projection_outbox",
+      "public.candidate_google_provisioning_attach_v1",
+      "public.candidate_google_rota_remove_v1",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contracts",
+      "public.timesheet_evidence",
+      "public.timesheets",
+      "public.timesheets_financials",
+      "public.ts_financials_outbox"
+    ],
+    "includes": []
+  },
+  {
+    "index": 28,
+    "file": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+    "bytes": 62035,
+    "sha256": "73842f8c6593f5b37d1886709f489760efb9b90a86e2b3e03d5fc0a33da92e0b",
+    "calls": [
+      "pg_temp.candidate_phone_approve_all",
+      "pg_temp.candidate_register_all_final_components",
+      "pg_temp.candidate_register_all_review_components",
+      "private._candidate_component_render_contract_v1",
+      "private._candidate_daily_booked_source_v1",
+      "private._candidate_daily_break_entry_v1",
+      "private._candidate_daily_first_receipt_v1",
+      "private._candidate_daily_receipt_context_v1",
+      "private._candidate_daily_receipt_reset_v1",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_sync_state",
+      "public.candidate_app_accounts",
+      "public.candidate_app_sessions",
+      "public.candidate_app_timesheet_detail_v2",
+      "public.candidate_app_timesheet_page_v1",
+      "public.candidate_break_entry_context_get_v1",
+      "public.candidate_daily_rota_generation_publish_atomic_v1",
+      "public.candidate_daily_tiles_get_v1",
+      "public.candidate_submission_finalize_atomic_v1",
+      "public.candidate_workflow_transition_atomic_v1",
+      "public.candidates",
+      "public.client_hospitals",
+      "public.client_settings",
+      "public.clients",
+      "public.cloudtms_office_candidate_adapter_v1",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.enqueue_ts_financials_priority",
+      "public.timesheet_authorise_generic_atomic",
+      "public.timesheet_daily_abandoned_receipt_delete_apply_v1",
+      "public.timesheet_daily_abandoned_receipt_delete_preview_v1",
+      "public.timesheet_lifecycle_guard_signature_v1",
+      "public.tms_users",
+      "public.tsfin_load_context_batch",
+      "public.tsfin_write_snapshots_and_complete"
+    ],
+    "includes": []
+  },
+  {
+    "index": 29,
+    "file": "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+    "bytes": 2601,
+    "sha256": "d8031788eee1fb06cdd82528051889ac1c476f89a639c8300e22bafd203cebd8",
+    "calls": [
+      "private._candidate_daily_break_entry_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 30,
+    "file": "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+    "bytes": 1988,
+    "sha256": "e4fb9311b074e521616fc1c9a8e816d22b64f4c961920289473e5ce4dba5ef4d",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 31,
+    "file": "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+    "bytes": 7374,
+    "sha256": "9b5515545e4c9a4241ebe9d6139516ac5dca0e5fbb2e145f255ef04bfd29c30b",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_command_receipts",
+      "public.candidate_daily_projection_claim_v1",
+      "public.candidate_daily_projection_complete_atomic_v1",
+      "public.candidate_daily_sheet_projection_outbox",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 32,
+    "file": "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql",
+    "bytes": 8388,
+    "sha256": "6c8a68077adb2c59c90c96741e5dde5b28877bcbd26bcde824cd1ead1d479774",
+    "calls": [
+      "public.pay_workbench_contract_version_get_v1",
+      "public.pay_workbench_session_get_action_required_page_v1",
+      "public.pay_workbench_session_get_blocked_page_v1",
+      "public.pay_workbench_session_get_candidate_ready_group_page_v1",
+      "public.pay_workbench_session_get_candidate_ready_page_v1",
+      "public.pay_workbench_session_get_candidate_summary_page_v1",
+      "public.pay_workbench_session_set_candidate_ready_selection_v1",
+      "public.pay_workbench_session_set_filtered_ready_selection_v1",
+      "public.pay_workbench_session_set_ready_group_v1",
+      "public.pay_workbench_session_set_ready_rows_v1",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 33,
+    "file": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+    "bytes": 7262,
+    "sha256": "6fee715f67c0de76ca0e45cba168a9a4293a3e88c4bf13ec498911878a2eca60",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 34,
+    "file": "supabase/verification/29082026_0518_banking_pay_replaced_queue_terminal_shape_verification.sql",
+    "bytes": 8223,
+    "sha256": "c4bc774476338df50eee3437a3fb0d335e42059238156fe21d104f169c0a5629",
+    "calls": [
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_sessions",
+      "public.pay_workbench_session_replay_replaced_queue_v1"
+    ],
+    "includes": []
+  },
+  {
+    "index": 35,
+    "file": "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
+    "bytes": 14350,
+    "sha256": "25746a344a4cc862826c56689710e35acda95bedf113b6106ee5a445041a1c47",
+    "calls": [
+      "public.app_change_counters",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_repair_replayed_candidate_jobs_v1",
+      "public.pay_workbench_session_replay_replaced_queue_v1",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 36,
+    "file": "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
+    "bytes": 11687,
+    "sha256": "b4f1895f05a94d5e6ba273471463983d82448e1e8543984519b59f5f1dc35768",
+    "calls": [
+      "private.banking_pay_workbench_economic_builds",
+      "private.banking_pay_workbench_stage_attempts",
+      "public._pay_workbench_candidate_serial_active_state",
+      "public.app_change_counters",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_repair_discarded_session_blockers_v1",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 37,
+    "file": "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
+    "bytes": 6228,
+    "sha256": "0734bd8a5ce7f41a85d4649a49bd4f394752e2964be649eff9051a5ff67dd617",
+    "calls": [
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_session_refresh_current_authority_v1",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 38,
+    "file": "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+    "bytes": 2178,
+    "sha256": "c5012d2476a440824d7e013edeb7ac142a81a266394e1987d87ed223353eab07",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 39,
+    "file": "tests/29082026_0924_candidate_daily_reconciliation_linked_window_runtime_verification.sql",
+    "bytes": 5492,
+    "sha256": "0640554467f31b374706dfcfced2f7c17e48a0596aa035515c50ed0e3bc359fb",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_reconciliation_apply_atomic_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 40,
+    "file": "supabase/verification/29082026_1407_candidate_daily_reconciliation_identity_probe_verification.sql",
+    "bytes": 2117,
+    "sha256": "81b1c7f5af33729edd6232f51f1ff951e296184610f9a3c592434170eb79e97e",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 41,
+    "file": "tests/29082026_1408_candidate_daily_reconciliation_identity_probe_runtime_verification.sql",
+    "bytes": 4922,
+    "sha256": "5833af1d3305aaadb45e5447b5a28c13a6b04f15e87c0e3f4fd599e281261d7b",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_reconciliation_apply_atomic_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 42,
+    "file": "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql",
+    "bytes": 1893,
+    "sha256": "159393c883d534091d42d50951483843c6fd1f9ade5f3bb59c83f05c486445b0",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 43,
+    "file": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+    "bytes": 15855,
+    "sha256": "85e3879cf552e2374aa9a7ed78973fc1b54b19cd87a931d2f720689b22e0c8d9",
+    "calls": [
+      "public.candidate_app_accounts",
+      "public.candidate_app_sessions",
+      "public.candidate_workflow_transition_atomic_v1",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.expense_carrier_resolve_or_create_atomic_v1",
+      "public.timesheets",
+      "public.timesheets_financials"
+    ],
+    "includes": []
+  },
+  {
+    "index": 44,
+    "file": "supabase/verification/29082026_1157_banking_pay_source_refresh_terminal_verification.sql",
+    "bytes": 16616,
+    "sha256": "3d856d46bddeec29fcb2131816bbccaae05f547ad617aada3971b5c7a3833dba",
+    "calls": [
+      "pg_temp._bpay_wb_sync_context_v1",
+      "private.banking_pay_workbench_economic_build_scope",
+      "private.banking_pay_workbench_economic_builds",
+      "private.banking_pay_workbench_stage_attempts",
+      "private.pay_workbench_timesheet_dependency_closure_v2",
+      "public.app_change_counters",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_sync_overpayments_from_preview",
+      "public.timesheets",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 45,
+    "file": "supabase/verification/29082026_1313_banking_pay_invalid_source_authority_repair_verification.sql",
+    "bytes": 16905,
+    "sha256": "a8b062ac19f41febeb0f0c888ef40beb776bd71b3ed37ba644ae1225716e2538",
+    "calls": [
+      "public.app_change_counters",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_session_candidate_state",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_enqueue_candidate_refresh",
+      "public.pay_workbench_repair_invalid_source_authority_jobs_v1",
+      "public.pay_workbench_source_build_attempt_claim_start_v1",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 46,
+    "file": "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
+    "bytes": 8370,
+    "sha256": "305a0e56e35fea90a68746413ecf821f8bfc24c5c05dae241e661daf7c494f71",
+    "calls": [
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_preview_rows",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_session_get_action_required_page_v1",
+      "public.pay_workbench_session_get_candidate_summary_page_v1",
+      "public.timesheets",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 47,
+    "file": "supabase/verification/31082026_2231_banking_pay_action_required_amount_presentation_verification.sql",
+    "bytes": 9624,
+    "sha256": "c7b26b54423a8fc10e234723d7bf7b74e5936bf72f174235256e4bcf0a8b2fd3",
+    "calls": [
+      "private.pay_workbench_modal_eligible_rows_v2",
+      "private.pay_workbench_modal_finance_task_members_v2",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_preview_rows",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_advances",
+      "public.pay_workbench_session_get_action_required_page_v1",
+      "public.pay_workbench_session_get_candidate_summary_page_v1",
+      "public.timesheets",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 48,
+    "file": "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
+    "bytes": 3621,
+    "sha256": "6f4e13b9ac3508bd52a1635b7679ae55a9ef65cf124bcc0a7c9ae1e1247b7d90",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 49,
+    "file": "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
+    "bytes": 9056,
+    "sha256": "4686588c0fcff6efa30aa3fe539b074a212a51d43b2cce45ded8802de7f57e5c",
+    "calls": [
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_information_candidate_v1",
+      "public.candidate_daily_information_settings_get_v1",
+      "public.candidate_daily_information_settings_set_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 50,
+    "file": "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+    "bytes": 8512,
+    "sha256": "54591ecaf499bf4767f509c424ed5666d9a43b807cbfa9a30e1505ea658fb3a6",
+    "calls": [
+      "private._candidate_daily_emergency_token_v1",
+      "private._candidate_daily_specialist_shift_v1",
+      "private.candidate_daily_authority_scopes",
+      "private.candidate_daily_batch_receipts",
+      "private.candidate_daily_entitlements",
+      "private.candidate_daily_source_links",
+      "public.candidate_daily_rota_days",
+      "public.candidate_daily_rota_generations",
+      "public.candidate_daily_specialist_read_v1",
+      "public.candidates"
+    ],
+    "includes": []
+  },
+  {
+    "index": 51,
+    "file": "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
+    "bytes": 1738,
+    "sha256": "38bd47904579fe717bf8397aae827a36d4c288a730b64bb20b74e839a18f788b",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 52,
+    "file": "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
+    "bytes": 2157,
+    "sha256": "eecae1828f5ac8b25db0832b089610cd3b0f17fc6a9d10bc62f4143151949001",
+    "calls": [],
+    "includes": []
+  },
+  {
+    "index": 53,
+    "file": "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+    "bytes": 25742,
+    "sha256": "717c8b145f77b3f708b64caeedb6aa17b0f111403fb8d3ef558616b98bb98b95",
+    "calls": [
+      "private._invoice_processor_limits",
+      "public.candidate_app_accounts",
+      "public.candidate_app_sessions",
+      "public.candidate_paper_manifest_v2_promote_v1",
+      "public.candidate_workflow_transition_atomic_v1",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.cloudtms_office_candidate_adapter_v1",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.invoice_document_versions",
+      "public.invoice_operations",
+      "public.timesheet_lifecycle_guard_signature_v1",
+      "public.timesheets",
+      "public.timesheets_financials",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 54,
+    "file": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+    "bytes": 28264,
+    "sha256": "2a7bca5f00a6ea9540e0655f58c0cb33a5c3babcb089bbef02589c01db2f6ca1",
+    "calls": [
+      "private.pay_workbench_scope_invalidate_v1",
+      "public.app_change_counters",
+      "public.banking_pay_snapshot_runs",
+      "public.banking_pay_workbench_jobs",
+      "public.banking_pay_workbench_session_scope",
+      "public.banking_pay_workbench_sessions",
+      "public.candidates",
+      "public.pay_workbench_candidate_dirty_apply_job_process",
+      "public.pay_workbench_repair_invalid_dirty_apply_jobs_v1",
+      "public.timesheets",
+      "public.timesheets_financials",
+      "public.tms_users"
+    ],
+    "includes": []
+  },
+  {
+    "index": 55,
+    "file": "supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql",
+    "bytes": 16347,
+    "sha256": "1135b2912a9c36e7019a6503ee59ab1c330f2cc6d8148cadc7640e79739efa40",
+    "calls": [
+      "private._candidate_sha256_jsonb_v1",
+      "public.candidate_app_accounts",
+      "public.candidate_submission_workflows",
+      "public.candidates",
+      "public.client_settings",
+      "public.clients",
+      "public.contract_weeks",
+      "public.contracts",
+      "public.timesheets",
+      "public.timesheets_financials"
+    ],
+    "includes": []
+  }
+]
