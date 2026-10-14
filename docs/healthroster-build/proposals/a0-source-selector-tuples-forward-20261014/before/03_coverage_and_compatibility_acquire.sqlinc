@@ -1,0 +1,98 @@
+-- The same arbiter, native date overlap and opposite intent classes.
+-- Engine contention/dirty visibility/old-RR and whole caller order remain UNRUN.
+create or replace function private.timesheet_correction_a0_source_coverage_acquire_v1(p_client uuid,p_coverage daterange,p_retain boolean)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'
+as $coverage$
+declare old_timeout text:=current_setting('lock_timeout');span numrange;xid numeric;inserted integer;changed integer;
+begin
+ if p_client is null or p_coverage is null or isempty(p_coverage) or p_retain is null then
+  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+ if p_retain then span:=numrange(null,null,'()');else
+  xid:=pg_current_xact_id()::text::numeric;span:=numrange(xid,xid+1,'[)');end if;
+ begin
+  perform set_config('lock_timeout','1ms',true);
+  if p_retain then
+   perform 1 from private.timesheet_correction_a0_transaction_fences f
+    where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client
+      and f.coverage_span=p_coverage for update nowait;
+   if not found then
+    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)
+     values('SOURCE_CONTRACT_COVERAGE',p_client,true,span,p_coverage,true)
+     on conflict(token_kind,uuid_identity,coverage_span) where retained and coverage_span is not null
+      do nothing returning 1 into inserted;
+    if inserted is distinct from 1 then
+     perform 1 from private.timesheet_correction_a0_transaction_fences f
+      where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client
+       and f.coverage_span=p_coverage for update nowait;
+     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+    end if;
+   end if;
+   if inserted is distinct from 1 then
+    update private.timesheet_correction_a0_transaction_fences f set touch_bit=not f.touch_bit
+     where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client and f.coverage_span=p_coverage;
+    get diagnostics changed=row_count;
+    if changed<>1 then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+   end if;
+  else
+   perform 1 from private.timesheet_correction_a0_transaction_fences f
+    where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client
+     and f.coverage_span && p_coverage for share nowait;
+   if not found then
+    insert into private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,retained,intent_span,coverage_span,touch_bit)
+     values('SOURCE_CONTRACT_COVERAGE',p_client,false,span,p_coverage,false)
+     on conflict on constraint timesheet_correction_a0_fences_coverage_excl do nothing returning 1 into inserted;
+    if inserted=1 then
+     delete from private.timesheet_correction_a0_transaction_fences f
+      where not f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client
+       and f.coverage_span=p_coverage and f.intent_span=span;
+    else
+     perform 1 from private.timesheet_correction_a0_transaction_fences f
+      where f.retained and f.token_kind='SOURCE_CONTRACT_COVERAGE' and f.uuid_identity=p_client
+       and f.coverage_span && p_coverage for share nowait;
+     if not found then raise exception 'CORRECTION_A0_TOKEN_CHANGED' using errcode='40001';end if;
+    end if;
+   end if;
+  end if;
+  perform set_config('lock_timeout',old_timeout,true);
+ exception when others then perform set_config('lock_timeout',old_timeout,true);raise;end;
+end;
+$coverage$;
+alter function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) owner to postgres;
+revoke all on function private.timesheet_correction_a0_source_coverage_acquire_v1(uuid,daterange,boolean) from public,anon,authenticated,service_role;
+
+-- Preserve the exact original public-to-private caller signature. No Source
+-- token means one unchanged native scalar call, preserving its old validation.
+create or replace function private.timesheet_correction_a0_fence_acquire_v1(p_tokens jsonb,p_retain boolean)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'
+as $source_acquire$
+declare t jsonb;scalar_tokens jsonb;
+begin
+ if jsonb_typeof(p_tokens) is distinct from 'array' then
+  perform private.timesheet_correction_a0_fence_scalar_acquire_core_v1(p_tokens,p_retain);return;end if;
+ if not exists(select 1 from jsonb_array_elements(p_tokens) x where x->>'kind' in
+  ('SOURCE_OBJECT','SOURCE_GROUP_CLIENT','SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE')) then
+  perform private.timesheet_correction_a0_fence_scalar_acquire_core_v1(p_tokens,p_retain);return;end if;
+ if p_retain is null then raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+ -- Validate the entire new envelope BEFORE an acquisition. Neither a malformed
+ -- coverage token nor mixed native token may partially admit an owner.
+ for t in select value from jsonb_array_elements(p_tokens) loop
+  if jsonb_typeof(t) is distinct from 'object' or exists(select 1 from jsonb_object_keys(t) key
+    where key not in('kind','uuid','json','coverage')) then
+   raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  perform private.timesheet_correction_a0_source_token_assert_v1(t);
+  if t->>'kind'='SOURCE_CONTRACT_COVERAGE' and (t ? 'json' or jsonb_typeof(t->'uuid') is distinct from 'string'
+    or pg_input_is_valid(t->>'uuid','uuid') is distinct from true) then
+   raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+ end loop;
+ select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into scalar_tokens
+  from jsonb_array_elements(p_tokens) where value->>'kind' is distinct from 'SOURCE_CONTRACT_COVERAGE';
+ perform private.timesheet_correction_a0_fence_scalar_acquire_core_v1(scalar_tokens,p_retain);
+ for t in select distinct value from jsonb_array_elements(p_tokens)
+   where value->>'kind'='SOURCE_CONTRACT_COVERAGE' order by value loop
+  perform private.timesheet_correction_a0_source_coverage_acquire_v1((t->>'uuid')::uuid,
+   daterange((t->'coverage'->>0)::date,(t->'coverage'->>1)::date,'[]'),p_retain);
+ end loop;
+end;
+$source_acquire$;
+alter function private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean) from public,anon,authenticated,service_role;
