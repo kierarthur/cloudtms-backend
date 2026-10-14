@@ -1,0 +1,33 @@
+import fs from'node:fs';import{createRequire}from'node:module';
+const require=createRequire('C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/package.json');
+const{chromium}=require('@playwright/test');
+const state='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/TEST-Frontend/tests/e2e/.auth/user.json';
+const backend='https://test-cloudtms-backend.kier-88a.workers.dev';
+const receipt={observedAt:new Date().toISOString(),target:'TEST',backend,sourceCommit:'f743b81fe537830d81b1de93ec4f9cb0331532a7',readOnlyApiCalls:true,fixtureOrBusinessMutation:false};
+let browser;
+try{
+ const anonymous=await fetch(backend+'/api/weekly-source/v1/workspace?tab=queries',{signal:AbortSignal.timeout(15000)});
+ receipt.anonymousWorkspaceStatus=anonymous.status;await anonymous.body?.cancel();
+ if(!fs.existsSync(state))throw Error('APPROVED_AUTH_STATE_UNAVAILABLE');
+ browser=await chromium.launch({channel:'msedge',headless:true});
+ const context=await browser.newContext({storageState:state});
+ const permitted=new Set(['testmode.arthur-rai.co.uk','test-cloudtms-backend.kier-88a.workers.dev','fonts.googleapis.com','fonts.gstatic.com','cdn.jsdelivr.net','cdnjs.cloudflare.com','unpkg.com']);
+ let refusedOrigins=0,refusedMethods=0,securityRefreshCount=0;const requestMethods={};
+ await context.route('**/*',async route=>{const request=route.request(),u=new URL(request.url()),method=request.method();requestMethods[method]=(requestMethods[method]??0)+1;
+  const securityRefresh=u.hostname==='test-cloudtms-backend.kier-88a.workers.dev'&&u.pathname==='/auth/refresh'&&method==='POST';
+  if(securityRefresh)securityRefreshCount++;
+  if(!['GET','HEAD','OPTIONS'].includes(method)&&!securityRefresh){refusedMethods++;return route.abort();}
+  if(u.protocol!=='https:'||!permitted.has(u.hostname)){refusedOrigins++;return route.abort();}return route.continue();});
+ const page=await context.newPage();await page.goto('https://testmode.arthur-rai.co.uk',{waitUntil:'domcontentloaded',timeout:45000});
+ await page.waitForFunction(()=>{const login=document.getElementById('loginOverlay');return login&&getComputedStyle(login).display==='none'&&typeof authFetch==='function';},null,{timeout:20000});
+ receipt.authenticatedWorkspace=await page.evaluate(async()=>{
+  const response=await authFetch(API('/api/weekly-source/v1/workspace?tab=queries'));
+  const body=await response.json().catch(()=>({}));
+  return{status:response.status,contract:typeof body.contract==='string'?body.contract:null,payReadOnly:body.permissions?.view==='PAY',queriesPresent:!!body.queries,sourceScopePresent:!!body.selected};
+ });
+ receipt.refusedOriginCount=refusedOrigins;
+ receipt.refusedMethodCount=refusedMethods;receipt.browserRequestMethods=requestMethods;receipt.nonReadBusinessMethodsBlocked=true;
+ receipt.securityRefreshCount=securityRefreshCount;receipt.securityRefreshException='Existing exact POST /auth/refresh only; no business write endpoint';
+ receipt.assertionsPassed=receipt.anonymousWorkspaceStatus===401&&receipt.authenticatedWorkspace.status===200&&receipt.authenticatedWorkspace.contract==='WEEKLY_SOURCE_IMPORT_WORKSPACE_V1'&&receipt.authenticatedWorkspace.queriesPresent;
+}catch(error){receipt.status='HTTP_FIRST_USE_INCOMPLETE';receipt.failure=String(error.message).includes('Timeout')?'APPROVED_AUTH_REUSE_OR_ROUTE_NOT_READY':String(error.message).replace(/https?:\/\/\S+/g,'[redacted origin]').slice(0,180);receipt.assertionsPassed=false;}
+finally{await browser?.close();fs.writeFileSync('.codex-tmp/install1-wp-pp-http-readback.json',JSON.stringify(receipt,null,2)+'\n');console.log(JSON.stringify(receipt));if(!receipt.assertionsPassed)process.exitCode=1;}

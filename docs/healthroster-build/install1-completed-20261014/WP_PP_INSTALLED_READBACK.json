@@ -1,0 +1,36 @@
+{
+  "helper": {
+    "config": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "boolean",
+    "stable": true,
+    "signature": "p_actor_user_id uuid",
+    "anonExecute": false,
+    "publicExecute": false,
+    "serviceExecute": true,
+    "securityDefiner": true,
+    "definitionSha256": "736fa960e78a591c8f1dbc3b3750dffa03cb504f87c8c46a0b2d0bf913042289",
+    "ownerIsServiceOwner": true,
+    "authenticatedExecute": false
+  },
+  "release": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "status": "VERIFIED",
+    "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+    "completedAt": "2026-10-14T15:47:03.075975+00:00",
+    "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+    "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+  },
+  "database": "cloudtms_test_clone",
+  "observedAt": "2026-10-14T15:53:26.649049+00:00",
+  "fixtureCounts": {
+    "users": 0,
+    "cycles": 0,
+    "groups": 0,
+    "clients": 0,
+    "memberships": 0
+  },
+  "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+  "assertionsPassed": true
+}

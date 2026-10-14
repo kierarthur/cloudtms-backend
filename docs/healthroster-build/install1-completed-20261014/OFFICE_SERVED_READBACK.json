@@ -1,0 +1,55 @@
+{
+  "observedAt": "2026-10-14T16:06:44.032Z",
+  "target": "TEST",
+  "origin": "https://testmode.arthur-rai.co.uk",
+  "officeCommit": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "hashBasis": "Exact Git blob bytes, not saved Windows CRLF",
+  "files": [
+    {
+      "file": "index.html",
+      "status": 200,
+      "gitBlobSha256": "55ea9b670b13e0374ccf1eb9ff75cacf78695cae19fc5f3ad66485ec96c0d549",
+      "servedSha256": "55ea9b670b13e0374ccf1eb9ff75cacf78695cae19fc5f3ad66485ec96c0d549",
+      "gitBytes": 97749,
+      "servedBytes": 97749,
+      "exactMatch": true
+    },
+    {
+      "file": "js/import-review-v1.js",
+      "status": 200,
+      "gitBlobSha256": "b177d3ae7e6057fe630796cd3771b8366b84b6fbd2d3c096fd54e8cc3316ff32",
+      "servedSha256": "b177d3ae7e6057fe630796cd3771b8366b84b6fbd2d3c096fd54e8cc3316ff32",
+      "gitBytes": 157529,
+      "servedBytes": 157529,
+      "exactMatch": true
+    },
+    {
+      "file": "js/weekly-source/import-workspace.js",
+      "status": 200,
+      "gitBlobSha256": "51b41487022414057ef7e1c83f646e484654464bebd635238814ad13fc4b00d4",
+      "servedSha256": "51b41487022414057ef7e1c83f646e484654464bebd635238814ad13fc4b00d4",
+      "gitBytes": 163348,
+      "servedBytes": 163348,
+      "exactMatch": true
+    },
+    {
+      "file": "js/weekly-source/checklist.js",
+      "status": 200,
+      "gitBlobSha256": "9b729819e54b45e84301ca7a568015ef464e966f78c6f78a70fe609df4e48aca",
+      "servedSha256": "9b729819e54b45e84301ca7a568015ef464e966f78c6f78a70fe609df4e48aca",
+      "gitBytes": 19197,
+      "servedBytes": 19197,
+      "exactMatch": true
+    },
+    {
+      "file": "css/weekly-source.css",
+      "status": 200,
+      "gitBlobSha256": "1ca147f80db7aefb445e9b52b2b88a4f25bdec88a8e7c34402ebfe754cb1f25e",
+      "servedSha256": "1ca147f80db7aefb445e9b52b2b88a4f25bdec88a8e7c34402ebfe754cb1f25e",
+      "gitBytes": 48623,
+      "servedBytes": 48623,
+      "exactMatch": true
+    }
+  ],
+  "assertionsPassed": true
+}

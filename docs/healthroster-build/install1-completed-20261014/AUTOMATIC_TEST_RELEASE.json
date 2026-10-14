@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "environment": "TEST",
+  "database": "cloudtms_test_clone",
+  "startedAt": "2026-10-14T14:48:10.641Z",
+  "status": "DATABASE_READY",
+  "stages": [
+    {
+      "script": "scripts/cloudtms-db-release.mjs",
+      "args": [
+        "plan",
+        "--environment=TEST",
+        "--mode=UPGRADE"
+      ],
+      "elapsedMs": 6841,
+      "status": "PASSED"
+    },
+    {
+      "script": "scripts/cloudtms-db-release.mjs",
+      "args": [
+        "apply",
+        "--environment=TEST",
+        "--mode=UPGRADE"
+      ],
+      "elapsedMs": 3500401,
+      "status": "PASSED"
+    }
+  ],
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "decision": {
+    "route": "FULL_UPGRADE",
+    "reason": "Schema, verification authority, contract or unclassified definition changes require the complete protected UPGRADE route."
+  },
+  "previousRelease": {
+    "commit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+    "status": "VERIFIED",
+    "contract": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+    "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-07e66fb2b274"
+  },
+  "pendingMigrations": [],
+  "pendingRepeatables": [
+    "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+  ],
+  "completedAt": "2026-10-14T15:47:03.625Z"
+}
