@@ -10,6 +10,7 @@ import {abortableDelay} from './healthroster-turn-control.mjs';
 import {runFullRehearsalWithinOwnedTurn,executePsqlWithinOwnedTurn,restorationSnapshotSql,identityProbeSql,rehearsalSourceBinding,assertRehearsalSourceBinding,expectedContractDigestSql,assertFreshNativeGate} from './healthroster-install1-full-rehearsal.mjs';
 import {validateConnectionProof} from './automatic-test-release-policy.mjs';
 import {canonical,digest} from './cloudtms-managed-release-sql.mjs';
+import {createReceiptJournal,latestBusyTimestamp} from './healthroster-receipt-journal.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
@@ -61,11 +62,19 @@ export async function runNativeInstall1(){
  assertRehearsalSourceBinding(sourceBinding,{review,expectedContractHash:contract});
  const marker='hr_install1_'+crypto.randomBytes(16).toString('hex');
  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
- const receiptFile=path.join(out,'INSTALL1_FULL_REHEARSAL_'+stamp+'.json');
+ const liveDirectory=fs.mkdtempSync('C:/tmp/healthroster-install1-native-'+stamp+'-');
+ const journal=createReceiptJournal(liveDirectory);
+ const turnJournal='C:/tmp/healthroster-install1-turn-journal-20261014';
+ fs.mkdirSync(turnJournal,{recursive:true});
+ let receiptFile;
  const receipt={status:'PREPARING_NOT_RUN',candidatePin,predecessor,contract,marker,beganAt:new Date().toISOString(),errors:[],publication:null};
- const save=()=>fs.writeFileSync(receiptFile,JSON.stringify(receipt,null,2)+'\n');
+ const save=({continueRestoration=false}={})=>{
+  try{receiptFile=journal.checkpoint(receipt);}
+  catch(error){receipt.receiptPersistenceFailed=true;if(!continueRestoration)throw error;}
+ };
  save();let published=false,relations;
  try{
+  console.log(JSON.stringify({status:receipt.status,candidatePin,liveDirectory,receiptFile}));
   const result=await withSharedRehearsalTurn({task:'Install1 exact pushed WP-PP full rehearsal and managed TEST release',progressPath,
    async work(turn){
     receipt.turn=turn.identity;save();
@@ -74,7 +83,8 @@ export async function runNativeInstall1(){
     // dispatched protected job is preserved for exact-run reconciliation.
     let controlInput='';
     const pauseInput=chunk=>{controlInput+=chunk.toString();const lines=controlInput.split(/\r?\n/);controlInput=lines.pop();
-     if(lines.includes('PAUSE')){receipt.ownerPauseRequestedAt=new Date().toISOString();save();void turn.turnConnection.close();}};
+     if(lines.includes('PAUSE')){receipt.ownerPauseRequestedAt=new Date().toISOString();
+      try{save({continueRestoration:true});}finally{void turn.turnConnection.close().catch(()=>{receipt.pauseCloseFailed=true;});}}};
     process.stdin.on('data',pauseInput);
     try{
     const probeEnv=agencyChildEnvironment('healthroster_install1_probe');
@@ -105,7 +115,7 @@ export async function runNativeInstall1(){
     };
     return await runFullRehearsalWithinOwnedTurn({turn,candidatePin,currentRemoteTestPin:predecessor,expectedContractHash:contract,marker,review,callbacks:{
      freshGate,
-     async recordReceipt(value){receipt.checkpoints??=[];receipt.checkpoints.push(value);receipt.status=value.status;save();},
+     async recordReceipt(value){receipt.checkpoints??=[];receipt.checkpoints.push(value);receipt.status=value.status;save({continueRestoration:true});},
      async before(){const before=await snapshot();before.installed=await probe("select jsonb_build_object('migrations',(select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',content_sha256) order by path),'[]'::jsonb) from private.cloudtms_migration_ledger),'repeatables',(select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',closure_sha256) order by path),'[]'::jsonb) from private.cloudtms_repeatable_ledger));");
       before.contractDigest={...await probe(expectedContractDigestSql({expectedContractHash:contract})),connectedFresh:true,checkedAt:new Date().toISOString()};receipt.before=before;save();return before;},
      async executeSameSession(input){receipt.status='FULL_REHEARSAL_RUNNING';receipt.sqlHash=input.sqlHash;receipt.mappedStatements=input.lineMap.length;save();
@@ -117,7 +127,8 @@ export async function runNativeInstall1(){
        const text=stdoutTail+chunk.toString();
        for(const match of text.matchAll(/^HR_FILE_(BEGIN|END) (\d+)\r?(?=\n)/gm)){
         const index=Number(match[2]);if(!units.some(unit=>unit.index===index))continue;
-        receipt.progress={unit:index,file:units.find(unit=>unit.index===index).file,event:match[1],unitCount:units.length,at:new Date().toISOString()};save();
+        receipt.progress={unit:index,file:units.find(unit=>unit.index===index).file,event:match[1],unitCount:units.length,at:new Date().toISOString()};
+        try{journal.checkpoint(receipt.progress,{progress:true});}catch(error){receipt.receiptPersistenceFailed=true;throw error;}
        }
        // Only keep a short incomplete control line for progress. Raw catalogue,
        // row and diagnostic output is never persisted or sent to the console.
@@ -125,8 +136,13 @@ export async function runNativeInstall1(){
       }}})};
       const execution=await executePsqlWithinOwnedTurn({...input,turn:observedTurn,psqlPath,env:agencyChildEnvironment('healthroster_install1_full')});
       receipt.execution=execution;receipt.errors=execution.errors;receipt.status='FULL_REHEARSAL_SQL_COMPLETED';save();return execution;},
-     async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=after;save();return after;},
+     async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=after;
+      const prior=new Map((receipt.before?.businessRelations??[]).map(row=>[row.relation,row]));
+      receipt.businessChanges=(after.businessRelations??[]).filter(row=>row.count!==prior.get(row.relation)?.count||row.hash!==prior.get(row.relation)?.hash)
+       .map(row=>({relation:row.relation,beforeCount:prior.get(row.relation)?.count,afterCount:row.count,beforeHash:prior.get(row.relation)?.hash,afterHash:row.hash}));
+      save({continueRestoration:true});return after;},
      async publishManaged({receipt:clean}){
+      requireThat(!receipt.receiptPersistenceFailed,'INSTALL1_RECEIPT_PERSISTENCE_FAILED_HOLD');
       receipt.cleanRehearsal=clean;receipt.status='FULL_CLEAN_AWAITING_FRESH_CONNECTION_PROOF';save();
       const proofFile=path.join(root,'.codex-tmp/healthroster-install1-connections-proof.json');
       console.log(JSON.stringify({status:receipt.status,candidatePin,receiptFile,proofFile}));
@@ -149,10 +165,32 @@ export async function runNativeInstall1(){
      }
     }});
     }finally{process.stdin.removeListener('data',pauseInput);process.stdin.pause();}
-   }});
+   }},{
+    readLastBusy(){
+     const records=fs.readdirSync(turnJournal).filter(name=>/^[a-f0-9-]{36}\.json$/.test(name))
+      .map(name=>JSON.parse(fs.readFileSync(path.join(turnJournal,name),'utf8')));
+     if(fs.existsSync(progressPath))for(const line of fs.readFileSync(progressPath,'utf8').split(/\r?\n/))
+      if(line.startsWith('SEND_7 turn: '))records.push(JSON.parse(line.slice('SEND_7 turn: '.length)));
+     return latestBusyTimestamp(records);
+    },
+    log(record){
+     // This immutable authoritative cooldown record survives a failed later
+     // OneDrive archive and is consulted before the next TEST connection.
+     fs.writeFileSync(path.join(turnJournal,crypto.randomUUID()+'.json'),JSON.stringify(record)+'\n',{flag:'wx'});
+     fs.appendFileSync(path.join(liveDirectory,'SHARED_TURN.md'),'\nSEND_7 turn: '+JSON.stringify(record)+'\n');
+    }
+   });
   receipt.endedAt=new Date().toISOString();receipt.result=result;receipt.status=result?.publication?'DEPLOYED_ACCEPTANCE_PENDING':result?.status??'STOPPED';save();
   console.log(JSON.stringify({status:receipt.status,candidatePin,receiptFile}));return receipt;
- }catch(error){receipt.status='HELD_NOT_COMPLETE';receipt.failure=/^[A-Z][A-Z0-9_]+$/.test(error.code??error.message)?error.code??error.message:'NATIVE_FAILURE_WITHHELD';receipt.endedAt=new Date().toISOString();save();console.error(receipt.failure);process.exitCode=1;return receipt;}
+ }catch(error){receipt.status='HELD_NOT_COMPLETE';receipt.failure=/^[A-Z][A-Z0-9_]+$/.test(error.code??error.message)?error.code??error.message:'NATIVE_FAILURE_WITHHELD';receipt.endedAt=new Date().toISOString();try{save();}catch{console.error('RECEIPT_CHECKPOINT_WRITE_FAILED');}console.error(receipt.failure);process.exitCode=1;return receipt;}
+ finally{
+  // The live turn log is already closed. Archiving is outside the database
+  // critical section and cannot orphan a running child or held turn.
+  try{if(fs.existsSync(path.join(liveDirectory,'SHARED_TURN.md')))fs.appendFileSync(progressPath,'\n'+fs.readFileSync(path.join(liveDirectory,'SHARED_TURN.md'),'utf8'));}
+  catch{console.error('TURN_LOG_ARCHIVE_PENDING');}
+  try{fs.writeFileSync(path.join(out,'INSTALL1_FULL_REHEARSAL_'+stamp+'.json'),JSON.stringify({...receipt,liveDirectory,receiptFile},null,2)+'\n',{flag:'wx'});}
+  catch{console.error('RECEIPT_ARCHIVE_PENDING');}
+ }
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await runNativeInstall1();

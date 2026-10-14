@@ -51,3 +51,22 @@ test('broken owned SQL stdin rejects even if that exact child subsequently exits
  await new Promise(resolve=>setImmediate(resolve));owned.stdin.emit('error',Error('synthetic EPIPE'));owned.emit('close',0,null);
  await assert.rejects(task,/OWNED_CHILD_INPUT_FAILED/);assert.deepEqual(kills,['SIGTERM']);assert.deepEqual(phases,['before-owned-child']);
 });
+
+for(const stream of ['stdout','stderr'])test(`throwing ${stream} observer rejects after closing only its own rollback child`,async()=>{
+ const controller=new AbortController(),owned=new EventEmitter(),kills=[];
+ owned.stdout=new EventEmitter();owned.stderr=new EventEmitter();
+ owned.kill=signal=>{kills.push(signal);setImmediate(()=>owned.emit('close',null,signal));};
+ const task=runOwnedTurnChild({file:'fake',signal:controller.signal,assertHeld:async()=>{},spawnChild:()=>owned,
+  options:{[stream==='stdout'?'onStdout':'onStderr']:()=>{throw Error('raw private OS error');}}});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.doesNotThrow(()=>owned[stream].emit('data',Buffer.from('control marker')));
+ await assert.rejects(task,error=>error.code==='OWNED_CHILD_OBSERVER_FAILED'&&!error.message.includes('private'));
+ assert.deepEqual(kills,['SIGTERM']);
+});
+test('a failed release observer preserves an already dispatched durable child until it completes',async()=>{
+ const controller=new AbortController(),owned=new EventEmitter();
+ owned.stdout=new EventEmitter();owned.stderr=new EventEmitter();owned.kill=()=>assert.fail('durable child must finish for reconciliation');
+ const task=runOwnedTurnChild({file:'fake',signal:controller.signal,assertHeld:async()=>{},spawnChild:()=>owned,cancelOnLoss:false,options:{onStdout:()=>{throw Error('synthetic write failure');}}});
+ await new Promise(resolve=>setImmediate(resolve));owned.stdout.emit('data',Buffer.from('progress'));owned.emit('close',0,null);
+ await assert.rejects(task,/OWNED_CHILD_OBSERVER_FAILED/);
+});

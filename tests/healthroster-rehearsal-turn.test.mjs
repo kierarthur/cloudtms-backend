@@ -86,3 +86,17 @@ test('periodic monitor signals an active callback when actual lock ownership dis
   await new Promise(resolve=>turn.signal.addEventListener('abort',resolve,{once:true}));return {status:'proved'};
  }},deps),/TURN_OWNERSHIP_LOST/);assert.ok(probes>=3);
 });
+test('failed loss logging stays contained and preserves the primary loss while own cleanup completes',async()=>{
+ const {deps,loss,events}=fixture([['t'],['t'],['t']]);
+ deps.log=record=>{if(record.status!=='TAKEN')throw Error('private raw write failure');};
+ await assert.rejects(withSharedRehearsalTurn({task:'test',async work(turn){
+  assert.doesNotThrow(()=>loss.abort(Error('primary own connection loss')));
+  await turn.assertHeld('must hold');
+ }},deps),/primary own connection loss/);
+ assert.ok(events.includes('close'));
+});
+test('failed initial journal prevents callback and still unlocks and closes only its own turn',async()=>{
+ const {deps,events}=fixture([['t'],['t']]);deps.log=()=>{throw Error('private raw write failure');};
+ await assert.rejects(withSharedRehearsalTurn({task:'test',work(){assert.fail('must not run');}},deps),/TURN_JOURNAL_WRITE_FAILED/);
+ assert.ok(events.includes('select pg_advisory_unlock(20261013, 1);'));assert.ok(events.includes('close'));
+});

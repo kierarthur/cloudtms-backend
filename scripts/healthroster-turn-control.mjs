@@ -35,10 +35,19 @@ export async function runOwnedTurnChild({file,args=[],options={},input,signal,as
  if(signal.aborted)throw signal.reason;
  const child=spawnChild(file,args,{...options,windowsHide:true});
  return await new Promise((resolve,reject)=>{
-  let stdout='',stderr='',killTimer,inputError;
+  let stdout='',stderr='',killTimer,inputError,observerError;
+  const observe=(callback,chunk)=>{
+   if(observerError||!callback)return;
+   try{callback(chunk);}catch{
+    observerError=closedTurnError('OWNED_CHILD_OBSERVER_FAILED');
+    // A failed rollback observer closes only its own child. A dispatched
+    // durable release is allowed to finish, then held for reconciliation.
+    if(cancelOnLoss){child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),5000);killTimer.unref?.();}
+   }
+  };
   const abort=()=>{if(cancelOnLoss){child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),5000);killTimer.unref?.();}};
-  child.stdout?.on('data',chunk=>{stdout+=chunk.toString();options.onStdout?.(chunk);});
-  child.stderr?.on('data',chunk=>{stderr+=chunk.toString();options.onStderr?.(chunk);});
+  child.stdout?.on('data',chunk=>{stdout+=chunk.toString();observe(options.onStdout,chunk);});
+  child.stderr?.on('data',chunk=>{stderr+=chunk.toString();observe(options.onStderr,chunk);});
   child.stdin?.on('error',()=>{
    inputError=closedTurnError('OWNED_CHILD_INPUT_FAILED');
    child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),5000);killTimer.unref?.();
@@ -49,6 +58,7 @@ export async function runOwnedTurnChild({file,args=[],options={},input,signal,as
    signal.removeEventListener('abort',abort);clearTimeout(killTimer);
    if(signal.aborted){reject(signal.reason);return;}
    if(inputError){reject(inputError);return;}
+   if(observerError){reject(observerError);return;}
    try {await assertHeld('after-owned-child');resolve({code,signal:childSignal,stdout,stderr});}catch(error){reject(error);}
   });
   if(input!==undefined){if(typeof input!=='string'||!child.stdin){child.kill('SIGTERM');reject(closedTurnError('OWNED_CHILD_INPUT_REFUSED'));return;}child.stdin.end(input);}

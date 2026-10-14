@@ -447,6 +447,7 @@ export function restorationSnapshotSql({identity,marker,relations,exportContract
  'catalogueFingerprint',${hash('select to_jsonb(c) from catalogue c')},
  'businessCountsFingerprint',${hash("select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'count',row_count) order by relation),'[]'::jsonb) from business")},
  'businessRowsFingerprint',${hash("select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business")},
+ 'businessRelations',(select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'count',row_count,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business),
  'relationCensus',${literal(digest(JSON.stringify([...names].sort())))},
  'otherActivityCount',(select count(*) from pg_catalog.pg_stat_activity where datname=current_database() and ${ownTurnActivityExclusionSql(identity)} and (state <> 'idle' or xact_start is not null))))::text from identity_proof;`;
 }

@@ -83,10 +83,11 @@ export async function withSharedRehearsalTurn({task,progressPath,work,monitorMs=
  }
  const check=deps.checkProtectedRelease??assertNoProtectedRelease;
  const open=deps.openTurn??(()=>new OwnedTurnConnection(agencyChildEnvironment('healthroster_rehearsal_turn')));
- const log=deps.log??(record=>{fs.appendFileSync(progressPath,'\nSEND_7 turn: '+JSON.stringify(record)+'\n');});
+ const writeLog=deps.log??(record=>{fs.appendFileSync(progressPath,'\nSEND_7 turn: '+JSON.stringify(record)+'\n');});
  await check();const connection=open();let taken=false,takenAt=null,releaseConfirmed=false,primaryError,result,monitor,probe,control;
  const controller=new AbortController();
- const lose=error=>{if(!controller.signal.aborted){controller.abort(error);log({chat:'HealthRoster',task,status:'LOST_INCOMPLETE',at:new Date().toISOString(),code:error.code??'SHARED_TURN_LOST',key:TURN_KEY});}};
+ const log=record=>{try{writeLog(record);}catch{const error=closedTurnError('TURN_JOURNAL_WRITE_FAILED');if(!controller.signal.aborted)controller.abort(error);throw error;}};
+ const lose=error=>{if(!controller.signal.aborted){controller.abort(error);try{log({chat:'HealthRoster',task,status:'LOST_INCOMPLETE',at:new Date().toISOString(),code:error.code??'SHARED_TURN_LOST',key:TURN_KEY});}catch{/* Loss stays contained in this controller; cleanup owns its children. */}}};
  const connectionLost=()=>lose(connection.signal.reason??closedTurnError('TURN_CONNECTION_CLOSED'));
  connection.signal?.addEventListener('abort',connectionLost,{once:true});
  try {
@@ -131,8 +132,8 @@ export async function withSharedRehearsalTurn({task,progressPath,work,monitorMs=
   try{if(taken){const unlock=await connection.query('select pg_advisory_unlock(20261013, 1);');releaseConfirmed=unlock.length===1&&unlock[0]==='t';}}catch(error){primaryError??=error;}
   let connectionClosed=false;try{await connection.close();connectionClosed=true;}catch(error){primaryError??=error;}
   connection.signal?.removeEventListener('abort',connectionLost);
-  if(taken)log({chat:'HealthRoster',task,status:'RELEASED',takenAt,releasedAt:new Date().toISOString(),explicitUnlockConfirmed:releaseConfirmed,connectionClosed,
-   proved:!primaryError&&!controller.signal.aborted&&releaseConfirmed&&connectionClosed,key:TURN_KEY});
+  if(taken)try{log({chat:'HealthRoster',task,status:'RELEASED',takenAt,releasedAt:new Date().toISOString(),explicitUnlockConfirmed:releaseConfirmed,connectionClosed,
+   proved:!primaryError&&!controller.signal.aborted&&releaseConfirmed&&connectionClosed,key:TURN_KEY});}catch(error){primaryError??=error;}
   // Preserve the original source/child error; cleanup failure never hides it.
   if(taken&&!releaseConfirmed){if(primaryError)primaryError.turnUnlockConfirmed=false;else primaryError=closedTurnError('TURN_UNLOCK_CONFIRMATION_FAILED');}
   if(controller.signal.aborted)primaryError??=controller.signal.reason;

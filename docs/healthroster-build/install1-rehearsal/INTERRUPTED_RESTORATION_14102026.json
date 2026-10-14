@@ -1,0 +1,40 @@
+{
+  "status": "RESTORATION_HELD",
+  "previousCandidate": "206dc3dbb50ca971af8faa26a5f4ed384570368b",
+  "previousMarker": "hr_install1_7648a0132590a450829c7fe0be5e0f62",
+  "startedAt": "2026-10-14T01:17:01.959Z",
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 488985,
+    "turnId": "hr_turn_9703ee72e2414959413032edcc58c04d",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T01:17:04.156Z",
+    "task": "Fresh restoration proof after own interrupted Install1 rehearsal"
+  },
+  "after": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+      "status": "VERIFIED"
+    },
+    "relationCensus": "786f8ce1dfb48483494ea8df58e56a9a32bf9b250722fdae4799aa0dc6861c38",
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "ledgerFingerprint": "a1cb68cba0068790f06ebd177afec8ac5e157e25c243740e8a988bcb100f1b2c",
+    "otherActivityCount": 0,
+    "catalogueFingerprint": "e653ca31e7903877e423df0f4d67bc2961a246d7044adeb444ee23306290dc4a",
+    "businessRowsFingerprint": "190604e97da1a7f3d9767e212978152c087019fa95f55bd2a4d9312b1418fff2",
+    "businessCountsFingerprint": "164acb4752225a2735d4a520b4fa853bbb3d88c88281e05fe4f95d330a3bee59",
+    "marker": "hr_install1_7648a0132590a450829c7fe0be5e0f62",
+    "connectedFresh": true
+  },
+  "failure": "REHEARSAL_RESTORATION_MISMATCH",
+  "finishedAt": "2026-10-14T01:21:15.404Z"
+}
