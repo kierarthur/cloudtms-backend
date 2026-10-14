@@ -1,0 +1,901 @@
+{
+  "status": "FINITE_SOURCE_GRAPH_REQUIRES_EXECUTED_PATH_AND_INSTALLED_BODY_REVIEW",
+  "sourceCommit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "roots": [
+    "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+    "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+    "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+    "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+    "private.weekly_source_pay_query_scope_v1(uuid)",
+    "private.weekly_source_pay_query_gate_v1(uuid)",
+    "private.bpay_next_source_query_segment_exclusions_v1(uuid,jsonb)",
+    "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+    "private.weekly_source_query_require_service_v1()",
+    "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+    "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+    "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)"
+  ],
+  "routines": [
+    {
+      "id": "private._candidate_expense_source_family_v1(uuid)",
+      "name": "private._candidate_expense_source_family_v1",
+      "file": "read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "source_file_sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+      "definition_sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d",
+      "body_sha256": "cee90fb60c8264a605870ee00a2bd9b37367b2862dc18bf3a411fd4f7914c5a3",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private._weekly_source_effective_policy_v1(uuid,uuid,date)",
+      "name": "private._weekly_source_effective_policy_v1",
+      "file": "read-graph/private._weekly_source_effective_policy_v1_uuid_uuid_date_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "source_file_sha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed",
+      "definition_sha256": "66daec8a58f94287e673703fd076165e910215dce842781613cd8f9c270e63e5",
+      "body_sha256": "83014cb0f8fabb9da5e49be06a2d9bc7324c2fc85aa90a20a37cf42b661fbf10",
+      "callees": [],
+      "qualified_names_without_source": [
+        "extensions.digest"
+      ],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "name": "private._weekly_source_settings_assert_request_v1",
+      "file": "read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "source_file_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4",
+      "body_sha256": "4862e0dffddcdb8c96cacdb8acc2e0de5157f45f500c3367c3c6899e35b1f855",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+      "name": "private.bpay_next_bound_source_snapshot_v1",
+      "file": "read-graph/private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "source_file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+      "source_file_sha256": "560982266cf01ccc9f743f9008e88107013e7831e0acdfa79837eb88afcf9400",
+      "definition_sha256": "f6ee0ff2168d7cc4696f286168ff488213e2589c97a0f6c592c5062fbe076439",
+      "body_sha256": "287a0582c6ad03d8968985d6afd429ed82c3bacf37c72555772ee2c078d47102",
+      "callees": [
+        "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+        "private.bpay_next_source_binding_members_v1(uuid)",
+        "private.bpay_next_source_command_id_v1(uuid)",
+        "private.bpay_next_treatment_approval_revision_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": true,
+      "mode_extracted": true
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+      "name": "private.bpay_next_initial_tsfin_bound_assert_v1",
+      "file": "read-graph/private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "source_file_sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+      "definition_sha256": "250470d891b2ab1c1bacd84368d405da0e7da03126b04b413f4d5d8600b0183c",
+      "body_sha256": "d64e2109f49cec037e05ebaad0ef9cf747d08fca656aa7b25903347196a8840c",
+      "callees": [
+        "private.bpay_next_initial_tsfin_certificate_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": true
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "name": "private.bpay_next_initial_tsfin_certificate_v1",
+      "file": "read-graph/private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+      "source_file_sha256": "86de08dd3bf9a64e7e347e9d41cb1430515e3ed83dc906ecab1ce7940b470a16",
+      "definition_sha256": "36babb4bebb9bb8649ef6999504f5b316e69324ca738768d59f57c7cc12f0548",
+      "body_sha256": "2b2506020c17009d5f09555d697935bc84e69df91f7112ece2d07187995559d1",
+      "callees": [
+        "private.bpay_next_source_command_id_v1(uuid)",
+        "private.bpay_next_treatment_approval_revision_v1(uuid)",
+        "private.weekly_source_effective_inventory_v1(uuid)",
+        "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": true,
+      "mode_extracted": true
+    },
+    {
+      "id": "private.bpay_next_line_pay_basis_v1(uuid)",
+      "name": "private.bpay_next_line_pay_basis_v1",
+      "file": "read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "source_file_sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "definition_sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09",
+      "body_sha256": "a0824b921cbe915de04fec4d784b2b128fd3bef39e05d48b6b4596123197e992",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_protected_receipt_json_v1(uuid,boolean)",
+      "name": "private.bpay_next_protected_receipt_json_v1",
+      "file": "read-graph/private.bpay_next_protected_receipt_json_v1_uuid_boolean_.sqlinc",
+      "source_file": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+      "source_file_sha256": "0ea79ae265cffb2370926e1728f483b8846e7539ffcac428f5d5fa557a56ac44",
+      "definition_sha256": "52f1a4329c768ccbf3a8722d0eb8ded90dee99b8e3914037ef32cee7a42a22e6",
+      "body_sha256": "d34ce2d6e6206a130d598dc063d5790d171cc67499929c716ff6e3a79b736fe4",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_segment_pay_basis_v1(uuid)",
+      "name": "private.bpay_next_segment_pay_basis_v1",
+      "file": "read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "source_file_sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "definition_sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c",
+      "body_sha256": "9a64ea51cc9f2c0f13345a0753f6446860232c602d792d2b48d28c7768afb3a7",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+      "name": "private.bpay_next_snooze_at_cut_v1",
+      "file": "read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql",
+      "source_file_sha256": "9b6ceda100c313e6ee879f73102740f38d20cd7e9e6c49bf7bd9affc7117fdf2",
+      "definition_sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40",
+      "body_sha256": "a486bff4568b4113d7bb86fbc21e6c8ce95aa8edf865580fba87ea8413610267",
+      "callees": [
+        "private.bpay_next_line_pay_basis_v1(uuid)",
+        "private.bpay_next_segment_pay_basis_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_source_binding_members_v1(uuid)",
+      "name": "private.bpay_next_source_binding_members_v1",
+      "file": "read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "source_file_sha256": "2e9a297ff362e41dbfbadc869b211b37176cf76d06edd3e78808a2e4c2a57340",
+      "definition_sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36",
+      "body_sha256": "f17f6c389f39efd21ed217a22ae6b5341ca271476e17beb9dad510a49aa1e49d",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_source_command_id_v1(uuid)",
+      "name": "private.bpay_next_source_command_id_v1",
+      "file": "read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+      "source_file_sha256": "f4af5a88d1ede025fdf227df2442a2c49b801104bf02a99a466366663378a4da",
+      "definition_sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec",
+      "body_sha256": "c42eb97bbacb921cd9218643dc852b9a768dbf407508910a3fe2f40ad85cf2a6",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_source_query_segment_exclusions_v1(uuid,jsonb)",
+      "name": "private.bpay_next_source_query_segment_exclusions_v1",
+      "file": "read-graph/private.bpay_next_source_query_segment_exclusions_v1_uuid_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "source_file_sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "definition_sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5",
+      "body_sha256": "50a513e1bc632292fd48ed91a8357c5c6f50bed4aee1707f854eacae3e58bf4e",
+      "callees": [
+        "private.weekly_source_pay_query_facts_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_treatment_approval_revision_v1(uuid)",
+      "name": "private.bpay_next_treatment_approval_revision_v1",
+      "file": "read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/12102026_2135_banking_pay_next_treatment_native_publication_v1.sql",
+      "source_file_sha256": "56d91e37ede376018c72245ee02fd1d30237f987c656754b2fd0ec668582ddc1",
+      "definition_sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7",
+      "body_sha256": "f789eb3250145fec27ca71951361a3c052f33f179155aea9723cb38d0a112e65",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
+      "name": "private.bpay_next_work_segment_gross_balance_v1",
+      "file": "read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "source_file_sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "definition_sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045",
+      "body_sha256": "3bb4fdfb7a30d4a3c33809aabbdb8381a878a7ad4e17ef5c1e4cff6a7b06af1d",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_workbench_accepted_work_v1(uuid,text,text)",
+      "name": "private.bpay_next_workbench_accepted_work_v1",
+      "file": "read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "source_file_sha256": "2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b",
+      "definition_sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874",
+      "body_sha256": "63b01aad57ebf4b22aad5a78a853ec2c204f2015e7c38e3dd09ec1f8d52df041",
+      "callees": [
+        "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+        "private.bpay_next_workbench_require_next_v1()"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_workbench_require_next_v1()",
+      "name": "private.bpay_next_workbench_require_next_v1",
+      "file": "read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "source_file": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "source_file_sha256": "2fe6c4c816613aaa554d012289124c47219fd228a2af229c2ceabdb8f0cc305b",
+      "definition_sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359",
+      "body_sha256": "b3774ed9e285800d0dd3e039e257bde879235fe705c652f4ec56cd952ceba1ea",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "name": "private.bpay_next_workbench_work_members_v1",
+      "file": "read-graph/private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "source_file_sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17",
+      "definition_sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6",
+      "body_sha256": "c894fa3bfe776d647bbbb9074e88490e3a84bb45d518736032313bf2bc6f50f6",
+      "callees": [
+        "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+        "private.bpay_next_treatment_approval_revision_v1(uuid)",
+        "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
+        "private.bpay_next_workbench_require_next_v1()"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": true
+    },
+    {
+      "id": "private.weekly_exceptional_hex_sha256_v1(text)",
+      "name": "private.weekly_exceptional_hex_sha256_v1",
+      "file": "read-graph/private.weekly_exceptional_hex_sha256_v1_text_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_c1_publication_v1.sql",
+      "source_file_sha256": "c74ea692273600ce753ee92c09efca5e812d8a61c4a536058c2a405c9be3f790",
+      "definition_sha256": "11f7f28fb29410e1c9510df8ecf0942f4c07f2fa3d9b15db7b5f62591e18dc12",
+      "body_sha256": "cedb33e6cf3818a9401f9be015442913b088184dda8b6a96012dd2eed09df128",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])",
+      "name": "private.weekly_exceptional_json_keys_exact_v1",
+      "file": "read-graph/private.weekly_exceptional_json_keys_exact_v1_jsonb_text___.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "source_file_sha256": "960b5ec7f2ed18898615fa0321d1b93434c1549576d75f8ad9e3f6e29152c933",
+      "definition_sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4",
+      "body_sha256": "c1e23ad8f8102e5b7b996bb448838441cb8920e23b64c69d46007d515b618063",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_canonical_json_text_v1(jsonb)",
+      "name": "private.weekly_source_canonical_json_text_v1",
+      "file": "read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345",
+      "body_sha256": "212969347c0f6b3c8124c9766b7162d619c84fc2398f769700ea6c38c268207d",
+      "callees": [
+        "private.weekly_source_canonical_json_text_v1(jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_effective_inventory_v1(uuid)",
+      "name": "private.weekly_source_effective_inventory_v1",
+      "file": "read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_file_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f",
+      "body_sha256": "1ba639d173ec04f3775f7759d0611723ad017a7d4a0f6555a6880d2604c70f84",
+      "callees": [
+        "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+        "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+        "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_component_content_v1(jsonb)",
+        "private.weekly_source_publication_request_digest_v1(jsonb)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+      "name": "private.weekly_source_entitlement_component_id_v1",
+      "file": "read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_file_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8",
+      "body_sha256": "09dcd82d4bbb581a1f7547d453882fc6a280a0d1f1ba1f60067b4a16c43e41a2",
+      "callees": [
+        "private.weekly_source_entitlement_derived_uuid_v1(text,text)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+      "name": "private.weekly_source_entitlement_components_v1",
+      "file": "read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_file_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118",
+      "body_sha256": "b0f548698a04d17f078c43fba593665d801f5ae882cb9f2068a00632541b6aaf",
+      "callees": [
+        "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+        "private.weekly_source_protected_component_event_v1(jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_entitlement_derived_uuid_v1(text,text)",
+      "name": "private.weekly_source_entitlement_derived_uuid_v1",
+      "file": "read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_file_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388",
+      "body_sha256": "85a6de726c6f54ff008ed402ddafe61cd8fcb6347293220d9fa561ed011db475",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+      "name": "private.weekly_source_initial_additional_components_v2",
+      "file": "read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "source_file": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "source_file_sha256": "2fee6c5413c1378610790e909642f5d6ea4966274f0d1436af96ec9f1d5f63bc",
+      "definition_sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438",
+      "body_sha256": "39a82b750d68596ef66d913db9652df16751fbde7c662ab36336ca0b62f6c05f",
+      "callees": [
+        "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+      "name": "private.weekly_source_inventory_approval_basis_v2",
+      "file": "read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "source_file_sha256": "2fee6c5413c1378610790e909642f5d6ea4966274f0d1436af96ec9f1d5f63bc",
+      "definition_sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc",
+      "body_sha256": "7dca6adc7f04ddd7dedf7be164f1fc7b34cddb91aef07420b0d4797c697acfde",
+      "callees": [
+        "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+        "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_component_content_v1(jsonb)",
+        "private.weekly_source_publication_request_digest_v1(jsonb)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [
+        "execute"
+      ],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+      "name": "private.weekly_source_is_import_authoritative_v1",
+      "file": "read-graph/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "source_file_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "definition_sha256": "7861b97e31eab1c939785976219065ba3c963f5d166788ef850d335efe774794",
+      "body_sha256": "96b491083b061d69fd0a49054dd7d12d6ad7a015d8e69ac47ee8606f9d463354",
+      "callees": [
+        "private._weekly_source_effective_policy_v1(uuid,uuid,date)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_local_origin_canonical_v2(jsonb)",
+      "name": "private.weekly_source_local_origin_canonical_v2",
+      "file": "read-graph/private.weekly_source_local_origin_canonical_v2_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/05102026_0201_weekly_source_local_origin_canonical_v2.sql",
+      "source_file_sha256": "641e417ad4fb2669f5bb59af583e3a18373c80bbf0cb3431c77d4df225aa1812",
+      "definition_sha256": "1f2c44585647139f936496628f8b520d5017cab7f19d1b28f1b1e415cd53a4da",
+      "body_sha256": "ee216ac4c35aa94ed62b1b3cc83c15e9357c5284f3cb9c1849c00db31ddb2a24",
+      "callees": [
+        "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+        "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "name": "private.weekly_source_office_authority_v1",
+      "file": "read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_file_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "body_sha256": "5cc2197010d7ddc639ab540ae221c7852bd1b862fad76ddf75bb869e34ecdb53",
+      "callees": [
+        "private.weekly_source_pay_actor_allowed_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "file": "read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_file_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "definition_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "body_sha256": "97cf8d3eeafbaa54c5cbec657e009db77fa93e100a847497132d1b1ccc6c0b94",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_c1_receipt_event_v1",
+      "file": "read-graph/private.weekly_source_pay_query_c1_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "f8279ed2c436f2cf157eed927630a069448ddce0c6b8517dbbc63dd185f575e8",
+      "body_sha256": "4b8a308150ecb3aeb0c5ddcfda81e03626aa6b03454441cb699f3a7c6aa5ef6f",
+      "callees": [
+        "private.weekly_exceptional_hex_sha256_v1(text)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_c1_receipt_v1",
+      "file": "read-graph/private.weekly_source_pay_query_c1_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "f3d43d66b4f67ec5931251556dff1a24f5f640c87ac9030739d51cbf05cea36b",
+      "body_sha256": "37cb2de5cf4038903079a965171540cb08be6277d3f8ba038bcf9643ca2d3923",
+      "callees": [
+        "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_facts_v1(uuid)",
+      "name": "private.weekly_source_pay_query_facts_v1",
+      "file": "read-graph/private.weekly_source_pay_query_facts_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "source_file_sha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652",
+      "definition_sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec",
+      "body_sha256": "989aa517ba80b4a2343e3ca047fda8c78bec97d3174d5575de43aa6326517380",
+      "callees": [
+        "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_protected_wait_receipt_v1(uuid,uuid)"
+      ],
+      "qualified_names_without_source": [
+        "extensions.digest"
+      ],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_gate_v1(uuid)",
+      "name": "private.weekly_source_pay_query_gate_v1",
+      "file": "read-graph/private.weekly_source_pay_query_gate_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+      "source_file_sha256": "fb70e23a80c7686606b5cbf8f17e2878ca37224f5752067d903e9a253a3cbfa8",
+      "definition_sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526",
+      "body_sha256": "27497d814f5c72b46bd6e2a935a1f0c8d314600501174e01967288e152ed9a0d",
+      "callees": [
+        "private.weekly_source_pay_query_facts_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_local_receipt_event_v1",
+      "file": "read-graph/private.weekly_source_pay_query_local_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "ea61636cb2708ff7a0cd0893a2870deb9fac1d814a9b5eaa6023e7d374557ed2",
+      "body_sha256": "2141c11ae0a472c7154b5a90a1bdaf9dc9fa8365c13d09b160bb68d95ad1e03d",
+      "callees": [
+        "private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])",
+        "private.weekly_source_local_origin_canonical_v2(jsonb)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_component_content_v1(jsonb)",
+        "private.weekly_source_publication_receipt_json_v1(uuid)",
+        "private.weekly_source_publication_request_canonical_v1(jsonb,text,uuid)",
+        "private.weekly_source_publication_request_digest_v1(jsonb)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_local_receipt_v1",
+      "file": "read-graph/private.weekly_source_pay_query_local_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "fdc84f55d3a1e2c169837d584653043d4786c79bd26ad5f9100a8c481bd8f79a",
+      "body_sha256": "fc492a7e92c911ef618bf26808b9ec9fb483a2d5745e217d76def3f0672a70f7",
+      "callees": [
+        "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_next_receipt_event_v1",
+      "file": "read-graph/private.weekly_source_pay_query_next_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "85779fc6fc1d8184e985f03cb2cba5947be57fd7f5ea6d6463ef9c18ddbe6f29",
+      "body_sha256": "e307b64f3c4a2be37eb3137ced47f0036bef187f2235c2687adbfd94b1bb5223",
+      "callees": [
+        "private.bpay_next_protected_receipt_json_v1(uuid,boolean)",
+        "private.bpay_next_source_command_id_v1(uuid)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
+      "name": "private.weekly_source_pay_query_next_receipt_v1",
+      "file": "read-graph/private.weekly_source_pay_query_next_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "source_file_sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "definition_sha256": "533f1fb62e135847c4c253559420a27b91c596d91dd7884dcd77bd9df3cdaffe",
+      "body_sha256": "037b250753c5230362737684061bef25e9f1e3673155326784b76240213be711",
+      "callees": [
+        "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "name": "private.weekly_source_pay_query_scope_v1",
+      "file": "read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "source_file_sha256": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d",
+      "definition_sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf",
+      "body_sha256": "cba37bff933fa1c1955da30404e82ec2d2161036771f3b6f46222c066cb07f5f",
+      "callees": [
+        "private._candidate_expense_source_family_v1(uuid)",
+        "private.weekly_source_resolve_root_identity_v1(uuid)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_protected_component_event_v1(jsonb)",
+      "name": "private.weekly_source_protected_component_event_v1",
+      "file": "read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "source_file_sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "definition_sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab",
+      "body_sha256": "4f0738441c25d24c2e303ed3ba4c0bda3ad8020fdff02b73d1671a5c514e4ea4",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_protected_wait_receipt_v1(uuid,uuid)",
+      "name": "private.weekly_source_protected_wait_receipt_v1",
+      "file": "read-graph/private.weekly_source_protected_wait_receipt_v1_uuid_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "source_file_sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5",
+      "definition_sha256": "15e722fc9de0d587e3fa032f2d739f7cc06cafc3a1b8e620a3067d933161bf9e",
+      "body_sha256": "c4015d4cdb61acd312fb91329b52cdc6ea17cbef0c5aa6a0f461ae8fd83b218f",
+      "callees": [
+        "private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)",
+        "private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)",
+        "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
+        "private.weekly_source_pay_query_scope_v1(uuid)",
+        "private.weekly_source_sha256_jsonb_v1(text,jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+      "name": "private.weekly_source_publication_component_canonical_v1",
+      "file": "read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb",
+      "body_sha256": "6220de5044e28f6c11e8f23f324727126fe80a9e63d5c37e5124c8dde10df7a1",
+      "callees": [
+        "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+        "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_component_content_v1(jsonb)",
+      "name": "private.weekly_source_publication_component_content_v1",
+      "file": "read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8",
+      "body_sha256": "9d993ce07f5f050ac94ad35a454dbcf8709cea164eff941c8dd8c8f610fac6f5",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_receipt_json_v1(uuid)",
+      "name": "private.weekly_source_publication_receipt_json_v1",
+      "file": "read-graph/private.weekly_source_publication_receipt_json_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "493e840e94721ace5d87801150d5bc7f0a35df880c57d054a7395f23bf7f0e19",
+      "body_sha256": "d2b39a02c4ee33700e449402f9a9144e3b352e70a361b7ca66a19317f259850f",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_request_canonical_v1(jsonb,text,uuid)",
+      "name": "private.weekly_source_publication_request_canonical_v1",
+      "file": "read-graph/private.weekly_source_publication_request_canonical_v1_jsonb_text_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "e6566b583e1d0040e512a021e4a44ee850ee8ffb6549de17332bd0bd32e64d45",
+      "body_sha256": "ed0181215293209770e57d170282d380b0ae1aebc4f15794c3fc9322dba5c32a",
+      "callees": [
+        "private.weekly_source_local_origin_canonical_v2(jsonb)",
+        "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+        "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+        "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_request_digest_v1(jsonb)",
+      "name": "private.weekly_source_publication_request_digest_v1",
+      "file": "read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278",
+      "body_sha256": "6f28fea5455b99fbf8595cbc3808ac194d06836bd66ccc56bf130c53cdfeb589",
+      "callees": [
+        "private.weekly_source_canonical_json_text_v1(jsonb)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+      "name": "private.weekly_source_publication_require_keys_v1",
+      "file": "read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4",
+      "body_sha256": "404adaf02eadffc267d0a188329cca97c3b6afa724b4aa4fac80e6120312c07f",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)",
+      "name": "private.weekly_source_publication_scalar_v1",
+      "file": "read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "source_file_sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "definition_sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306",
+      "body_sha256": "5280db91579c743189525b8e3ce9e7619f134470ff7c6d9d292ab9c0aa763bf6",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_query_require_service_v1()",
+      "name": "private.weekly_source_query_require_service_v1",
+      "file": "read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_file_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "body_sha256": "379fbd7c0113eada17adab3ce212f1e719a7b4c0c26d2c00d6fc79650f3bf237",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "name": "private.weekly_source_resolve_root_identity_v1",
+      "file": "read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "source_file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "source_file_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "definition_sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+      "body_sha256": "79cc1030762653b862ea2b112b8c15e2de18aefbaf0c16e185bb3470b02cd2b2",
+      "callees": [
+        "public._pay_timesheet_rotation_scope(uuid[])"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "name": "private.weekly_source_sha256_jsonb_v1",
+      "file": "read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "source_file_sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "body_sha256": "e8c8d7e26cb8eb21b960a0a6594f55af37093e0e0042feaaa6da67fd8244af25",
+      "callees": [
+        "private.weekly_source_sha256_text_v1(text,text)"
+      ],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "private.weekly_source_sha256_text_v1(text,text)",
+      "name": "private.weekly_source_sha256_text_v1",
+      "file": "read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "source_file_sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "definition_sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "body_sha256": "43aa31d7b3a8f3f6b9ef515614c056a4599fb1b7bd75fa32c95ce6a9ee9b99ea",
+      "callees": [],
+      "qualified_names_without_source": [
+        "extensions.digest"
+      ],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    },
+    {
+      "id": "public._pay_timesheet_rotation_scope(uuid[])",
+      "name": "public._pay_timesheet_rotation_scope",
+      "file": "read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "source_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "source_file_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f",
+      "definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "body_sha256": "1d9633d261ed9b5c9985278f460da3beddf61ceaed633e4e1f4a90857acdfdf8",
+      "callees": [],
+      "qualified_names_without_source": [],
+      "conservative_direct_write_or_lock_tokens": [],
+      "direct_row_locks": false,
+      "mode_extracted": false
+    }
+  ],
+  "public_Bank_wrapper_used": false,
+  "refresh_mutator_used": false,
+  "nativeExecuted": false
+}

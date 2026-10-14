@@ -1,0 +1,131 @@
+create or replace function private.weekly_source_resolve_root_identity_v1(
+  p_timesheet_id uuid
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_result jsonb;
+begin
+  if p_timesheet_id is null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+      'reason','ROOT_ID_REQUIRED','timesheet_id',null,
+      -- A null id is a "cannot tell", so bound fails CLOSED here.
+      'weekly_source_bound',true,
+      'authorisation_record_without_authorised_timesheet',false,
+      'protected_target_ownership_state',null
+    );
+  end if;
+
+  with scope as (
+    select * from public._pay_timesheet_rotation_scope(array[p_timesheet_id]::uuid[])
+  ),
+  split_family as (
+    -- WP-08a review F3: a sibling whose btrim(booking_id) matches but whose raw
+    -- value differs splits one logical family in two.  HANDOVER 2 round-5
+    -- Part E names this a canonical booking-reference collision.
+    select pg_catalog.count(*) as split_count
+    from public.timesheets requested
+    where requested.timesheet_id=p_timesheet_id
+      and exists(
+        select 1
+        from public.timesheets sibling
+        where pg_catalog.btrim(sibling.booking_id)=pg_catalog.btrim(requested.booking_id)
+          and sibling.booking_id<>requested.booking_id
+      )
+  ),
+  aggregated as (
+    select
+      (select split_family.split_count from split_family) as split_count,
+      pg_catalog.min(resolved.booking_id) as family_booking_id,
+      pg_catalog.count(distinct resolved.booking_id) as booking_count,
+      pg_catalog.min(resolved.canonical_timesheet_id::text)::uuid as canonical_timesheet_id,
+      pg_catalog.count(distinct resolved.canonical_timesheet_id::text) as canonical_count,
+      pg_catalog.bool_or(resolved.requested_is_canonical) as requested_is_canonical,
+      pg_catalog.count(*) as member_count,
+      pg_catalog.count(*) filter (where resolved.family_is_current) as current_count,
+      pg_catalog.count(distinct resolved.family_version) as distinct_version_count,
+      pg_catalog.count(*) filter (where resolved.family_version is null) as null_version_count,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=p_timesheet_id
+      ) as requested_member_count,
+      pg_catalog.bool_or(
+        resolved.family_timesheet_id=p_timesheet_id and resolved.family_is_current
+      ) as family_is_current,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=p_timesheet_id
+      ) as requested_version,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_member_count,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_version,
+      pg_catalog.array_agg(
+        resolved.family_timesheet_id
+        order by resolved.family_version,resolved.family_timesheet_id
+      ) as member_timesheet_ids
+    from scope resolved
+  )
+  select
+    case
+      when aggregated.family_booking_id is null
+        or pg_catalog.btrim(aggregated.family_booking_id)=''
+        or aggregated.booking_count<>1
+        or aggregated.member_count=0
+        or aggregated.requested_member_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','BOOKING_IDENTITY_MISSING','timesheet_id',p_timesheet_id
+        )
+      when coalesce(aggregated.split_count,0)>0
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','BOOKING_REFERENCE_CANONICAL_COLLISION','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.canonical_timesheet_id is null
+        or aggregated.canonical_count<>1
+        or aggregated.canonical_member_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','CANONICAL_AMBIGUOUS','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.current_count<>1
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','CURRENT_ROW_CARDINALITY','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      when aggregated.null_version_count>0
+        or aggregated.distinct_version_count<>aggregated.member_count
+        then pg_catalog.jsonb_build_object(
+          'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+          'reason','VERSION_NOT_UNIQUE','timesheet_id',p_timesheet_id,
+          'family_booking_id',aggregated.family_booking_id
+        )
+      else pg_catalog.jsonb_build_object(
+        'ok',true,
+        'timesheet_id',p_timesheet_id,
+        'family_booking_id',aggregated.family_booking_id,
+        'canonical_timesheet_id',aggregated.canonical_timesheet_id,
+        'canonical_version',aggregated.canonical_version,
+        'requested_version',aggregated.requested_version,
+        'requested_is_canonical',coalesce(aggregated.requested_is_canonical,false),
+        'family_is_current',coalesce(aggregated.family_is_current,false),
+        'member_timesheet_ids',pg_catalog.to_jsonb(aggregated.member_timesheet_ids)
+      )
+    end
+  into v_result
+  from aggregated;
+
+  return coalesce(v_result,pg_catalog.jsonb_build_object(
+    'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',
+    'reason','BOOKING_IDENTITY_MISSING','timesheet_id',p_timesheet_id
+  ));
+end;
+$function$;

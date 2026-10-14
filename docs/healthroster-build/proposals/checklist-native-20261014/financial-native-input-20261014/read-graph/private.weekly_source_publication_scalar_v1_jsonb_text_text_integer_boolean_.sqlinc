@@ -1,0 +1,177 @@
+create or replace function private.weekly_source_publication_scalar_v1(
+  p_value jsonb,
+  p_field text,
+  p_kind text,
+  p_scale integer default null,
+  p_nullable boolean default false
+) returns jsonb
+language plpgsql
+immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_type text:=case when p_value is null then 'null'
+                    else pg_catalog.jsonb_typeof(p_value) end;
+  v_text text;
+  v_num numeric;
+  v_format text;
+begin
+  if v_type='null' then
+    if p_nullable then
+      return 'null'::jsonb;
+    end if;
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field',p_field,'reason','NULL_NOT_ALLOWED')::text;
+  end if;
+
+  if p_kind='BOOL' then
+    if v_type<>'boolean' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_BOOLEAN',
+                'jsonb_typeof',v_type)::text;
+    end if;
+    return p_value;
+  end if;
+
+  if p_kind='INT' then
+    if v_type<>'number' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_INTEGER',
+                'jsonb_typeof',v_type)::text;
+    end if;
+    v_num:=pg_catalog.trim_scale(p_value::numeric);
+    if pg_catalog.scale(v_num)<>0 then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_DIGEST_NON_INTEGER'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_DIGEST_NON_INTEGER',
+                'field',p_field,'value',p_value)::text;
+    end if;
+    return pg_catalog.to_jsonb(v_num);
+  end if;
+
+  if v_type<>'string' then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+      using errcode='22023',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+              'field',p_field,'reason','EXPECTED_STRING',
+              'jsonb_typeof',v_type)::text;
+  end if;
+  v_text:=p_value #>> '{}';
+
+  if p_kind='TEXT' then
+    if pg_catalog.length(v_text)=0 then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EMPTY_TEXT')::text;
+    end if;
+    return pg_catalog.to_jsonb(v_text);
+
+  elsif p_kind='RAWTEXT' then
+    -- The raw booking_id travels byte for byte; it is never trimmed, because
+    -- the trimmed form is a lock and index key, not an identity (H2-035).
+    return pg_catalog.to_jsonb(v_text);
+
+  elsif p_kind='UUID' then
+    if v_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_UUID')::text;
+    end if;
+    return pg_catalog.to_jsonb(v_text::uuid::text);
+
+  elsif p_kind='HEX32' then
+    if v_text !~* '^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_32_BYTE_HEX')::text;
+    end if;
+    return pg_catalog.to_jsonb(pg_catalog.lower(v_text));
+
+  elsif p_kind='DATE' then
+    -- The wire form is validated as ISO by pattern, parsed to prove it is a
+    -- real date, and rendered back by PATTERN, never by DateStyle.  `date::text`
+    -- honours the session's DateStyle, so under `German, DMY` the same request
+    -- would canonicalise `2026-03-02` as `02.03.2026` and produce a different
+    -- money digest from the same decision (review finding, lower severity 2).
+    if v_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_ISO_DATE')::text;
+    end if;
+    return pg_catalog.to_jsonb(pg_catalog.to_char(v_text::date,'YYYY-MM-DD'));
+
+  elsif p_kind='DEC' then
+    if v_text !~ '^-?[0-9]+(\.[0-9]+)?$' then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','EXPECTED_DECIMAL_STRING')::text;
+    end if;
+    v_num:=pg_catalog.trim_scale(v_text::numeric);
+    -- More precision than the stored column can hold is refused, never rounded:
+    -- silently rounding money is how a penny goes missing.
+    if pg_catalog.scale(v_num)>p_scale then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','DECIMAL_SCALE_EXCEEDED',
+                'max_scale',p_scale,'actual_scale',pg_catalog.scale(v_num))::text;
+    end if;
+    -- And more MAGNITUDE than the column can hold is refused too.  The relation
+    -- is numeric(18,s), so the integer part may carry at most 18-s digits.  The
+    -- first version rendered through a fixed to_char picture, which prints `#`
+    -- on overflow: `1000000000000000000.00` and `2000000000000000000.00` both
+    -- became `##################.##` and DIGESTED THE SAME (review finding,
+    -- lower severity 3).  A money digest may never be ambiguous, so this
+    -- refuses instead of printing.
+    if pg_catalog.length((pg_catalog.trunc(pg_catalog.abs(v_num)))::text)>18-p_scale then
+      raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+        using errcode='22023',
+              detail=pg_catalog.jsonb_build_object(
+                'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+                'field',p_field,'reason','DECIMAL_MAGNITUDE_EXCEEDED',
+                'max_integer_digits',18-p_scale,
+                'actual_integer_digits',
+                  pg_catalog.length((pg_catalog.trunc(pg_catalog.abs(v_num)))::text))::text;
+    end if;
+    -- Rendered by arithmetic, not by to_char: to_char's decimal separator
+    -- follows lc_numeric, while `numeric::text` is always '.' with no grouping.
+    v_format:=v_num::text;
+    if p_scale>0 then
+      if pg_catalog.strpos(v_format,'.')=0 then
+        v_format:=v_format||'.'||pg_catalog.repeat('0',p_scale);
+      else
+        v_format:=v_format||pg_catalog.repeat('0',p_scale-pg_catalog.scale(v_num));
+      end if;
+    end if;
+    return pg_catalog.to_jsonb(v_format);
+  end if;
+
+  raise exception 'WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID'
+    using errcode='22023',
+          detail=pg_catalog.jsonb_build_object(
+            'code','WEEKLY_SOURCE_PUBLICATION_REQUEST_INVALID',
+            'field',p_field,'reason','UNKNOWN_KIND','kind',p_kind)::text;
+end;
+$function$;

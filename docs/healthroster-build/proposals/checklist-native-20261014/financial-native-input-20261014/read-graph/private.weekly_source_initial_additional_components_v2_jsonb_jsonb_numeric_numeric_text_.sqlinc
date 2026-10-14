@@ -1,0 +1,87 @@
+create or replace function private.weekly_source_initial_additional_components_v2(
+  p_components jsonb, p_units jsonb, p_expected_pay numeric, p_expected_charge numeric,
+  p_family_booking_id text
+) returns jsonb
+language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_result jsonb:=p_components;
+  v_entry record;
+  v_component jsonb;
+  v_code text;
+  v_member text;
+  v_units numeric;
+  v_pay_rate numeric;
+  v_charge_rate numeric;
+  v_pay numeric;
+  v_charge numeric;
+  v_total_pay numeric:=0;
+  v_total_charge numeric:=0;
+begin
+  if jsonb_typeof(p_components) is distinct from 'array'
+     or jsonb_typeof(p_units) is distinct from 'object'
+     or p_expected_pay is null or p_expected_charge is null
+     or nullif(btrim(p_family_booking_id),'') is null then
+    raise exception 'BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED' using errcode='23514';
+  end if;
+  if exists(select 1 from jsonb_each(p_units) u
+    group by upper(btrim(u.key)) having count(*)<>1) then
+    raise exception 'BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED' using errcode='23514';
+  end if;
+  for v_entry in select key,value from jsonb_each(p_units) order by upper(key),key loop
+    v_code:=btrim(v_entry.key);
+    if v_code='' or jsonb_typeof(v_entry.value) is distinct from 'object'
+       or not (v_entry.value ?& array['unit_count','pay_rate','charge_rate','pay_ex_vat','charge_ex_vat'])
+       or exists(select 1 from jsonb_each(v_entry.value) e
+         where e.key=any(array['unit_count','pay_rate','charge_rate','pay_ex_vat','charge_ex_vat'])
+           and (jsonb_typeof(e.value) not in ('number','string')
+             or (e.value#>>'{}') !~ '^[+-]?[0-9]+([.][0-9]+)?$')) then
+      raise exception 'BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED' using errcode='23514';
+    end if;
+    v_units:=(v_entry.value->>'unit_count')::numeric;
+    v_pay_rate:=(v_entry.value->>'pay_rate')::numeric;
+    v_charge_rate:=(v_entry.value->>'charge_rate')::numeric;
+    v_pay:=(v_entry.value->>'pay_ex_vat')::numeric;
+    v_charge:=(v_entry.value->>'charge_ex_vat')::numeric;
+    if v_units<0 or v_pay_rate<0 or v_charge_rate<0
+       or v_units<>round(v_units,6) or v_pay_rate<>round(v_pay_rate,6)
+       or v_charge_rate<>round(v_charge_rate,6)
+       or v_pay is distinct from round(v_units*v_pay_rate,2)
+       or v_charge is distinct from round(v_units*v_charge_rate,2) then
+      raise exception 'BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED' using errcode='23514';
+    end if;
+    v_total_pay:=v_total_pay+v_pay;
+    v_total_charge:=v_total_charge+v_charge;
+    -- The saved calculator's code occurrence belongs to this stable booking
+    -- family, not every other week using the same code. Neither amount,
+    -- physical version, contract, current head nor ordinal forms its identity.
+    v_member:='additional:'||btrim(p_family_booking_id)||':'||upper(v_code);
+    if v_units<>0 or v_pay<>0 or v_charge<>0 then
+      v_component:=jsonb_build_object(
+        'component_ordinal',jsonb_array_length(v_result)+1,
+        'component_id',private.weekly_source_entitlement_component_id_v1(
+          'ADDITIONAL_UNIT','ADDITIONAL_CODE',upper(v_code),v_member),
+        'component_kind','ADDITIONAL_UNIT','economic_key_type','ADDITIONAL_CODE',
+        'economic_key_value',upper(v_code),'component_member_identity',v_member,
+        'segment_id',null,'segment_key',null,'segment_stable_key',null,
+        'work_date',null,'reference_number',null,
+        'hours_day',null,'hours_night',null,'hours_sat',null,'hours_sun',null,'hours_bh',null,
+        'additional_code_raw',v_code,'unit_count',to_char(v_units,'FM9999999999990.000000'),
+        'unit_pay_rate',to_char(v_pay_rate,'FM9999999999990.000000'),
+        'unit_charge_rate',to_char(v_charge_rate,'FM9999999999990.000000'),
+        'expense_code',null,'pay_ex_vat',to_char(v_pay,'FM9999999999990.00'),
+        'charge_ex_vat',to_char(v_charge,'FM9999999999990.00'),
+        'exclude_from_pay',false,'origin','WEEKLY_SOURCE',
+        'movement_id',null,'movement_group_id',null);
+      v_result:=v_result||jsonb_build_array(
+        private.weekly_source_publication_component_canonical_v1(v_component,'initial.additional'));
+    end if;
+  end loop;
+  if v_total_pay is distinct from p_expected_pay
+     or v_total_charge is distinct from p_expected_charge then
+    raise exception 'BPAY_NEXT_SOURCE_FIRST_ADDITIONAL_UNMAPPED' using errcode='23514';
+  end if;
+  return v_result;
+end;
+$function$;

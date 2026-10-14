@@ -20,7 +20,7 @@ declare
   native_workspace jsonb; tracker_action jsonb; finalise_link jsonb;
   agency_native record; agency_facts jsonb; comparison_accepted boolean; query_unsent boolean;
   report_bindings jsonb; needs_export boolean;
-  hold_facts jsonb; item_hold jsonb; financial_facts jsonb; native_root uuid; native_roots integer;
+  hold_facts jsonb; source_money jsonb; item_hold jsonb; financial_facts jsonb; native_root uuid; native_roots integer;
   d10_groups jsonb; query_parent jsonb; query_targets jsonb;
   unknown_hold constant jsonb:='{"holds_pay":null,"holds_pay_scope":null,"withheld_amount_pence":null,"holds_invoice":null,"pending_decision":null,"authority":{"owner":"UNAVAILABLE","hash":null,"withholding_known":false}}';
   binding text; revision text; records jsonb; result jsonb; primary_key text; sort_key jsonb;
@@ -405,6 +405,16 @@ begin
         if native_roots=1 and private.weekly_source_actual_timesheet_submission_v1(native_root)->'actual_submitted'='true'::jsonb then
           hold_facts:=private.weekly_source_checklist_timesheet_hold_facts_v1(native_root,row_scope,actor.id);
           item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
+        end if;
+        if native_roots=1 then
+          -- A genuine Source-owned authorised root may have no Candidate
+          -- submission. The native money owner proves its real event/root,
+          -- publication/command/job/member and current query qualification;
+          -- it never creates a counted Timesheet or ordinary money subject.
+          source_money:=private.weekly_source_checklist_source_shift_query_money_v1(
+            native_root,source_native.work_event_id,row_scope,actor.id);
+          financial_facts:=financial_facts||jsonb_build_array(source_money->'native_facts');
+          if source_money->'known'='true'::jsonb then item_hold:=source_money->'hold';pay_subject:=true; end if;
         end if;
         if pay_subject then pay_count:=pay_count+1; end if;
         if view='PAY_READONLY' and pay_subject is distinct from true then continue; end if;

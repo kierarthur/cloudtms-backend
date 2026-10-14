@@ -1,0 +1,183 @@
+{
+  "status": "SOURCE_ONLY_SINGLE_SHARED_KERNEL_PROPOSAL_NOT_MOUNTED_OR_NATIVE_QUALIFIED",
+  "sourceCommit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "moneyCommit": "76a5dbd0721ae2c41edb049312aa81d5df5a06be",
+  "moneyManifestSha256": "a864f502301c8fd4f6eb95404c06fd3c14b90e4400e0180ba782dee396b9977f",
+  "roots": 1484,
+  "uniqueInputs": 1745,
+  "occurrences": 2160,
+  "rootCensusSha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+  "unresolvedDynamicStatements": 15,
+  "nativeExecuted": false,
+  "canonicalBankBodyEdited": false,
+  "selected": [
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_bound_source_snapshot_v1",
+      "inputTypes": "uuid,bigint",
+      "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+      "offset": 0,
+      "header": "private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint) returns table(qualification_state text,selection_state text,candidate_id uuid, canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint, approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid, source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid, approved_source_ex_vat private.bpay_next_penny_amount, native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount, native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount) language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+      "include_stack": [],
+      "order": 5527,
+      "source_file_sha256": "560982266cf01ccc9f743f9008e88107013e7831e0acdfa79837eb88afcf9400",
+      "definition_sha256": "f6ee0ff2168d7cc4696f286168ff488213e2589c97a0f6c592c5062fbe076439",
+      "body_sha256": "287a0582c6ad03d8968985d6afd429ed82c3bacf37c72555772ee2c078d47102"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_initial_tsfin_certificate_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_initial_tsfin_certificate_v1(p_root_authorisation_id uuid) returns jsonb language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+      "include_stack": [],
+      "order": 5528,
+      "source_file_sha256": "86de08dd3bf9a64e7e347e9d41cb1430515e3ed83dc906ecab1ce7940b470a16",
+      "definition_sha256": "36babb4bebb9bb8649ef6999504f5b316e69324ca738768d59f57c7cc12f0548",
+      "body_sha256": "2b2506020c17009d5f09555d697935bc84e69df91f7112ece2d07187995559d1"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_initial_tsfin_bound_assert_v1",
+      "inputTypes": "uuid",
+      "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_initial_tsfin_bound_assert_v1(p_binding_version_id uuid) returns void language plpgsql security definer set search_path=pg_catalog,private,public",
+      "file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "include_stack": [],
+      "order": 4674,
+      "source_file_sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+      "definition_sha256": "250470d891b2ab1c1bacd84368d405da0e7da03126b04b413f4d5d8600b0183c",
+      "body_sha256": "d64e2109f49cec037e05ebaad0ef9cf747d08fca656aa7b25903347196a8840c"
+    },
+    {
+      "kind": "CREATE",
+      "name": "private.bpay_next_workbench_work_members_v1",
+      "inputTypes": "uuid,uuid",
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "offset": 0,
+      "header": "private.bpay_next_workbench_work_members_v1(p_work_id uuid,p_revision_id uuid) returns table(component_key text,approved_line_id uuid,approved_segment_id uuid,segment_key text, component_kind text,tax_treatment text,work_date date,approved_quantity numeric,unit_label text, approved_amount numeric,realised_amount numeric,held_amount numeric,source_pay_channel text, parent_complete boolean,segment_attribution_complete boolean) language plpgsql security definer set search_path=pg_catalog,private",
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "include_stack": [],
+      "order": 5531,
+      "source_file_sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17",
+      "definition_sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6",
+      "body_sha256": "c894fa3bfe776d647bbbb9074e88490e3a84bb45d518736032313bf2bc6f50f6"
+    }
+  ],
+  "transformations": [
+    {
+      "nativeName": "private.bpay_next_bound_source_snapshot_v1",
+      "coreName": "private.weekly_source_checklist_native_bound_snapshot_core_v1",
+      "changes": [
+        {
+          "before": "function private.bpay_next_bound_source_snapshot_v1(",
+          "after": "function private.weekly_source_checklist_native_bound_snapshot_core_v1("
+        },
+        {
+          "before": "(p_binding_version_id uuid,p_expected_book_revision bigint)",
+          "after": "(p_binding_version_id uuid,p_expected_book_revision bigint,p_native_locks boolean)"
+        },
+        {
+          "before": "perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;",
+          "after": "if p_native_locks then\n  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;\n  else\n  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT';\n  end if;"
+        },
+        {
+          "before": "perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;",
+          "after": "if p_native_locks then\n  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;\n  else\n  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id;\n  end if;"
+        },
+        {
+          "before": "select b.* into strict v_binding from private.bpay_next_source_component_binding b\n    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;",
+          "after": "if p_native_locks then\n  select b.* into strict v_binding from private.bpay_next_source_component_binding b\n    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;\n  else\n  select b.* into strict v_binding from private.bpay_next_source_component_binding b\n    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key;\n  end if;"
+        },
+        {
+          "before": "select p.* into v_position from private.bpay_next_position p\n    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;",
+          "after": "if p_native_locks then\n  select p.* into v_position from private.bpay_next_position p\n    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;\n  else\n  select p.* into v_position from private.bpay_next_position p\n    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key;\n  end if;"
+        },
+        {
+          "before": "private.bpay_next_initial_tsfin_bound_assert_v1(v_version.id)",
+          "after": "private.weekly_source_checklist_native_initial_bound_assert_core_v1(v_version.id,p_native_locks)"
+        },
+        {
+          "before": "begin\n",
+          "after": "begin\n  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;\n"
+        }
+      ],
+      "fullReverseMatched": true
+    },
+    {
+      "nativeName": "private.bpay_next_initial_tsfin_certificate_v1",
+      "coreName": "private.weekly_source_checklist_native_initial_certificate_core_v1",
+      "changes": [
+        {
+          "before": "function private.bpay_next_initial_tsfin_certificate_v1(",
+          "after": "function private.weekly_source_checklist_native_initial_certificate_core_v1("
+        },
+        {
+          "before": "(p_root_authorisation_id uuid)",
+          "after": "(p_root_authorisation_id uuid,p_native_locks boolean)"
+        },
+        {
+          "before": "select m.owner_epoch into epoch from private.bpay_next_module_control m\n    where m.id=1 and m.active_owner='NEXT' for share;",
+          "after": "if p_native_locks then\n  select m.owner_epoch into epoch from private.bpay_next_module_control m\n    where m.id=1 and m.active_owner='NEXT' for share;\n  else\n  select m.owner_epoch into epoch from private.bpay_next_module_control m\n    where m.id=1 and m.active_owner='NEXT';\n  end if;"
+        },
+        {
+          "before": "begin\n",
+          "after": "begin\n  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;\n"
+        }
+      ],
+      "fullReverseMatched": true
+    },
+    {
+      "nativeName": "private.bpay_next_initial_tsfin_bound_assert_v1",
+      "coreName": "private.weekly_source_checklist_native_initial_bound_assert_core_v1",
+      "changes": [
+        {
+          "before": "function private.bpay_next_initial_tsfin_bound_assert_v1(",
+          "after": "function private.weekly_source_checklist_native_initial_bound_assert_core_v1("
+        },
+        {
+          "before": "(p_binding_version_id uuid)",
+          "after": "(p_binding_version_id uuid,p_native_locks boolean)"
+        },
+        {
+          "before": "private.bpay_next_initial_tsfin_certificate_v1(v.initial_root_authorisation_id)",
+          "after": "private.weekly_source_checklist_native_initial_certificate_core_v1(v.initial_root_authorisation_id,p_native_locks)"
+        },
+        {
+          "before": "begin\n",
+          "after": "begin\n  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;\n"
+        }
+      ],
+      "fullReverseMatched": true
+    },
+    {
+      "nativeName": "private.bpay_next_workbench_work_members_v1",
+      "coreName": "private.weekly_source_checklist_native_members_core_v1",
+      "changes": [
+        {
+          "before": "function private.bpay_next_workbench_work_members_v1(",
+          "after": "function private.weekly_source_checklist_native_members_core_v1("
+        },
+        {
+          "before": "(p_work_id uuid,p_revision_id uuid)",
+          "after": "(p_work_id uuid,p_revision_id uuid,p_native_locks boolean)"
+        },
+        {
+          "before": "private.bpay_next_bound_source_snapshot_v1(v.id,p.source_book_revision)",
+          "after": "private.weekly_source_checklist_native_bound_snapshot_core_v1(v.id,p.source_book_revision,p_native_locks)"
+        },
+        {
+          "before": "begin\n",
+          "after": "begin\n  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_ACCESS_MODE_REQUIRED' using errcode='22023'; end if;\n"
+        }
+      ],
+      "fullReverseMatched": true
+    }
+  ],
+  "forward_sha256": "884a92f62d998fa62dff3c0545abe91b82a28aa6a55685d6d818e84b90b064ba",
+  "reverse_sha256": "8d1f577a5809f3869ac539f6fb9a209469af5cbb91e63ac2c0febaef00767285"
+}

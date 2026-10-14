@@ -1,0 +1,57 @@
+-- ROOT-ONLY, UNRUN native qualification vectors. The approved real fixture
+-- manifest supplies pg_temp.wp_u3_source_query_money_fixtures:
+-- kind, actor_user_id, root_timesheet_id, work_event_id, scope jsonb,
+-- expected_known boolean, expected_pence text, expected_sqlstate text.
+-- No fixture, fake financial frame, cycle or business row is created here.
+do $verify$
+declare fixture record; kind text; result jsonb; observed_sqlstate text;
+begin
+  if to_regclass('pg_temp.wp_u3_source_query_money_fixtures') is null then
+    raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_FIXTURES_REQUIRED';
+  end if;
+  foreach kind in array array['SOURCE_SHIFT_POSITIVE','SOURCE_SHIFT_RESERVED_SPLIT','SOURCE_INITIAL_PUBLICATION_PROOF',
+    'SOURCE_BUNDLE_PUBLICATION_PROOF','SOURCE_TREATMENT_REVISION','DIRTY_GROUP','WRONG_ITEM_REVISION','STALE_WORKER_CLOCK',
+    'PENDING_METADATA','INCOMPLETE_ATTRIBUTION','FOREIGN_MEMBER','MISSING_MEMBER','ACCEPTED_IN_PREPARATION','PAY_ON_HOLD',
+    'RESERVED_ONLY','RECOVERY_ONLY','SNOOZED','QUERY_CLEAR','FOREIGN_SEGMENT','FAKE_READY_NO_PUBLICATION',
+    'WRONG_BOOK_REVISION','WRONG_CLIENT_SCOPE','INACTIVE_ACTOR','NO_PAY_PERMISSION','LEGACY_OWNER','ORDINARY_WORK',
+    'MINOR_UNIT_OVERFLOW'] loop
+    if not exists(select 1 from pg_temp.wp_u3_source_query_money_fixtures f where f.kind=kind) then
+      raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_CASE_REQUIRED:%',kind;
+    end if;
+  end loop;
+  for fixture in select * from pg_temp.wp_u3_source_query_money_fixtures order by kind loop
+    result:=null;observed_sqlstate:=null;
+    begin
+      result:=private.weekly_source_checklist_source_shift_query_money_v1(
+        fixture.root_timesheet_id,fixture.work_event_id,fixture.scope,fixture.actor_user_id);
+    exception when others then observed_sqlstate:=sqlstate;
+    end;
+    if observed_sqlstate is distinct from fixture.expected_sqlstate then
+      raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_SQLSTATE_MISMATCH:%',fixture.kind;
+    end if;
+    if observed_sqlstate is not null then continue; end if;
+    if result->'known' is distinct from to_jsonb(fixture.expected_known) then
+      raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_KNOWN_MISMATCH:%',fixture.kind;
+    end if;
+    if fixture.expected_known then
+      if result#>>'{hold,authority,owner}' is distinct from 'SOURCE_QUERY_EX_VAT'
+        or result#>'{hold,holds_pay}' is distinct from 'true'::jsonb
+        or result#>>'{hold,holds_pay_scope}' is distinct from 'SHIFT'
+        or result#>>'{hold,withheld_amount_pence}' is distinct from fixture.expected_pence
+        or result#>'{hold,holds_invoice}' is distinct from 'null'::jsonb
+        or result#>'{hold,pending_decision}' is distinct from 'null'::jsonb
+        or result#>>'{native_facts,amount_basis}' is distinct from 'SOURCE_EX_VAT'
+        or not exists(select 1 from jsonb_array_elements(result#>'{native_facts,items}') i
+          where i->>'segment_key'=fixture.work_event_id::text and i->>'reason_code'='PAY_QUERY_OPEN'
+            and i->>'portion_kind'='AVAILABLE' and i->>'direction'='PAYMENT'
+            and i->'amount_known'='true'::jsonb and i->'is_selected'='false'::jsonb
+            and (i->>'included_source_ex_vat')::numeric>0)
+        or (result#>>'{native_facts,withheld_source_ex_vat}')::numeric*100<>fixture.expected_pence::numeric then
+        raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_POSITIVE_GRAIN_MISMATCH:%',fixture.kind;
+      end if;
+    elsif result ? 'hold' or fixture.expected_pence is not null then
+      raise exception 'CHECKLIST_QUERY_MONEY_NATIVE_UNKNOWN_MUST_NOT_MINT_AMOUNT:%',fixture.kind;
+    end if;
+  end loop;
+end;
+$verify$;

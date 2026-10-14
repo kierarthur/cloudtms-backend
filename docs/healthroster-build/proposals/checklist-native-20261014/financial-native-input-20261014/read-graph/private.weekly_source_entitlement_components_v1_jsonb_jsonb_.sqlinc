@@ -1,0 +1,109 @@
+create or replace function private.weekly_source_entitlement_components_v1(
+  p_segments jsonb,
+  p_expenses jsonb
+) returns jsonb
+language sql immutable
+set search_path to 'private','pg_catalog','pg_temp'
+as $function$
+  with worked as (
+    select
+      segment.ordinality as within_kind_ordinal,
+      1 as kind_order,
+      'WORKED_TIME'::text as component_kind,
+      'SEGMENT'::text as economic_key_type,
+      segment.value->>'segment_id' as economic_key_value,
+      -- A segment read back from an ordinary (non-Weekly-Source) financial
+      -- snapshot carries no `weekly_source` block, so the stable identity falls
+      -- back to the segment id itself.  It must never be null, or two unrelated
+      -- segments would derive the same component id.
+      coalesce(private.weekly_source_protected_component_event_v1(segment.value),
+               segment.value#>>'{weekly_source,work_event_id}',
+               segment.value->>'segment_id') as component_member_identity,
+      segment.value->>'segment_id' as segment_id,
+      coalesce(private.weekly_source_protected_component_event_v1(segment.value),
+               segment.value#>>'{weekly_source,work_event_id}',
+               segment.value->>'segment_id') as segment_key,
+      segment.value#>>'{weekly_source,calculation_fingerprint}' as segment_stable_key,
+      segment.value->>'date' as work_date,
+      segment.value->>'ref_num' as reference_number,
+      (segment.value->>'hours_day')::numeric as hours_day,
+      (segment.value->>'hours_night')::numeric as hours_night,
+      (segment.value->>'hours_sat')::numeric as hours_sat,
+      (segment.value->>'hours_sun')::numeric as hours_sun,
+      (segment.value->>'hours_bh')::numeric as hours_bh,
+      null::text as expense_code,
+      (segment.value->>'pay_amount')::numeric as pay_ex_vat,
+      (segment.value->>'charge_amount')::numeric as charge_ex_vat,
+      coalesce((segment.value->>'exclude_from_pay')::boolean,false) as exclude_from_pay,
+      'WEEKLY_SOURCE'::text as origin
+    from pg_catalog.jsonb_array_elements(coalesce(p_segments,'[]'::jsonb))
+      with ordinality as segment(value,ordinality)
+  ), expensed as (
+    select
+      expense.ordinality as within_kind_ordinal,
+      2 as kind_order,
+      'SOURCE_FIXED_EXPENSE'::text,
+      'EXPENSE_AUTHORITY'::text,
+      'weekly-source-expense:'||(expense.value->>'work_event_id'),
+      expense.value->>'work_event_id',
+      null::text,null::text,null::text,null::text,null::text,
+      null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,
+      expense.value->>'source_observation_kind',
+      (expense.value->>'candidate_reimbursement_ex_vat')::numeric,
+      (expense.value->>'client_charge_ex_vat')::numeric,
+      false,
+      'WEEKLY_SOURCE_EXPENSE'::text
+    from pg_catalog.jsonb_array_elements(coalesce(p_expenses,'[]'::jsonb))
+      with ordinality as expense(value,ordinality)
+  ), combined as (
+    select * from worked
+    union all
+    select * from expensed
+  ), ordered as (
+    select combined.*,
+      pg_catalog.row_number() over (
+        order by combined.kind_order,combined.within_kind_ordinal
+      ) as component_ordinal
+    from combined
+  )
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'component_ordinal',ordered.component_ordinal::integer,
+      'component_id',private.weekly_source_entitlement_component_id_v1(
+        ordered.component_kind,ordered.economic_key_type,
+        ordered.economic_key_value,ordered.component_member_identity),
+      'component_kind',ordered.component_kind,
+      'economic_key_type',ordered.economic_key_type,
+      'economic_key_value',ordered.economic_key_value,
+      'component_member_identity',ordered.component_member_identity,
+      'segment_id',ordered.segment_id,
+      'segment_key',ordered.segment_key,
+      'segment_stable_key',ordered.segment_stable_key,
+      'work_date',ordered.work_date,
+      'reference_number',ordered.reference_number,
+      'hours_day',case when ordered.hours_day is null then null
+        else pg_catalog.to_char(ordered.hours_day,'FM9999999999990.000000') end,
+      'hours_night',case when ordered.hours_night is null then null
+        else pg_catalog.to_char(ordered.hours_night,'FM9999999999990.000000') end,
+      'hours_sat',case when ordered.hours_sat is null then null
+        else pg_catalog.to_char(ordered.hours_sat,'FM9999999999990.000000') end,
+      'hours_sun',case when ordered.hours_sun is null then null
+        else pg_catalog.to_char(ordered.hours_sun,'FM9999999999990.000000') end,
+      'hours_bh',case when ordered.hours_bh is null then null
+        else pg_catalog.to_char(ordered.hours_bh,'FM9999999999990.000000') end,
+      'additional_code_raw',null::text,
+      'unit_count',null::text,
+      'unit_pay_rate',null::text,
+      'unit_charge_rate',null::text,
+      'expense_code',ordered.expense_code,
+      'pay_ex_vat',pg_catalog.to_char(coalesce(ordered.pay_ex_vat,0),'FM9999999999990.00'),
+      'charge_ex_vat',case when ordered.charge_ex_vat is null then null
+        else pg_catalog.to_char(ordered.charge_ex_vat,'FM9999999999990.00') end,
+      'exclude_from_pay',ordered.exclude_from_pay,
+      'origin',ordered.origin,
+      'movement_id',null::uuid,
+      'movement_group_id',null::uuid
+    ) order by ordered.component_ordinal
+  ),'[]'::jsonb)
+  from ordered;
+$function$;

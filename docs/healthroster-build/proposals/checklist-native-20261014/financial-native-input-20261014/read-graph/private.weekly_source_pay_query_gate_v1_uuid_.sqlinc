@@ -1,0 +1,6 @@
+create or replace function private.weekly_source_pay_query_gate_v1(p_root_timesheet_id uuid)
+returns jsonb language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_pay_query_facts_v1(p_root_timesheet_id)-'hours_incidents'-'manual_reviews';
+$function$;

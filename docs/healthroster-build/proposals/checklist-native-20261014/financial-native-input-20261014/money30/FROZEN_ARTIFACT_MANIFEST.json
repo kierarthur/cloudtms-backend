@@ -1,0 +1,161 @@
+{
+  "schema_version": "NATIVE_CHECKLIST_FINANCIAL_GRAIN_SOURCE_INPUT_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "implemented_adapter": false,
+  "Banking_owner_changed": false,
+  "native_proof": false,
+  "artifact_count": 30,
+  "artifacts": [
+    {
+      "file": "CURRENT_NATIVE_SOURCE_PINS.json",
+      "bytes": 23002,
+      "sha256": "3ea5a28bbccc04a44df8f8598af299e56ce5743437a84e6e282b6881a45aeda2"
+    },
+    {
+      "file": "NATIVE_FINANCIAL_GRAIN_AND_READ_CONSTRUCTION.md",
+      "bytes": 9543,
+      "sha256": "6c99065574ef6e100eaecc2d940a9ddfd7d79d5ebdfed47ac5659f50ae5feaa6"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 732,
+      "sha256": "3ee36ed5d568397cea1aa7faa26d5b98d5eb7e31ad2e2e4d46f74933f9bfcccd"
+    },
+    {
+      "file": "build-native-source-pins.mjs",
+      "bytes": 7114,
+      "sha256": "2f673b12439d675e7d8539ce3f68f8d0871c48a1d14b14795c741288fb97a581"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2898,
+      "sha256": "3513adf0d81cef002155119954d79dd997d8ed482a15107e7a689044c6eca996"
+    },
+    {
+      "file": "input/04102026_0300_banking_pay_next_case_instruction_core.sql",
+      "bytes": 52863,
+      "sha256": "04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e"
+    },
+    {
+      "file": "input/10102026_1252_banking_pay_next_workbench_summary.sql",
+      "bytes": 22502,
+      "sha256": "aa9a42864893856c9ae02479edb1172cdf39c764a6ca2e9e77f2fd11253affab"
+    },
+    {
+      "file": "input/10102026_1946_banking_pay_next_candidate_group_display.sql",
+      "bytes": 11407,
+      "sha256": "08040425d1d1e603782b9c157421df33adf64075ff50f79cd0329d239df861b7"
+    },
+    {
+      "file": "input/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "bytes": 9154,
+      "sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17"
+    },
+    {
+      "file": "input/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "bytes": 41811,
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "file": "input/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "bytes": 78316,
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    },
+    {
+      "file": "input/private_bpay_next_create_preparation_v1.sqlinc",
+      "bytes": 44805,
+      "sha256": "615f734caee9d73872deabc50685a82b1225997f17defad8634e3a35da194a47"
+    },
+    {
+      "file": "input/private_bpay_next_create_preparation_v1__3_args.sqlinc",
+      "bytes": 3001,
+      "sha256": "cdeccb1803e7c113ed756b1bbb152df2385a37563b89e6ff69798b0d20ae43bd"
+    },
+    {
+      "file": "input/private_bpay_next_create_preparation_v1__5_args.sqlinc",
+      "bytes": 394,
+      "sha256": "fe7be7f9096f51bb181e678225ff24daf4c97d44f1b65035bf20caab5d9f4f98"
+    },
+    {
+      "file": "input/private_bpay_next_create_preparation_v1__6_args.sqlinc",
+      "bytes": 44805,
+      "sha256": "615f734caee9d73872deabc50685a82b1225997f17defad8634e3a35da194a47"
+    },
+    {
+      "file": "input/private_bpay_next_source_query_segment_exclusions_v1.sqlinc",
+      "bytes": 3833,
+      "sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_ensure_metadata_v1.sqlinc",
+      "bytes": 2351,
+      "sha256": "552dc66c933018bf3b630333188b05206571a991c73e00e4cf84e7f3eacf3d9e"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_group_contribution_v1.sqlinc",
+      "bytes": 4159,
+      "sha256": "23f3d98d15fa09f4b5fb6c6216596b586f4c1331141570fb20d79b6db4ad701b"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_kind_page_v1.sqlinc",
+      "bytes": 78752,
+      "sha256": "6d3caaedc59467e3e482bc9deec69ae4032757004dbebcba40b9f0c894320647"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_refresh_group_display_v1.sqlinc",
+      "bytes": 12793,
+      "sha256": "d71fd36e08464e9744898c49d6607875f9f80b36a79d874f5734e1cf4f96612f"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_refresh_work_core_v1.sqlinc",
+      "bytes": 41403,
+      "sha256": "39596ef09ff413e81292f7f0bbea02df551730f343a2687c69ff8ae39b8a2769"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_require_next_v1.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "file": "input/private_bpay_next_workbench_work_members_v1.sqlinc",
+      "bytes": 8746,
+      "sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6"
+    },
+    {
+      "file": "input/private_weekly_source_first_authorise_core_v1.sqlinc",
+      "bytes": 12710,
+      "sha256": "2a991225c83ac0de80b4084b0fb3aa201ba198015aa3620d98cf13c280beadd8"
+    },
+    {
+      "file": "input/private_weekly_source_invoice_duty_v1.sqlinc",
+      "bytes": 35830,
+      "sha256": "eca8d5720fd78c53c4d764aeea5b758b44e5ab3aa04cdc5b07b2969a9138b359"
+    },
+    {
+      "file": "input/private_weekly_source_pay_query_facts_v1.sqlinc",
+      "bytes": 7005,
+      "sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec"
+    },
+    {
+      "file": "input/private_weekly_source_pay_query_gate_v1.sqlinc",
+      "bytes": 318,
+      "sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526"
+    },
+    {
+      "file": "input/private_weekly_source_pay_query_scope_v1.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "file": "input/public_bpay_next_workbench_page_v1.sqlinc",
+      "bytes": 105686,
+      "sha256": "7f4938e853ab8cd1f63f2ce901c632c0ea6c909ed89f10a98f69ac9578c438bb"
+    },
+    {
+      "file": "native-grain-source.test.mjs",
+      "bytes": 5381,
+      "sha256": "065bc61a9502e0d5dfa1b71c343565f7e4da11dcb25b161881e854038edd0fa4"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+create or replace function private.bpay_next_workbench_mark_processing_v1(p_work_id uuid)
+returns void language plpgsql security definer set search_path=pg_catalog,private
+as $function$
+declare
+  v_work private.bpay_next_work%rowtype;v_revision private.bpay_next_work_revision%rowtype;
+  v_metadata private.bpay_next_workbench_candidate_metadata%rowtype;v_item private.bpay_next_workbench_item%rowtype;
+  v_before private.bpay_next_workbench_delta[];v_after private.bpay_next_workbench_delta[];
+  v_candidate uuid;v_client uuid;v_target text;v_financial bigint;v_projection bigint;v_was_dirty boolean;v_wait boolean;
+  v_group text:='WORK:'||p_work_id::text;
+begin
+  perform private.bpay_next_workbench_require_next_v1();
+  select w.candidate_id into strict v_candidate from private.bpay_next_work w where w.id=p_work_id;
+  select c.financial_view_revision into strict v_financial from private.bpay_next_worker_control c
+    where c.candidate_id=v_candidate for update;
+  select w.* into strict v_work from private.bpay_next_work w where w.id=p_work_id for update;
+  v_metadata:=private.bpay_next_workbench_ensure_metadata_v1(v_candidate);
+  select c.pay_method::text into v_target from public.candidates c where c.id=v_candidate;
+  if v_target not in ('PAYE','UMBRELLA') then v_target:=null;end if;
+  select c.client_id into v_client from public.contracts c where c.id=v_work.contract_id;
+  select r.* into v_revision from private.bpay_next_work_revision r where r.work_id=v_work.id
+    and r.id=coalesce(v_work.current_revision_id,v_work.applied_revision_id);
+  select exists(select 1 from private.bpay_next_workbench_group g where g.group_key=v_group and g.dirty) into v_was_dirty;
+  -- Preserve the real stored-before WAIT marker across reauthorisation pages.
+  select exists(select 1 from private.bpay_next_workbench_item i where i.group_key=v_group
+    and i.reason_code='AWAITING_REAUTHORISATION') into v_wait;
+  if v_work.approval_state='WITHDRAWN' then v_wait:=private.bpay_next_work_wait_state_v1(v_work.id);end if;
+  select array_agg(d) into v_before from private.bpay_next_workbench_group_contribution_v1(v_group) d;
+  update private.bpay_next_workbench_revision set workbench_revision=workbench_revision+1,
+    dirty_group_count=dirty_group_count+case when v_was_dirty then 0 else 1 end,
+    updated_at_utc=transaction_timestamp() where id=1 returning workbench_revision into v_projection;
+  delete from private.bpay_next_workbench_item where group_key=v_group;
+  insert into private.bpay_next_workbench_group(group_key,group_kind,work_id,candidate_id,client_id,contract_id,
+    physical_timesheet_id,current_revision_id,source_pay_channel,target_pay_channel,week_ending_date,
+    complete,dirty,projection_revision,financial_view_revision,metadata_version,progress_state,certified_zero,
+    ready_count,action_count,blocked_count,waiting_count)
+  values(v_group,'WORK',v_work.id,v_candidate,v_client,v_work.contract_id,v_revision.physical_timesheet_id,
+    v_work.current_revision_id,v_revision.source_pay_channel,v_target,v_work.week_ending_date,false,true,
+    v_projection,v_financial,v_metadata.metadata_version,'PROCESSING',false,0,case when v_wait then 1 else 0 end,
+    case when v_wait then 0 else 1 end,0)
+  on conflict(group_key) do update set client_id=excluded.client_id,contract_id=excluded.contract_id,
+    physical_timesheet_id=excluded.physical_timesheet_id,current_revision_id=excluded.current_revision_id,
+    source_pay_channel=excluded.source_pay_channel,target_pay_channel=excluded.target_pay_channel,
+    week_ending_date=excluded.week_ending_date,complete=false,dirty=true,certified_zero=false,
+    projection_revision=excluded.projection_revision,financial_view_revision=excluded.financial_view_revision,
+    metadata_version=excluded.metadata_version,progress_state='PROCESSING',error_code=null,
+    ready_count=excluded.ready_count,action_count=excluded.action_count,blocked_count=excluded.blocked_count,
+    waiting_count=0,updated_at_utc=transaction_timestamp();
+  v_item:=null;v_item.id:=gen_random_uuid();v_item.group_key:=v_group;v_item.candidate_id:=v_candidate;
+  v_item.work_id:=v_work.id;v_item.revision_id:=v_revision.id;v_item.member_kind:='GROUP_EVIDENCE';
+  v_item.member_key:=v_work.id::text;v_item.component_key:='';v_item.portion_kind:='EVIDENCE';
+  v_item.client_id:=v_client;v_item.contract_id:=v_work.contract_id;v_item.physical_timesheet_id:=v_revision.physical_timesheet_id;
+  v_item.week_ending_date:=v_work.week_ending_date;v_item.candidate_display_name:=v_metadata.candidate_sort_name;
+  v_item.candidate_reference:=v_metadata.tms_ref;v_item.client_display_name:=v_revision.client_display_name;
+  v_item.timesheet_reference:=v_revision.timesheet_reference;v_item.source_pay_channel:=v_revision.source_pay_channel;
+  v_item.target_pay_channel:=v_target;v_item.direction:='INFORMATIONAL';v_item.amount_known:=false;
+  v_item.is_selected:=false;v_item.selected_amount_known:=false;v_item.selectable:=false;
+  v_item.section:=case when v_wait then 'ACTION' else 'BLOCKED' end;
+  v_item.reason_code:=case when v_wait then 'AWAITING_REAUTHORISATION'
+    when v_work.approval_state='WITHDRAWN' then 'APPROVAL_WITHDRAWN' else 'APPLY_PENDING' end;
+  v_item.reason_priority:=case when v_wait then 70 when v_work.approval_state='WITHDRAWN' then 20 else 30 end;
+  v_item.query_state:='NOT_APPLICABLE';v_item.query_qualified:=false;v_item.progress_state:='PROCESSING';
+  v_item.financial_view_revision:=v_financial;v_item.projection_revision:=v_projection;v_item.metadata_version:=v_metadata.metadata_version;
+  v_item.updated_at_utc:=transaction_timestamp();insert into private.bpay_next_workbench_item select (v_item).*;
+  select array_agg(d) into v_after from private.bpay_next_workbench_group_contribution_v1(v_group) d;
+  perform private.bpay_next_workbench_apply_delta_v1(v_before,v_after);
+end
+$function$;

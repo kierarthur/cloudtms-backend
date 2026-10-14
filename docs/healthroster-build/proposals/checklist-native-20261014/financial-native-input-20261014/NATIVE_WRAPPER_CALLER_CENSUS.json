@@ -1,0 +1,93 @@
+{
+  "status": "CURRENT_LITERAL_SOURCE_CALLER_CENSUS_INSTALLED_BODY_HELD",
+  "sourceCommit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "wrapper_signature_and_native_locked_mode_preserved": true,
+  "callers": [
+    {
+      "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+      "callers": [
+        {
+          "id": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+          "file": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+          "source_file_sha256": "5dd92083243dde0bd41418da6436d28d1566c32c1b0a0a540d9a8d4ae742f66a",
+          "definition_sha256": "9c86da2a478913500ff99fb9c2042d2b4d9858058bb586e33a7a3c8cb2b25f2a"
+        },
+        {
+          "id": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+          "file": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+          "source_file_sha256": "5dd92083243dde0bd41418da6436d28d1566c32c1b0a0a540d9a8d4ae742f66a",
+          "definition_sha256": "0ccf060344241461ea4349da700f2eecb0be928db851a70fe4a953188352e0e9"
+        },
+        {
+          "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+          "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+          "source_file_sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17",
+          "definition_sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6"
+        },
+        {
+          "id": "private.bpay_next_resolution_source_seed_plan_v1(uuid,text,uuid)",
+          "file": "supabase/repeatable/12102026_2316_banking_pay_next_resolution_publication_scope_v1.sql",
+          "source_file_sha256": "5e0e66249e76555fe14a65d68aee704ef7518e3c38883d13d5cc6b656508bc56",
+          "definition_sha256": "6845db64bda0e00a9239dc53bda2f9c28354888827a98eee9838b136f9297c9e"
+        },
+        {
+          "id": "private.bpay_next_resolution_command_v1(uuid,text,jsonb,boolean)",
+          "file": "supabase/repeatable/13102026_0537_banking_pay_next_saved_resolution_clear_review_v1.sql",
+          "source_file_sha256": "09aeff09b7e0ca6e1874920e917c987b1f75467cf8e6312d09bf8d8c60d878c8",
+          "definition_sha256": "10f6b9c19bc520e4d40f2dff74e31aa0d35abb4098a23d8208a15e760403ed12"
+        }
+      ]
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "callers": [
+        {
+          "id": "private.bpay_next_initial_tsfin_bind_v1(uuid)",
+          "file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+          "source_file_sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+          "definition_sha256": "b324fbfc66249dd762adf34f9a2c20d84e2b5e3f3b9223355477347845bb1f2c"
+        },
+        {
+          "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+          "file": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+          "source_file_sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+          "definition_sha256": "250470d891b2ab1c1bacd84368d405da0e7da03126b04b413f4d5d8600b0183c"
+        },
+        {
+          "id": "private.bpay_next_acceptance_source_proof_v1(uuid,uuid)",
+          "file": "supabase/repeatable/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+          "source_file_sha256": "4462d4e9a45909ba5e428b1916f74a7eeacf99b73add469b64eae8f185e28810",
+          "definition_sha256": "644d9519fdc32162f17d9546c8035c3cd360bd4bcb39ad1ef349d82151e454ce"
+        }
+      ]
+    },
+    {
+      "id": "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)",
+      "callers": [
+        {
+          "id": "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)",
+          "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_bound_source_snapshot_v1.sql",
+          "source_file_sha256": "560982266cf01ccc9f743f9008e88107013e7831e0acdfa79837eb88afcf9400",
+          "definition_sha256": "f6ee0ff2168d7cc4696f286168ff488213e2589c97a0f6c592c5062fbe076439"
+        },
+        {
+          "id": "private.bpay_next_acceptance_source_proof_v1(uuid,uuid)",
+          "file": "supabase/repeatable/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+          "source_file_sha256": "4462d4e9a45909ba5e428b1916f74a7eeacf99b73add469b64eae8f185e28810",
+          "definition_sha256": "644d9519fdc32162f17d9546c8035c3cd360bd4bcb39ad1ef349d82151e454ce"
+        }
+      ]
+    },
+    {
+      "id": "private.bpay_next_workbench_work_members_v1(uuid,uuid)",
+      "callers": [
+        {
+          "id": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+          "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+          "source_file_sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522",
+          "definition_sha256": "39596ef09ff413e81292f7f0bbea02df551730f343a2687c69ff8ae39b8a2769"
+        }
+      ]
+    }
+  ]
+}

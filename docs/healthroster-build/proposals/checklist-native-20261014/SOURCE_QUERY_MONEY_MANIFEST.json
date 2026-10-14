@@ -1,0 +1,542 @@
+{
+  "status": "UNMOUNTED_SOURCE_ONLY_NOT_NATIVE_QUALIFIED",
+  "predecessor": "0e373d6c62286aa94718dd6698b256e611c04246",
+  "source_checks": 112,
+  "artifacts": [
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/freshness-hooks/private_bpay_next_source_query_refresh_v1.sqlinc",
+      "bytes": 1597,
+      "sha256": "6f195ed2753fac20e0b29454c5862c9780a45ae434bb03ac3a67954ff654a4bf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/freshness-hooks/private_bpay_next_workbench_mark_processing_v1.sqlinc",
+      "bytes": 5863,
+      "sha256": "5bef5f9f0554e4a4ef83d1ffdea985357908ccb56efa960d9db2217826116323"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/build-native-source-pins.mjs",
+      "bytes": 7114,
+      "sha256": "2f673b12439d675e7d8539ce3f68f8d0871c48a1d14b14795c741288fb97a581"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/CURRENT_NATIVE_SOURCE_PINS.json",
+      "bytes": 23002,
+      "sha256": "3ea5a28bbccc04a44df8f8598af299e56ce5743437a84e6e282b6881a45aeda2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/freeze-source.mjs",
+      "bytes": 2898,
+      "sha256": "3513adf0d81cef002155119954d79dd997d8ed482a15107e7a689044c6eca996"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/FROZEN_ARTIFACT_MANIFEST.json",
+      "bytes": 5933,
+      "sha256": "a864f502301c8fd4f6eb95404c06fd3c14b90e4400e0180ba782dee396b9977f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/04102026_0300_banking_pay_next_case_instruction_core.sql",
+      "bytes": 52863,
+      "sha256": "04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/10102026_1252_banking_pay_next_workbench_summary.sql",
+      "bytes": 22502,
+      "sha256": "aa9a42864893856c9ae02479edb1172cdf39c764a6ca2e9e77f2fd11253affab"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/10102026_1946_banking_pay_next_candidate_group_display.sql",
+      "bytes": 11407,
+      "sha256": "08040425d1d1e603782b9c157421df33adf64075ff50f79cd0329d239df861b7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/12102026_2146_banking_pay_next_treatment_workbench_members_v1.sql",
+      "bytes": 9154,
+      "sha256": "f43af34f67e9ac1b33ee0ae0d65a11a2a06d956d8b31a4b56d9b4ca032665d17"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "bytes": 41811,
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "bytes": 78316,
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_create_preparation_v1.sqlinc",
+      "bytes": 44805,
+      "sha256": "615f734caee9d73872deabc50685a82b1225997f17defad8634e3a35da194a47"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_create_preparation_v1__3_args.sqlinc",
+      "bytes": 3001,
+      "sha256": "cdeccb1803e7c113ed756b1bbb152df2385a37563b89e6ff69798b0d20ae43bd"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_create_preparation_v1__5_args.sqlinc",
+      "bytes": 394,
+      "sha256": "fe7be7f9096f51bb181e678225ff24daf4c97d44f1b65035bf20caab5d9f4f98"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_create_preparation_v1__6_args.sqlinc",
+      "bytes": 44805,
+      "sha256": "615f734caee9d73872deabc50685a82b1225997f17defad8634e3a35da194a47"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_source_query_segment_exclusions_v1.sqlinc",
+      "bytes": 3833,
+      "sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_ensure_metadata_v1.sqlinc",
+      "bytes": 2351,
+      "sha256": "552dc66c933018bf3b630333188b05206571a991c73e00e4cf84e7f3eacf3d9e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_group_contribution_v1.sqlinc",
+      "bytes": 4159,
+      "sha256": "23f3d98d15fa09f4b5fb6c6216596b586f4c1331141570fb20d79b6db4ad701b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_kind_page_v1.sqlinc",
+      "bytes": 78752,
+      "sha256": "6d3caaedc59467e3e482bc9deec69ae4032757004dbebcba40b9f0c894320647"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_refresh_group_display_v1.sqlinc",
+      "bytes": 12793,
+      "sha256": "d71fd36e08464e9744898c49d6607875f9f80b36a79d874f5734e1cf4f96612f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_refresh_work_core_v1.sqlinc",
+      "bytes": 41403,
+      "sha256": "39596ef09ff413e81292f7f0bbea02df551730f343a2687c69ff8ae39b8a2769"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_require_next_v1.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_bpay_next_workbench_work_members_v1.sqlinc",
+      "bytes": 8746,
+      "sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_weekly_source_first_authorise_core_v1.sqlinc",
+      "bytes": 12710,
+      "sha256": "2a991225c83ac0de80b4084b0fb3aa201ba198015aa3620d98cf13c280beadd8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_weekly_source_invoice_duty_v1.sqlinc",
+      "bytes": 35830,
+      "sha256": "eca8d5720fd78c53c4d764aeea5b758b44e5ab3aa04cdc5b07b2969a9138b359"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_weekly_source_pay_query_facts_v1.sqlinc",
+      "bytes": 7005,
+      "sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_weekly_source_pay_query_gate_v1.sqlinc",
+      "bytes": 318,
+      "sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/private_weekly_source_pay_query_scope_v1.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/input/public_bpay_next_workbench_page_v1.sqlinc",
+      "bytes": 105686,
+      "sha256": "7f4938e853ab8cd1f63f2ce901c632c0ea6c909ed89f10a98f69ac9578c438bb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/native-grain-source.test.mjs",
+      "bytes": 5381,
+      "sha256": "065bc61a9502e0d5dfa1b71c343565f7e4da11dcb25b161881e854038edd0fa4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/NATIVE_FINANCIAL_GRAIN_AND_READ_CONSTRUCTION.md",
+      "bytes": 9543,
+      "sha256": "6c99065574ef6e100eaecc2d940a9ddfd7d79d5ebdfed47ac5659f50ae5feaa6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/money30/SOURCE_CHECK_RESULT.json",
+      "bytes": 732,
+      "sha256": "3ee36ed5d568397cea1aa7faa26d5b98d5eb7e31ad2e2e4d46f74933f9bfcccd"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/native/private_bpay_next_bound_source_snapshot_v1.sqlinc",
+      "bytes": 10466,
+      "sha256": "f6ee0ff2168d7cc4696f286168ff488213e2589c97a0f6c592c5062fbe076439"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/native/private_bpay_next_initial_tsfin_bound_assert_v1.sqlinc",
+      "bytes": 3113,
+      "sha256": "250470d891b2ab1c1bacd84368d405da0e7da03126b04b413f4d5d8600b0183c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/native/private_bpay_next_initial_tsfin_certificate_v1.sqlinc",
+      "bytes": 9060,
+      "sha256": "36babb4bebb9bb8649ef6999504f5b316e69324ca738768d59f57c7cc12f0548"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/native/private_bpay_next_workbench_work_members_v1.sqlinc",
+      "bytes": 8746,
+      "sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/NATIVE_FRESHNESS_HOOK_BOUNDARY.json",
+      "bytes": 6775,
+      "sha256": "82b291ae4f3ee14d8c404e67c3a4c73aa050e481b9ef0cb2f4c7fb35195c73d3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/NATIVE_KERNEL_INPUT_PINS.json",
+      "bytes": 11743,
+      "sha256": "db7418c3386f262f9dab96933ac6544e862b0790675666839573e8955053599a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/NATIVE_READ_CALL_GRAPH.json",
+      "bytes": 50928,
+      "sha256": "3c7bf91279b77409ba423f726ec7daeb3d126e85230626db17e35a4ed72a13be"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/NATIVE_WRAPPER_CALLER_CENSUS.json",
+      "bytes": 5100,
+      "sha256": "74c481ccc9f23a813ab7d34df20b958e696742f732a6e9f5e90d98077436cfaa"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+      "bytes": 14454,
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/PINNED_SQL_DATE_ORDER.mjs",
+      "bytes": 648,
+      "sha256": "7035b4f5fcbca7ed25bff284ef29115ef645f58314c28e3d19475e1d8a894f5e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_bound_source_snapshot_v1_uuid_bigint_.sqlinc",
+      "bytes": 10466,
+      "sha256": "f6ee0ff2168d7cc4696f286168ff488213e2589c97a0f6c592c5062fbe076439"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_initial_tsfin_bound_assert_v1_uuid_.sqlinc",
+      "bytes": 3113,
+      "sha256": "250470d891b2ab1c1bacd84368d405da0e7da03126b04b413f4d5d8600b0183c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_initial_tsfin_certificate_v1_uuid_.sqlinc",
+      "bytes": 9060,
+      "sha256": "36babb4bebb9bb8649ef6999504f5b316e69324ca738768d59f57c7cc12f0548"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_line_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 859,
+      "sha256": "818c2abd303df43114907cafaff5294e1d2dbc03e122a55f12a751d56be16f09"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_protected_receipt_json_v1_uuid_boolean_.sqlinc",
+      "bytes": 916,
+      "sha256": "52f1a4329c768ccbf3a8722d0eb8ded90dee99b8e3914037ef32cee7a42a22e6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_segment_pay_basis_v1_uuid_.sqlinc",
+      "bytes": 1071,
+      "sha256": "243d62acde0d820d4724dd7eb3391affa26e607bf4d58b13b287933084ae366c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_snooze_at_cut_v1_uuid_uuid_text_text_bigint_date_.sqlinc",
+      "bytes": 1741,
+      "sha256": "40fa068e6c27d9d3cfefe620576efe972b5fa30a16c2dbfe27d2c47a0e19ed40"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_source_binding_members_v1_uuid_.sqlinc",
+      "bytes": 3498,
+      "sha256": "771eaefe07928ff4a93abb73e8d5073f7bf1f9addda5ddd9b629a786053efa36"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_source_command_id_v1_uuid_.sqlinc",
+      "bytes": 460,
+      "sha256": "e57c861d95af5bef07b290332e2da074420daa39668a3fbc5451c13cd8656cec"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_source_query_segment_exclusions_v1_uuid_jsonb_.sqlinc",
+      "bytes": 3833,
+      "sha256": "f00b841fd02c29101e5fa8e6249428d98d09f7da5e05551e5c8cf799d8e624f5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_treatment_approval_revision_v1_uuid_.sqlinc",
+      "bytes": 2406,
+      "sha256": "f874b8fdbd62efde870310b953a49c53b2232dc65bedeb9adf13067a4eef0bd7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_workbench_accepted_work_v1_uuid_text_text_.sqlinc",
+      "bytes": 3129,
+      "sha256": "dace1f2703136d94bcadc62d41701d05dd252a6941a4461f9a81b0439d662874"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_workbench_require_next_v1__.sqlinc",
+      "bytes": 398,
+      "sha256": "9a5ae058f859672cbae7c81d4b45f28e5ca2ab9f695316b5ca49a208b7472359"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_workbench_work_members_v1_uuid_uuid_.sqlinc",
+      "bytes": 8746,
+      "sha256": "96afdf304d8679195039817622ea1b08289b3a704e8b20db5878b2dea1723af6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.bpay_next_work_segment_gross_balance_v1_uuid_text_text_.sqlinc",
+      "bytes": 808,
+      "sha256": "96e70b650ed344ef419112ffcdebcf167baedca5ffc035ee79066fe1ad5d6045"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_exceptional_hex_sha256_v1_text_.sqlinc",
+      "bytes": 390,
+      "sha256": "11f7f28fb29410e1c9510df8ecf0942f4c07f2fa3d9b15db7b5f62591e18dc12"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_exceptional_json_keys_exact_v1_jsonb_text___.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_canonical_json_text_v1_jsonb_.sqlinc",
+      "bytes": 2456,
+      "sha256": "14617730f41111a793abb1cdd1eba348cf620be4c2274cadd38c17d9a523e345"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_effective_inventory_v1_uuid_.sqlinc",
+      "bytes": 12756,
+      "sha256": "eb532bbe2088e3332586ff39c5e0184a162d3df29bf2a315630667f4a7477d6f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_entitlement_components_v1_jsonb_jsonb_.sqlinc",
+      "bytes": 5357,
+      "sha256": "9800b9c3087c051ac7fc36085e49de5e63eff931a6d81ba5fc2d53edd2bd3118"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_entitlement_component_id_v1_text_text_text_text_.sqlinc",
+      "bytes": 586,
+      "sha256": "ba2fe6aeba0323021939b691e2b64e28e394f8c17d066c6d5ed94c1aa103ece8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_entitlement_derived_uuid_v1_text_text_.sqlinc",
+      "bytes": 1007,
+      "sha256": "651f61775e44627b6912374bb74f1b940b07adc14211a84093a51230b0b46388"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_initial_additional_components_v2_jsonb_jsonb_numeric_numeric_text_.sqlinc",
+      "bytes": 4461,
+      "sha256": "5b452472e1930a1df776f0f10a89784c07913ec67f3b61c417a284582264d438"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_inventory_approval_basis_v2_uuid_jsonb_.sqlinc",
+      "bytes": 15704,
+      "sha256": "47a3a581621cbacfc5bfac4aad749cbeedc2412a67f30e08c8844bd32662ffcc"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_is_import_authoritative_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 1588,
+      "sha256": "7861b97e31eab1c939785976219065ba3c963f5d166788ef850d335efe774794"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_local_origin_canonical_v2_jsonb_.sqlinc",
+      "bytes": 6752,
+      "sha256": "1f2c44585647139f936496628f8b520d5017cab7f19d1b28f1b1e415cd53a4da"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3525,
+      "sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 492,
+      "sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_c1_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 10786,
+      "sha256": "f8279ed2c436f2cf157eed927630a069448ddce0c6b8517dbbc63dd185f575e8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_c1_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 373,
+      "sha256": "f3d43d66b4f67ec5931251556dff1a24f5f640c87ac9030739d51cbf05cea36b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_facts_v1_uuid_.sqlinc",
+      "bytes": 7005,
+      "sha256": "ce7d19b9984d8a4e2269fd705572d351a874219dff40dc17a7d857556dbde1ec"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_gate_v1_uuid_.sqlinc",
+      "bytes": 318,
+      "sha256": "31992d662b68652d1d32851110704a6d31c17cbb15f09a4e8d5e664afab17526"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_local_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 29463,
+      "sha256": "ea61636cb2708ff7a0cd0893a2870deb9fac1d814a9b5eaa6023e7d374557ed2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_local_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 379,
+      "sha256": "fdc84f55d3a1e2c169837d584653043d4786c79bd26ad5f9100a8c481bd8f79a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_next_receipt_event_v1_uuid_uuid_uuid_uuid_.sqlinc",
+      "bytes": 8234,
+      "sha256": "85779fc6fc1d8184e985f03cb2cba5947be57fd7f5ea6d6463ef9c18ddbe6f29"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_next_receipt_v1_uuid_uuid_uuid_.sqlinc",
+      "bytes": 377,
+      "sha256": "533f1fb62e135847c4c253559420a27b91c596d91dd7884dcd77bd9df3cdaffe"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_pay_query_scope_v1_uuid_.sqlinc",
+      "bytes": 4245,
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_protected_component_event_v1_jsonb_.sqlinc",
+      "bytes": 1480,
+      "sha256": "0f3675f1705d12452f3c78183103338315267a216af1cc9cced3da782b5603ab"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_protected_wait_receipt_v1_uuid_uuid_.sqlinc",
+      "bytes": 6163,
+      "sha256": "15e722fc9de0d587e3fa032f2d739f7cc06cafc3a1b8e620a3067d933161bf9e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_component_canonical_v1_jsonb_text_.sqlinc",
+      "bytes": 5138,
+      "sha256": "5a87bc2077f5e85e9062f33fc77a90f38a6b70e13da205d01a996649ab6fb9bb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_component_content_v1_jsonb_.sqlinc",
+      "bytes": 285,
+      "sha256": "3e78df8ec5ddeca69692667fec6b844bd6814e3777a8d64963a4ca3f64a671a8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_receipt_json_v1_uuid_.sqlinc",
+      "bytes": 1449,
+      "sha256": "493e840e94721ace5d87801150d5bc7f0a35df880c57d054a7395f23bf7f0e19"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_request_canonical_v1_jsonb_text_uuid_.sqlinc",
+      "bytes": 18560,
+      "sha256": "e6566b583e1d0040e512a021e4a44ee850ee8ffb6549de17332bd0bd32e64d45"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_request_digest_v1_jsonb_.sqlinc",
+      "bytes": 335,
+      "sha256": "92499de237dbfcdc0821b21432c1256306dfdb613b114015fcbd7428fdee9278"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_require_keys_v1_jsonb_text___text_.sqlinc",
+      "bytes": 1749,
+      "sha256": "63d5de3d002e96bdd15006323df3bb24b8c4e38af2acf71bed1e0b1724c248e4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_publication_scalar_v1_jsonb_text_text_integer_boolean_.sqlinc",
+      "bytes": 7676,
+      "sha256": "6a36641e4b8f381aaf343ba9c407b8ae9efbf5f52d0f924629ed2872e5f47306"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_query_require_service_v1__.sqlinc",
+      "bytes": 509,
+      "sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_resolve_root_identity_v1_uuid_.sqlinc",
+      "bytes": 5797,
+      "sha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_sha256_jsonb_v1_text_jsonb_.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private.weekly_source_sha256_text_v1_text_text_.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private._candidate_expense_source_family_v1_uuid_.sqlinc",
+      "bytes": 2015,
+      "sha256": "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private._weekly_source_effective_policy_v1_uuid_uuid_date_.sqlinc",
+      "bytes": 7422,
+      "sha256": "66daec8a58f94287e673703fd076165e910215dce842781613cd8f9c270e63e5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/private._weekly_source_settings_assert_request_v1_jsonb_text___text_.sqlinc",
+      "bytes": 574,
+      "sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/financial-native-input-20261014/read-graph/public._pay_timesheet_rotation_scope_uuid___.sqlinc",
+      "bytes": 5333,
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-financial-kernel-packet.mjs",
+      "bytes": 17056,
+      "sha256": "e634067a7053ae6b4259d88625e3c179c6b144df3a4ebc7e8c0b44037ec4fcc2"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/update-financial-source-pins.mjs",
+      "bytes": 4198,
+      "sha256": "58e45832986bb8ce9fefeab86b849c6bb4a53e565117277e0b1b545a984cd293"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_QUERY_MONEY_HANDOFF.md",
+      "bytes": 10611,
+      "sha256": "c7969cdd3849487230ab351dcb7f25f8a83c5ceab6cbb81ddc26cfe3d95fd830"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_financial_native_kernel.forward.sqlinc",
+      "bytes": 37379,
+      "sha256": "884a92f62d998fa62dff3c0545abe91b82a28aa6a55685d6d818e84b90b064ba"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_financial_native_kernel.reverse.sqlinc",
+      "bytes": 32617,
+      "sha256": "8d1f577a5809f3869ac539f6fb9a209469af5cbb91e63ac2c0febaef00767285"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_source_shift_query_money.sqlinc",
+      "bytes": 23124,
+      "sha256": "991173d8badcb24679732a093fcee18326640d270432c8153b7ac59a2d9cb932"
+    },
+    {
+      "path": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "bytes": 16884,
+      "sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67"
+    },
+    {
+      "path": "supabase/verification/support/wp_u3_source_query_money_vectors.sqlinc",
+      "bytes": 3633,
+      "sha256": "5c287d59e2ab7c3ce81c145cf6a28a64babc2736ba7def03eb939d114d90d620"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "bytes": 29469,
+      "sha256": "1db867c46c25ed21c7a6d5c0c1d2a316bb470327ca9bad60a864da8a7f4faff2"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
+      "bytes": 55258,
+      "sha256": "592b218a93e2872c2a140440a488dad3269459b8b0d9768fb40d00fb98f7569e"
+    }
+  ]
+}

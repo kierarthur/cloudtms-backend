@@ -1,0 +1,110 @@
+create or replace function private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint)
+returns table(qualification_state text,selection_state text,candidate_id uuid,
+  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
+  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
+  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
+  approved_source_ex_vat private.bpay_next_penny_amount,
+  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
+  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare v_version private.bpay_next_source_component_binding_version%rowtype;
+  v_binding private.bpay_next_source_component_binding%rowtype;
+  v_position private.bpay_next_position%rowtype;v_line private.bpay_next_approved_line%rowtype;
+  v_revision private.bpay_next_work_revision%rowtype;v_count integer;
+begin
+  if p_binding_version_id is null or p_expected_book_revision is null or p_expected_book_revision<1 then
+    raise exception using errcode='22023',message='BPAY_NEXT_BOUND_SNAPSHOT_ID_REQUIRED';end if;
+  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;
+  if not found then raise exception using errcode='55000',message='BPAY_NEXT_BINDING_NEXT_REQUIRED';end if;
+  select v.* into strict v_version from private.bpay_next_source_component_binding_version v where v.id=p_binding_version_id;
+  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;
+  if not found then raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONTROL_REQUIRED';end if;
+  select b.* into strict v_binding from private.bpay_next_source_component_binding b
+    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;
+  if v_binding.current_binding_version_id is distinct from p_binding_version_id then
+    qualification_state:='SUPERSEDED';return next;return;end if;
+  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+    perform private.bpay_next_initial_tsfin_bound_assert_v1(v_version.id);
+  else
+  if not exists(select 1 from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=v_version.decision_bundle_id and b.bundle_revision=v_version.bundle_revision
+      and b.state='COMMITTED') then
+    qualification_state:='BUNDLE_PENDING';return next;return;end if;
+  end if;
+  select p.* into v_position from private.bpay_next_position p
+    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;
+  if not found then qualification_state:='POSITION_PENDING';return next;return;end if;
+  -- Retain actual Position applicability during the native apply interval:
+  -- Work.applied may still be the predecessor while this Position is new.
+  if not exists(select 1 from private.bpay_next_work w where w.id=v_position.work_id
+    and (v_position.applied_revision_id=w.current_revision_id or v_position.applied_revision_id=w.applied_revision_id)) then
+    qualification_state:='POSITION_PENDING';return next;return;end if;
+  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+    select pg_catalog.count(*) into v_count from private.bpay_next_publication p
+      join private.bpay_next_work w on w.id=p.work_id
+      join private.bpay_next_command c on c.id=p.command_id
+      join private.bpay_next_command_member m on m.command_id=c.id and m.candidate_id=w.candidate_id
+      join private.bpay_next_job j on j.command_id=c.id and j.candidate_id=w.candidate_id and j.job_kind='POSITION_APPLY'
+      join private.bpay_next_worker_control ctl on ctl.candidate_id=w.candidate_id
+      join private.bpay_next_module_control module on module.id=1 and module.active_owner='NEXT'
+      where p.command_id=v_version.publication_command_id_1 and p.work_id=v_version.approval_work_id
+        and p.revision_id=v_version.approval_revision_id and p.candidate_id=v_version.candidate_id
+        and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+        and (case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end)=p.revision_id and (case when w.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision apr where apr.id=w.applied_revision_id and apr.sealed_at_utc is not null and apr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.applied_revision_id) else w.applied_revision_id end)=p.revision_id
+        and c.id=private.bpay_next_source_command_id_v1(v_version.initial_root_authorisation_id)
+        and c.command_kind='POSITION_APPLY' and c.status='COMPLETE' and c.module_epoch=module.owner_epoch
+        and c.expected_member_count=1 and c.enrolled_member_count=1 and c.sealed_at_utc is not null
+        and j.status='DONE' and j.phase='DONE' and j.module_epoch=c.module_epoch
+        and j.command_sequence=c.agency_sequence and j.owner_epoch>0 and j.owner_epoch<=ctl.active_owner_epoch
+        and j.lease_nonce is null and j.lease_until_utc is null
+        and (case when v_position.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision pr where pr.id=v_position.applied_revision_id and pr.sealed_at_utc is not null and pr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(v_position.applied_revision_id) else v_position.applied_revision_id end)=p.revision_id;
+  else
+  select pg_catalog.count(*) into v_count from private.bpay_next_source_binding_members_v1(v_version.source_receipt_id) m
+    join private.bpay_next_publication p on p.command_id=m.publication_command_id
+    join private.bpay_next_work w on w.id=m.work_id
+    where p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+      and (case when w.current_revision_id is not null and exists(select 1 from private.bpay_next_work_revision cr where cr.id=w.current_revision_id and cr.sealed_at_utc is not null and cr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.current_revision_id) else w.current_revision_id end)=m.revision_id and (case when w.applied_revision_id is not null and exists(select 1 from private.bpay_next_work_revision apr where apr.id=w.applied_revision_id and apr.sealed_at_utc is not null and apr.payment_treatment_approval_revision_id is not null) then private.bpay_next_treatment_approval_revision_v1(w.applied_revision_id) else w.applied_revision_id end)=m.revision_id
+      and ((m.publication_command_id=v_version.publication_command_id_1
+            and m.work_id=v_version.publication_work_id_1 and m.revision_id=v_version.publication_revision_id_1)
+        or (m.publication_command_id=v_version.publication_command_id_2
+            and m.work_id=v_version.publication_work_id_2 and m.revision_id=v_version.publication_revision_id_2));
+  end if;
+  if v_count is distinct from (case when v_version.publication_command_id_2 is null then 1 else 2 end) then
+    qualification_state:='PUBLICATION_PENDING';return next;return;end if;
+  if v_position.source_book_state is distinct from 'READY' then qualification_state:='BOOK_UNBOUND';return next;return;end if;
+  if v_position.source_book_revision is distinct from p_expected_book_revision then
+    qualification_state:='BOOK_REVISION_STALE';return next;return;end if;
+  if v_position.source_basis_channel is distinct from v_position.source_book_seed_channel
+     or (v_position.source_book_seed_channel='PAYE' and
+       (v_position.native_realised_paye is distinct from v_position.realised_source_ex_vat
+        or v_position.native_held_paye is distinct from v_position.held_source_ex_vat))
+     or (v_position.source_book_seed_channel='UMBRELLA' and
+       (v_position.native_realised_umbrella is distinct from v_position.realised_source_ex_vat
+        or v_position.native_held_umbrella is distinct from v_position.held_source_ex_vat)) then
+    qualification_state:='BOOK_POSTING_REQUIRED';return next;return;end if;
+  if v_version.tax_treatment is null or v_version.classification_line_id is null then
+    qualification_state:='CLASSIFICATION_UNBOUND';return next;return;end if;
+  select r.* into strict v_revision from private.bpay_next_work_revision r where r.id=v_version.approval_revision_id;
+  if v_version.component_state='PRESENT' then
+    select l.* into strict v_line from private.bpay_next_approved_line l where l.id=v_version.approved_line_id;
+    approved_source_ex_vat:=v_line.source_pay_ex_vat;
+  else
+    if exists(select 1 from private.bpay_next_approved_line l
+      where l.revision_id=v_version.approval_revision_id and l.component_key=v_version.approval_component_key) then
+      raise exception using errcode='23514',message='BPAY_NEXT_BINDING_REMOVAL_LINE_CONFLICT';end if;
+    approved_source_ex_vat:=0;
+  end if;
+  candidate_id:=v_version.candidate_id;canonical_work_id:=v_version.canonical_work_id;
+  canonical_component_key:=v_version.canonical_component_key;binding_version_id:=v_version.id;
+  source_book_revision:=v_position.source_book_revision;approval_work_id:=v_version.approval_work_id;
+  approval_revision_id:=v_version.approval_revision_id;approved_line_id:=v_version.approved_line_id;
+  head_id:=v_version.head_id;source_receipt_id:=v_version.source_receipt_id;source_channel:=v_version.approval_source_channel;
+  tax_treatment:=v_version.tax_treatment;classification_line_id:=v_version.classification_line_id;
+  valuation_policy_id:=v_revision.valuation_policy_id;
+  native_realised_paye:=v_position.native_realised_paye;native_realised_umbrella:=v_position.native_realised_umbrella;
+  native_held_paye:=v_position.native_held_paye;native_held_umbrella:=v_position.native_held_umbrella;
+  selection_state:='UNBOUND';qualification_state:='READY';return next;
+end
+$function$;

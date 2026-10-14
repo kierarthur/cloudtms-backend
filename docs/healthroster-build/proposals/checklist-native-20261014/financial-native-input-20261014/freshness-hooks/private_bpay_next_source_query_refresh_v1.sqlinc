@@ -1,0 +1,26 @@
+create or replace function private.bpay_next_source_query_refresh_v1(p_contract_id uuid,p_work_event_id uuid)
+returns void language plpgsql volatile security definer set search_path=pg_catalog,private
+as $function$
+declare v_ids uuid[];v_id uuid;
+begin
+ -- Identity only; eligibility is decided by the current Workbench classifier.
+ if (select m.active_owner from private.bpay_next_module_control m where m.id=1) is distinct from 'NEXT' then return;end if;
+ select array_agg(x.id order by x.id) into v_ids from (
+  select distinct w.id from public.weekly_work_events e
+  join public.contracts c on c.id=p_contract_id and c.candidate_id=e.candidate_id and c.client_id=e.client_id
+  join public.contract_weeks cw on cw.contract_id=c.id and cw.additional_seq=0 and cw.is_adjustment is false
+   and cw.week_ending_date between e.work_date and e.work_date+6
+  join public.timesheets t on t.timesheet_id=cw.timesheet_id and t.contract_id=c.id
+   and t.week_ending_date=cw.week_ending_date and t.is_adjustment is false
+   and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+  join private.bpay_next_work w on w.booking_id=t.booking_id and w.contract_id=c.id and w.work_kind='SOURCE'
+   and w.candidate_id=e.candidate_id and w.week_ending_date=cw.week_ending_date
+  where e.id=p_work_event_id order by w.id limit 2
+ ) x;
+ if coalesce(cardinality(v_ids),0)=0 then return;end if;
+ if cardinality(v_ids)<>1 then
+  raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_QUERY_WORK_IDENTITY_AMBIGUOUS';end if;
+ v_id:=v_ids[1];
+ perform private.bpay_next_workbench_refresh_work_v1(v_id);
+end
+$function$;

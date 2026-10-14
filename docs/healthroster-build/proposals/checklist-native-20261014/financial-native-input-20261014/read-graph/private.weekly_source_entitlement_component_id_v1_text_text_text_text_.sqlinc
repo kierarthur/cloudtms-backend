@@ -1,0 +1,15 @@
+create or replace function private.weekly_source_entitlement_component_id_v1(
+  p_component_kind text,
+  p_economic_key_type text,
+  p_economic_key_value text,
+  p_component_member_identity text
+) returns uuid
+language sql immutable
+set search_path to 'private','pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_entitlement_derived_uuid_v1(
+    'WEEKLY_SOURCE_ENTITLEMENT_COMPONENT_V1',
+    coalesce(p_component_kind,'')||'|'||coalesce(p_economic_key_type,'')||'|'||
+    coalesce(p_economic_key_value,'')||'|'||coalesce(p_component_member_identity,'')
+  );
+$function$;

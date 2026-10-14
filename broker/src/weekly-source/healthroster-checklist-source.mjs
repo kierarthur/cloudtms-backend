@@ -46,7 +46,7 @@ export function decodeChecklistHold(value) {
   if (![true, false, null].includes(value.holds_pay) || ![true, false, null].includes(value.holds_invoice) ||
       ![true, false, null].includes(value.pending_decision)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   closed(value.authority, ['owner', 'hash', 'withholding_known']);
-  if (!['SOURCE', 'NEXT', 'ORDINARY', 'UNAVAILABLE'].includes(value.authority.owner) ||
+  if (!['SOURCE', 'SOURCE_QUERY_EX_VAT', 'NEXT', 'ORDINARY', 'UNAVAILABLE'].includes(value.authority.owner) ||
       typeof value.authority.withholding_known !== 'boolean') fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   if (value.authority.owner === 'UNAVAILABLE') {
     if (value.authority.hash !== null || value.authority.withholding_known !== false || value.holds_invoice !== null ||
@@ -63,6 +63,13 @@ export function decodeChecklistHold(value) {
   }
   if (value.holds_pay === true && !['SHIFT', 'TIMESHEET'].includes(value.holds_pay_scope)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
   if (value.holds_pay_scope !== null && !['SHIFT', 'TIMESHEET'].includes(value.holds_pay_scope)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');
+  // This finite authority means genuine positive query-withheld SOURCE EX-VAT
+  // at one native WORK segment. It supplies neither invoice/decision facts nor
+  // target VAT, payroll net, cash, a whole Timesheet amount or known zero.
+  if (value.authority.owner === 'SOURCE_QUERY_EX_VAT' && (value.holds_pay !== true || value.holds_pay_scope !== 'SHIFT' ||
+      value.holds_invoice !== null || value.pending_decision !== null || value.authority.withholding_known !== true)) {
+    fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
+  }
   return copy(value);
 }
 
@@ -188,6 +195,8 @@ export function projectChecklistItem(item, actor) {
     }
   }
   const hold = decodeChecklistHold(item.hold), s = status(item.status), correction = item.correction_binding;
+  if (hold.authority.owner === 'SOURCE_QUERY_EX_VAT' && (item.item_kind !== 'NATIVE_SOURCE' ||
+      item.subject !== 'PAY' || item.permitted_pay_subject !== true)) fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
   if (correction != null) {
     closed(correction, ['request_id', 'state', 'state_revision', 'original_timesheet_id', 'replacement_timesheet_id', 'reversal_timesheet_id']);
     uuid(correction.request_id); uuid(correction.original_timesheet_id); uuid(correction.replacement_timesheet_id);
@@ -217,6 +226,7 @@ export function projectChecklistRow(row, actor) {
   if (typeof row.retention.has_open_items !== 'boolean' || typeof row.retention.most_recent_ended_week !== 'string' || !DATE.test(row.retention.most_recent_ended_week)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   const checked = cell(row.checked, row.scope), completed = cell(row.completed, row.scope), pay = cell(row.pay_completed, row.scope);
   const hold = decodeChecklistHold(row.hold); count(row.permitted_pay_item_count);
+  if (hold.authority.owner === 'SOURCE_QUERY_EX_VAT') fail('CHECKLIST_SOURCE_QUERY_MONEY_GRAIN_INVALID');
   if (!Array.isArray(row.admin_actions) || row.admin_actions.length > 2) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   const admin = row.admin_actions.map(a => {
     closed(a, ['kind', 'label', 'native_allowed', 'payload']);
