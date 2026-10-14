@@ -1,0 +1,20 @@
+create or replace function private.timesheet_correction_actor_assert_v1(p_actor_user_id uuid)
+returns void language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_allowed boolean:=false;
+begin
+  perform 1 from public.tms_users u where u.id=p_actor_user_id for share;
+  if p_actor_user_id is null or not exists(select 1 from public.tms_users u
+    where u.id=p_actor_user_id and coalesce(u.is_active,false)) then
+    raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';
+  end if;
+  if to_regprocedure('private.weekly_source_pay_actor_allowed_v1(uuid)') is null then
+    raise exception 'CORRECTION_PAY_ACTOR_HELPER_UNAVAILABLE' using errcode='55000';
+  end if;
+  execute 'select private.weekly_source_pay_actor_allowed_v1($1)' into v_allowed using p_actor_user_id;
+  if v_allowed is distinct from true then
+    raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';
+  end if;
+end;
+$function$;

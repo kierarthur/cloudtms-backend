@@ -1,0 +1,80 @@
+{
+  "schema": "NO_SHIFTS_UNDO_STATE_PROTOCOL_SUCCESSOR_V1",
+  "source_pin": "87b9908370d238d1af4da910b97018d19a3fd033",
+  "predecessor_manifest_sha256": "d97bd1909b77353905ec19d8e988bbc9ce1f010e41386aee18a0d05c94db1337",
+  "changed_leaf": {
+    "path": "supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+    "before_sha256": "3620f3fe8a70474d502b59c5e5a3772d673c701d44309896190f1629527c3efe",
+    "after_sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e",
+    "hunk": {
+      "before": "  if v_cycle.state not in('OPEN','FINALISABLE','FINALISED') then\n    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_CYCLE_STATE_INVALID' using errcode='55000';\n  end if;\n",
+      "after": ""
+    },
+    "reverse_insert_offset": 3337,
+    "reverse_prefix_sha256": "ffdbcd22c7774f080b7487eee6b2436294e4a2e397859e2366c64fd0e0db1efa",
+    "reverse_suffix_sha256": "ec0391a5aeb7c7addd54b97102ff84ed2ff513d3ddd8726d522b9f78f79d56bb"
+  },
+  "controlling_current_protocol": [
+    {
+      "name": "public.weekly_source_correct_final_open_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "line": 2,
+      "source_raw_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_raw_sha256": "ff401ed39865338afa135ea5277eb60bf0b22cb1a2305726d10251052525c07b",
+      "evidence_path": "current-protocol/public_weekly_source_correct_final_open_atomic_v1.sql.txt",
+      "evidence_sha256": "128fb591ced89320ea69bc304c48166d44bea23fc22b9b5b0fb3065e249817c1",
+      "correction_in_progress_literal_present": false,
+      "cycle_state_field_reference": false
+    },
+    {
+      "name": "public.weekly_source_correct_final_review_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "line": 233,
+      "source_raw_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_raw_sha256": "44b85ac76af73cc19104d7a897bb827bcac1f3fe581969cd0aeb057d6a79d2ed",
+      "evidence_path": "current-protocol/public_weekly_source_correct_final_review_atomic_v1.sql.txt",
+      "evidence_sha256": "f62727e880288024562eed90d2f67486059301512767fd47b8d1ce4c513a1565",
+      "correction_in_progress_literal_present": false,
+      "cycle_state_field_reference": false
+    },
+    {
+      "name": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "line": 469,
+      "source_raw_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_raw_sha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7",
+      "evidence_path": "current-protocol/public_weekly_source_correct_final_prepare_atomic_v1.sql.txt",
+      "evidence_sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5",
+      "correction_in_progress_literal_present": false,
+      "cycle_state_field_reference": false
+    },
+    {
+      "name": "public.weekly_source_correct_final_apply_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "line": 767,
+      "source_raw_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_raw_sha256": "ef469c9579eb0fc4c702ba9718cac942473d9bebf830aa35e457267d4b0a65e1",
+      "evidence_path": "current-protocol/public_weekly_source_correct_final_apply_atomic_v1.sql.txt",
+      "evidence_sha256": "844ccd908d7c509c2ac517b00254793d8ad3b0eedada51f6658023e658fa8d77",
+      "correction_in_progress_literal_present": false,
+      "cycle_state_field_reference": false
+    },
+    {
+      "name": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "line": 1475,
+      "source_raw_sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "definition_raw_sha256": "d3591a9339a36ca3282e45a18e92b25f6103dac0e275151c51164e6b8b029a09",
+      "evidence_path": "current-protocol/public_weekly_source_correct_final_cancel_atomic_v1.sql.txt",
+      "evidence_sha256": "ae1b37ad11b3a48f29e610fe7dd7cdb0e9d00117f45b0a2f8eaf2102b971e78f",
+      "correction_in_progress_literal_present": false,
+      "cycle_state_field_reference": false
+    }
+  ],
+  "source_code_finding": "No controlling Correct-Final owner sets/tests CORRECTION_IN_PROGRESS; no blanket state exclusion justified by those source owners",
+  "runtime_route_and_wrapper_unchanged": true,
+  "actual_native_state_absence_claim": false,
+  "native_calls": false,
+  "database_calls": false,
+  "native_seal": null
+}

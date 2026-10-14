@@ -1,0 +1,12 @@
+create or replace function private.timesheet_correction_draft_holds_v1(p_invoice_id uuid)
+returns jsonb language sql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+  select coalesce(jsonb_agg(jsonb_build_object('request_id',request.id,'replacement_timesheet_id',request.replacement_timesheet_id,
+    'return_invoice_id',request.return_invoice_id,'blocker_code','AGENCY_INVOICE_TIMESHEET_RETURNING') order by request.id),'[]'::jsonb)
+  from private.timesheet_correction_requests request
+  where request.return_invoice_id=p_invoice_id and request.state='APPLIED'
+    and not private.timesheet_correction_replacement_empty_v1(request.id)
+    and not coalesce((private.timesheet_correction_invoice_scope_v1(request.replacement_timesheet_id,p_invoice_id,null,false,100)
+      ->>'placement_complete')::boolean,false);
+$function$;

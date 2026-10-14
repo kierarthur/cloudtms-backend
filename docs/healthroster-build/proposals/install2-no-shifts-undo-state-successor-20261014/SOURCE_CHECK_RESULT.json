@@ -1,0 +1,43 @@
+{
+  "schema": "NO_SHIFTS_UNDO_STATE_SOURCE_CHECKS_V1",
+  "checks": [
+    {
+      "name": "all44_predecessor_artifacts_unchanged",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "five_whole_current_correct_final_owners_exact_saved_git87_and_no_literal_protocol_gate",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "single_deletion_complete_native_reverse_prefix_suffix_and_hash_exact",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "all_original_guards_acl_and_payload_history_remain_whole_body_identical_outside_one_block",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "four_complete_native_packaging_statements_without_sql_execution",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "both_new_preparation_and_check_scripts_syntax_only",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    }
+  ],
+  "source_checks": 6,
+  "runtime38_predecessor_vectors_retained": true,
+  "runtime_route_changed": false,
+  "native_calls": false,
+  "database_calls": false,
+  "postgres_compilation": false,
+  "native_state_absence_claim": false,
+  "native_seal": null
+}

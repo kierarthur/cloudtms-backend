@@ -1,0 +1,9 @@
+create table public.ts_financials_outbox (
+  id uuid not null,
+  timesheet_id uuid not null,
+  reason ts_fin_reason_enum not null,
+  attempt_count integer not null,
+  next_attempt_at timestamp with time zone,
+  last_error text,
+  created_at timestamp with time zone not null
+);

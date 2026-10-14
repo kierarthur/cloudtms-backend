@@ -1,0 +1,86 @@
+create table public.weekly_source_pending_entitlement_bundles (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  decision_bundle_id uuid not null,
+  bundle_revision bigint not null,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  member_root_ids uuid[] not null,
+  member_family_booking_ids text[] not null,
+  member_root_versions integer[] not null,
+  request_digest bytea not null check (pg_catalog.octet_length(request_digest)=32),
+  source_revision_digest bytea not null check (pg_catalog.octet_length(source_revision_digest)=32),
+  contract_choice_digest bytea not null check (pg_catalog.octet_length(contract_choice_digest)=32),
+  decision_id uuid not null,
+  decided_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  proposed_head_ids uuid[] not null,
+  -- proof/32 section 8: the deferred release "calls the SAME atomic
+  -- head-publication coordinator used for immediate publication ... It does not
+  -- reimplement it", and the section 2 apply signature receives no request from
+  -- its caller, so the exact request the coordinator will be handed has to live
+  -- on the bundle.  The three digests above prove a request has not changed;
+  -- they cannot reconstitute one.  Nothing else stores it either: a frozen
+  -- decision publishes no head at all (24 section 4.4), so the proposed head
+  -- components exist nowhere until the release transaction stages them.  Without
+  -- this column a saved bundle could never be released (WP-08b_NEEDS N1).
+  --
+  -- NOT NULL because a pending bundle without its request is not a deferred
+  -- decision, only an unreleasable row: every path that reads the bundle needs
+  -- it, and there is no legitimate bundle that lacks it.  No backfill question
+  -- arises - decision D3 edits these migrations in place and zero Weekly Source
+  -- objects are installed anywhere, so no row exists to carry a default.
+  --
+  -- This is an IDENTITY column, not a lifecycle one.  It is deliberately absent
+  -- from the sixteen lifecycle columns registered in
+  -- supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql, so the
+  -- IMMUTABLE_FACTS_WITH_LIFECYCLE fact guard refuses every rewrite of it with
+  -- WEEKLY_SOURCE_IMMUTABLE_FACT.  A changed request is a new bundle_revision
+  -- and a new row, never an edit of this one.
+  --
+  -- The CHECK is a SHAPE rule and nothing more: it says the stored value is a
+  -- JSON object.  Every money predicate over the request - the member set, the
+  -- four approval digests, the complete entitlement vector - is proved by the
+  -- one canonical encoder and by the uniqueness rules above and on the accepted
+  -- decision, never by a CHECK, which cannot express a cross-row rule
+  -- (24 section 4.5 step 3; WP-01a's discipline).
+  request_json jsonb not null check (pg_catalog.jsonb_typeof(request_json)='object'),
+  pending_revision bigint not null check (pending_revision>=1),
+  state text not null check (state in ('PENDING','RELEASING','RELEASED','SUPERSEDED','MANUAL_REVIEW')),
+  lease_owner text,
+  lease_token uuid,
+  lease_worker_run_id uuid,
+  lease_expires_at_utc timestamptz,
+  next_check_at_utc timestamptz,
+  -- proof/32 section 10 gives ten consecutive technical failures as the
+  -- MANUAL_REVIEW threshold, not as a storage limit.  An upper bound here would
+  -- turn an eleventh increment into 23514 instead of a transition, so only the
+  -- floor is enforced and the threshold belongs to the release owner.
+  technical_failure_count integer not null default 0 check (technical_failure_count>=0),
+  manual_review_reason text,
+  last_census_json jsonb check (last_census_json is null or pg_catalog.jsonb_typeof(last_census_json)='object'),
+  -- proof/32 section 8 step 5 names four facts to record on release: the
+  -- receipt id, released_at_utc, released_by_worker_id and the verified
+  -- released_by_worker_run_id.  All four have their own column; the digest is
+  -- kept as well because section 8 step 1 replays by digest.
+  released_receipt_id uuid,
+  released_receipt_digest bytea check (released_receipt_digest is null or pg_catalog.octet_length(released_receipt_digest)=32),
+  released_by_worker_id text,
+  released_by_worker_run_id uuid,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  updated_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  released_at_utc timestamptz,
+  check (pg_catalog.cardinality(member_root_ids)>=1),
+  check (pg_catalog.cardinality(member_root_ids)=pg_catalog.cardinality(member_family_booking_ids)),
+  check (pg_catalog.cardinality(member_root_ids)=pg_catalog.cardinality(member_root_versions)),
+  check (pg_catalog.array_position(member_root_ids,null::uuid) is null),
+  check (pg_catalog.array_position(member_family_booking_ids,null::text) is null),
+  check (pg_catalog.array_position(member_root_versions,null::integer) is null),
+  check (private.weekly_source_uuid_array_is_distinct_v1(member_root_ids)),
+  check (pg_catalog.cardinality(proposed_head_ids)>=1),
+  check (pg_catalog.array_position(proposed_head_ids,null::uuid) is null),
+  check (private.weekly_source_uuid_array_is_distinct_v1(proposed_head_ids)),
+  check (state<>'RELEASING' or (lease_owner is not null and lease_token is not null and lease_worker_run_id is not null and lease_expires_at_utc is not null)),
+  check (state<>'PENDING' or next_check_at_utc is not null),
+  check ((state='MANUAL_REVIEW')=(manual_review_reason is not null)),
+  check ((state='RELEASED')=(released_at_utc is not null and released_receipt_id is not null and released_receipt_digest is not null and released_by_worker_id is not null and released_by_worker_run_id is not null)),
+  unique (request_digest),
+  unique (decision_bundle_id,bundle_revision)
+);

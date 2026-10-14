@@ -1,0 +1,16 @@
+create table public.audit_events (
+  id uuid not null,
+  ts_utc timestamp with time zone not null,
+  actor_user_id uuid,
+  actor_display text,
+  actor_role_at_time text,
+  object_type text not null,
+  object_id_text text,
+  action text not null,
+  before_json jsonb,
+  after_json jsonb,
+  reason text,
+  ip text,
+  user_agent text,
+  correlation_id text
+);

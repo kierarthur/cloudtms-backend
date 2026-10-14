@@ -1,0 +1,60 @@
+create table public.weekly_source_rule_set_versions (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  rule_set_id uuid not null references public.weekly_source_rule_sets(id) on delete restrict,
+  version_number bigint not null check (version_number>=1),
+  values_json jsonb not null,
+  values_sha256 text not null check (values_sha256 ~ '^[0-9a-f]{64}$'),
+  save_request_id uuid not null,
+  save_request_sha256 text not null check (save_request_sha256 ~ '^[0-9a-f]{64}$'),
+  created_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+  created_at_utc timestamptz not null default transaction_timestamp(),
+  unique (rule_set_id,version_number),
+  unique (rule_set_id,save_request_id),
+  check (jsonb_typeof(values_json)='object' and values_json ?& array['checking_profile_kind','self_bill_source','final_report_profile_kind','invoice_membership','pay_membership','invoice_amount_basis','source_amount_basis','line_vat_method','invoice_vat_method','rate_difference_policy','negative_adjustment_policy','lookback_warning','identical_rekey','authorised_late_addition','equal_protected_hours','signed_comparison','unfinalised_action','unfinalised_chase','changed_query_clocks','invoice_sender','earliest_final_weekday','earliest_final_local_time','attach_healthroster_section']::text[] and values_json - array['checking_profile_kind','self_bill_source','final_report_profile_kind','invoice_membership','pay_membership','invoice_amount_basis','source_amount_basis','line_vat_method','invoice_vat_method','rate_difference_policy','negative_adjustment_policy','lookback_warning','identical_rekey','authorised_late_addition','equal_protected_hours','signed_comparison','unfinalised_action','unfinalised_chase','changed_query_clocks','invoice_sender','earliest_final_weekday','earliest_final_local_time','attach_healthroster_section']::text[]='{}'::jsonb),
+  check (jsonb_typeof(values_json->'checking_profile_kind')='string' and values_json->>'checking_profile_kind' in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')),
+  check (jsonb_typeof(values_json->'self_bill_source')='string' and values_json->>'self_bill_source' in ('SAME_FILE','SEPARATE_FINAL_REPORT')),
+  check (jsonb_typeof(values_json->'final_report_profile_kind')='string' and values_json->>'final_report_profile_kind' in ('NONE','ACACIUM_SELF_BILL_REPORT_V1')),
+  check (jsonb_typeof(values_json->'invoice_membership')='string' and values_json->>'invoice_membership' in ('FINALISED_IN_CYCLE_WINDOW','FOLLOW_FINAL_REPORT_LINES')),
+  check (jsonb_typeof(values_json->'pay_membership')='string' and values_json->>'pay_membership' in ('ALL_FINALISED_IN_FILE','ON_ACCEPTED_REPORT_OR_PROTECTED')),
+  check (jsonb_typeof(values_json->'invoice_amount_basis')='string' and values_json->>'invoice_amount_basis' in ('CONTRACT_CALCULATION','SOURCE_AMOUNT')),
+  check (jsonb_typeof(values_json->'source_amount_basis')='string' and values_json->>'source_amount_basis' in ('NONE','EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY','REPORT_LINE_NET')),
+  check (jsonb_typeof(values_json->'line_vat_method')='string' and values_json->>'line_vat_method' in ('ROUND_EACH_LINE_FROM_NET','LINE_GROSS_MINUS_NET_FROM_SOURCE','LINE_VAT_FROM_REPORT','ROUND_TOTAL_FROM_EXACT_NET')),
+  check (jsonb_typeof(values_json->'invoice_vat_method')='string' and values_json->>'invoice_vat_method' in ('SUM_OF_LINES','ONCE_ON_TOTAL_TRUNCATE','ONCE_ON_TOTAL_HALF_UP')),
+  check (jsonb_typeof(values_json->'rate_difference_policy')='string' and values_json->>'rate_difference_policy' in ('NOT_APPLICABLE','FLAG_ALLOW_IGNORE')),
+  check (jsonb_typeof(values_json->'negative_adjustment_policy')='string' and values_json->>'negative_adjustment_policy' in ('NOT_ALLOWED','NEGATIVE_ADJUSTMENT_LINE')),
+  check (jsonb_typeof(values_json->'lookback_warning')='string' and values_json->>'lookback_warning' in ('OFF','WARN_IF_AFTER_OLDEST_PROTECTED')),
+  check (jsonb_typeof(values_json->'identical_rekey')='string' and values_json->>'identical_rekey' in ('COMPLETE_AUTOMATICALLY')),
+  check (jsonb_typeof(values_json->'authorised_late_addition')='string' and values_json->>'authorised_late_addition' in ('COMPLETE_AUTOMATICALLY')),
+  check (jsonb_typeof(values_json->'equal_protected_hours')='string' and values_json->>'equal_protected_hours' in ('CLEAR_AUTOMATICALLY')),
+  check (jsonb_typeof(values_json->'signed_comparison')='string' and values_json->>'signed_comparison' in ('ON_EVERY_PUBLICATION')),
+  check (jsonb_typeof(values_json->'unfinalised_action')='string' and values_json->>'unfinalised_action' in ('ASK_CLIENT_TO_FINALISE')),
+  check (jsonb_typeof(values_json->'unfinalised_chase')='string' and values_json->>'unfinalised_chase' in ('ASK_FROM_FIRST_CHECKING_IMPORT_SHOWING_IT')),
+  check (jsonb_typeof(values_json->'changed_query_clocks')='string' and values_json->>'changed_query_clocks' in ('REASK_WITH_NEW_CLOCKS_EXCLUDE_UNCHANGED')),
+  check (jsonb_typeof(values_json->'invoice_sender')='string' and values_json->>'invoice_sender' in ('CLIENT_SELF_BILL','AGENCY_INVOICE')),
+  check (jsonb_typeof(values_json->'attach_healthroster_section')='boolean'),
+  check ((values_json->'earliest_final_weekday'='null'::jsonb and values_json->'earliest_final_local_time'='null'::jsonb)
+    or (jsonb_typeof(values_json->'earliest_final_weekday')='number'
+      and values_json->>'earliest_final_weekday' ~ '^[0-6]$'
+      and jsonb_typeof(values_json->'earliest_final_local_time')='string'
+      and values_json->>'earliest_final_local_time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')),
+  constraint weekly_source_rule_values_r1 check (values_json->>'self_bill_source'<>'SAME_FILE'
+    or (values_json->>'final_report_profile_kind'='NONE' and values_json->>'invoice_membership'='FINALISED_IN_CYCLE_WINDOW'
+      and values_json->>'pay_membership'='ALL_FINALISED_IN_FILE')),
+  constraint weekly_source_rule_values_r2 check ((values_json->>'invoice_membership'<>'FOLLOW_FINAL_REPORT_LINES'
+    and values_json->>'pay_membership'<>'ON_ACCEPTED_REPORT_OR_PROTECTED')
+    or (values_json->>'self_bill_source'='SEPARATE_FINAL_REPORT' and values_json->>'final_report_profile_kind'<>'NONE')),
+  constraint weekly_source_rule_values_r3 check ((values_json->>'invoice_amount_basis'<>'SOURCE_AMOUNT' or values_json->>'source_amount_basis'<>'NONE')
+    and (values_json->>'source_amount_basis'<>'REPORT_LINE_NET' or values_json->>'self_bill_source'='SEPARATE_FINAL_REPORT')
+    and (values_json->>'source_amount_basis'<>'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+      or values_json->>'checking_profile_kind'<>'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')),
+  constraint weekly_source_rule_values_r4 check ((values_json->>'line_vat_method'<>'LINE_VAT_FROM_REPORT' or values_json->>'final_report_profile_kind'<>'NONE')
+    and (values_json->>'line_vat_method'<>'LINE_GROSS_MINUS_NET_FROM_SOURCE'
+      or values_json->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY')
+    and (values_json->>'line_vat_method'<>'ROUND_TOTAL_FROM_EXACT_NET' or values_json->>'invoice_amount_basis'='CONTRACT_CALCULATION')),
+  constraint weekly_source_rule_values_r6 check ((values_json->>'rate_difference_policy'='FLAG_ALLOW_IGNORE')=(values_json->>'invoice_amount_basis'='SOURCE_AMOUNT')),
+  constraint weekly_source_rule_values_r9 check ((values_json->>'checking_profile_kind'='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
+      or values_json->>'invoice_sender'='AGENCY_INVOICE')=(values_json->'earliest_final_weekday'='null'::jsonb)),
+  constraint weekly_source_rule_values_r13 check (values_json->>'invoice_sender'<>'AGENCY_INVOICE'
+    or values_json - 'attach_healthroster_section'='{"self_bill_source":"SAME_FILE","final_report_profile_kind":"NONE","invoice_membership":"FINALISED_IN_CYCLE_WINDOW","pay_membership":"ALL_FINALISED_IN_FILE","invoice_amount_basis":"CONTRACT_CALCULATION","source_amount_basis":"NONE","line_vat_method":"ROUND_EACH_LINE_FROM_NET","invoice_vat_method":"SUM_OF_LINES","rate_difference_policy":"NOT_APPLICABLE","negative_adjustment_policy":"NEGATIVE_ADJUSTMENT_LINE","lookback_warning":"WARN_IF_AFTER_OLDEST_PROTECTED","identical_rekey":"COMPLETE_AUTOMATICALLY","authorised_late_addition":"COMPLETE_AUTOMATICALLY","equal_protected_hours":"CLEAR_AUTOMATICALLY","signed_comparison":"ON_EVERY_PUBLICATION","unfinalised_action":"ASK_CLIENT_TO_FINALISE","unfinalised_chase":"ASK_FROM_FIRST_CHECKING_IMPORT_SHOWING_IT","changed_query_clocks":"REASK_WITH_NEW_CLOCKS_EXCLUDE_UNCHANGED","invoice_sender":"AGENCY_INVOICE","earliest_final_weekday":null,"earliest_final_local_time":null,"checking_profile_kind":"HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1"}'::jsonb),
+  check (values_sha256=encode(extensions.digest(convert_to(values_json::text,'UTF8'),'sha256'),'hex'))
+);

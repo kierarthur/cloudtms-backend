@@ -1,0 +1,51 @@
+create or replace function private.weekly_source_signed_check_only_v1(p_timesheet_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ts public.timesheets%rowtype; v_contract public.contracts%rowtype;
+  v_client uuid; v_client_count integer; v_work_date date; v_policy jsonb; v_route record;
+begin
+  select * into v_ts from public.timesheets t where t.timesheet_id=p_timesheet_id and t.is_current
+    and t.sheet_scope::text in ('WEEKLY','DAILY') and t.status::text not in ('REVOKED','ARCHIVED','CANCELLED') and t.revoked_at is null and t.archived_at_utc is null;
+  if not found or v_ts.week_ending_date is null then return false; end if;
+  if v_ts.contract_id is not null then
+    select * into v_contract from public.contracts c where c.id=v_ts.contract_id;
+    if not found or v_contract.self_bill or coalesce(v_contract.no_timesheet_required,false)
+      or coalesce(v_contract.is_nhsp,false) then return false; end if;
+    v_client:=v_contract.client_id;
+    if nullif(v_ts.settings_authority_json->>'client_id','') is not null
+      and v_ts.settings_authority_json->>'client_id'<>v_client::text then return false; end if;
+    if exists(select 1 from public.timesheets_financials f where f.timesheet_id=p_timesheet_id
+      and f.is_current and f.timesheet_version=v_ts.version and f.client_id is distinct from v_client) then return false; end if;
+  elsif v_ts.sheet_scope::text='DAILY' then
+    select count(distinct f.client_id),(array_agg(distinct f.client_id))[1] into v_client_count,v_client
+      from public.timesheets_financials f where f.timesheet_id=p_timesheet_id and f.is_current
+        and f.timesheet_version=v_ts.version and f.client_id is not null;
+    if v_client_count<>1 then return false; end if;
+    if nullif(v_ts.settings_authority_json->>'client_id','') is not null
+      and v_ts.settings_authority_json->>'client_id'<>v_client::text then return false; end if;
+  else return false;
+  end if;
+  v_work_date:=case when v_ts.sheet_scope::text='DAILY' then (v_ts.worked_start_iso at time zone 'Europe/London')::date
+    else v_ts.week_ending_date end;
+  if v_work_date is null or v_work_date>v_ts.week_ending_date or v_work_date<v_ts.week_ending_date-6 then return false; end if;
+  if not exists(select 1 from public.weekly_source_group_clients gc
+    join public.weekly_source_groups g on g.id=gc.source_group_id and g.active and g.source_family='ROSTER'
+    join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id and a.feature_enabled
+      and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+      and v_ts.week_ending_date between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+    where gc.client_id=v_client and v_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+      and v_ts.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)) then return false; end if;
+  if not exists(select 1 from public.weekly_source_client_policies cp
+    join public.weekly_source_group_clients gc on gc.source_group_id=cp.source_group_id and gc.client_id=cp.client_id
+    where cp.client_id=v_client and v_work_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    and v_work_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date)) then return false; end if;
+  v_policy:=private._weekly_source_effective_policy_v1(v_client,v_ts.contract_id,v_work_date);
+  if v_policy->>'source_family'<>'ROSTER' or v_policy->>'authority_mode'<>'TIMESHEET_AUTHORITY'
+    or v_policy->>'document_mode'<>'INVOICE_EVIDENCE_REQUIRED' or coalesce((v_policy->>'self_bill_enabled')::boolean,true) then return false; end if;
+  select * into v_route from public._import_review_effective_authority_core_v1(
+    case when v_ts.sheet_scope::text='DAILY' then 'HR_DAILY' else 'HR_WEEKLY' end,v_ts.contract_id,v_client,v_work_date);
+  return coalesce(v_route.route_eligible,false) and coalesce(v_route.validation_eligible,false)
+    and not coalesce(v_route.import_authoritative,true) and v_route.authority_mode='VALIDATION_ONLY'
+    and not coalesce(v_route.effective_is_nhsp,true) and not coalesce(v_route.effective_no_timesheet_required,true);
+end;
+$function$;

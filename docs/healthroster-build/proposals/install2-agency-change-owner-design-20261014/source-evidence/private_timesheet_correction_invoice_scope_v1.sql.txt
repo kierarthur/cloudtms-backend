@@ -1,0 +1,123 @@
+create or replace function private.timesheet_correction_invoice_scope_v1(
+  p_timesheet_id uuid,p_target_invoice_id uuid,p_actor_user_id uuid,p_lock_rows boolean,p_max_members integer
+) returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_request private.timesheet_correction_requests%rowtype; v_rfin public.timesheets_financials%rowtype;
+  v_pfin public.timesheets_financials%rowtype; v_target public.invoices%rowtype; v_cn public.invoices%rowtype;
+  v_empty boolean; v_errors jsonb:='[]'::jsonb; v_placement text:='UNPLACED'; v_complete boolean:=false;
+  v_p_invoice uuid; v_p_invoice_count integer; v_p_count integer; v_component_keys integer; v_net numeric; v_pay numeric;
+  v_h_day numeric; v_h_night numeric; v_h_sat numeric; v_h_sun numeric; v_h_bh numeric; v_credit_count integer;
+  v_original_line_count integer; v_clone_count integer; v_credit_valid boolean:=false; v_source_lines jsonb;
+begin
+  select request.* into v_request from private.timesheet_correction_requests request
+    where p_timesheet_id in(request.reversal_timesheet_id,request.replacement_timesheet_id)
+      and request.correction_id=(select t.correction_id from public.timesheets t where t.timesheet_id=p_timesheet_id);
+  if not found then return null; end if;
+  if p_actor_user_id is not null and private.timesheet_correction_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';
+  end if;
+  if p_max_members<2 then raise exception 'INVOICE_CORRECTION_MEMBER_LIMIT_INVALID' using errcode='22023'; end if;
+  if p_lock_rows then
+    perform 1 from public.invoices i where i.id in(v_request.original_invoice_id,v_request.return_invoice_id,p_target_invoice_id)
+      or i.id in(select l.invoice_id from public.invoice_lines l where l.timesheet_id=v_request.replacement_timesheet_id)
+      or (i.original_invoice_id=v_request.original_invoice_id and i.header_snapshot_json#>>'{credit_scope,reversal_timesheet_id}'=v_request.reversal_timesheet_id::text)
+      order by i.id for update;
+    perform 1 from private.timesheet_correction_requests request where request.id=v_request.id for update;
+    perform 1 from public.timesheets t where t.timesheet_id in(v_request.reversal_timesheet_id,v_request.replacement_timesheet_id)
+      order by t.timesheet_id for update;
+    perform 1 from public.timesheets_financials tf where tf.timesheet_id in(v_request.reversal_timesheet_id,v_request.replacement_timesheet_id)
+      and tf.is_current order by tf.timesheet_id,tf.id for update;
+  end if;
+  if v_request.state<>'APPLIED' then v_errors:=jsonb_build_array(jsonb_build_object('code','CORRECTION_REQUEST_NOT_APPLIED')); end if;
+  if v_request.state='APPLIED' then perform private.timesheet_correction_applied_assert_v1(v_request.id); end if;
+  select tf.* into v_rfin from public.timesheets_financials tf where tf.timesheet_id=v_request.reversal_timesheet_id and tf.is_current;
+  select tf.* into v_pfin from public.timesheets_financials tf where tf.timesheet_id=v_request.replacement_timesheet_id and tf.is_current;
+  if v_rfin.id is null or v_pfin.id is null or v_rfin.authorised_at_utc is null or v_pfin.authorised_at_utc is null
+    or v_pfin.client_id is distinct from v_request.client_id or v_rfin.client_id is distinct from v_request.client_id then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_UNIT_NOT_AUTHORISED'));
+  end if;
+  v_empty:=private.timesheet_correction_replacement_empty_v1(v_request.id);
+  select count(*)::integer,count(distinct l.invoice_id)::integer,count(distinct l.source_key)::integer,
+    sum(l.total_charge_ex_vat),sum(l.total_pay_ex_vat),sum(l.hours_day),sum(l.hours_night),sum(l.hours_sat),sum(l.hours_sun),sum(l.hours_bh),
+    (array_agg(l.invoice_id order by l.invoice_id))[1]
+    into v_p_count,v_p_invoice_count,v_component_keys,v_net,v_pay,v_h_day,v_h_night,v_h_sat,v_h_sun,v_h_bh,v_p_invoice
+  from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
+    where l.timesheet_id=v_request.replacement_timesheet_id and i.type='INVOICE';
+  -- Multiple native components on one invoice are one placement. A split,
+  -- repeated source key, stale financial cut or missing monetary/hour part is
+  -- refused; there is deliberately no one-line-per-member assumption.
+  if v_p_invoice_count>1 or v_p_count<>v_component_keys
+    or (v_p_count>0 and (v_net is distinct from v_pfin.total_charge_ex_vat or v_pay is distinct from v_pfin.total_pay_ex_vat
+      or v_h_day is distinct from v_pfin.hours_day or v_h_night is distinct from v_pfin.hours_night
+      or v_h_sat is distinct from v_pfin.hours_sat or v_h_sun is distinct from v_pfin.hours_sun or v_h_bh is distinct from v_pfin.hours_bh
+      or exists(select 1 from public.invoice_lines l where l.timesheet_id=v_request.replacement_timesheet_id and l.invoice_id=v_p_invoice
+        and l.meta_json#>>'{tsfin_id}' is distinct from v_pfin.id::text)))
+    or (v_empty and v_p_count<>0) then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_REPLACEMENT_COMPONENT_PLACEMENT_INVALID'));
+  end if;
+  if exists(select 1 from public.invoice_lines l where l.timesheet_id=v_request.reversal_timesheet_id) then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_REVERSAL_NORMAL_LINE_FORBIDDEN'));
+  end if;
+  if p_target_invoice_id is not null then
+    select i.* into v_target from public.invoices i where i.id=p_target_invoice_id;
+    if p_timesheet_id<>v_request.replacement_timesheet_id or v_target.type is distinct from 'INVOICE'
+      or v_target.status not in('DRAFT','ON_HOLD') or v_target.issued_at_utc is not null or v_target.paid_at_utc is not null
+      or v_target.client_id is distinct from v_request.client_id or (v_request.return_invoice_id is not null and p_target_invoice_id<>v_request.return_invoice_id)
+      or (v_p_invoice is not null and v_p_invoice<>p_target_invoice_id) then
+      v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_TARGET_INVOICE_INCOMPATIBLE'));
+    end if;
+  end if;
+  if v_request.original_invoice_id is null then
+    if exists(select 1 from public.invoice_lines l where l.timesheet_id=v_request.reversed_timesheet_id) then
+      v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_UNINVOICED_PARENT_HAS_LINE'));
+    end if;
+    if v_empty or v_p_count>0 then v_placement:='COMPLETE_UNINVOICED_PARENT'; v_complete:=true; end if;
+  else
+    select count(*)::integer into v_credit_count from public.invoices cn where cn.type='CREDIT_NOTE'
+      and cn.original_invoice_id=v_request.original_invoice_id
+      and cn.header_snapshot_json#>>'{credit_scope,reversal_timesheet_id}'=v_request.reversal_timesheet_id::text
+      and cn.status in('DRAFT','ISSUED','PAID');
+    if v_credit_count>1 then v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_DUPLICATE_CREDIT_PLACEMENT')); end if;
+    if v_credit_count=1 then
+      select cn.* into v_cn from public.invoices cn where cn.type='CREDIT_NOTE'
+        and cn.original_invoice_id=v_request.original_invoice_id
+        and cn.header_snapshot_json#>>'{credit_scope,reversal_timesheet_id}'=v_request.reversal_timesheet_id::text
+        and cn.status in('DRAFT','ISSUED','PAID');
+      select count(*)::integer into v_original_line_count from public.invoice_lines l
+        where l.invoice_id=v_request.original_invoice_id and l.timesheet_id=v_request.reversed_timesheet_id;
+      select count(*)::integer,count(distinct l.meta_json->>'original_invoice_line_id')::integer into v_clone_count,v_component_keys
+        from public.invoice_lines l where l.invoice_id=v_cn.id;
+      v_credit_valid:=v_clone_count=v_original_line_count and v_clone_count=v_component_keys and v_clone_count>0
+        and not exists(select 1 from public.invoice_lines l left join public.invoice_lines original
+          on original.id::text=l.meta_json->>'original_invoice_line_id' and original.invoice_id=v_request.original_invoice_id
+            and original.timesheet_id=v_request.reversed_timesheet_id
+          where l.invoice_id=v_cn.id and (original.id is null or l.timesheet_id is distinct from original.timesheet_id
+            or l.meta_json->>'reversal_timesheet_id' is distinct from v_request.reversal_timesheet_id::text
+            or l.source_key is distinct from original.source_key or l.booking_id is distinct from original.booking_id
+            or l.total_charge_ex_vat is distinct from -original.total_charge_ex_vat or l.total_pay_ex_vat is distinct from -original.total_pay_ex_vat
+            or l.vat_amount is distinct from -original.vat_amount or l.total_inc_vat is distinct from -original.total_inc_vat))
+        and v_rfin.locked_by_invoice_id is not distinct from v_cn.id
+        and not exists(select 1 from jsonb_array_elements(case when jsonb_typeof(v_rfin.invoice_breakdown_json->'segments')='array'
+          then v_rfin.invoice_breakdown_json->'segments' else '[]'::jsonb end) s
+          where s->>'invoice_locked_invoice_id' is distinct from v_cn.id::text);
+      if v_credit_valid is distinct from true then v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','WHOLE_CORRECTION_CREDIT_COMPONENT_PLACEMENT_INVALID')); end if;
+      if v_credit_valid and v_cn.status in('ISSUED','PAID') and exists(select 1 from public.invoice_document_versions d
+        where d.id=v_cn.issued_document_version_id and d.entity_type='INVOICE' and d.entity_id=v_cn.id and d.purpose='FINAL_ISSUE'
+          and d.status='READY' and d.verified_at_utc is not null and nullif(d.r2_key,'') is not null
+          and d.sha256~'^[0-9a-f]{64}$' and d.page_count>0 and d.size_bytes>0)
+        and (v_empty or v_p_count>0) then
+        v_placement:='COMPLETE_BY_TIMESHEET_CREDIT'; v_complete:=true;
+      end if;
+    end if;
+  end if;
+  return jsonb_build_object('ok',true,'valid',jsonb_array_length(v_errors)=0,'root_timesheet_id',v_request.root_timesheet_id,
+    'request_id',v_request.id,'correction_id',v_request.correction_id,'correction_shape','WHOLE_REVERSAL_REPLACEMENT',
+    'expected_member_count',2,'pair_timesheet_ids',jsonb_build_array(v_request.reversal_timesheet_id,v_request.replacement_timesheet_id),
+    'target_invoice_id',p_target_invoice_id,'target_appendable',jsonb_array_length(v_errors)=0,
+    'invoice_stream','NORMAL','placement_state',v_placement,'placement_complete',v_complete and jsonb_array_length(v_errors)=0,
+    'placement_compatible',jsonb_array_length(v_errors)=0,'credit_note_id',v_cn.id,'replacement_invoice_id',v_p_invoice,
+    'replacement_component_count',v_p_count,'empty_replacement',v_empty,'errors',v_errors);
+end;
+$function$;

@@ -1,0 +1,232 @@
+{
+  "schema": "NO_SHIFTS_UNDO_NATIVE_SOURCE_REVIEW_MANIFEST_V1",
+  "source_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "source_checks_sha256": "45712c45001a8ac6a9f8d3077f56e5416276361ae6aae182ba15098b47f7c574",
+  "artifact_count": 44,
+  "entries": [
+    {
+      "path": "before/broker/src/weekly-source/routes.js",
+      "bytes": 62448,
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53"
+    },
+    {
+      "path": "check-and-freeze-undo-source.mjs",
+      "bytes": 6501,
+      "sha256": "b983f00c02ca385de574e88b1d2f8e9b7976e7283d2bcf193be0f242c8522184"
+    },
+    {
+      "path": "CURRENT_UNDO_FULL_REVERSE.json",
+      "bytes": 22356,
+      "sha256": "1cd7efa81e41eb813e44a5c29b6d7eb279dabd47662fb659adf0ec412bd1d46a"
+    },
+    {
+      "path": "forward/broker/src/weekly-source/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "bytes": 7644,
+      "sha256": "3620f3fe8a70474d502b59c5e5a3772d673c701d44309896190f1629527c3efe"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo_v1.sql",
+      "bytes": 146,
+      "sha256": "ff332bc03050801ab30ee9974b8b217a576027620f052d786eab3957d63b2dcb"
+    },
+    {
+      "path": "prepare-undo-forward.mjs",
+      "bytes": 10187,
+      "sha256": "76c106b1cde3f594894c92acf53bdf0e31ef3d24caee9f8b537398e9e5ea2b0f"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1621,
+      "sha256": "45712c45001a8ac6a9f8d3077f56e5416276361ae6aae182ba15098b47f7c574"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 5045,
+      "sha256": "9904f69b6fc78d74c353353804cb3f168795f012f00089657ff9579e57b35491"
+    },
+    {
+      "path": "test-mount/broker/src/banking-pay/weekly-source-c1-authoring.mjs",
+      "bytes": 12998,
+      "sha256": "67bff9ac76aa2b6ac71e0e4a34f921f10bd01293a9c2889e4c9997f76018777f"
+    },
+    {
+      "path": "test-mount/broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "bytes": 14027,
+      "sha256": "1c70ca14d9893096ae9a0ff04865bdb54dc7021cb1dc1418f46e8c0d9e185ca8"
+    },
+    {
+      "path": "test-mount/broker/src/banking-pay/weekly-source-c1-publication.mjs",
+      "bytes": 14260,
+      "sha256": "2a9a1f6d06eed3637b1de2f11de3023e87cd3d71ab686a847fc616a0d405be7e"
+    },
+    {
+      "path": "test-mount/broker/src/banking-pay/weekly-source-c1-stream.mjs",
+      "bytes": 16357,
+      "sha256": "45aacb4a33e17d9d8b41d80a225a7bae678e4098e95fd8f7cf19cf941b26f00c"
+    },
+    {
+      "path": "test-mount/broker/src/bpay-busy.js",
+      "bytes": 4751,
+      "sha256": "f9de3b1fd722ce592868fe5b13f65d01494c88d83d082fcd1bd214bc99c16932"
+    },
+    {
+      "path": "test-mount/broker/src/bpay-next-legacy-fence.js",
+      "bytes": 10491,
+      "sha256": "0a7e0f87af882e1d0d39a98498fed7814bbdad77c444ac9b0f9058bc4c5f24b8"
+    },
+    {
+      "path": "test-mount/broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/acacium-report-normalise.js",
+      "bytes": 6379,
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/csv-evidence.js",
+      "bytes": 5014,
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/guard-refusal-record.mjs",
+      "bytes": 8193,
+      "sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/healthroster-normalise.js",
+      "bytes": 8831,
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/html-evidence.js",
+      "bytes": 5649,
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/index.js",
+      "bytes": 6275,
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/manager-email.js",
+      "bytes": 15252,
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/nhsp-normalise.js",
+      "bytes": 15260,
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/profiles.js",
+      "bytes": 14652,
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "bytes": 35819,
+      "sha256": "5352ef8bcc66e87b090d5a1d4f40ba872cf7a542d38f60aaf690ec1eea80f3c3"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/protected-next-preview.mjs",
+      "bytes": 10762,
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/protected-target-schedule.js",
+      "bytes": 6387,
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/roster-summary-normalise.js",
+      "bytes": 7516,
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/routes.js",
+      "bytes": 65443,
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/rule-set-validation.js",
+      "bytes": 10329,
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/shared.js",
+      "bytes": 8080,
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/source-finalised-time.js",
+      "bytes": 2786,
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/source-invoice-money.js",
+      "bytes": 6221,
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "test-mount/broker/src/weekly-source/xlsx-evidence.js",
+      "bytes": 11671,
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    },
+    {
+      "path": "undo-current-transport.test.mjs",
+      "bytes": 8069,
+      "sha256": "4799c14ac16044b330405e224188695320ef03c4b6db3ef40a5c6b35be4eee4d"
+    },
+    {
+      "path": "unit-source-loader.mjs",
+      "bytes": 897,
+      "sha256": "80c0fec48e3022de16e635273ce00d5b6c7850f25757cff102864e05be4c2414"
+    }
+  ],
+  "native_seal": null,
+  "runtime_changed_owners": 1,
+  "new_public_native_signatures": [
+    "public.weekly_source_no_shifts_undo_atomic_v1(jsonb)"
+  ],
+  "new_private_signatures": [],
+  "new_tables": [],
+  "native_claims": false,
+  "critic_review_pending": true
+}

@@ -1,0 +1,20 @@
+create or replace function private.timesheet_correction_origin_v1(p_timesheet_id uuid)
+returns text language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_agency boolean:=false;
+  v_signed boolean:=false;
+begin
+  if to_regprocedure('private.weekly_source_agency_invoice_check_only_v1(uuid)') is not null then
+    execute 'select private.weekly_source_agency_invoice_check_only_v1($1)' into v_agency using p_timesheet_id;
+    if v_agency is true then return 'AGENCY_INVOICE_CORRECTION'; end if;
+  end if;
+  if to_regprocedure('private.weekly_source_signed_check_only_v1(uuid)') is not null then
+    execute 'select private.weekly_source_signed_check_only_v1($1)' into v_signed using p_timesheet_id;
+    if v_signed is true then return 'SIGNED_TIMESHEET_CORRECTION'; end if;
+  end if;
+  return null;
+exception when sqlstate '55000' or sqlstate '22023' then return null;
+end;
+$function$;

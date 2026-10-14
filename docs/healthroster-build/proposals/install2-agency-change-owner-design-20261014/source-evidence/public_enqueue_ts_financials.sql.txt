@@ -1,0 +1,15 @@
+CREATE OR REPLACE FUNCTION public.enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum)
+RETURNS void
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  INSERT INTO public.ts_financials_outbox (timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
+  VALUES (_timesheet_id, _reason, 0, NULL, NULL, now())
+  ON CONFLICT (timesheet_id, reason)
+  DO UPDATE SET
+      attempt_count   = 0,
+      next_attempt_at = NULL,
+      last_error      = NULL,
+      created_at      = now();
+END;
+$function$;

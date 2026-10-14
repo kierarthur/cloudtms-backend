@@ -1,0 +1,55 @@
+{
+  "schema": "NO_SHIFTS_UNDO_SOURCE_CHECKS_V1",
+  "source_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "checks": [
+    {
+      "name": "eight_saved_current_native_compiler_package_inputs_equal_actual74a9_git",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "two_complete_unique_runtime_hunks_reverse_current_owner_exactly",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "all32_runtime_import_bytes_and_relative_edges_match_actual_current_or_exact_forward",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "all_packet_javascript_syntax_source_only",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "one_new_public_native_owner_only_exact_grants_and_no_store_or_guc",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "new_native_destinations_absent_and_full_generated_hashes_exact",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "actual_canonical_packaging_parser_four_opaque_native_statements",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    },
+    {
+      "name": "38_real_dispatcher_unit_and_source_vectors_no_network_or_native",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE"
+    }
+  ],
+  "source_check_count": 8,
+  "unit_vector_count": 38,
+  "syntax_count": 38,
+  "runtime_import_objects": 32,
+  "native_packaging_statements": 4,
+  "native_calls": false,
+  "database_calls": false,
+  "postgres_compilation": false,
+  "native_seal": null
+}

@@ -1,0 +1,86 @@
+{
+  "schema": "AGENCY_SINGLE_STORE_SOURCE_DESIGN_CHECKS_V1",
+  "actual_source_pin": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "checks": [
+    {
+      "name": "exact_actual_current_source_74a9_no_native_seal",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "all_complete_native_store_and_primary_excerpts_exact",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "planned_callable_absence_is_separate_from_semantic_disposition",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "actual_current_manual_upsert_preserves_query_and_family_guards",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "current_generic_authorise_is_actual_next_successor_call_only",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "actual_unchanged_editor_keeps_service_boundary_and_ordinary_admin",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "current_send_agency_is_issued_origin_not_preset_t0_amendment",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "existing_correction_store_requires_distinct_physical_p0_and_terminal_unit",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "ordinary_recompute_uses_actual_outbox_identity_without_new_run_task",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "w14_weekly_only_and_signed_daily_native_scope_remain_distinct",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "native_pay_predicate_requires_real_active_actor",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "same_draft_native_owner_already_checks_full_placement_and_unrelated_lines",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "single_planned_private_store_closed_fields_and_owner_only_wrapper",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "immutable_capture_conflict_keeps_true_phase_hold_and_no_unsafe_cleanup",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    },
+    {
+      "name": "no_executable_owner_mounted_or_fabricated_native_design_verdict",
+      "status": "PASS",
+      "scope": "EFFECT_FREE_SOURCE_DESIGN_EVIDENCE"
+    }
+  ],
+  "pass_count": 15,
+  "native_calls": false,
+  "database_calls": false,
+  "implementation_complete": false,
+  "critic_review_pending": true
+}

@@ -1,0 +1,405 @@
+{
+  "schema": "AGENCY_CURRENT_SOURCE_DESIGN_INPUTS_V1",
+  "source_only": true,
+  "actual_current_git_commit": "74a9c10f7370cd3641ee95d31f6702ecadd900a7",
+  "owner_plan": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\03_IMPLEMENTATION_PLAN.md",
+    "raw_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+    "bytes": 563296
+  },
+  "pure_inventory_owner": {
+    "path": "scripts/cloudtms-db-release-lib.mjs",
+    "raw_sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+    "only_methods_called": [
+      "inventory"
+    ]
+  },
+  "inventory": {
+    "migrations": 399,
+    "repeatables": 1058,
+    "ordered_occurrences": 2129,
+    "distinct_inputs": 1715,
+    "function_declaration_occurrences": 4963,
+    "distinct_callable_names": 2594
+  },
+  "planned_names": [
+    {
+      "name": "private.weekly_source_agency_draft_round_trip_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "private.weekly_source_agency_issue_close_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "private.weekly_source_agency_week_complete_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "public.weekly_source_agency_authorise_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "public.weekly_source_agency_invoice_whole_correction_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "public.weekly_source_agency_timesheet_change_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    },
+    {
+      "name": "public.weekly_source_agency_week_validation_refresh_v1",
+      "declaration_found": false,
+      "semantic_verdict": "SEE_SOURCE_SEMANTIC_MAP"
+    }
+  ],
+  "native_owners": [
+    {
+      "name": "public.enqueue_ts_financials",
+      "source_path": "supabase/repeatable/19012026_extras.sql",
+      "source_line": 74,
+      "source_raw_sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36",
+      "full_header": "CREATE OR REPLACE FUNCTION public.enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum) RETURNS void LANGUAGE plpgsql",
+      "definition_raw_sha256": "bbe5a314d7a96248e296a31e0de3501db89f14a88be730da4dbd0defc43c14c1",
+      "definition_bytes": 518,
+      "evidence_path": "source-evidence/public_enqueue_ts_financials.sql.txt",
+      "evidence_sha256": "11b325d7bc7b960369be97dbd18be7aa5a439ffe5e55bcbde53398f976e5c43f"
+    },
+    {
+      "name": "public.tsfin_update_segments_locked",
+      "source_path": "supabase/repeatable/19012026_extras.sql",
+      "source_line": 4684,
+      "source_raw_sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36",
+      "full_header": "create or replace function public.tsfin_update_segments_locked( p_timesheet_id uuid, p_segment_updates jsonb, p_actor_user_id uuid ) returns jsonb language plpgsql security definer set search_path = public",
+      "definition_raw_sha256": "25a257bd6837573d86f7e433dba4b0210978ce1c9d940d040b05501caae87a48",
+      "definition_bytes": 18963,
+      "evidence_path": "source-evidence/public_tsfin_update_segments_locked.sql.txt",
+      "evidence_sha256": "ba8a1f1c7c957681d007722a2d196f3d856b406937a3f7303fc918c24058197f"
+    },
+    {
+      "name": "public.contract_week_manual_upsert_atomic",
+      "source_path": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "source_line": 6,
+      "source_raw_sha256": "0b93bd0b0379348930ba9cff38b45e0196eb52b54690cfc29ea257252b922e06",
+      "full_header": "CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text, p_queue_timesheet_materialisation_json jsonb DEFAULT NULL::jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'",
+      "definition_raw_sha256": "0d37f0a50664072788f012e54ef202fbbeb0139310922fbe3fbdc1c74d83b063",
+      "definition_bytes": 120683,
+      "evidence_path": "source-evidence/public_contract_week_manual_upsert_atomic.sql.txt",
+      "evidence_sha256": "2cc217cc4dfdf2f51ee3b88c098ba3b972fd156ac035ef79b858968f3549103a"
+    },
+    {
+      "name": "public.timesheet_unauthorise_atomic",
+      "source_path": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "source_line": 4,
+      "source_raw_sha256": "53e9af7ae8209f834508cb688c7b5d2449a9f7aedbe22db4906dafceb94c8a45",
+      "full_header": "CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'",
+      "definition_raw_sha256": "67983c70f46bfd6732a08e5b1ce114cfe85744e84af2b5829817c20638a475a7",
+      "definition_bytes": 25252,
+      "evidence_path": "source-evidence/public_timesheet_unauthorise_atomic.sql.txt",
+      "evidence_sha256": "1156bf1164b5253beb190b6c8d4d8511ca0995145ae1cc01fe69121db5078f40"
+    },
+    {
+      "name": "public.timesheet_authorise_generic_atomic",
+      "source_path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "source_line": 2124,
+      "source_raw_sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "full_header": "CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'",
+      "definition_raw_sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3",
+      "definition_bytes": 36434,
+      "evidence_path": "source-evidence/public_timesheet_authorise_generic_atomic.sql.txt",
+      "evidence_sha256": "faedc390ba1064cf590eb3573de177cbdeab6fd602829077d0bafb1c97920c27"
+    },
+    {
+      "name": "public.tsfin_write_current_snapshot_single_bounded",
+      "source_path": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+      "source_line": 4,
+      "source_raw_sha256": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa",
+      "full_header": "CREATE OR REPLACE FUNCTION public.tsfin_write_current_snapshot_single_bounded(p_timesheet_id uuid, p_timesheet_version integer DEFAULT NULL::integer, p_snapshot_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now()) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'",
+      "definition_raw_sha256": "a2c478f9f90e17a61c8c4fbf039ce422fbf3c84ce94ef5a162b7616c7909354a",
+      "definition_bytes": 36613,
+      "evidence_path": "source-evidence/public_tsfin_write_current_snapshot_single_bounded.sql.txt",
+      "evidence_sha256": "3345f5ffd3c4ea69ab95b3d0903b798c6be6989705de075ddbfe6aa587d1fc2f"
+    },
+    {
+      "name": "public.invoice_apply_edits",
+      "source_path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "source_line": 1,
+      "source_raw_sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "full_header": "CREATE OR REPLACE FUNCTION public.invoice_apply_edits(p_invoice_id uuid, p_payload jsonb, p_actor_user_id uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'",
+      "definition_raw_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "definition_bytes": 148094,
+      "evidence_path": "source-evidence/public_invoice_apply_edits.sql.txt",
+      "evidence_sha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204"
+    },
+    {
+      "name": "private.weekly_source_office_authority_v1",
+      "source_path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_line": 17,
+      "source_raw_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "full_header": "create or replace function private.weekly_source_office_authority_v1( p_actor_user_id uuid, p_operation text, p_source_group_id uuid default null, p_client_id uuid default null, p_scope_date date default null ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_temp'",
+      "definition_raw_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d",
+      "definition_bytes": 3525,
+      "evidence_path": "source-evidence/private_weekly_source_office_authority_v1_aa9824429793.sql.txt",
+      "evidence_sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "name": "public.weekly_source_office_timesheet_presentation_v1",
+      "source_path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_line": 4201,
+      "source_raw_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "full_header": "create or replace function public.weekly_source_office_timesheet_presentation_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "definition_raw_sha256": "a5fee7a92456ed515788d95782ff9de5678c49999b4595a4b757fe0faf24518c",
+      "definition_bytes": 43181,
+      "evidence_path": "source-evidence/public_weekly_source_office_timesheet_presentation_v1.sql.txt",
+      "evidence_sha256": "fd6de30fc9d5b621b6c274b93218414f5af31546b42ea1bc9499b89e1f3d0bb1"
+    },
+    {
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "source_path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_line": 3561,
+      "source_raw_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "full_header": "create or replace function public.weekly_source_office_authorise_scope_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definition_raw_sha256": "6af026b832ad16d2474a9dca510d12e95109ff88f7e8ef93122fb2f9a2844fa3",
+      "definition_bytes": 2930,
+      "evidence_path": "source-evidence/public_weekly_source_office_authorise_scope_v1.sql.txt",
+      "evidence_sha256": "b1f684162fbf34fa892fd14a395e1534e01f1b793693ec924ef793cfe6d0deb8"
+    },
+    {
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "source_path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_line": 6,
+      "source_raw_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "full_header": "create or replace function private.weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid) returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definition_raw_sha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+      "definition_bytes": 492,
+      "evidence_path": "source-evidence/private_weekly_source_pay_actor_allowed_v1.sql.txt",
+      "evidence_sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "name": "private.timesheet_correction_actor_assert_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "source_line": 27,
+      "source_raw_sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "full_header": "create or replace function private.timesheet_correction_actor_assert_v1(p_actor_user_id uuid) returns void language plpgsql security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "definition_raw_sha256": "424dc15fd13ab55fa9c3c4d2d7b1f5fbb7e0b50308bd7d8e9bc12d4694ae69ce",
+      "definition_bytes": 986,
+      "evidence_path": "source-evidence/private_timesheet_correction_actor_assert_v1.sql.txt",
+      "evidence_sha256": "f42d4b96094311d7f04569e7ecdad1dd54ffa9bd55955b6d25fab6a1eb8a0e6f"
+    },
+    {
+      "name": "private.timesheet_correction_origin_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "source_line": 69,
+      "source_raw_sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "full_header": "create or replace function private.timesheet_correction_origin_v1(p_timesheet_id uuid) returns text language plpgsql stable security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "definition_raw_sha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "definition_bytes": 970,
+      "evidence_path": "source-evidence/private_timesheet_correction_origin_v1.sql.txt",
+      "evidence_sha256": "72744a0e349381b1755f1318f696231592d3ae4a849cd6c5a64035512f155f79"
+    },
+    {
+      "name": "public.timesheet_correction_send_v1",
+      "source_path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "source_line": 99,
+      "source_raw_sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "full_header": "create or replace function public.timesheet_correction_send_v1(p_request jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now()) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "definition_raw_sha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7",
+      "definition_bytes": 10114,
+      "evidence_path": "source-evidence/public_timesheet_correction_send_v1.sql.txt",
+      "evidence_sha256": "5ecf89977679ce25c6a7cc395cda733fd7fe6d4e210f4f8e23ad2d103eb38878"
+    },
+    {
+      "name": "private.timesheet_correction_invoice_scope_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "source_line": 29,
+      "source_raw_sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4",
+      "full_header": "create or replace function private.timesheet_correction_invoice_scope_v1( p_timesheet_id uuid,p_target_invoice_id uuid,p_actor_user_id uuid,p_lock_rows boolean,p_max_members integer ) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','extensions','pg_temp'",
+      "definition_raw_sha256": "7d541735ec00d7e2a27d65185763a867e7fed73807c31808c449545d8b3a5035",
+      "definition_bytes": 10783,
+      "evidence_path": "source-evidence/private_timesheet_correction_invoice_scope_v1.sql.txt",
+      "evidence_sha256": "28dd15009edfff8829e1a39bd01c3c02dae6b7a92e9d82cb45a438698f1a8ae9"
+    },
+    {
+      "name": "private.timesheet_correction_draft_holds_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "source_line": 17,
+      "source_raw_sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+      "full_header": "create or replace function private.timesheet_correction_draft_holds_v1(p_invoice_id uuid) returns jsonb language sql stable security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "definition_raw_sha256": "bc402c49196d488d963a34295462e31d64d21a76107972134eb6f189181c4cee",
+      "definition_bytes": 876,
+      "evidence_path": "source-evidence/private_timesheet_correction_draft_holds_v1.sql.txt",
+      "evidence_sha256": "343f956ebf3f37e16f57b6f5c383edc7bd42b9efa527cfe9a6ecfc837bbcc79d"
+    },
+    {
+      "name": "private.timesheet_correction_draft_round_trip_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "source_line": 30,
+      "source_raw_sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+      "full_header": "create or replace function private.timesheet_correction_draft_round_trip_v1(p_request_id uuid,p_action text,p_actor_user_id uuid) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "definition_raw_sha256": "259b5ceb6f859f381ba0a726d38321f21abbdc9d796ce6079a3444f4aeeba5c2",
+      "definition_bytes": 6538,
+      "evidence_path": "source-evidence/private_timesheet_correction_draft_round_trip_v1.sql.txt",
+      "evidence_sha256": "6a6885ba728a0ac61cec89cb36ff74f17f52395489485b559e571692732ac00e"
+    },
+    {
+      "name": "public.timesheet_correction_return_to_draft_v1",
+      "source_path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "source_line": 111,
+      "source_raw_sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+      "full_header": "create or replace function public.timesheet_correction_return_to_draft_v1(p_request_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql security definer set search_path to 'pg_catalog','public','private','pg_temp'",
+      "definition_raw_sha256": "0748a75ea6fae89267c3d4a8c72824f1b506869f13dfd69ed2e45ef12f588b79",
+      "definition_bytes": 357,
+      "evidence_path": "source-evidence/public_timesheet_correction_return_to_draft_v1.sql.txt",
+      "evidence_sha256": "36c64a8aaa529bc3d01d803f0f53992126154edeccb66d82f05c44b6d9b78fc8"
+    },
+    {
+      "name": "private.weekly_source_agency_invoice_check_only_v1",
+      "source_path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "source_line": 271,
+      "source_raw_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "full_header": "create or replace function private.weekly_source_agency_invoice_check_only_v1(p_timesheet_id uuid) returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definition_raw_sha256": "4482fb9ec88991595adb3644459fc3c14517d7f5831bb827eafaf05cfb94cc9c",
+      "definition_bytes": 3450,
+      "evidence_path": "source-evidence/private_weekly_source_agency_invoice_check_only_v1.sql.txt",
+      "evidence_sha256": "36e19cbd0a39a3e2f9074531c04a565cfdb1601e67f2bb732d2a85054fe7d24c"
+    },
+    {
+      "name": "private.weekly_source_signed_check_only_v1",
+      "source_path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "source_line": 315,
+      "source_raw_sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "full_header": "create or replace function private.weekly_source_signed_check_only_v1(p_timesheet_id uuid) returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definition_raw_sha256": "bc565bef991c2ee69f8f557a3a93d1b2ada589f49ca67dc824e75e35df8c449c",
+      "definition_bytes": 4309,
+      "evidence_path": "source-evidence/private_weekly_source_signed_check_only_v1.sql.txt",
+      "evidence_sha256": "3f4484291b186f9732260d9bf0ee366ff504dfa0bce24a8ef876114826e2bf9b"
+    }
+  ],
+  "closest_and_native_store_definitions": [
+    {
+      "name": "private.timesheet_correction_requests",
+      "source_path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "source_line": 11,
+      "source_raw_sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "definition_raw_sha256": "b3fec7a378224caf95f4c386f31762370e7eb7590b6cea89e56830ec4b12459f",
+      "evidence_path": "source-evidence/private_timesheet_correction_requests.table.sql.txt",
+      "evidence_sha256": "5f1c918ca0b5c2ac5c19aeb3a928269eaa20e869bac1a9ca821f11c3e2997d53"
+    },
+    {
+      "name": "public.weekly_final_source_correction_sessions",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_line": 203,
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_raw_sha256": "5c1d696ffb16d0b8ecb8dc1cef80a8331c9e196bf634a99ec0f48b24ce834e7a",
+      "evidence_path": "source-evidence/public_weekly_final_source_correction_sessions.table.sql.txt",
+      "evidence_sha256": "a90971e8b9653b7212ffe01dd8640559b0c6bba35033fa4522d8d9b8892eeacf"
+    },
+    {
+      "name": "public.weekly_timesheet_submission_requests",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_line": 1548,
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_raw_sha256": "9f5eea9decdad30b9fc791bc1b6fd4d89c521dae7c930057d526f01b165cc7b8",
+      "evidence_path": "source-evidence/public_weekly_timesheet_submission_requests.table.sql.txt",
+      "evidence_sha256": "8338f8a757778d20342495f6cbfeb5b019e29406ae59b3d22f5cf350f0e77e6b"
+    },
+    {
+      "name": "public.weekly_source_entitlement_decision_bundles",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_line": 2586,
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_raw_sha256": "e865fc793b60b94a2ac175571fb0ebc3e04f990f2981c32782ddf91e6ca37acf",
+      "evidence_path": "source-evidence/public_weekly_source_entitlement_decision_bundles.table.sql.txt",
+      "evidence_sha256": "2a435dbc3d1217634a6160810fe24529cf0b7e3a609b327412e09cfd824e5ef4"
+    },
+    {
+      "name": "public.weekly_source_pending_entitlement_bundles",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_line": 3098,
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_raw_sha256": "4bf62b9288e61dfeeb4a04b6575f33a55ffc0b1d5d12b2812cccadb3e27d3451",
+      "evidence_path": "source-evidence/public_weekly_source_pending_entitlement_bundles.table.sql.txt",
+      "evidence_sha256": "9f887a6f2eb035e76f7a35f849d8b3a5f00dbba96af996145b3640f6790bd940"
+    },
+    {
+      "name": "public.audit_events",
+      "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "source_line": 617,
+      "source_raw_sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+      "definition_raw_sha256": "d8d83e167e1203b20ab8da30c312afc44cfcd07cea036742a4db78e106967300",
+      "evidence_path": "source-evidence/public_audit_events.table.sql.txt",
+      "evidence_sha256": "ce16e9308d3d4736f4dd64059ae02ae4ddf06c50bcf003e95f83feab0ce599a2"
+    },
+    {
+      "name": "public.ts_financials_outbox",
+      "source_path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "source_line": 4519,
+      "source_raw_sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+      "definition_raw_sha256": "29f7a3a705ef4e49de205e34ec84b6aa52674ff4480aba56c0e7c2fce0ca6eb1",
+      "evidence_path": "source-evidence/public_ts_financials_outbox.table.sql.txt",
+      "evidence_sha256": "f62b6679caf1a4c4ca77cf8b270820bd52a0196521e54cee6b5ff965af636c7e"
+    },
+    {
+      "name": "public.weekly_source_rule_set_versions",
+      "source_path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "source_line": 24,
+      "source_raw_sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "definition_raw_sha256": "dec2220922f614d2a34a061837cc316306bce4d40e5c0abc964875cb86d74c94",
+      "evidence_path": "source-evidence/public_weekly_source_rule_set_versions.table.sql.txt",
+      "evidence_sha256": "2f5ac1d53f92e2b398948cd1eee3c43a5eef765941ffd9c79b93b84ecee4fdce"
+    }
+  ],
+  "controlling_plan_sections": [
+    {
+      "section": "25.2",
+      "start_line": 919,
+      "evidence_path": "source-evidence/primary_25_2.md.txt",
+      "evidence_sha256": "35634691e1f310259029bbcfaad838df9d8dcd87e5dd880e511da1b6cd78e8e4"
+    },
+    {
+      "section": "26.4",
+      "start_line": 1131,
+      "evidence_path": "source-evidence/primary_26_4.md.txt",
+      "evidence_sha256": "0d6afb90bef19cdb3aa7395c61cb6da4495e3ef4a72bb15466bd5defab7c7de6"
+    },
+    {
+      "section": "26.5",
+      "start_line": 1216,
+      "evidence_path": "source-evidence/primary_26_5.md.txt",
+      "evidence_sha256": "fc5f45bddafce9b235755f90bd13cb980685e6e56830346484909a9e9a089685"
+    },
+    {
+      "section": "26.11",
+      "start_line": 1753,
+      "evidence_path": "source-evidence/primary_26_11.md.txt",
+      "evidence_sha256": "38e27419475bcea702d08de071ad422a1825256fc7e46c28d803e727a5bdfa43"
+    }
+  ],
+  "runtime_inputs": [
+    {
+      "path": "broker/src/index.js",
+      "raw_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "bytes": 8927507
+    },
+    {
+      "path": "broker/src/weekly-source/authorise-routing.mjs",
+      "raw_sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9",
+      "bytes": 7289
+    },
+    {
+      "path": "broker/src/payment-actor-permission.js",
+      "raw_sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "bytes": 2692
+    }
+  ],
+  "native_calls": false,
+  "database_calls": false,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null
+}

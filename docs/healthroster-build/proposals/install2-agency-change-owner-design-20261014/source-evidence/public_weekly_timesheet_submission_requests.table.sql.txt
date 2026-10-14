@@ -1,0 +1,26 @@
+create table public.weekly_timesheet_submission_requests (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  environment text not null default 'TEST' check (environment in ('TEST','LIVE')),
+  agency_id uuid not null,
+  source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  candidate_cohort_id uuid not null references public.weekly_candidate_cohorts(id) on delete restrict,
+  request_generation integer not null check (request_generation>=1),
+  current_upload_id uuid not null references public.weekly_source_uploads(id) on delete restrict,
+  current_projection_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+  state text not null check (state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED','COMPLETE','SUPERSEDED','CANCELLED')),
+  started_at_utc timestamptz,
+  reminder_due_at_utc timestamptz,
+  deadline_at_utc timestamptz,
+  membership_hash bytea not null check (pg_catalog.octet_length(membership_hash)=32),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  updated_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  constraint weekly_timesheet_submission_requests_clock_ck check (
+    (started_at_utc is null and reminder_due_at_utc is null and deadline_at_utc is null)
+    or
+    (started_at_utc is not null
+     and reminder_due_at_utc>started_at_utc
+     and deadline_at_utc>reminder_due_at_utc)
+  ),
+  unique (source_cycle_id,candidate_id,request_generation)
+);
