@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "codex-kier1978-miget-transaction-lab",
+  "main": "src/index.ts",
+  "account_id": "88a7276f12e3f68d6323a82d6ece49ce",
+  "compatibility_date": "2026-10-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "secrets": {"required": ["MIGET_TRANSACTION_LAB_ROUTE_TOKEN"]},
+  "hyperdrive": [{"binding": "HYPERDRIVE", "id": "11c78f14afea494c9d5e8d8ad57d41a2"}],
+  "observability": {"enabled": true}
+}

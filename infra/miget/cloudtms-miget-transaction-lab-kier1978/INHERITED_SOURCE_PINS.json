@@ -1,0 +1,42 @@
+[
+  {
+    "file": "package.json",
+    "sourceSha256": "a8f1393047efb340a4eaa38a3adb946a801117207e0034433f2da1470b5d7c9e",
+    "copiedSha256": "a8f1393047efb340a4eaa38a3adb946a801117207e0034433f2da1470b5d7c9e"
+  },
+  {
+    "file": "package-lock.json",
+    "sourceSha256": "f5413dd72dca5451adede5cdaca67fdcae14a0b300abdc40f45490fe3a2156ae",
+    "copiedSha256": "f5413dd72dca5451adede5cdaca67fdcae14a0b300abdc40f45490fe3a2156ae"
+  },
+  {
+    "file": "tsconfig.json",
+    "sourceSha256": "945c5bafb92e3f437391cb4c772c5ff2667c9bf1b2beca280bbc4255f321f3bc",
+    "copiedSha256": "945c5bafb92e3f437391cb4c772c5ff2667c9bf1b2beca280bbc4255f321f3bc"
+  },
+  {
+    "file": "src/index.ts",
+    "sourceSha256": "188c009704231957d25dbb7490b30802dc759b1fe2e6b70958a7141c3d12801c",
+    "copiedSha256": "188c009704231957d25dbb7490b30802dc759b1fe2e6b70958a7141c3d12801c"
+  },
+  {
+    "file": "src/transaction-runner.ts",
+    "sourceSha256": "8ce94d948a81e90f2bd9e82de55977ba314cac600be61b3765dcc6d1cd5dd516",
+    "copiedSha256": "8ce94d948a81e90f2bd9e82de55977ba314cac600be61b3765dcc6d1cd5dd516"
+  },
+  {
+    "file": "src/sql-envelope.ts",
+    "sourceSha256": "9d6d5edcd55e8e2e5920770c06a997b4e374d483551aed3debb616fa78dd2f94",
+    "copiedSha256": "9d6d5edcd55e8e2e5920770c06a997b4e374d483551aed3debb616fa78dd2f94"
+  },
+  {
+    "file": "test/transaction-runner.test.ts",
+    "sourceSha256": "884fd1d1f67c8c65781ea6c4b108e295393f1928dd563b73de2597164f946d3f",
+    "copiedSha256": "884fd1d1f67c8c65781ea6c4b108e295393f1928dd563b73de2597164f946d3f"
+  },
+  {
+    "file": "test/sql-envelope.test.ts",
+    "sourceSha256": "db0bd45f490ec45c8501e67d974c262716b4ad7c6a031692289532f22d8fa3f8",
+    "copiedSha256": "db0bd45f490ec45c8501e67d974c262716b4ad7c6a031692289532f22d8fa3f8"
+  }
+]
