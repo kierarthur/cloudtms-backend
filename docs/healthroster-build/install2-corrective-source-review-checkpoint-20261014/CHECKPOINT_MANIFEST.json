@@ -1,0 +1,40 @@
+{
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "AGENCY_13_SOURCE_MANIFEST.json",
+      "bytes": 2418,
+      "sha256": "7a596ac65ab1e300418bcef0760e25e250b8e0172b7683c040bc0d1eee5cbbe2"
+    },
+    {
+      "file": "BUILD_AGENCY_WHOLE_WEEK_VALIDATION_RUNTIME_SOURCE_CRITIC_14102026.md",
+      "bytes": 11573,
+      "sha256": "e2c1bf593276b174ab611280282d67401b87eff2cf3608fc6d8d1fbda8ea6024"
+    },
+    {
+      "file": "BUILD_CHECKLIST_D10_ACTOR_CONTINUATION_SOURCE_CRITIC_14102026.md",
+      "bytes": 6083,
+      "sha256": "17348f14bb5fc65e138fcf83e4a271d55cfb9be21270108631e784d137eca71d"
+    },
+    {
+      "file": "BUILD_MONEY_PAID_MATCH_WRITER_NONE_SOURCE_CRITIC_14102026.md",
+      "bytes": 7386,
+      "sha256": "da978af927e0fd13529d4b570e0c7e013a3d8deed8af8cf19d80daa2f38c818b"
+    },
+    {
+      "file": "MONEY_58_SOURCE_MANIFEST.json",
+      "bytes": 10327,
+      "sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453"
+    },
+    {
+      "file": "NATIVE_9E_SOURCE_PINS.json",
+      "bytes": 23407,
+      "sha256": "ce6f9d3755a819333e0570ce364dbdf1f71c5e53efc5394a946ab77cba49a4d8"
+    },
+    {
+      "file": "SOURCE_STATUS.json",
+      "bytes": 1508,
+      "sha256": "308f4bd72ad56a2f54f68e516e50fd664c378723ddf5aef3c0be7ee96c156c5b"
+    }
+  ]
+}

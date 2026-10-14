@@ -1,0 +1,302 @@
+{
+  "schema_version": "PAID_SAME_SEPARATE_NONE_CURRENT_NATIVE_WRITER_CONSTRUCTION_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "artifact_count": 58,
+  "artifacts": [
+    {
+      "file": "CURRENT_SOURCE_INPUT_PINS.json",
+      "bytes": 12343,
+      "sha256": "0868f0c88ca1a6f3d0ae6f53bb1c24b892d0d57178df20ce700ff25fc9d5bd1e"
+    },
+    {
+      "file": "CURRENT_WRITER_REVERSE.json",
+      "bytes": 6707,
+      "sha256": "4db75969fe39e1c6e1b502ec99c673016976734aa7332f0bb58a3318a71efa28"
+    },
+    {
+      "file": "FIN4_REVERSE.json",
+      "bytes": 12811,
+      "sha256": "f22b6a144a08777482078cae1ed61fe68796feb4991c0b40d2717598ff800f83"
+    },
+    {
+      "file": "FULL_OWNER_REVERSAL_PROOF.json",
+      "bytes": 11684,
+      "sha256": "76e26401078b8c6d32857ec23d4cb680e8b0a333b94e46d8a485b4efcf177307"
+    },
+    {
+      "file": "INVOICE_CONSUMER_REVERSES.json",
+      "bytes": 17610,
+      "sha256": "6bc651f7fa95499e744832d64dff0e4da54491f50e6ae75c0484e117c5b1be23"
+    },
+    {
+      "file": "PAY_CONSUMER_REVERSES.json",
+      "bytes": 6695,
+      "sha256": "4a3122e7f59e13163606d3cf6092f1c95ffa322b35b910e07d7d974885431a9a"
+    },
+    {
+      "file": "PROJECTION_REVERSES.json",
+      "bytes": 10252,
+      "sha256": "e59a7b710c04cac8581c70e673ed288df26e4fc63abe04d5be714c40597c8966"
+    },
+    {
+      "file": "RUNTIME_REVERSE.json",
+      "bytes": 2731,
+      "sha256": "14e594d670fab88bbe3f7c45424f55a1a135c8e583ce366bad138cb881a7e013"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 15854,
+      "sha256": "ddb8124b8c413be2c3a8c4efd72b4519da7fe2da5dddf70b90e2ac4fa74ef5da"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md",
+      "bytes": 5193,
+      "sha256": "d8e84029e18fd6c003d75d429716f4219ac1ba30d1493a5cc00302090ed37e61"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1579,
+      "sha256": "74a6fc6d67276d2091c22de0938673463bd034ecb81484fe02022552754470ed"
+    },
+    {
+      "file": "before/01_invoice_snapshot_origins.sqlinc",
+      "bytes": 4475,
+      "sha256": "209f49a1f250a229e7eaa7f983465595d754633a2c3c224d13baaa1f7cde5cd1"
+    },
+    {
+      "file": "before/02_complete_office_recheck.sqlinc",
+      "bytes": 12027,
+      "sha256": "acb15e1e380b96eb4496274bae0773f513df9a6ed24ed63960dae13d13824f15"
+    },
+    {
+      "file": "before/04_complete_upload_context.sqlinc",
+      "bytes": 28750,
+      "sha256": "1a23b8da7645ed0ce0482ed1647165076c7b0d2747dba1dee3fe2c95d417e4df"
+    },
+    {
+      "file": "before/05_complete_projection_rows.sqlinc",
+      "bytes": 69070,
+      "sha256": "14f01e7ca69c1f1ada8720194d0aa7311e2b9bd408f6865e9e563b4505a1fe60"
+    },
+    {
+      "file": "before/06_complete_fin4.sqlinc",
+      "bytes": 115717,
+      "sha256": "96838b0e1b34d81e2649df2f84191cea3277d81e123170091fc9ec25dced4db2"
+    },
+    {
+      "file": "before/10_complete_billing_hash.sqlinc",
+      "bytes": 1444,
+      "sha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+    },
+    {
+      "file": "before/11_complete_movement_window.sqlinc",
+      "bytes": 1189,
+      "sha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b"
+    },
+    {
+      "file": "before/12_complete_source_amount_valid.sqlinc",
+      "bytes": 6712,
+      "sha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39"
+    },
+    {
+      "file": "before/13_complete_invoice_admission.sqlinc",
+      "bytes": 47695,
+      "sha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
+    },
+    {
+      "file": "before/14_complete_self_bill_shift_facts.sqlinc",
+      "bytes": 8016,
+      "sha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+    },
+    {
+      "file": "before/15_complete_active_pay_movements.sqlinc",
+      "bytes": 12359,
+      "sha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e"
+    },
+    {
+      "file": "before/16_complete_source_pay_units.sqlinc",
+      "bytes": 4995,
+      "sha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+    },
+    {
+      "file": "before/17_complete_selected_source_witness.sqlinc",
+      "bytes": 37868,
+      "sha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a"
+    },
+    {
+      "file": "before/18_complete_finalisation_pay_open.sqlinc",
+      "bytes": 8169,
+      "sha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666"
+    },
+    {
+      "file": "before/19_complete_invoice_allocation.sqlinc",
+      "bytes": 9624,
+      "sha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+    },
+    {
+      "file": "before/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "file": "build-current-writer.mjs",
+      "bytes": 8087,
+      "sha256": "797b133957d1e738b8900e4d9d9b4bc2d7dcacd5f3f8c243a2a4c27d2848a0c8"
+    },
+    {
+      "file": "build-fin4.mjs",
+      "bytes": 13747,
+      "sha256": "0d1e6fb5a14e0384e0aea80617f8b2553697e77750b76dc4dfcfbcbf50ce51b0"
+    },
+    {
+      "file": "build-invoice-consumers.mjs",
+      "bytes": 17168,
+      "sha256": "691f90c77d34abf5d7c28f29ee4ff6a202ae39d75f1a89774e9452d1d4573adf"
+    },
+    {
+      "file": "build-pay-consumers.mjs",
+      "bytes": 3214,
+      "sha256": "d101a01c7951e82182e2595361ce4b0c019159fac31ae0a6edf1b312a9ecacae"
+    },
+    {
+      "file": "build-projection.mjs",
+      "bytes": 10486,
+      "sha256": "bbf6717e8700c2dc9c55e4b5bad731dc6db7d8c30fa710aac97b95595941f004"
+    },
+    {
+      "file": "build-runtime.mjs",
+      "bytes": 3938,
+      "sha256": "6dcfb3fd6dd724d6210b8b0617214a1f506f356949a5ec47aebda82a470102d7"
+    },
+    {
+      "file": "forward/01_paid_overlap_choice_admit.sqlinc",
+      "bytes": 10196,
+      "sha256": "c82a96bb8ad6bb51589e39f31f675a146eab99b6ba47877a8d31a2072f80642a"
+    },
+    {
+      "file": "forward/02_complete_office_recheck.sqlinc",
+      "bytes": 15808,
+      "sha256": "792dcd8b37007a6002ccd9b9d796d1c54c5b681dd0acec03e73d34dfdccd68ea"
+    },
+    {
+      "file": "forward/03_paid_overlap_choice_current.sqlinc",
+      "bytes": 11558,
+      "sha256": "710a1a9a0036ae1cc1e58b44835cbe4c27e3c2538e53bd8c0e3532749411afa5"
+    },
+    {
+      "file": "forward/04_complete_upload_context.sqlinc",
+      "bytes": 30127,
+      "sha256": "38e4ca8773cec6cd90f2012b834336461d7d1846538b91179886c3cedc235e04"
+    },
+    {
+      "file": "forward/05_complete_projection_rows.sqlinc",
+      "bytes": 72586,
+      "sha256": "bac2c386c5fcd246a788ce412b3de46bafaf821f386f51b8f6dec72bb4cac6e4"
+    },
+    {
+      "file": "forward/06_complete_fin4.sqlinc",
+      "bytes": 121748,
+      "sha256": "1e5d0bbfbbe8fe9e4af2449c5413fa416d791e820742ec52730b684fc6182b67"
+    },
+    {
+      "file": "forward/07_paid_choice_revision_guard.sqlinc",
+      "bytes": 2316,
+      "sha256": "7d8f569c872cd3546bc3054645ed83a772dc3036ba4081ff961ac0ce95f5b98a"
+    },
+    {
+      "file": "forward/08_paid_match_invoice_producer.sqlinc",
+      "bytes": 9224,
+      "sha256": "b139b1d3cb52670a88848292da34db24a15fef6d35c254a5c76616f586c3dd59"
+    },
+    {
+      "file": "forward/09_paid_match_invoice_origin_assert.sqlinc",
+      "bytes": 11216,
+      "sha256": "8e94bbaa234cdf5d6a9b4652b8e923b0f0fedda7d31094080ff7c381a52f023a"
+    },
+    {
+      "file": "forward/10_complete_billing_hash.sqlinc",
+      "bytes": 1700,
+      "sha256": "68489f1f09e1375c144072816067c67e76cec45c7bbe48339fdd9920580d55d0"
+    },
+    {
+      "file": "forward/11_complete_movement_window.sqlinc",
+      "bytes": 1561,
+      "sha256": "f7d8e809b966cec0acc0561276af1ad2d5fafec4a3e2c4b402ef12fb8c08ccee"
+    },
+    {
+      "file": "forward/12_complete_source_amount_valid.sqlinc",
+      "bytes": 7413,
+      "sha256": "4926a91e434bfde5c650a45e3559f81dc3ea309c86aaf399f1c4f16fda84cd6e"
+    },
+    {
+      "file": "forward/13_complete_invoice_admission.sqlinc",
+      "bytes": 49310,
+      "sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145"
+    },
+    {
+      "file": "forward/14_complete_self_bill_shift_facts.sqlinc",
+      "bytes": 12775,
+      "sha256": "eac92cc2e6d35394a0162a39a0ed75086514e70f776718ae86ea7a46615ddf64"
+    },
+    {
+      "file": "forward/15_complete_active_pay_movements.sqlinc",
+      "bytes": 12671,
+      "sha256": "8ae42edd3532702ad991db837d12294270f50bf5a468c2d6f41aaf244c4a1c58"
+    },
+    {
+      "file": "forward/16_complete_source_pay_units.sqlinc",
+      "bytes": 5308,
+      "sha256": "5bdfe420c541b432591015ca67006746c685ff24e66ee42654ef54ee611b1705"
+    },
+    {
+      "file": "forward/17_complete_selected_source_witness.sqlinc",
+      "bytes": 38205,
+      "sha256": "4a55fa7191dcc71e1d0a3fc9a6d071618bb1f716a5cc6d1aa1b2d16216f441f6"
+    },
+    {
+      "file": "forward/18_complete_finalisation_pay_open.sqlinc",
+      "bytes": 8548,
+      "sha256": "499ebc59fd4f328311d619431fe03eaa1fd48fe6e28a142dba6cadd410df3a5d"
+    },
+    {
+      "file": "forward/19_complete_invoice_allocation.sqlinc",
+      "bytes": 10246,
+      "sha256": "d8b87af710d0a61f12eb8b5087ca2b61fa549aca79830cbb2e6861f22b50649b"
+    },
+    {
+      "file": "forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 54939,
+      "sha256": "8cb9d3a6b9e5f01278f81197a3ce98cf8225baf892d541fb69b6d261f6df5994"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 17409,
+      "sha256": "c0529b86717e834c53b32f6de8652ac8114c9385a4282e72b8cdd950fe729e33"
+    },
+    {
+      "file": "one-time/00_paid_shift_choice_fields.sqlinc",
+      "bytes": 5117,
+      "sha256": "aad80d0146e0194d22ce5eefcbe768e8c12c293921d05d9223ea75c430b425b2"
+    },
+    {
+      "file": "one-time/01_invoice_snapshot_origins.sqlinc",
+      "bytes": 5777,
+      "sha256": "7bdbc8cb99e7794a1e6c8617f538c844977785aad3c756e5e0bd0fe7ddad5344"
+    },
+    {
+      "file": "source-runtime-vm.mjs",
+      "bytes": 3053,
+      "sha256": "d42c275f383f4eafe323afa6fe0f0438eaba81be2a303379ccacfc0105d1bf67"
+    },
+    {
+      "file": "writer-source.test.mjs",
+      "bytes": 9555,
+      "sha256": "4e210c0d3fd9f761c2183bc5f55a509f94bca2fb73e1749745aba3d3b18e0f5f"
+    }
+  ]
+}

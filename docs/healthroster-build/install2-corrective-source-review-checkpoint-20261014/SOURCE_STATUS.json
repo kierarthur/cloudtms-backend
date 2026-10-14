@@ -1,0 +1,31 @@
+{
+  "status": "SOURCE_CORRECTIONS_AND_REVIEW_NOT_INSTALL2_ACCEPTANCE",
+  "checkedAt": "2026-10-14T19:52:19.079Z",
+  "install1": {
+    "backend": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "office": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+    "verifiersPassed": 158,
+    "receiptTest": "912297ab79b48633b66d806d128ff00a9a9cd83d"
+  },
+  "currentI2Backup": "973625f17cd51a49803872a819638e10f13bbbff",
+  "canonicalSqlCounts": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "verifiers": 173
+  },
+  "sourceReview": {
+    "actor1": "independently closed at8c1727",
+    "frame1": "new confirmed defect at8c; separate9e successor87cases pending independent closure",
+    "agency": "37 has confirmedMARKER1/SUPERSEDED-OVERRIDE1; separate13/9a successor24cases pending independent closure",
+    "money58": "root independently accepted bounded source construction atb0e5;58artifacts/26inputs/17cases/16reverses; real remaining source/native gates held"
+  },
+  "rootChanges": {
+    "boundedExternalCompletion": "6c5c source19cases; repaired runner not natively run",
+    "caseCensus": "973625 includes uppercase2 and25baseline/all399/1060roots:1484/1745/2160;22DOreadIDs preserved; lexical only",
+    "liveBefore": "973625 admits nonnegative observed activity only with complete observer and requires fresh branded restoration afterward;2target+21existingtests; no full rehearsal"
+  },
+  "noOwnerAnswerPending": true,
+  "normalInstallsRemaining": 1,
+  "fullPartB": false,
+  "noBankingChatMessage": true
+}
