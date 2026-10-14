@@ -1,0 +1,81 @@
+function candidateNotificationMessage(eventType, parameters = {}) {
+  const expenseCategory = ({
+    MILEAGE: 'Mileage',
+    TRAVEL: 'Travel',
+    ACCOMMODATION: 'Accommodation',
+    OTHER: 'Other expense'
+  })[upper(parameters?.expense_category)] || 'This expense';
+  const reason = typeof parameters?.reason === 'string'
+    ? parameters.reason.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+    : '';
+  const reasonSentence = reason ? ` Reason: ${reason.replace(/[.!?]+$/g, '')}.` : '';
+  const linkedExpenseRejectedBeforeDelete = (
+    (
+      eventType === 'EXPENSE_CLAIM_CANCELLED'
+      && upper(parameters?.reason_code) === 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+    )
+    || (
+      eventType === 'OFFICE_REJECTED'
+      && upper(parameters?.resubmission_scope) === 'COMPLETE_EXPENSE_CLAIM'
+    )
+  );
+  if (linkedExpenseRejectedBeforeDelete) {
+    return 'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.';
+  }
+  if (eventType === 'EXPENSE_WITHDRAWN') {
+    return `${expenseCategory} was withdrawn. You can add it again as a new expense if needed.`;
+  }
+  if (eventType === 'EXPENSE_CANCELLED') {
+    return `${expenseCategory} was cancelled. You can add it again as a new expense if needed.`;
+  }
+  if (eventType === 'OFFICE_REJECTED'
+      && upper(parameters?.resubmission_scope) === 'EXPENSE_CATEGORY') {
+    return `${expenseCategory} was rejected by your agency.${reasonSentence} Start a new expense for this category to resubmit it.`;
+  }
+  if (eventType === 'MANAGER_REFUSED') {
+    return `Your claim was refused by the manager.${reasonSentence} Start a new claim to submit it again.`;
+  }
+  if (eventType === 'OFFICE_REJECTED') {
+    return `Your claim was rejected by your agency.${reasonSentence} Start a new claim to submit it again.`;
+  }
+  if (eventType === 'CLAIM_WITHDRAWN') {
+    return `Your whole claim was withdrawn.${reasonSentence} Start again if you need to submit it.`;
+  }
+  if (eventType === 'CLAIM_CANCELLED') {
+    return `Your whole claim was cancelled.${reasonSentence} Start again if you need to submit it.`;
+  }
+  if (eventType === 'TIMESHEET_HOURS_UPDATED') {
+    return approvedHoursChangedMessage(parameters);
+  }
+  if (eventType === 'WEEKLY_SOURCE_REQUEST'
+      || eventType === 'WEEKLY_SOURCE_REMINDER') {
+    const requestKind = upper(parameters?.request_kind);
+    if (requestKind === 'CHECK_HOURS') {
+      return eventType === 'WEEKLY_SOURCE_REMINDER'
+        ? 'Please check your hours against the client’s hours. Your response is still needed.'
+        : 'Please check your hours against the client’s hours and confirm which are correct.';
+    }
+    if (requestKind === 'SUBMIT_TIMESHEET') {
+      const count = Number(parameters?.timesheet_count);
+      const clientName = text(parameters?.client_name)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      const weekEnding = text(parameters?.week_ending_label)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (eventType === 'WEEKLY_SOURCE_REMINDER') {
+        if (Number.isInteger(count) && count > 1 && clientName) {
+          return `${count} Weekly Timesheets at ${clientName} are still waiting to be submitted.`;
+        }
+        if (clientName) return `1 Weekly Timesheet at ${clientName} is still waiting to be submitted.`;
+        return 'Your Weekly Timesheet is still waiting to be submitted.';
+      }
+      if (Number.isInteger(count) && count > 1 && clientName) {
+        return `You have ${count} Weekly Timesheets to submit at ${clientName} so your hours can be checked.`;
+      }
+      if (weekEnding && clientName) {
+        return `Submit your Weekly Timesheet for the week ending ${weekEnding} at ${clientName} so your hours can be checked.`;
+      }
+      return 'Please submit your Weekly Timesheet so your hours can be checked.';
+    }
+  }
+  return CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update.';
+}

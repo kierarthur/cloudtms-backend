@@ -51,6 +51,7 @@ declare
   action_bindings jsonb; child_binding jsonb; review_action jsonb; latest_decision public.import_review_decisions%rowtype;
   state public.import_review_states%rowtype; first_seen timestamptz; group_row jsonb;
   native_status jsonb; native_summary jsonb; actual_item_id text; native_actions text[]; child_filter_keys jsonb; group_filter_keys jsonb;
+  reminder_facts jsonb; reminder_action jsonb;
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_filters,
@@ -174,6 +175,17 @@ begin
           'actor_user_id',actor.id,'permission_view',view,'scope',scope,'parent_group_key',parent_key,
           'item_id',actual_item_id,'proof_hash',parent_proof,'action_bindings',action_bindings),
         'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
+      reminder_action:=null;
+      if raw->>'item_kind'='SOURCE_INFORMATION' and raw->>'native_reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED') then
+        reminder_facts:=private.weekly_source_check_only_candidate_reminder_context_v1(actor.id,scope,raw->>'action_id');
+        if reminder_facts->'available'='true'::jsonb then
+          reminder_action:=jsonb_build_object('label','Remind candidate','kind','CHECK_ONLY_D10_CANDIDATE_REMINDER','enabled',true,
+            'payload',jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_D10_CANDIDATE_REMINDER_ACTION_V1',
+              'actor_user_id',actor.id,'permission_view',view,'scope',scope,'parent_group_key',parent_key,
+              'parent_proof_hash',parent_proof,'action_id',raw->>'action_id','candidate_context_hash',reminder_facts->>'context_hash'),
+            'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
+        end if;
+      end if;
       group_row:=jsonb_build_object('row_key',parent_key,'group_key',parent_key,'origin','CHECK_ONLY_D10',
         'client_id',p_client_id,'candidate_id',raw->'candidate_id','candidate_sort',private.weekly_source_query_ascii_fold_v1(raw->>'worker'),
         'candidate',raw->'worker','client',raw->'client','issues',jsonb_array_length(children),'issue_filter_keys',group_filter_keys,
@@ -187,6 +199,7 @@ begin
       if exists(select 1 from jsonb_array_elements(groups) g where g->>'group_key'=parent_key) then
         raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_GROUP_PARENT_AMBIGUOUS' using errcode='55000';
       end if;
+      if reminder_action is not null then group_row:=jsonb_set(group_row,'{actions}',group_row->'actions'||jsonb_build_array(reminder_action),false); end if;
       groups:=groups||jsonb_build_array(group_row);
       targets:=targets||jsonb_build_array(jsonb_build_object('item_id',actual_item_id,'parent_group_key',parent_key,
         'owner','private.weekly_source_check_only_query_groups_v1','actor_user_id',actor.id,'permission_view',view,

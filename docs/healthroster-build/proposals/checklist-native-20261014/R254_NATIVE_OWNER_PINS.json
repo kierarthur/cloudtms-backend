@@ -1,0 +1,432 @@
+{
+  "status": "SOURCE_ONLY_NATIVE_KERNEL_CENSUS_NOT_EXECUTION",
+  "sourceRoot": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "canonicalSQLCommit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "rootCensus": {
+    "path": "docs/healthroster-build/proposals/root-effective-body-amendment-census-case-forward-20261014/BODY_AMENDMENT_CENSUS.json",
+    "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+    "roots": 1484,
+    "uniqueInputs": 1745,
+    "occurrences": 2160
+  },
+  "declarations": [
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "b87f2a6d5f50e0f824185e5893727aab7738ffe0dc0986cb66a55e7db6c98e6d",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "b33c756de1e34495cc498f2e3d9f119ec5b3310d97aed90a3af83c0f59ec6756",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "80767e2f452f905864e74bcb5716840819cbdcf432b3879f895f525a324874c1",
+      "head": "CREATE"
+    }
+  ],
+  "effectiveOwners": {
+    "private._candidate_notification_insert_v1": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+    "private.candidate_notification_visible_v1": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql"
+  },
+  "guardedAmendments": [],
+  "references": [
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_04.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "dcbf116123d78117c9107e6341672ddd8c9209eb64cc63931f27cfcb52c54780",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_04.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "0e65baf22ef645bf494f3ab2d526803ae09bce3d7bf5057f033a1dd0288d451d",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_04.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "41fc988e3dbb95406cdd9b64a7eaa817f5512496194574e1654c5bb80126ba06",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "ed2a4d340f0e8c11d89770115a0e1013193afa2271ffbaa49d7a7d6777fefeba",
+      "head": "ALTER"
+    },
+    {
+      "path": "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "55ea314ac03638e56a07930ca1aba6e15d430fd61de1ee490060a14247ba281b",
+      "head": "REVOKE"
+    },
+    {
+      "path": "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "aea39fbe16834bfeedb1b7688adbc9060320d9781a45e7066c51182c1d536669",
+      "head": "GRANT"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "1c0b250f62aefad4af06dbc01e921ed8b55113d36746f0b4544a4bbe932d5dff",
+      "head": "REVOKE"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "58d55b74ab6fc887dbefd157ad36c46f2e06f8373ea256725f9d726c624b3f13",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "c680e785d8a495db535a8d7b5eda865be799f3a51b63ecaaa1c50ae967a3535a",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "de0fbf3431b8b0ef209484b5420a5504cc032a1499fc813a951e285d44f50d85",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "f439af2e214ec3af82866ad8237328fcc46f236e6306ec446f4552a8b2afba22",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "aa3f75220ffadf3832f9e9703eea562ddff97b71f02e0bbb91b19d4975bf14cd",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1913_candidate_daily_submission_admission_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "44b8eaf37d394cc9a706d385a08953f896088dd4063eac8a773d515525b12305",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "333b223f62c31053e7236836f6b54bf9ce115552870ab8bc935df7a8459d3e28",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/28082026_2027_candidate_daily_office_receipt_adapter_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "9a06a2ff064f6a760d378447b0f6c8fdc91b7b466c179fc433756b89f64397c9",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/28082026_2210_candidate_daily_handoff_recovery_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "ae247b1d0fad5c088299c9ad836ce79d16141c290769c2f9b5e05ab496996024",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "ccb2ff363c220ffe018fd7ed03b86db6eea0dd5888d5cbac624d0af519058134",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "827548d010c38f84a89efdc15cf4f5364c136e0c98c877f5b3f7b3f9805e165d",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "6a1c5870ea27dbd00069a5d2d73867fbe77bf7f4edfe2701b40f845e113da128",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "0b23dffddddec8290feacb7c6210d0e39f216df90ea815ce2cce17a23cf83124",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "db706c46534135c3ce685d6799b67b8f726c0ffbbb948197b997d096c74da0e3",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "878446fcf7e488103d4c77120e80cf098810b9ef6361402baf7d91359b45572e",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10092026_0823_planned_week_candidate_submission_delete_guard.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "c575eed0b1b9801ec91a9f139e8205b8805488cb8d6b687b55e336afbec93d00",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "3724642c4a6f509b48aeb9168cedd6d160d173b3ee6da1af764c273c607bebfa",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "10c5ccdfcfe828fc16c4b5c6a2ae103c1213e2951639e5ea77fd06d0910dff74",
+      "head": "COMMENT"
+    },
+    {
+      "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "64b6dfc40d5fecf91efbf5c310847d8948a6367eb1548a16ce6958b9f19b8b4f",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "5318a28f684b9f3e413f0e4f2487a04340899ff714d9ca4344ed790049568e96",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "f8bc14a44998db6606d4e116ab3f43607ba2bfec776ffde2e323dbcc12c96343",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "a3f71e8611d9bf392dd0b96e78a5ad5350da45b84d292931a19a7aa3b556d49f",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "391dc6f1f0f30f32f93f3ac935f9f53b132855716a2eedd800c42f862288593c",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "5efc2dd7ed192cfdea5c4492b8fef32ffe593f97b34636acfd4bece2ca0c6b7b",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "0fafc1a67699b934ea293055838452002b8c61c6209bb5ea29bfe42e2aec9b91",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "a2bf06065aae8d769597cdae6ea751ed87be11d1ff56a5ed3f8e040b8594788e",
+      "head": "ALTER"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "8fc24d49c5f56d33c5ed2c7767905e6b83600b678f7b8da600f620fe4b3db029",
+      "head": "REVOKE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "565e548503bde0887a97d97d5dc3105565b7e68135a392228fe26aaac0029ad5",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "c6933eb61aab10089ba91698ebb875617b7c81a5f81e6964a82270ea9536ddcd",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "owner": "private.candidate_notification_visible_v1",
+      "statement_sha256": "cd32d36532f2da4c111df826612ad4e48d36b86558e8ca6d2fb836874018fd93",
+      "head": "CREATE"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "owner": "private._candidate_notification_insert_v1",
+      "statement_sha256": "ef64ee3c3ab65347ec801ca3d3d0edbfcb3b0264c59dceb5d7dda650a7345c03",
+      "head": "CREATE"
+    }
+  ],
+  "pins": [
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_04.sql",
+      "saved_sha256": "61e4cb95aefcea4d836804b832422b67cd8256eb0a35eb225dfa432d3ed494dc",
+      "canonical_sha256": "61e4cb95aefcea4d836804b832422b67cd8256eb0a35eb225dfa432d3ed494dc"
+    },
+    {
+      "path": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+      "saved_sha256": "dc365ebdc858a2ce3303b84391c1ea6ecb6904224069fe737a581483e74c9d00",
+      "canonical_sha256": "dc365ebdc858a2ce3303b84391c1ea6ecb6904224069fe737a581483e74c9d00"
+    },
+    {
+      "path": "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql",
+      "saved_sha256": "4f6067e78a8a760a1974c9cfb5a49cedf4d46f6cba1ffebfdd5e7fb46f032aa2",
+      "canonical_sha256": "4f6067e78a8a760a1974c9cfb5a49cedf4d46f6cba1ffebfdd5e7fb46f032aa2"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "saved_sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+      "canonical_sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "saved_sha256": "9f47ab97b5e520074576c77bcfeee8867211663a4d7be0c8667aff9f7c73845a",
+      "canonical_sha256": "9f47ab97b5e520074576c77bcfeee8867211663a4d7be0c8667aff9f7c73845a"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+      "saved_sha256": "f6c04bf346f2e31a54b59fe3637fe9d633a4c50d1b6c39e7afec45f889d8a523",
+      "canonical_sha256": "f6c04bf346f2e31a54b59fe3637fe9d633a4c50d1b6c39e7afec45f889d8a523"
+    },
+    {
+      "path": "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
+      "saved_sha256": "4da90df45355552ba0366f12ecb67712328410a965c1046212a90de437252aca",
+      "canonical_sha256": "4da90df45355552ba0366f12ecb67712328410a965c1046212a90de437252aca"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
+      "saved_sha256": "d8c50cc8109b90be4a0f4e50ecb397b7d331431a196225429fbd660c6cd9ff68",
+      "canonical_sha256": "d8c50cc8109b90be4a0f4e50ecb397b7d331431a196225429fbd660c6cd9ff68"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1913_candidate_daily_submission_admission_v1.sql",
+      "saved_sha256": "ae72a4a050e15d2861868cf8afae51d3fb06f215e2477aecce919c6e0c613c5a",
+      "canonical_sha256": "ae72a4a050e15d2861868cf8afae51d3fb06f215e2477aecce919c6e0c613c5a"
+    },
+    {
+      "path": "supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql",
+      "saved_sha256": "babd9d24106b986e8ebff09d0791b86413e4aada6eb4ba8a957d298f6db82810",
+      "canonical_sha256": "babd9d24106b986e8ebff09d0791b86413e4aada6eb4ba8a957d298f6db82810"
+    },
+    {
+      "path": "supabase/repeatable/28082026_2027_candidate_daily_office_receipt_adapter_v1.sql",
+      "saved_sha256": "3b3fdc9d1ad5518e91b6ac873d487f3e72f16951769d4df4fa7740930950e398",
+      "canonical_sha256": "3b3fdc9d1ad5518e91b6ac873d487f3e72f16951769d4df4fa7740930950e398"
+    },
+    {
+      "path": "supabase/repeatable/28082026_2210_candidate_daily_handoff_recovery_v1.sql",
+      "saved_sha256": "26960666dde32dd8a08cccf7dfbcb699d0fd10486640315e01f532f6b2156410",
+      "canonical_sha256": "26960666dde32dd8a08cccf7dfbcb699d0fd10486640315e01f532f6b2156410"
+    },
+    {
+      "path": "supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql",
+      "saved_sha256": "07db60f811fa86f1bf303b8ebb7898dc8c8db2634300fce9376c01e177087443",
+      "canonical_sha256": "07db60f811fa86f1bf303b8ebb7898dc8c8db2634300fce9376c01e177087443"
+    },
+    {
+      "path": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "saved_sha256": "feb34bd16cdff196802190581901797bb91e1025ea369a882f4e67f288b14c95",
+      "canonical_sha256": "feb34bd16cdff196802190581901797bb91e1025ea369a882f4e67f288b14c95"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "saved_sha256": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908",
+      "canonical_sha256": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908"
+    },
+    {
+      "path": "supabase/repeatable/10092026_0823_planned_week_candidate_submission_delete_guard.sql",
+      "saved_sha256": "2ab4ac7162c2925261d47506538d2ecfa0d9a3c086b637db628811c5f7363ac5",
+      "canonical_sha256": "2ab4ac7162c2925261d47506538d2ecfa0d9a3c086b637db628811c5f7363ac5"
+    },
+    {
+      "path": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "saved_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd",
+      "canonical_sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd"
+    },
+    {
+      "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "saved_sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+      "canonical_sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "saved_sha256": "7fdddc57b5f1ca6aff196567a10dd09b393185b17efdfe9b58bb766aea7e847b",
+      "canonical_sha256": "7fdddc57b5f1ca6aff196567a10dd09b393185b17efdfe9b58bb766aea7e847b"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "saved_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "canonical_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "saved_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+      "canonical_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "saved_sha256": "180bd448cc1d6a6b11f0b69e6ce1c83321d44712be7b0b096f2c3232bfd4359f",
+      "canonical_sha256": "180bd448cc1d6a6b11f0b69e6ce1c83321d44712be7b0b096f2c3232bfd4359f"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "saved_sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe",
+      "canonical_sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+    }
+  ],
+  "selectedNativeInputs": [
+    {
+      "path": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "saved_sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "saved_sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "saved_sha256": "180bd448cc1d6a6b11f0b69e6ce1c83321d44712be7b0b096f2c3232bfd4359f"
+    },
+    {
+      "path": "supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql",
+      "saved_sha256": "04697851870a16a292413d575a560cb6a454501e03fc53a7686e90502dd58c58"
+    },
+    {
+      "path": "supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql",
+      "saved_sha256": "d96efe14799d4382c6d57f909e39f6dc906feb7ebcd69a504828ee0c8f2b5110"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "saved_sha256": "f8b1202086c2aacf119dca7b827c606e01921f34ef5f5e9c0a1f31e6d80df25e"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "saved_sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c"
+    },
+    {
+      "path": "supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql",
+      "saved_sha256": "4b6184ae53ac7321720da0d4adc78ae7002bea6e1dcbe53d607601caf161cc3a"
+    },
+    {
+      "path": "supabase/migrations/21082026_1757_candidate_federated_session_projection.sql",
+      "saved_sha256": "39d57acea3cfff59974e06fa37b6fc5008dfff5ae2981ffb4ecd9052cf430c1b"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "saved_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "saved_sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587"
+    }
+  ],
+  "nativeExecuted": false,
+  "pushDeliveryQualified": false
+}

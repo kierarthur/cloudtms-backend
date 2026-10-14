@@ -9,6 +9,7 @@ import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs'
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
+import {checkOnlyReminderRequest,checkOnlyReminderReceipt,CheckOnlyReminderError} from './check-only-candidate-reminder.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -680,6 +681,22 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
     }
     if (action === 'COMBINED_REVIEW_WORKSPACE') request.tab = 'queries';
+  }
+
+  if (action === 'CHECK_ONLY_D10_REMIND_CANDIDATE') {
+    try {
+      const nativeRequest=checkOnlyReminderRequest(body,user);
+      const result=await callRpc(dependencies,'weekly_source_check_only_candidate_reminder_atomic_v1',nativeRequest);
+      return jsonResponse(200,checkOnlyReminderReceipt(result,nativeRequest));
+    } catch(error) {
+      const busy=bpayBusyEnvelope(error);if(busy)return jsonResponse(busy.status,busy.body);
+      if(error instanceof CheckOnlyReminderError) fail(error.code,
+        error.status===502?'The reminder result could not be confirmed. Retry the same request.':'This reminder changed. Refresh Queries before continuing.',error.status);
+      const nativeState=String(error?.json?.code||error?.code||'');
+      if(nativeState==='42501') fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_ACTOR_FORBIDDEN','This reminder is no longer available to this user.',403);
+      if(['40001','23505','55000','22023'].includes(nativeState)) fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_CHANGED','This reminder changed. Refresh Queries before continuing.',409);
+      fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_RESULT_UNCONFIRMED','The reminder result could not be confirmed. Retry the same request.',502);
+    }
   }
 
   if (action === 'LATER_CHANGE_DECISION') {

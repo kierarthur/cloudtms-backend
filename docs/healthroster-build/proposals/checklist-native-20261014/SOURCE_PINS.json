@@ -1,9 +1,9 @@
 {
-  "status": "SOURCE_ONLY_NATIVE_PRODUCER_WITH_ACTUAL_CANDIDATE_DAILY_SAVE_HOOKS_AND_D10_PARENT_FINANCIAL_FACTS_GATES_HELD",
+  "status": "SOURCE_ONLY_NATIVE_CHECKLIST_HISTORICAL_CALLER_D10_R254_INTENT_UNMOUNTED_FINANCIAL_NATIVE_GATES_HELD",
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 97,
+    "passed": 104,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -80,7 +80,7 @@
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
-      "saved_sha256": "5fe27bf0723ed51f28952177aa10987760619b3b6b0c08d97a2a58098011f7cc"
+      "saved_sha256": "9329a0b8f443755dd7f29a303f5cbcc4673ea82ac336e6cf34dc2cf86f2893de"
     },
     {
       "path": "supabase/verification/support/wp_u3_submission_witness_vectors.sqlinc",
@@ -229,6 +229,94 @@
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/HISTORICAL_PREPARATION_CALLER.md",
       "saved_sha256": "5ca702e102f42c12192f98452efe854d7660c31e0a2131ce542f3034e8f01fe9"
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "saved_sha256": "18a5a5eb5fe5dbd950c3fca74f28764067e1b495a7b26f470746f7694ebcf1d6"
+    },
+    {
+      "path": "broker/src/weekly-source/check-only-candidate-reminder.mjs",
+      "saved_sha256": "a0a573a0e781f02680f85bebf16d1c13b8b54d43906dd3e0dfe70bd0956cd368"
+    },
+    {
+      "path": "tests/healthroster-checklist-r254-reminder.test.mjs",
+      "saved_sha256": "fe77915aa704143f4677a0fa26aeb9c4d774598499eb7c03cea3df182de3e966"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_subject.sqlinc",
+      "saved_sha256": "c5bce88819ef7c78b694c9b703bf61e38a48f103b1b6ed4c1f7120f7346043fa"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_context.sqlinc",
+      "saved_sha256": "78b238d508a0591a4af33eb86f4e6afe8fc801f98ac51a07bc7bab73ec0d37bf"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_atomic.sqlinc",
+      "saved_sha256": "e82e4eefb059d7d8bb0923e871faf7ba0dfa228f321259323576f0b0f43e9117"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_notification_visible.forward.sqlinc",
+      "saved_sha256": "14a9b6e027eea98c5d3f5313c927db886c6b4889b7a2c97f59286bdc96d35eb4"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_candidate_notification_visible.reverse.sqlinc",
+      "saved_sha256": "91513f37fbe2e7ebdc23328e6838aac6867c049bec04ee57c92f097c8259feb9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-reminder-owner-packet.mjs",
+      "saved_sha256": "cbf36007ed8114d95ccbc370d2c7d93451364f2cb8533146160144f51e5893d8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/update-reminder-source-pins.mjs",
+      "saved_sha256": "605d25ca31bee409bd0c55889d8a4f7300396231113f1b90f721166cb40041d7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/R254_REMINDER_SOURCE_HANDOFF.md",
+      "saved_sha256": "0e652950bd8818abb7b103aae1f55bf17d27aa1c320ccb6d6e606da2a4ab8f40"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/R254_NATIVE_OWNER_PINS.json",
+      "saved_sha256": "4e27e5f9bacf7247c6bfa4735fa615bd6872a03227b5eb5666ac666efc02f198"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/candidate-notification-copy.forward.jsinc",
+      "saved_sha256": "7979f313df40d5b928a72ab35d909ebf09782f1c68abb8a5aaefb20efe81c6a8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/candidate-notification-copy.reverse.jsinc",
+      "saved_sha256": "76abdbb0f0b547d394e834c9042b9f8af6ebe58cea367d74ccda6729fa5abe93"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-candidate-reminder.jsinc",
+      "saved_sha256": "c26fb5d1d6e193519db52ef14f811cb9d7423478627c20e7461ae5d513c80572"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-reminder.forward.json",
+      "saved_sha256": "895eb3d545b6008d8dfa906f78ec858613bbe97691b2efc24a882986dc0b4e51"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-reminder.reverse.json",
+      "saved_sha256": "32211bcc9fa5367c02e00090d3150fe432959c28dcb8eeab9d606400bc693493"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-workspace-actions-reminder.forward.jsinc",
+      "saved_sha256": "fb1d4adef3bf19dd4aec1f6cfe99026855ac642e9b6c45d470796962cca17a73"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-workspace-actions-reminder.reverse.jsinc",
+      "saved_sha256": "519db99c7f6862b3f3c1b8a76e7e1f8a85a32e87a6013e508e52e90d194735c6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/broker-r254-command.forward.jsinc",
+      "saved_sha256": "8da184125175089dbd331400453cb8a9d8b372870e605340810707db4aaa0a3c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/broker-r254-command.reverse.jsinc",
+      "saved_sha256": "4dc8c6f2ff006cf657f303e37c47dfbf4486009fe33b6ac414da1cb2b85cbacc"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/broker-r254-command.import.jsinc",
+      "saved_sha256": "fbacedb45920386b6ab587f54d88fc676ea37fcdf4fadd900c5cb31594af57f1"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -399,9 +487,11 @@
     "REPORT_NHSP_AGENCY_PROCESS_POPULATION_RETENTION_CURSOR_ANCHOR_ACCEPTANCE",
     "NATIVE_API_UI_RUNTIME_PHONE_FEATURE_QUALIFICATION",
     "HISTORICAL_REAL_WITNESS_PREPARATION_CALLER_MOUNT_NATIVE_TRANSACTIONS_REQUIRED_BEFORE_FEATURE_ON",
-    "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE"
+    "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE",
+    "R254_NATIVE_ACCOUNT_COOLDOWN_REPLAY_SUBMISSION_RETIREMENT_INBOX_UNDO_TARGET_AND_PUSH_QUALIFICATION",
+    "SOURCE_5804_HISTORICAL_CALLER_FILTER_CHECKING_AND_R254_SUCCESSOR_INDEPENDENT_REVIEW"
   ],
-  "predecessor_source_increment": "9e55341f49902a3f212aac888739424ca4241bce",
+  "predecessor_source_increment": "5804a7d0be822e2f133d86d934fca8a2897ff33f",
   "db_source_check": {
     "passed": true,
     "migrations": 399,
@@ -459,9 +549,10 @@
     "critic_sha256": "17348f14bb5fc65e138fcf83e4a271d55cfb9be21270108631e784d137eca71d",
     "predecessor": "8c1727a77f8840527afe8266ec928abb988df2ab",
     "finding": "P1-D10-FRAME1",
-    "successor_disposition": "EXACT_NATIVE_CHILD_BEFORE_FIRST_RENDER_AWAITING_INDEPENDENT_SOURCE_CLOSURE",
+    "successor_disposition": "ROOT_REPORTED_SOURCE_CLOSED_AT_9E_FINAL_CRITIC_PIN_PENDING",
     "complete_native_showModal_setTab_renderTop_executed_in_memory": true,
-    "physical_browser_native_UI_executed": false
+    "physical_browser_native_UI_executed": false,
+    "source_closed_head": "9e55341f49902a3f212aac888739424ca4241bce"
   },
   "source_comparison_note": {
     "head": "9e55341f49902a3f212aac888739424ca4241bce",
@@ -471,5 +562,16 @@
     "reported_86_of_87_run": "MOVING_SAVED_SOURCE_NOT_FROZEN_GIT_OBJECTS_ROOT_CRITIC_RECONCILIATION_PENDING",
     "successor_group_declarations": 2,
     "successor_group_statements": 6
+  },
+  "r254_reminder_checkpoint": {
+    "status": "SOURCE_BUILT_NATIVE_STAGING_GET_CATALOGUE_INBOX_LOCKS_PHONE_AND_PUSH_UNQUALIFIED",
+    "native_owner_pins": "docs/healthroster-build/proposals/checklist-native-20261014/R254_NATIVE_OWNER_PINS.json",
+    "native_owner_pins_sha256": "4e27e5f9bacf7247c6bfa4735fa615bd6872a03227b5eb5666ac666efc02f198",
+    "command": "CHECK_ONLY_D10_REMIND_CANDIDATE",
+    "rpc": "public.weekly_source_check_only_candidate_reminder_atomic_v1(jsonb)",
+    "native_executed": false,
+    "external_action_executed": false,
+    "other_lane_edited": false,
+    "source_review": "AWAITING_INDEPENDENT_REVIEW"
   }
 }

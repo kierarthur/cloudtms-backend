@@ -1,0 +1,268 @@
+async function handleCommand(req, env, ctx, dependencies, user) {
+  const body = await readJsonBody(req);
+  const action = String(body.action ?? '').trim().toUpperCase();
+  const payload = plainObject(body.payload ?? {}, 'WEEKLY_SOURCE_COMMAND_INVALID', 'Command');
+  assertNoBrowserFinancialFacts(payload);
+  const request = { ...payload, actor_user_id: user.id };
+  if (user.payView) {
+    if (!PAY_VIEW_COMMANDS.has(action)
+        || (action === 'COMBINED_REVIEW_WORKSPACE' && (
+          (payload.tab != null && payload.tab !== 'queries')
+          || (payload.section != null && !['questions', 'checks', 'protected'].includes(payload.section))
+        ))) {
+      fail('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED', 'Office administrator permission is required.', 403);
+    }
+    if (action === 'COMBINED_REVIEW_WORKSPACE') request.tab = 'queries';
+  }
+
+  if (action === 'CHECK_ONLY_D10_REMIND_CANDIDATE') {
+    try {
+      const nativeRequest=checkOnlyReminderRequest(body,user);
+      const result=await callRpc(dependencies,'weekly_source_check_only_candidate_reminder_atomic_v1',nativeRequest);
+      return jsonResponse(200,checkOnlyReminderReceipt(result,nativeRequest));
+    } catch(error) {
+      const busy=bpayBusyEnvelope(error);if(busy)return jsonResponse(busy.status,busy.body);
+      if(error instanceof CheckOnlyReminderError) fail(error.code,
+        error.status===502?'The reminder result could not be confirmed. Retry the same request.':'This reminder changed. Refresh Queries before continuing.',error.status);
+      const nativeState=String(error?.json?.code||error?.code||'');
+      if(nativeState==='42501') fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_ACTOR_FORBIDDEN','This reminder is no longer available to this user.',403);
+      if(['40001','23505','55000','22023'].includes(nativeState)) fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_CHANGED','This reminder changed. Refresh Queries before continuing.',409);
+      fail('WEEKLY_SOURCE_CHECK_ONLY_REMINDER_RESULT_UNCONFIRMED','The reminder result could not be confirmed. Retry the same request.',502);
+    }
+  }
+
+  if (action === 'LATER_CHANGE_DECISION') {
+    const keys = ['schema_version', 'decision_bundle_id', 'bundle_revision',
+      'root_timesheet_id', 'final_revision_id', 'decision', 'idempotency_key'];
+    // Digest-derived Source UUIDs use PostgreSQL's full UUID domain.
+    const sourceUuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+    if (body.action !== action || Object.keys(body).length !== 2
+        || !Object.hasOwn(body, 'payload') || Object.keys(payload).length !== keys.length
+        || !keys.every((key) => Object.hasOwn(payload, key))
+        || payload.schema_version !== 'WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1'
+        || !['decision_bundle_id', 'root_timesheet_id', 'final_revision_id']
+          .every((key) => typeof payload[key] === 'string' && sourceUuid.test(payload[key]))
+        || !Number.isSafeInteger(payload.bundle_revision) || payload.bundle_revision < 1
+        || !['APPROVE_UPDATED_HOURS', 'KEEP_CURRENTLY_APPROVED_HOURS'].includes(payload.decision)
+        || typeof payload.idempotency_key !== 'string'
+        || payload.idempotency_key !== payload.idempotency_key.trim()
+        || payload.idempotency_key.length < 16 || payload.idempotency_key.length > 200) {
+      fail('WEEKLY_SOURCE_LATER_CHANGE_REQUEST_INVALID', 'This decision could not be prepared.', 400);
+    }
+    let owner;
+    try {
+      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();
+      owner = normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));
+    } catch {
+      fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', 'This decision is unavailable; try again shortly.', 503);
+    }
+    if (owner.active_owner !== 'NEXT') {
+      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED', 'This decision is not available for this agency yet.', 409);
+    }
+    try {
+      const result = await withRefusalRecording(dependencies,
+        'broker:weekly-source:weekly_source_later_change_decide_atomic_v1', user.id,
+        () => callRpc(dependencies, 'weekly_source_later_change_decide_atomic_v1', request));
+      return jsonResponse(200, result);
+    } catch (error) {
+      // These exact native errors occur after original receipt replay and the
+      // idempotency lock. Admission/network errors cannot establish that outcome.
+      const database = error?.json;
+      const definite = new Set(['WEEKLY_SOURCE_LATER_CHANGE_SCOPE_UNAVAILABLE',
+        'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_STALE', 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE',
+        'WEEKLY_SOURCE_LATER_CHANGE_ACCEPTANCE_FAILED', 'WEEKLY_SOURCE_LATER_CHANGE_PUBLICATION_REFUSED']);
+      if (database?.code === '55000' && definite.has(database.message)) {
+        return jsonResponse(409, { ok: false, published: false,
+          error_code: database.message, sqlstate: database.code,
+          message: 'This decision was not saved; close and reopen the Timesheet.' });
+      }
+      throw error;
+    }
+  }
+
+  if (BULK_QUERY_ACTIONS.has(action)) {
+    try {
+      const result = await callRpc(
+        dependencies,
+        'weekly_source_office_bulk_query_action_atomic_v1',
+        { ...request, action },
+      );
+      return jsonResponse(200, result);
+    } catch (error) {
+      if (action === 'ASK_CANDIDATES'
+          && /WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE/i.test(
+            `${String(error?.code || '')} ${String(error?.message || '')}`
+          )) {
+        return jsonResponse(200, {
+          ok: false,
+          status: 'UNAVAILABLE_NO_ACTIVE_APP_ACCOUNT',
+          accepted: false,
+        });
+      }
+      throw error;
+    }
+  }
+
+  if (action === 'RECHECK_SOURCE') {
+    if (typeof dependencies.recheckUpload !== 'function') {
+      fail('WEEKLY_SOURCE_RECHECK_UNAVAILABLE', 'Source rechecking is unavailable.', 503);
+    }
+    return jsonResponse(200, await dependencies.recheckUpload({ request, actor: user, env, ctx }));
+  }
+
+  if (action === 'FINALISE_WEEK') {
+    if (typeof dependencies.orchestrateFinalisation !== 'function') {
+      fail(
+        'WEEKLY_SOURCE_FINALISATION_UNAVAILABLE',
+        'The final source cannot be completed right now.',
+        503,
+      );
+    }
+    const result = await dependencies.orchestrateFinalisation({
+      request,
+      actor: user,
+      env,
+      ctx,
+    });
+    return jsonResponse(200, result);
+  }
+
+  if (action === 'RECOVER_FINALISED_PAY') {
+    if (typeof dependencies.recoverFinalisedPay !== 'function') {
+      fail(
+        'WEEKLY_SOURCE_FINALISATION_RECOVERY_UNAVAILABLE',
+        'The approved-hours update cannot be checked right now.',
+        503,
+      );
+    }
+    const result = await dependencies.recoverFinalisedPay({
+      request,
+      actor: user,
+      env,
+      ctx,
+    });
+    return jsonResponse(200, result);
+  }
+
+  // WP-23.  The positional and strict-envelope owners are dispatched before the
+  // jsonb-request set, because their request is NOT `{...payload, actor_user_id}`.
+  if (POSITIONAL_RPC_COMMANDS[action]) {
+    const definition = POSITIONAL_RPC_COMMANDS[action];
+    const namedArguments = positionalArguments(definition, payload, user.id);
+    const result = await withRefusalRecording(
+      dependencies,
+      `broker:weekly-source:${definition.rpc}`,
+      user.id,
+      () => callPositionalRpc(dependencies, definition.rpc, namedArguments),
+    );
+    return jsonResponse(200, result);
+  }
+  if (STRICT_ENVELOPE_RPC_COMMANDS[action]) {
+    const definition = STRICT_ENVELOPE_RPC_COMMANDS[action];
+    const result = await withRefusalRecording(
+      dependencies,
+      `broker:weekly-source:${definition.rpc}`,
+      user.id,
+      () => callRpc(dependencies, definition.rpc, strictEnvelopeRequest(definition, payload)),
+    );
+    return jsonResponse(200, result);
+  }
+  if (action === 'UNDO_NO_ONE_WORKED') {
+    const keys = ['source_cycle_id', 'source_group_id', 'client_id', 'completion_id', 'expected_cycle_version'];
+    if (Object.keys(payload).length !== keys.length || keys.some(key => !Object.hasOwn(payload, key))
+        || Object.keys(payload).some(key => !keys.includes(key))) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    for (const key of keys.filter(key => key.endsWith('_id'))) {
+      request[key] = canonicalUuid(payload[key], 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', key);
+    }
+    const version = payload.expected_cycle_version;
+    if (!(typeof version === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(version))
+        && !(Number.isSafeInteger(version) && version >= 0)) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    request.expected_cycle_version = String(version);
+    if (BigInt(request.expected_cycle_version) >= 9223372036854775807n) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    const result = await withRefusalRecording(dependencies,
+      'broker:weekly-source:weekly_source_no_shifts_undo_atomic_v1', user.id,
+      () => callRpc(dependencies, 'weekly_source_no_shifts_undo_atomic_v1', request));
+    const receiptKeys = ['ok', 'status', 'idempotent', 'completion_id', 'source_cycle_id', 'source_group_id',
+      'client_id', 'cycle_state', 'cycle_version', 'undone_by_user_id', 'undone_at_utc'];
+    if (!result || typeof result !== 'object' || Array.isArray(result)
+        || Object.keys(result).length !== receiptKeys.length
+        || receiptKeys.some(key => !Object.hasOwn(result, key))
+        || result.ok !== true || result.status !== 'NO_SHIFTS_UNDONE' || typeof result.idempotent !== 'boolean'
+        || !['OPEN', 'FINALISABLE', 'FINALISED'].includes(result.cycle_state)
+        || typeof result.cycle_version !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(result.cycle_version)
+        || typeof result.undone_at_utc !== 'string' || !Number.isFinite(Date.parse(result.undone_at_utc))
+        || ['completion_id', 'source_cycle_id', 'source_group_id', 'client_id'].some(key => result[key] !== request[key])
+        || result.undone_by_user_id !== user.id) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_RECEIPT_UNAVAILABLE', 'The Undo result could not be verified. Refresh the Checklist before trying again.', 503);
+    }
+    if ((!result.idempotent && BigInt(result.cycle_version) !== BigInt(request.expected_cycle_version) + 1n)
+        || BigInt(result.cycle_version) > 9223372036854775807n) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_RECEIPT_UNAVAILABLE', 'The Undo result could not be verified. Refresh the Checklist before trying again.', 503);
+    }
+    return jsonResponse(200, result);
+  }
+  if (DIRECT_RPC_COMMANDS[action]) {
+    try {
+      const result = await withRefusalRecording(
+        dependencies,
+        `broker:weekly-source:${DIRECT_RPC_COMMANDS[action]}`,
+        user.id,
+        () => callRpc(dependencies, DIRECT_RPC_COMMANDS[action], request),
+      );
+      return jsonResponse(200, result);
+    } catch (error) {
+      if (action === 'ASK_CANDIDATES'
+          && /WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE/i.test(
+            `${String(error?.code || '')} ${String(error?.message || '')}`
+          )) {
+        return jsonResponse(200, {
+          ok: false,
+          status: 'UNAVAILABLE_NO_ACTIVE_APP_ACCOUNT',
+          candidate_id: request.candidate_id ?? null,
+          accepted: false,
+        });
+      }
+      throw error;
+    }
+  }
+  if (PROTECTED_ACTIONS.has(action)) {
+    if (typeof dependencies.orchestrateProtectedAction !== 'function') {
+      fail(
+        'WEEKLY_SOURCE_PROTECTED_ACTION_UNAVAILABLE',
+        'Approved hours cannot be changed right now.',
+        503,
+      );
+    }
+    try {
+      const result = await dependencies.orchestrateProtectedAction({
+        action, request, actor: user, env, ctx
+      });
+      return jsonResponse(200, result);
+    } catch (error) {
+      const typed = protectedActionErrorResponse(error);
+      if (typed) return typed;
+      throw error;
+    }
+  }
+  if (action === 'PREVIEW_CORRECT_FINAL_SOURCE') {
+    if (typeof dependencies.previewCorrectFinalSource !== 'function') {
+      fail('WEEKLY_SOURCE_CORRECTION_UNAVAILABLE', 'The final source cannot be corrected right now.', 503);
+    }
+    const result = await dependencies.previewCorrectFinalSource({ request, actor: user, env, ctx });
+    return jsonResponse(200, result);
+  }
+  if (action === 'APPLY_CORRECT_FINAL_SOURCE') {
+    if (typeof dependencies.applyCorrectFinalSource !== 'function') {
+      fail('WEEKLY_SOURCE_CORRECTION_UNAVAILABLE', 'The final source cannot be corrected right now.', 503);
+    }
+    const result = await dependencies.applyCorrectFinalSource({ request, actor: user, env, ctx });
+    return jsonResponse(200, result);
+  }
+  fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED', 'This action is not available.', 400);
+}
