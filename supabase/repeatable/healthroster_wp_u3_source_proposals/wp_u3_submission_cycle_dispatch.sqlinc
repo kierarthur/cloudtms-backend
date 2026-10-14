@@ -5,7 +5,7 @@ create or replace function private.weekly_source_checklist_submission_cycle_prep
 ) returns jsonb language plpgsql volatile security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
-declare witness jsonb; group_id uuid; groups integer; client_id uuid; own_week date; cycle_id uuid;
+declare witness jsonb; group_id uuid; groups integer; v_client_id uuid; own_week date; cycle_id uuid;
 begin
   perform private.weekly_source_query_require_service_v1();
   if p_timesheet_id is null then return jsonb_build_object('applies',false,'reason','NO_TIMESHEET'); end if;
@@ -13,10 +13,10 @@ begin
   if witness->'actual_submitted' is distinct from 'true'::jsonb then
     return jsonb_build_object('applies',false,'reason','NO_ACTUAL_SUBMISSION');
   end if;
-  client_id:=(witness->>'client_id')::uuid; own_week:=(witness->>'week_ending_date')::date;
+  v_client_id:=(witness->>'client_id')::uuid; own_week:=(witness->>'week_ending_date')::date;
   select count(distinct g.id),(array_agg(distinct g.id order by g.id))[1] into groups,group_id
     from public.weekly_source_groups g
-    join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=client_id
+    join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=v_client_id
       and own_week between member.valid_from and coalesce(member.valid_to,'infinity'::date)
     cross join lateral(select private.weekly_source_signed_submission_read_context_v1(p_timesheet_id,g.id) context) read_context
     where g.active and g.source_family='ROSTER' and read_context.context->'eligible'='true'::jsonb;
@@ -24,7 +24,7 @@ begin
   if groups<>1 then raise exception 'WEEKLY_SOURCE_SUBMISSION_CYCLE_SIGNED_SCOPE_AMBIGUOUS' using errcode='55000'; end if;
   cycle_id:=private._weekly_source_settings_ensure_open_cycle_v1(group_id,p_timesheet_id,
     private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',witness),p_actor_user_id);
-  return jsonb_build_object('applies',true,'source_group_id',group_id,'client_id',client_id,'week_ending',own_week,
+  return jsonb_build_object('applies',true,'source_group_id',group_id,'client_id',v_client_id,'week_ending',own_week,
     'source_cycle_id',cycle_id,'timesheet_id',p_timesheet_id,
     'submission_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SUBMISSION_CYCLE_WITNESS_V1',witness),'hex'));
 end;

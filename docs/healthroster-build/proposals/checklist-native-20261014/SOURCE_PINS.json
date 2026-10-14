@@ -36,7 +36,7 @@
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_cycle_dispatch.sqlinc",
-      "saved_sha256": "e46447f0f9a51035d0e03c3256382f87d37e91f69b46e96feb675929fd7a10b6"
+      "saved_sha256": "3456667adc4c06a0c3e5a52ca72913f87a5d8dc9876c4cd3cf4463cad2c1de17"
     },
     {
       "path": "supabase/verification/support/wp_u3_submission_cycle_prepare_vectors.sqlinc",
