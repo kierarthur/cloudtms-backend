@@ -1,0 +1,239 @@
+### 26.5 The invoiceable Timesheet, per-shift pay and pay-only protection (owner rounds 12–15; R-207, R-212, R-218, R-222)
+
+**Rebuilt for rounds 14–15. This replaces the earlier §26.5–26.5a: protection lives on T0's segment, R0/P0 for paid protections, and the two-step Amend of protected hours.**
+
+**1. T0 holds finalised HealthRoster shifts only (round 15 item 2; R-222).**
+- The worker's signed MyTMS submission is the **claim**. Its immutable submission and the comparison rows (`weekly_timesheet_source_comparisons`, §26.3) keep every claimed shift for the queries.
+- **The invoiceable Timesheet T0 carries only shifts that HealthRoster has finalised, at the finalised times.** An unfinalised shift, protected or not, is never on T0. There is nothing to remove and no "deemed not worked" step for an unprotected shift; the round-14 deeming idea is superseded. "Deemed not worked" now means only the consequence of Office's Unprotect of a still-waiting protected shift (item 3; round 15 reconciliation item 4).
+- **How T0 is aligned (REUSE, no new edit path; round-6 M7: ONE Office action).** Every preset T0 change runs as **one Office action** through a single thin owner, `public.weekly_source_agency_timesheet_change_v1(p_contract_week_id, p_reason, p_expected_signature, p_request_key, p_actor_user_id)`, replay-safe by request key. It resolves the current T0 fresh from the Contract week and refuses a rotated id (item 13). Its request row is also the store for the return hold of item 5. The action covers:
+  - Authorise;
+  - "Shift now finalised · add to the Timesheet";
+  - **"Shift now matches HealthRoster · Authorise"** (critic round 8 §8 item 2): a held, disputed shift on an authorised T0 whose HealthRoster hours later match. It is Office's re-authorise, which clears that segment's `exclude_from_pay`;
+  - "Accept HealthRoster hours";
+  - the same-draft round trip as **one click** (critic round 8 §8 item 1; item 5).
+
+  The equal-hours case (a protected shift finalised at exactly the protected hours, £0 netting) **still needs Office's re-authorise click**. The netting and the clearing are automatic, the authorisation is not (round-12 final decision; critic round 8 §8 item 4). The Worker request runs the steps below in sequence:
+  1. While T0 is unauthorised and on no invoice, T0's schedule is set to the finalised shifts through the existing edit owner `contract_week_manual_upsert_atomic` (`03102026_0500…:10`).
+  2. The existing Worker recompute runs (`enqueue_ts_financials` → `tsfin_write_current_snapshot_single_bounded`).
+  3. When the TSFIN is fresh (the NEXT publisher's own test, `10102026_1236…:415-425`), the authorise wrapper of item 4 completes the authorisation. The recorded actor is the Office user who clicked.
+
+  The click is the authorisation (R-082). The Worker runs the recompute inline for this one Timesheet before calling the wrapper, so the user sees one click and one result. If the recompute is not fresh in time, the action returns `AGENCY_INVOICE_TSFIN_NOT_READY` ("Still recalculating — try again in a moment"); this refusal is only a safety net (AM-1). A replay of the same request key returns the stored result. Nothing authorises without an Office click.
+
+**2. Pay per shift.**
+
+| Shift | On T0? | Pay |
+|---|---|---|
+| finalised and matching | yes | paid from T0 |
+| finalised, worker disputes the hours (a query raised before authorisation; after authorisation the worker cannot query, round 17 item 3), unprotected | yes, at HealthRoster's hours | held: T0 segment `exclude_from_pay=true` |
+| unfinalised or missing, unprotected | **no** | not paid |
+| **protected** (unfinalised, missing or disputed) | only if finalised (then segment `exclude_from_pay=true`) | **pay-only protected pay at the worker's submitted hours** (item 3). A protected shift that is still waiting **holds the week's invoice** (§26.4 condition 8). So does a protected shift that HealthRoster has finalised at **different** hours, until Office chooses "Accept HealthRoster hours" (round 17 item 4) |
+| HealthRoster higher than the claim (R-209, "! No hold") | yes, at HealthRoster's hours | paid |
+
+The invoice still waits for the complete matching week (§26.4). Protected hours never appear on the invoice; but a protected shift that is still waiting, or finalised at different hours, holds the week's invoice (§26.4 condition 8; owner round 15 reconciliation item 4, round 17 item 4).
+
+**3. Protected pay is PAY-ONLY (round 14 item 2; round 15 items 2 and 7; R-207, R-218).**
+- **The protection store** (`private.weekly_source_check_only_shift_protections`, NEW-JUSTIFIED store only) holds the worker's submitted hours, state and audit, keyed by the week and the shift's `work_event_id` (item 13), never by a Timesheet id. It is the **source** of a protected-pay position.
+- **The protected-pay position** sits on T0's own NEXT pay record. NEXT's existing `PROTECTED_WORK` position family is extended to read this store (WT `10102026_1236…:2523-2674`). It is a Banking Pay request: **NX-AI-6**, with the exact contract in the handoff. No Banking Pay file is edited here.
+- **Protect, Amend and Unprotect change pay by the difference only:**
+  - no T0 edit, no unauthorise, no R0/P0 and no invoice line effect (Unprotect of a still-waiting shift does release the week's invoice hold, below);
+  - Amend and Unprotect after payment record an overpayment of the difference only, never refused (R-213);
+  - an increase is paid at the next run.
+
+  The earlier two-step Amend of protected hours is withdrawn; R-218 is rewritten to the pay-only rule.
+- **Unprotect** (round 15 reconciliation item 4) is offered **only while the shift is still waiting**. A finalised shift at the protected hours clears automatically once it is on T0 and T0 is authorised (R-166; item 6, §26.5b). At different hours, only Accept or Wait is offered (R-227, below).
+  - **Shift still waiting:** it is **deemed not worked**. The position is reconciled to zero, and anything already paid becomes an overpayment of the difference (never refused, R-213). The week's invoice is released.
+
+  Leaving the shift protected keeps it waiting.
+- **A protected shift finalised at DIFFERENT hours (owner round 17 item 4; R-227)** has exactly two resolutions:
+  - **Accept HealthRoster hours.** One Office action (item 1) settles the shift on T0 at HealthRoster's hours. There are two timings. If the shift was finalised **before** T0's alignment, it is already on T0 with `exclude_from_pay=true`, and Accept releases it and nets. If it is finalised **after** authorisation, Accept adds it to T0. Either way condition 8 holds the invoice until then. The protection is reconciled to HealthRoster, and pay settles only the difference: an overpayment of the difference, or a top-up. The protection clears and the week can then be invoiced.
+  - **Wait for a further import.** The protection is kept unchanged, and it **still holds the week's invoice** (§26.4 condition 8).
+
+  There is **no** "keep the worker's hours" or keep-as-paid option, and no "invoice HealthRoster's hours and absorb the difference" option (critic option 2 rejected). If a later import finalises the shift at the protected hours, the normal netting applies (£0 extra).
+
+**4. Authorise wrapper beside the pinned owners (unchanged from the final writer pass; R-217).** `public.weekly_source_agency_authorise_v1(…)` does the following in order:
+- writes every T0 segment's `exclude_from_pay` from the pay table above with the existing `tsfin_update_segments_locked` (`19012026_extras.sql:4684`). The same re-derivation also runs after **every** recompute of a preset T0, keyed by `work_event_id` (item 13 (5));
+- calls the **unchanged** `timesheet_authorise_generic_atomic`;
+- runs the validation writer (§26.4).
+
+If this is impossible, the build stops and reports, naming `17092026_0610…:1142-1160`. An Authorise before any export covers the week is refused unless a shift is protected; protected pay then flows through the position.
+
+**5. When T0 may still be changed (round 15 item 3 and the owner-confirmed reconciliation; R-202).** The test is **invoiced or not, never authorised or not.**
+- **On no ISSUED invoice, unauthorised:** T0 is amended directly. The next import's alignment does it (item 1).
+- **On no ISSUED invoice, authorised (and on no draft):** Office's one action (item 1) unauthorises T0 (allowed, because no invoice line exists: `21072026_1235_30…:250-293`), amends it through the item 1 edit and inline recalculation, and re-authorises through the normal authorise wrapper. That Office click is the re-authorisation, so this is never automatic. If the request is interrupted, nothing new on T0 is captured, amounts already paid stand, and a replay finishes it.
+- **On an unissued DRAFT D1 (owner round 16, Q-R15-3 answered, binding): remove, amend, put back on the SAME draft.** Verified reuse (critic round 6, `origin/test` `2c907ece`):
+  1. **Remove T0 only.** The existing `public.invoice_apply_edits(p_invoice_id, p_payload, p_actor_user_id)` (controlling body `23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql`; ACL `03092026_1644…`; admin actor, `INVOICE_ADMINISTRATOR_PERMISSION_REQUIRED`) with `remove_invoice_line_ids` = T0's lines on D1: DRAFT/ON_HOLD only (`:348`), deletes the lines (`:1761-1763`), unlocks T0's TSFIN and segment locks (`:1782-1806`) and sets T0's Contract week `INVOICED` → `AUTHORISED` (`:2955-2959`). Every other Timesheet's lines on D1 are untouched. `invoice_apply_edits` never deletes an invoice, so a D1 that is left with zero lines stays a DRAFT with the same id.
+  2. **Amend.** The "authorised" route above runs: unauthorise (now allowed, no invoice line), edit, recalculation, Office re-authorise through the authorise wrapper, validation writer.
+  3. **Put back on D1.** When T0 is `READY_FOR_INVOICE` again, the same existing function with `add_timesheet_ids=[T0]` on **D1's invoice id** re-places it (the add path requires `READY_FOR_INVOICE`, `:2504-2509`, and sets the Contract week `INVOICED` again, `:2955-2959`). **Guarantee: D1 keeps its invoice id and invoice number (if one is assigned); T0 never goes to a new invoice.** Batch Generate is **not** used for this: its draft reuse (`03092026_1645…:466-488`) picks the most recent matching DRAFT for BY_WEEK/ANY_WEEK and always creates a new invoice under NONE, so it cannot guarantee D1.
+  4. **Return hold (the only new state; held on the request row of the single change owner `weekly_source_agency_timesheet_change_v1`, item 1, §26.11).** From step 1 to step 3 the store records T0 → D1. While it exists: (a) D1 cannot be issued or sent — one more code in the existing issue-validator arm (§26.4), `AGENCY_INVOICE_TIMESHEET_RETURNING`; (b) D1 cannot be deleted even with zero lines — a preset guard in the existing `handleInvoiceDeleteOne` (`broker/src/index.js:155721`, which today deletes any zero-line DRAFT on an admin request, `:155759-155766`); (c) the batch classification successor excludes T0 from every other invoice (`AGENCY_INVOICE_RETURNING_TO_DRAFT`). Steps 1 and 3 are invoice actions. They run through the narrow round-trip wrapper of §25.2 (R-239), so any pay actor (admin, payment authoriser or golden key) may run them for this Timesheet only; all other invoice editing stays admin-only. The Checklist expansion shows "Invoice D1 · waiting for W3's amended Timesheet · Authorise" (§26.14).
+  **One click (critic round 8 §8 item 1).** Steps 1–3 run as **one** Office action through the change owner, started by any pay actor (admin, payment authoriser or golden key; owner R8-Q1, R-239, §25.2). Removal (step 1) and putting T0 back (step 3) are invoice actions. The re-authorise in step 2 is the same click. A second user is never needed; the return hold covers only an interrupted request, and the same request key finishes it.
+
+  **Payment authorisers (owner R8-Q1, R-239).** A non-admin payment authoriser or golden-key holder may run this one-click round trip **for that Timesheet only**, through the narrow wrapper of §25.2. Every other invoice edit stays admin-only (owner round 8). Tests DA-1…DA-5.
+  5. **Failure rule.** If D1 is no longer a DRAFT at step 3 (impossible while the guards hold), stop and report under `07` §4; never silently create a new invoice. Tests DR-1, DR-2, RE-1.
+- **On an ISSUED invoice:** T0 is never changed. See §26.6.
+- **Why unauthorise is used only before any invoice line:** unauthorise is refused as soon as any invoice line exists for the booking family, drafts and credit notes included (`21072026_1235_30…:250-293`; round 14 item 3 confirmed). A Batch Generate draft also sets the Contract week to INVOICED (`03092026_1645…:1538-1545`), which blocks authorise and edits (`03102026_0500…:8767-8771, 325-327`). Protection is pay-only (item 3), so no pay change ever needs unauthorise after drafting.
+
+**6. A shift HealthRoster finalises later (round 15 items 2 and 7, and the owner-confirmed reconciliation; R-222).**
+- **A protected shift finalised later is ALWAYS added to T0.** It is never put on a new Timesheet: the waiting protected shift held the week's invoice, so T0 cannot have been invoiced. T0 is changed through the item 5 route.
+- **An unprotected shift finalised later before T0 is invoiced** is added to T0 the same way.
+- **A new Timesheet is needed ONLY after issue (owner round 17 item 3 removes the post-authorisation query case).**
+  - A new shift goes on a new additional Timesheet T1, created by the existing additional-week owner (`handleContractWeekCreateAdditionalWeeklyAdjustment`, `index.js:175235-175242`, route `:202055-202060`) and filled by `contract_week_manual_upsert_atomic`, then onto a new invoice through normal Batch Generate.
+  - Amended or removed hours go through R0/P0 and a credit note for that Timesheet only (§26.6; R-240).
+- **Never paid twice (round 15 item 7).** If the shift was protected, its pay on T0 at HealthRoster's hours is **netted against the protected pay already paid** for the same worker, work date and shift identity. Only the difference is settled:
+  - HealthRoster higher → top-up;
+  - HealthRoster lower → an overpayment of the difference (R-213);
+  - equal → nothing.
+
+  The protection is then cleared (`CLEARED`/`RECONCILED_BY_IMPORT`, audited) and the shift is invoiceable.
+- **The netting key is the economic key** `candidate_id + work_date + work_event_id` (R-230; a finalised shift inherits the protection's `work_event_id`, item 13 (3)). It is never `booking_id`, `segment_id` or Request Id. In the normal case the protected position and the shift are both on T0's single NEXT work. **Netting is always cross-work by that key** (handoff NX-AI-6 item 5): a post-issue T1, R0/P0 (own works), and a T0 whose booking family changed (safeguard (b), item 13 (6)). Post-authorisation worker queries no longer exist (round 17 item 3). The netting is order-independent: while a protection is ACTIVE for a key, the key's payable amount is the protected value. The contract is in handoff NX-AI-6 item 5 (tests PX-1…PX-7, WH-1…WH-3).
+
+**7. Queries and reminders (round 14 items 5–6; round 17 item 3).**
+- **A query on an unprotected shift** is resolved through the existing `weekly_source_query_accept_system_hours_atomic_v1` (QD `:642-730`, "Accept source hours"). For a finalised shift this releases T0's segment at HealthRoster's hours, through the item 5 route while T0 is still on no invoice. For an unfinalised or missing shift nothing is on T0, so the shift simply stays unpaid.
+- **Reminders never hold anything** — neither pay nor the invoice.
+- **Worker queries stop at authorisation (owner round 17 item 3; R-226; supersedes round 14 item 6's "post-authorise query → new Timesheet"; resolves Q-R16-A).** Once T0 is authorised, MyTMS no longer lets the worker query a shift on T0 or submit changes for it. Later changes come only from HealthRoster imports, handled by Office.
+  - **REUSE** the existing authorised-record lock: `_candidate_record_capabilities_v1` sets `candidate_mutation_locked` for an authorised record (`04092026_1603…:230-235`), and the weekly submission refuses `CANDIDATE_RECORD_MUTATION_LOCKED` (controlling `10102026_1347…:1045-1051`).
+  - **EXTEND** (preset only, one test): the Weekly Source Candidate query read and answer owners apply the same capability. `weekly_source_candidate_query_get_v1` (QD `:144`) returns the item read-only with "This week has been authorised — please contact the office". `weekly_source_candidate_response_submit_atomic_v1` (QD `:2473`) refuses it. Office's `weekly_source_query_ask_candidate_atomic_v1` (QD `:3216`) offers no new question for an authorised T0.
+  - There is no second lock.
+
+**8. "Use HealthRoster hours"** (REUSE composition: `contract_week_manual_upsert_atomic` + `weekly_source_query_accept_system_hours_atomic_v1`) applies automatically to an unauthorised T0 once the worker's reminder is OVERDUE (R-206).
+
+**9. Policy X / OR-44.** A lawful effective approval before the cut enters the next capture once in its native order. A lawful effective post-cut pay-state or correction approval records its current entitlement and next-run position without repricing, removing or blocking the accepted frozen Draft. Merely saved pending Source publication is not effective entitlement. A wait/refusal may be asserted only for an independently proved exact existing owner/action admission guard, with that guard and its narrow fixture named; the captured day alone is not such a guard. Preserve original settlement, legally discardable unissued-artifact and issued/in-flight/unknown-outcome branches separately (I-19, PS-5); no new recovery engine or weakening of existing Source guards.
+
+**10. What the worker sees in MyTMS (round-6 M6).** After alignment, T0 holds only finalised shifts, but the worker's week view keeps the **signed claim** with one plain line per claimed shift:
+- "Confirmed by the hospital";
+- "Protected — paid at your hours";
+- "Waiting for the hospital to confirm — not paid yet";
+- "Not confirmed by the hospital — not paid".
+
+After authorisation the shifts are read-only (round 17 item 3) with "This week has been authorised — please contact the office". The signed document stays the worker's claim record. It is never re-rendered, and it is never attached to the invoice for this preset (R-242, §26.16). The copy follows the AGENTS Candidate rule: normal status words, no internal resolution warnings. The lines are read from the existing comparison rows and pay state; there is no new store. Test MT-1.
+
+**11. Protected pay before anything is finalised (round-6 M8).**
+- **The case.** When Office protects a shift and nothing in the week is finalised yet, T0 holds no shift. The position of NX-AI-6 still needs a NEXT work.
+- **WP-0 proof.** WP-0 must prove that the **unchanged** `timesheet_authorise_generic_atomic` accepts an authorised T0 with no finalised shift, and that NEXT then creates the work.
+- **If not.** NX-AI-6 must allow the position without an approved revision (handoff item 1). Never edit the pinned owner; stop and report under `07` §4 if neither holds.
+- **Tests:** AI-17 (ii), MT-1.
+
+**12. Timesheet display — HealthRoster-approved hours plus a separate Protected pay line (owner round 17 item 7, binding; round 17 item 2; R-229).**
+- **The owner's rule.** The single-Timesheet modal and the bulk-authorise modal show the same two things, with the same layout and wording:
+  - the HealthRoster-approved hours as the Timesheet's shift lines (these are the invoiceable hours);
+  - a separate **Protected pay** line (pay-only).
+
+  The totals reconcile.
+- **Today (verified, `origin/main` `887e7af7`; critic round 7 §2.1).**
+  - **Single modal:** a preset T0 is an ordinary weekly ELECTRONIC Timesheet, so it falls to the generic "Weekly schedule" grid (`js/main.js:312661`, grid `:314195-314227`, totals `:314239-314246`). That grid has no protected-pay concept.
+  - **Bulk authorise:** a preset row shows only the compact summary (`:255237`) and a read-only "Manual editor" card (`:256052-256066`), with **no shift lines at all**.
+  - Protected screens show hours only (`protected-shift-editor.js:173-214`).
+- **Design (EXTEND the existing presentation module; Codex R2 C15).** The module `js/weekly-source-presentation-v1.js` is one owner, but its two modal paths differ today: the single Timesheet modal calls `renderSimpleLines` (`main.js:311806-311820`) and bulk calls `renderApprovedHours` / `renderFourTotals` (`:255888-255900`). Extend the module with one common server-fed renderer and mount it in the current single and bulk modal paths. Preserve its unavailable/withheld/zero semantics (`weekly-source-presentation-v1.js:1424-1435`). Do not add a display ledger or browser-side financial arithmetic. The common renderer shows:
+  - in the single modal it replaces the generic weekly grid for a preset T0;
+  - in bulk authorise it replaces the "Manual editor" card for preset rows.
+
+  It is fed by **one server view model**, built from the per-shift pay state (§26.5) plus NEXT's approved, realised and held amounts per component. The browser does no arithmetic, and it never shows a missing figure as £0.00 (it shows "—"; the existing rule at `weekly-source-presentation-v1.js:1424-1435`). New-block dates are DD/MM/YYYY. The block has **no** protection actions, only a link "Open Protected shifts" (R-187).
+  - **Block 1 — "HealthRoster-approved hours"** (badge "Used for pay and invoice"). It shows T0's finalised shifts as Day and date | Start | End | Break | Hours | Status. The status is "Confirmed by HealthRoster" (`is-match`), or "Hours query — not paid yet" (`is-waiting`) for a disputed shift held from pay. A subtotal follows: "Total ‹h› hours · Pay £‹x› excl VAT · Charge £‹y› excl VAT".
+  - **Block 2 — "Protected pay"** (shown only when a protection exists). Its sub-line reads "Paid at the worker's hours. Not on the invoice." It has one line per protected shift: Day and date | Protected hours | Status | Pay excl VAT. The status is "Waiting for HealthRoster" (`is-protected`), "Confirmed by HealthRoster at ‹h› hours" (`is-match`) or "Unprotected — not worked" (`is-waiting`).
+  - **Block 3 — "Totals".** It shows:
+    - pay for HealthRoster-approved hours;
+    - protected pay;
+    - **total pay**;
+    - already paid ("—" while unknown);
+    - **to pay**, or "Overpayment recorded £‹x› excl VAT (‹h› hours)";
+    - charge excl/incl VAT, with the note "Protected pay is not charged".
+
+    Any margin uses total pay including protected pay.
+  - **Not shown:** an unfinalised, unprotected shift, which is neither paid nor invoiced. It stays in the Checklist and in MyTMS (item 10).
+- **W3 worked example** (illustrative £20.00/h pay, £28.00/h charge):
+  - **(a) Authorised 15/10.** Approved: 07/10 and 09/10, 23.0 h, £460.00 pay, £644.00 charge. Protected: Mon 05/10, 8.0 h, £160.00. Total pay £620.00, already paid £0.00, **to pay £620.00**. The invoice waits.
+  - **(b) 19/10, after "Accept HealthRoster hours" at 7.5 h.** Approved 30.5 h, £610.00. Protected £0.00 (the £160.00 paid is in "Already paid"). Already paid £620.00. **Overpayment recorded £10.00 (0.5 hours)**. The week can be invoiced at £854.00.
+  - **(c) If finalised at 8.0 h.** After Office's "Shift now finalised · add to the Timesheet" (T0 is authorised, so the shift is added through the one action and Office's re-authorise, item 5), to pay £0.00; the netting and the clearing need no separate decision.
+- **Tests:** DS-1, DS-2, DS-3.
+
+**13. Protected-pay identity — survives every Timesheet rotation (`PROTECTED_PAY_IDENTITY_REVIEW.md` §F–§H; R-230).**
+
+The preset's T0 can rotate to a new physical row. Rotation happens on rejection or resubmission, route change, QR action, and withdrawal followed by resubmission, and its segment ids change with its hours. So nothing in the plan is anchored to a physical Timesheet, segment, booking or Request Id.
+
+- **(1) The store anchor** (`private.weekly_source_check_only_shift_protections`, NEW-JUSTIFIED, store only).
+  - **Columns:**
+    - `id`;
+    - `candidate_id`, `contract_id`, `client_id`, `week_ending_date`;
+    - `contract_week_id` — the **main** Contract week (`additional_seq=0`), a pointer for resolution only and never the netting key;
+    - `work_date`;
+    - **`work_event_id uuid not null`** (FK `weekly_work_events`) — the only shift identity;
+    - the protected start, end, break and hours; `state`; the audit and request-key columns;
+    - claim evidence (the immutable submission fingerprint, and the comparison row id **as audit only**).
+  - **What it never holds as identity:** `timesheet_id`, `segment_id`, `booking_id` or Request Id.
+  - **Uniqueness:** unique `(candidate_id, work_event_id) WHERE state='ACTIVE'`.
+  - **Register key:** the register row key is `'agency-protected-'||id`, beside today's `'protected-'||family_id||':'||work_event_id` (`01102026_1201…:511`).
+- **(2) The current T0 is resolved fresh at every use.** It is read from `contract_weeks.timesheet_id` of the main Contract week, and must be:
+  - `is_current`;
+  - not revoked or archived;
+  - the single current row of its booking family (the TSFIN context does the same, `21072026_1235_36…:32-40`).
+
+  Who resolves it this way: the change owner (item 1), the authorise wrapper (item 4), the validation writer and week-complete function (§26.4), the pay-state function, the return hold (item 5, which stores `contract_week_id` and the draft id) and the display view model (item 12). Each takes the expected signature and refuses `AGENCY_INVOICE_TIMESHEET_ROTATED` on a stale or revoked id; none ever acts on one.
+
+  A NULL pointer (a withdrawal in progress) means there is no T0. The protection stays ACTIVE and pay already made stands.
+
+  After any rotation the validation writer re-runs for the new current row, which starts without `VALIDATION_OK` (fail-closed, `index.js:171963-171987`).
+- **(3) An unfinalised or missing protected shift gets a work event (REUSE).** When Office protects a claimed shift that has no HealthRoster work event, the owner creates or reuses a `weekly_work_events` row of the existing kind **`OFFICE_PROTECTED_SHIFT`**. It is hashed exactly as the Weekly Source publisher does (agency, candidate, client, date, claimed start/end/break; `15092026_1534_weekly_source_protected_pay_publisher_v1.sql:507-551`).
+  - **Linking at finalisation.** When HealthRoster later finalises the shift, the projection's existing protected-match step (`07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql:544-578`) offers the protected work event. Office's existing "same shift / separate shift" choice binds the finalised row to it through `prior_work_event_id` → `EXACT_DURABLE_LINEAGE` (`:580-600`). The finalised shift therefore **inherits the protection's `work_event_id`**.
+  - **One extra branch.** `weekly_source_protected_match_candidates_v1` (`01102026_1201…:454-489`, today Source families only) gets one preset branch that unions the store's ACTIVE rows (EXTEND).
+  - **WP-0 proof:** whether an unfinalised HealthRoster row with a Request Id already has a `PROFILE_EXTERNAL_KEY` work event. If it does, that event is used instead.
+  - **Never a key:** the comparison row id, `contract_week_id + date + start`, or an ordinal.
+- **(4) The shift identity is carried onto T0.** The alignment (item 1) writes each schedule entry's `source_shift_id = work_event_id`. The live builder then derives `shift:<work_event_id>` (`index.js:172404-172411`), and the TSFIN segment carries `work_event_id` as an explicit field.
+  - **WP-0 proof:** the field survives `buildWeeklyScheduleSegmentsSnapshot` into `invoice_breakdown_json.segments` (it does not today).
+  - NEXT reads that field, **never `segment_id`**.
+- **(5) `exclude_from_pay` after every recalculation.** Every TSFIN recompute of a preset T0 re-derives each segment's `exclude_from_pay` from the per-shift pay state, keyed by `work_event_id`. This covers alignment, rotation, an hours edit and the "Use HealthRoster hours" path, not only Authorise. It is written through the existing `tsfin_update_segments_locked` right after the Worker's snapshot write (`tsfin_write_current_snapshot_single_bounded`).
+- **(6) One booking family per week — both safeguards (coordinator decision; review MUST 8).**
+  - **(a) Unify.** For this preset the change owner refuses to create a second booking family for a Contract week that already has one (`AGENCY_INVOICE_SECOND_FAMILY_REFUSED`). It reuses the existing current family.
+    - **WP-0 proof:** the MyTMS late-submission path patches the existing week target rather than minting `CANDIDATE-WEEKLY-…`. The paper path already uses `coalesce(workflow target, week.timesheet_id)` (`30082026_0550…:98`).
+  - **(b) Netting by economic key across works** is a Banking **GO-LIVE** requirement anyway (handoff NX-AI-6 item 5).
+  - If (a) cannot be proved and (b) is not confirmed, stop and report under `07` §4.
+- **(7) The comparison row is evidence only.** The completeness and pay-state functions read the latest comparison per `(contract_id, work_date, work_event_id)` for the current T0 resolved under (2), never by a stored Timesheet id.
+- **(8) Corrections.** R0/P0 exist only after issue, when T0 is authorised and invoice-locked and cannot rotate (`03102026_0500…:499-501`). A corrected record (with a `correction_id`) must never be rotated by the rejection path, which does not copy `correction_id`. The chain scope resolves "T0" as the current row of T0's family if T0 is later revoked (WP-0 proof).
+- **(9) Pinned owners unchanged** (R-217).
+- **Tests:** RO-1…RO-3 (rotation), SI-1, SI-2 (segment id and flag survival), FN-1, FN-2 (finalised later: same or separate shift), KY-1 (re-key), XW-1, XW-2 (cross-work and correction chain).
+
+### 26.5b Queries › Protected shifts — the same register (R-212)
+
+**Where.** The existing section of the Queries tab (`TEST-Frontend js/weekly-source/import-workspace.js:696`; `combined-review.js:155`) is fed by `private.weekly_source_protected_query_rows_v1` (`01102026_1201…:493-548`).
+
+**What changes (EXTEND).**
+- The reader's successor **unions** the ACTIVE rows of the protection store, in the same row shape. Its status reads "Protected pay — awaiting HealthRoster".
+- The existing prepare and run entry points (orchestration `:73`, `:907`) and the editor (`protected-shift-editor.js:193, 213`) take a `CHECK_ONLY` arm that calls the pay-only position change (item 3).
+- There is one Worker route and one action vocabulary.
+
+**Actions** (shared predicate R-216; one person):
+
+| Action | Effect |
+|---|---|
+| **Amend** (change protected hours) | position changed to the new hours; difference paid or recorded as an overpayment; T0 and the invoice untouched |
+| **Unprotect** (only while the shift is still waiting) | the shift is deemed not worked: the position goes to zero, anything paid becomes an overpayment of the difference, and the week's invoice is released |
+| **Accept HealthRoster hours** (only when HealthRoster has finalised the shift at different hours; round 17 item 4) | one Office action adds the shift to T0 at HealthRoster's hours; the protection is reconciled and pay settles the difference only; the week's invoice is released |
+| **Wait for a further import** (same case) | protection kept; it still holds the week's invoice |
+| **Review protected pay** | read-only details |
+
+For a protected shift finalised at different hours, only **Accept HealthRoster hours** and **Wait for a further import** are offered; Amend and Unprotect are not. There is no keep-as-paid option (R-227).
+
+**Leaving the register automatically (R-166).** When a later import finalises the shift at the protected hours, the shift is added to T0 through the §26.5 item 5 route (at once by the import's alignment while T0 is unauthorised; through Office's one-click change, "Shift now finalised · add to the Timesheet", while T0 is authorised — never an automatic re-authorisation, R-207). When T0 is (re-)authorised with the shift, the netting of item 6 runs, the protection is `CLEARED` without any separate Office reconcile decision, and the row leaves the register. Until then the protection stays ACTIVE and its pay stands, so pay is never half-changed. For this preset the clearing always runs inside Office's authorise action, whose actor meets the R-195/R-201 predicate, so R-166's configured automatic actor is not needed here.
+
+**One place (R-187, R-056).**
+- Amend, Unprotect, Accept HealthRoster hours / Wait for a further import and Reconcile exist only in this register; **Protect pay** itself is offered from Queries (owner Q-PROTECT: protect at any time from a checking import).
+- Queries offers **Protect pay** for an unresolved shift and **Accept source hours**. On a **finalised, disputed** shift, Protect pay first warns: "The invoice for this week will wait until HealthRoster changes these hours or you accept HealthRoster's hours." Under R-227 that protection always holds the invoice (W3's 07/10: claimed 11.5 h, finalised 11.0 h).
+- No other screen has these buttons.
+
+### 26.5c Late worker submissions, unlimited re-imports and when a week matches (owner rounds 13–14; R-219, R-220)
+
+**Late submissions (R-219).**
+- **The request stays answerable after OVERDUE** (QD `:183, 437, 1491-1521`). "Use HealthRoster hours" never closes it (QD `:690-713`).
+- **Before authorisation.** One preset arm in the existing `_candidate_record_capabilities_v1` (`04092026_1603…:12, 230-235, 349-350`) lets the worker submit over a "Use HealthRoster hours" T0. Today that submission is refused with `CANDIDATE_RECORD_MUTATION_LOCKED` (controlling check `10102026_1347…:1045-1051`; the older `07082026_2120…:2408-2420` copy is superseded), because the Office edit leaves `PENDING_AUTH` (`index.js:59905-59908`). After the arm, the submission is compared again, and a mismatch reopens the query and Protect pay flow.
+- **After authorisation.** The worker can no longer submit or query for T0's shifts. The existing authorised-record lock applies (§26.5 item 7; round 17 item 3). The earlier "admitted and held" branch and the "post-authorise query → new Timesheet" branch are both deleted.
+- **After issue.** The worker stays locked (an issued T0 is authorised; owner round 17 item 3). A later change can come only from a HealthRoster import, through the post-issue route (§26.6).
+
+**Re-imports (R-220).**
+- Re-imports are unlimited.
+- Each one writes fresh comparison rows and re-runs the alignment of an unauthorised T0 (§26.5 item 1) and the validation writer.
+
+**When a week matches (R-220).** All of the following hold:
+- every T0 shift is finalised and agrees with HealthRoster;
+- no query raised before authorisation about a shift on T0 is open (a query about an unfinalised or missing, unprotected shift never counts, §26.4 condition 3);
+- no protected shift is still waiting, and none is finalised at different hours unresolved (§26.4 condition 8);
+- the export is ticked complete.
+
+Agreement comes from a later import, or from Office's **Accept HealthRoster hours** (R-227). Unprotect of a still-waiting shift ends its protection (deemed not worked; it was never on T0) and releases the invoice hold. Only then is `VALIDATION_OK` written and the invoice prepared by normal Batch Generate.

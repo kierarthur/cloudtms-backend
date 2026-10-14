@@ -1,0 +1,38 @@
+{
+  "schema": "AGENCY_PROTECTION_LINEAGE_REVIEWED_SOURCE_CHECKPOINT_V1",
+  "source_only": true,
+  "author_branch": "codex/healthroster-v2-report-build-13102026",
+  "author_prior_commit": "67fd9f4a0f8262536999f02146aaf47a77c5f701",
+  "input_git_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "frozen_proposal": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014",
+  "manifest_sha256": "da810065813c144c27626adbaca674cd0879fde367eb73e744fa4a75159de153",
+  "checks_sha256": "037df7c9446dc923ebecb3013b5c4273bd3be0e8181570f3dc7461655d38ae5a",
+  "artifact_count_including_manifest": 37,
+  "independent_critic": {
+    "source_scope": "PARTIAL_STORE_AND_EXISTING_LINEAGE_ONLY",
+    "frozen_mismatches": 0,
+    "current_selected_git_source_objects": 16,
+    "whole_owner_reverses": 3,
+    "unique_hunks": 3,
+    "import_objects": 11,
+    "relative_edges": 14,
+    "pure_tests": 15,
+    "concrete_p0_p1": 0
+  },
+  "not_complete": [
+    "native_protection_actions",
+    "original_claim_projection",
+    "sole_change_phase_owner",
+    "paid_writer_purpose",
+    "native_nx_ai_6",
+    "foreign_writer_guards_and_schedules",
+    "public_agency_transport_and_office_consumer"
+  ],
+  "canonical_mount": false,
+  "native_compiled": false,
+  "native_qualified": false,
+  "compiled_contract_sha256": null,
+  "pay_or_settlement_authority": false,
+  "other_frozen_packets_changed": false,
+  "unreviewed_agency_construction_staged": false
+}

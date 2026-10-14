@@ -1,0 +1,14 @@
+create table public.weekly_exceptional_pending_reconciliation_targets (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  family_id uuid not null references public.weekly_exceptional_pay_target_families(id) on delete restrict,
+  approval_id uuid not null references public.weekly_exceptional_payment_approvals(id) on delete restrict,
+  durable_work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,
+  incident_id uuid references public.weekly_discrepancy_incidents(id) on delete restrict,
+  current_final_revision_id uuid references public.weekly_source_final_revisions(id) on delete restrict,
+  intended_outcome text not null check (intended_outcome in ('WAIT','ACCEPT_SOURCE','RECORD_NOT_WORKED')),
+  source_action_policy_target_fingerprint bytea not null check (pg_catalog.octet_length(source_action_policy_target_fingerprint)=32),
+  state text not null check (state in ('ACTIVE','SUPERSEDED','CONSUMED','WITHDRAWN')),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  completed_at_utc timestamptz,
+  unique (family_id,approval_id,source_action_policy_target_fingerprint)
+);

@@ -1,0 +1,192 @@
+{
+  "schema": "AGENCY_CHECK_ONLY_PROTECTION_LINEAGE_REVIEW_MANIFEST_V1",
+  "source_only": true,
+  "input_git_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "implementation_complete": false,
+  "native_compiled": false,
+  "native_qualified": false,
+  "previous_frozen_packets_mutated": false,
+  "publication_commit": null,
+  "entries": [
+    {
+      "path": "check-source.mjs",
+      "bytes": 5592,
+      "sha256": "b1b0c62f7af40e0a680c2c9fa5edd05bca2db7e5b5fffb8f2988de34061eaf89"
+    },
+    {
+      "path": "CLASSIFICATION_DELTA.json",
+      "bytes": 844,
+      "sha256": "19f87234dbaa926f28a44518ead090a124a4852e005960c53df39bb304d73082"
+    },
+    {
+      "path": "CLOSEST_STORE_AND_CURRENT_SOURCE_INPUTS.json",
+      "bytes": 6664,
+      "sha256": "569d8f1cdd4371b21d1fd08c7fc011fb47bee551077b2532eda02e5fdc13b1d0"
+    },
+    {
+      "path": "evidence/primary_26_4.md.txt",
+      "bytes": 12453,
+      "sha256": "0d6afb90bef19cdb3aa7395c61cb6da4495e3ef4a72bb15466bd5defab7c7de6"
+    },
+    {
+      "path": "evidence/primary_26_5.md.txt",
+      "bytes": 35511,
+      "sha256": "fc5f45bddafce9b235755f90bd13cb980685e6e56830346484909a9e9a089685"
+    },
+    {
+      "path": "evidence/private_bpay_next_work_revision.table.sql.txt",
+      "bytes": 2661,
+      "sha256": "d1dd835d5b7036f71633e540d5f147578f451f844bd590332cac181f3abdf793"
+    },
+    {
+      "path": "evidence/private_bpay_next_work.table.sql.txt",
+      "bytes": 1189,
+      "sha256": "9fc1c0c5632ecaa02616928e77c4b4115c4d58a5c3fd05c9239adac0c58dae8e"
+    },
+    {
+      "path": "evidence/public_candidate_submission_workflows.table.sql.txt",
+      "bytes": 3587,
+      "sha256": "34ca248e15c4254a109b8acb8264fd849c60f3cfaf9a0a4e498a2067ed815284"
+    },
+    {
+      "path": "evidence/public_weekly_exceptional_pay_generations.table.sql.txt",
+      "bytes": 2128,
+      "sha256": "b9b8ad995ea29ee236d28b277d2ccd94e17e54ccabf9f6d5f4cdf1e3a340f1f8"
+    },
+    {
+      "path": "evidence/public_weekly_exceptional_pay_target_families.table.sql.txt",
+      "bytes": 2711,
+      "sha256": "fd8c30614589527fa83ba85568a6109bc2ad9f623dd94bd612273a170d5e6af8"
+    },
+    {
+      "path": "evidence/public_weekly_exceptional_pending_reconciliation_targets.table.sql.txt",
+      "bytes": 1158,
+      "sha256": "072afb685ff8d2f015fca391006805a85b9b8ad3c519f252a08996fc97402679"
+    },
+    {
+      "path": "lineage/before/08_complete_native_protected_match.sqlinc.txt",
+      "bytes": 2493,
+      "sha256": "278444c66888cc6d14c6fd688b530e21dbf61b18bc3b2865534f6c60e3f82df1"
+    },
+    {
+      "path": "lineage/before/09_complete_native_projection_rows.sqlinc.txt",
+      "bytes": 67446,
+      "sha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc"
+    },
+    {
+      "path": "lineage/before/upload-publication-owner.mjs.txt",
+      "bytes": 53302,
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "path": "lineage/forward/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53437,
+      "sha256": "fcd034ab1d4c8029df19d9f421ae467dc2f96020cd5c0320e7f82296d7ae290a"
+    },
+    {
+      "path": "lineage/FULL_NATIVE_AND_WORKER_REVERSE.json",
+      "bytes": 267070,
+      "sha256": "459d3b043e1d39232c2150dd9c797400a4b2f5f2b3d2492c28b0fa9966fd89fd"
+    },
+    {
+      "path": "lineage/native/08_complete_native_protected_match.sqlinc",
+      "bytes": 5960,
+      "sha256": "21eb2084a7cf530525312234f9db6502226139c75ff9a9ecc108591d7d677622"
+    },
+    {
+      "path": "lineage/native/09_complete_native_projection_rows.sqlinc",
+      "bytes": 67576,
+      "sha256": "70f8bdbe08482213d96ded8da2ba847442756590d2922c7e50b41b2cae42b978"
+    },
+    {
+      "path": "lineage/protected-lineage.test.mjs",
+      "bytes": 4729,
+      "sha256": "09c7aaa24b0036b9dd35a0037884cdb4f7fb9da9c4fd69a08c642e93fe2cc22b"
+    },
+    {
+      "path": "lineage/TEST_IMPORT_CLOSURE.json",
+      "bytes": 5260,
+      "sha256": "a27c9bf3f193cbceacedeb58564bcdaf646ae4c0879c3e69f83e8119a743e751"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/contract-qualification.js",
+      "bytes": 7660,
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/economic-snapshot.js",
+      "bytes": 13513,
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/errors.js",
+      "bytes": 340,
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/money.js",
+      "bytes": 7889,
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/report-upload-provenance.mjs",
+      "bytes": 12480,
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/source-price-comparator.js",
+      "bytes": 6857,
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 53437,
+      "sha256": "fcd034ab1d4c8029df19d9f421ae467dc2f96020cd5c0320e7f82296d7ae290a"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "path": "lineage/test-mount/broker/src/weekly-source/weekly-rate-owner.js",
+      "bytes": 15000,
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "native/07_check_only_shift_protection_store.sqlinc",
+      "bytes": 6712,
+      "sha256": "0e5deb3c57ff9ac05dd1a07e421aa7e3189ea954995a1c3476018e2312525ab1"
+    },
+    {
+      "path": "prepare-protection-lineage-review.mjs",
+      "bytes": 5511,
+      "sha256": "faee341265b01056c780d6db4e6bc95ac2547df109a1f7b2cccf83bac130a09b"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 2234,
+      "sha256": "037df7c9446dc923ebecb3013b5c4273bd3be0e8181570f3dc7461655d38ae5a"
+    },
+    {
+      "path": "SOURCE_DISPOSITION.md",
+      "bytes": 2825,
+      "sha256": "7028b0c6c0f7b48d3ecc142c39cca6aa42440fe616b1afc3f29f15877c19a5dd"
+    },
+    {
+      "path": "source-tools/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "AGENCY_CHECK_ONLY_PROTECTION_LINEAGE_SOURCE_INPUTS_V1",
+  "source_only": true,
+  "input_git_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "owner_plan": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2\\03_IMPLEMENTATION_PLAN.md",
+    "raw_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+    "bytes": 563296
+  },
+  "closest_stores": [
+    {
+      "name": "public.weekly_exceptional_pay_target_families",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_sha256": "fd8c30614589527fa83ba85568a6109bc2ad9f623dd94bd612273a170d5e6af8",
+      "source_line": 2083,
+      "evidence": "evidence/public_weekly_exceptional_pay_target_families.table.sql.txt",
+      "reason": "Full Source/C1 target ownership is canonical Timesheet family authority, not independent check-only Candidate/work_event protection intent."
+    },
+    {
+      "name": "public.weekly_exceptional_pay_generations",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_sha256": "b9b8ad995ea29ee236d28b277d2ccd94e17e54ccabf9f6d5f4cdf1e3a340f1f8",
+      "source_line": 2248,
+      "evidence": "evidence/public_weekly_exceptional_pay_generations.table.sql.txt",
+      "reason": "Complete native target generations/components are actual computed Source/C1 pay positions; they are not mutable original signed-claim protection intent."
+    },
+    {
+      "name": "public.weekly_exceptional_pending_reconciliation_targets",
+      "source_path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "source_raw_sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "definition_sha256": "072afb685ff8d2f015fca391006805a85b9b8ad3c519f252a08996fc97402679",
+      "source_line": 2357,
+      "evidence": "evidence/public_weekly_exceptional_pending_reconciliation_targets.table.sql.txt",
+      "reason": "Existing target reconciliation binds actual approved native generation/target; it cannot be repurposed as a standalone check-only waiting-shift intent keyed independently of T0."
+    },
+    {
+      "name": "private.bpay_next_work",
+      "source_path": "supabase/migrations/03102026_1324_banking_pay_next_core.sql",
+      "source_raw_sha256": "f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c",
+      "definition_sha256": "9fc1c0c5632ecaa02616928e77c4b4115c4d58a5c3fd05c9239adac0c58dae8e",
+      "source_line": 111,
+      "evidence": "evidence/private_bpay_next_work.table.sql.txt",
+      "reason": "Banking work represents obligations/disposition. Its original Timesheet/booking ownership is retained; storing Office protection intent here would invent Banking authority."
+    },
+    {
+      "name": "private.bpay_next_work_revision",
+      "source_path": "supabase/migrations/03102026_1324_banking_pay_next_core.sql",
+      "source_raw_sha256": "f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c",
+      "definition_sha256": "d1dd835d5b7036f71633e540d5f147578f451f844bd590332cac181f3abdf793",
+      "source_line": 132,
+      "evidence": "evidence/private_bpay_next_work_revision.table.sql.txt",
+      "reason": "Immutable native financial approval revision, with physical Timesheet and computed amount/detail authority. This proposal produces no such approval or money."
+    },
+    {
+      "name": "public.candidate_submission_workflows",
+      "source_path": "supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql",
+      "source_raw_sha256": "4b6184ae53ac7321720da0d4adc78ae7002bea6e1dcbe53d607601caf161cc3a",
+      "definition_sha256": "34ca248e15c4254a109b8acb8264fd849c60f3cfaf9a0a4e498a2067ed815284",
+      "source_line": 297,
+      "evidence": "evidence/public_candidate_submission_workflows.table.sql.txt",
+      "reason": "Actual immutable worker submission is the claim evidence. Office Protect/Amend/Unprotect may not mutate it or relabel it as Office intent."
+    }
+  ],
+  "current_replaced_owners": [
+    {
+      "name": "private.weekly_source_protected_match_candidates_v1",
+      "source_path": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "source_raw_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "before_sha256": "278444c66888cc6d14c6fd688b530e21dbf61b18bc3b2865534f6c60e3f82df1",
+      "after_sha256": "60b341eb62c8a2c82965121d20c9a649f77dee9ba77d6742489247825c0b6d74",
+      "forward_file_sha256": "21eb2084a7cf530525312234f9db6502226139c75ff9a9ecc108591d7d677622",
+      "forward_path": "lineage/native/08_complete_native_protected_match.sqlinc"
+    },
+    {
+      "name": "public.weekly_source_projection_rows_apply_atomic_v1",
+      "source_path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "source_raw_sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "before_sha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "after_sha256": "2761eebdcbbd35ecc362b8e440a071a147f710e8654b63c5f1ea4b72a8c753ef",
+      "forward_file_sha256": "70f8bdbe08482213d96ded8da2ba847442756590d2922c7e50b41b2cae42b978",
+      "forward_path": "lineage/native/09_complete_native_projection_rows.sqlinc"
+    },
+    {
+      "name": "buildWeeklySourceProjectionRows",
+      "source_path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "source_raw_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "before_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "after_sha256": "fcd034ab1d4c8029df19d9f421ae467dc2f96020cd5c0320e7f82296d7ae290a",
+      "forward_file_sha256": "fcd034ab1d4c8029df19d9f421ae467dc2f96020cd5c0320e7f82296d7ae290a",
+      "forward_path": "lineage/forward/broker/src/weekly-source/upload-publication-owner.mjs"
+    }
+  ],
+  "new_private_table": "private.weekly_source_check_only_shift_protections",
+  "new_owner_private_signature": "private.weekly_source_check_only_protection_identity_guard_v1()",
+  "new_public_signature_count": 0,
+  "banking_obligation_write": false,
+  "native_protection_actions_present": false,
+  "native_nx_ai_6_present": false,
+  "native_compiled_contract_sha256": null
+}

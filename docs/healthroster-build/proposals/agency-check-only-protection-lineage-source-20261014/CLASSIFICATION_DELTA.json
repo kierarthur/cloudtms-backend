@@ -1,0 +1,26 @@
+{
+  "schema": "AGENCY_PROTECTION_LINEAGE_LITERAL_CLASSIFICATION_DELTA_V1",
+  "source_only": true,
+  "classification_final": false,
+  "owner_private_additions": [
+    "private.weekly_source_check_only_protection_identity_guard_v1()"
+  ],
+  "table_access": [
+    {
+      "table": "private.weekly_source_check_only_shift_protections",
+      "purpose": "PRIMARY_CHECK_ONLY_PROTECTION_INTENT",
+      "owner_only": true,
+      "service_role": false,
+      "anon": false,
+      "authenticated": false
+    }
+  ],
+  "replaced_signature_abi_unchanged": [
+    "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+    "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)"
+  ],
+  "new_public_signatures": [],
+  "new_native_recorders": [],
+  "native_money_or_settlement_authority": false,
+  "native_qualification": null
+}

@@ -1,0 +1,134 @@
+{
+  "schema": "AGENCY_PROTECTED_LINEAGE_PURE_IMPORT_CLOSURE_V1",
+  "input_git_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+  "source_only": true,
+  "entries": [
+    {
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "source_sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "mounted_sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "source_sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "mounted_sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "source_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "mounted_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "source_sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "mounted_sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "edges": [
+        {
+          "specifier": "./errors.js",
+          "target": "broker/src/weekly-source/errors.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "source_sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "mounted_sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "source_sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "mounted_sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "edges": [
+        {
+          "specifier": "./report-upload-provenance.mjs",
+          "target": "broker/src/weekly-source/report-upload-provenance.mjs"
+        },
+        {
+          "specifier": "./money.js",
+          "target": "broker/src/weekly-source/money.js"
+        },
+        {
+          "specifier": "./coverage-warnings.mjs",
+          "target": "broker/src/weekly-source/coverage-warnings.mjs"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "source_sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "mounted_sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "source_sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "mounted_sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "edges": []
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "source_sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "mounted_sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "edges": [
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "source_sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "mounted_sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "edges": [
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        }
+      ]
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "source_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "mounted_sha256": "fcd034ab1d4c8029df19d9f421ae467dc2f96020cd5c0320e7f82296d7ae290a",
+      "edges": [
+        {
+          "specifier": "./report-upload-provenance.mjs",
+          "target": "broker/src/weekly-source/report-upload-provenance.mjs"
+        },
+        {
+          "specifier": "./magnit-contract-price-admission.js",
+          "target": "broker/src/weekly-source/magnit-contract-price-admission.js"
+        },
+        {
+          "specifier": "./upload-staging-adapter.mjs",
+          "target": "broker/src/weekly-source/upload-staging-adapter.mjs"
+        },
+        {
+          "specifier": "./contract-qualification.js",
+          "target": "broker/src/weekly-source/contract-qualification.js"
+        },
+        {
+          "specifier": "./weekly-rate-owner.js",
+          "target": "broker/src/weekly-source/weekly-rate-owner.js"
+        },
+        {
+          "specifier": "./source-price-comparator.js",
+          "target": "broker/src/weekly-source/source-price-comparator.js"
+        },
+        {
+          "specifier": "./economic-snapshot.js",
+          "target": "broker/src/weekly-source/economic-snapshot.js"
+        },
+        {
+          "specifier": "./coverage-warnings.mjs",
+          "target": "broker/src/weekly-source/coverage-warnings.mjs"
+        }
+      ]
+    }
+  ]
+}

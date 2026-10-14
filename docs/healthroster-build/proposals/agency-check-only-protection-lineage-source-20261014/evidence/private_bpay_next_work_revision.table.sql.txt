@@ -1,0 +1,46 @@
+create table private.bpay_next_work_revision (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  work_id uuid not null references private.bpay_next_work(id) on delete restrict,
+  revision_no bigint not null check (revision_no > 0),
+  source_kind text not null check (source_kind in ('ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT')),
+  source_head_id uuid,
+  -- One immutable Source event (a first authorisation or a committed head)
+  -- names one approval. It makes multi-root retry identity exact without
+  -- scanning older Timesheet versions or inventing another history ledger.
+  source_event_id uuid unique,
+  physical_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  -- Ordinary approval pins the exact financial row used to create this revision.
+  -- Source-owned revisions may instead pin their Source head above.
+  financial_snapshot_id uuid references public.timesheets_financials(id) on delete restrict,
+  physical_timesheet_version integer not null check (physical_timesheet_version > 0),
+  source_pay_channel text not null check (source_pay_channel in ('PAYE','UMBRELLA')),
+  valuation_policy_id uuid not null default private.bpay_next_current_valuation_policy_id_v1()
+    references private.bpay_next_valuation_policy(id) on delete restrict,
+  currency text not null default 'GBP' check (currency = 'GBP'),
+  week_ending_date date not null,
+  detail_kind text not null check (detail_kind in ('SHIFT','AGGREGATE','FIXED')),
+  expected_line_count integer not null check (expected_line_count>=0),
+  expected_rate_schedule_count integer not null default 0
+    check (expected_rate_schedule_count>=0),
+  certified_zero boolean not null default false,
+  approved_source_ex_vat numeric(18,2) not null,
+  candidate_display_name text not null,
+  candidate_reference text,
+  client_display_name text not null,
+  job_title text,
+  band_label text,
+  timesheet_reference text,
+  approved_at_utc timestamptz,
+  sealed_at_utc timestamptz,
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  unique (work_id,revision_no),
+  unique (work_id,id),
+  check ((approved_at_utc is null) = (sealed_at_utc is null)),
+  -- A genuinely zero-pay approval may still have worked shifts and rate
+  -- evidence. Conversely, an empty line set can only certify zero.
+  check (expected_line_count<>0 or certified_zero),
+  check (not certified_zero or approved_source_ex_vat=0),
+  check (pg_catalog.octet_length(candidate_display_name) <= 8192),
+  check (pg_catalog.octet_length(client_display_name) <= 8192),
+  check (job_title is null or pg_catalog.octet_length(job_title) <= 8192)
+);

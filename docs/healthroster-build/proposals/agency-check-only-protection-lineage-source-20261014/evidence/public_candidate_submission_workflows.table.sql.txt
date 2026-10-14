@@ -1,0 +1,74 @@
+create table if not exists public.candidate_submission_workflows (
+  id uuid primary key default gen_random_uuid(),
+  environment text not null,
+  account_id uuid not null references public.candidate_app_accounts(id) on delete restrict,
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  workflow_kind text not null,
+  scope text not null,
+  route text not null,
+  state text not null default 'CREATED',
+  generation integer not null default 1,
+  contract_id uuid references public.contracts(id) on delete restrict,
+  contract_week_id uuid references public.contract_weeks(id) on delete restrict,
+  anchor_timesheet_id uuid references public.timesheets(timesheet_id) on delete restrict,
+  target_timesheet_id uuid references public.timesheets(timesheet_id) on delete restrict,
+  work_date date,
+  week_ending_date date,
+  policy_snapshot_json jsonb not null default '{}'::jsonb,
+  input_snapshot_json jsonb not null default '{}'::jsonb,
+  issue_codes jsonb not null default '[]'::jsonb,
+  expected_row_signature text,
+  capability_hash text,
+  rejection_reason text,
+  rejection_scope text,
+  idempotency_key text not null,
+  last_mutation_idempotency_key text,
+  last_mutation_response_json jsonb,
+  worker_submitted_at_utc timestamptz,
+  finalised_at_utc timestamptz,
+  cancelled_at_utc timestamptz,
+  created_at_utc timestamptz not null default now(),
+  updated_at_utc timestamptz not null default now(),
+  constraint candidate_submission_workflows_environment_ck check (environment in ('TEST','LIVE')),
+  constraint candidate_submission_workflows_kind_ck check (workflow_kind in ('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED','DAILY')),
+  constraint candidate_submission_workflows_scope_ck check (scope in ('WEEKLY','DAILY')),
+  constraint candidate_submission_workflows_route_ck check (route in ('ELECTRONIC','PHONE','EMAIL','PAPER')),
+  constraint candidate_submission_workflows_kind_scope_route_ck check (
+    (
+      workflow_kind in ('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED')
+      and scope='WEEKLY'
+    )
+    or (
+      workflow_kind='DAILY'
+      and scope='DAILY'
+      and route in ('PHONE','EMAIL')
+    )
+  ),
+  constraint candidate_submission_workflows_identity_shape_ck check (
+    (
+      workflow_kind in ('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED')
+      and contract_id is not null
+      and contract_week_id is not null
+      and week_ending_date is not null
+    )
+    or (
+      workflow_kind='DAILY'
+      and target_timesheet_id is not null
+      and anchor_timesheet_id=target_timesheet_id
+      and work_date is not null
+      and contract_week_id is null
+      and week_ending_date is null
+    )
+  ),
+  constraint candidate_submission_workflows_state_ck check (state in (
+    'CREATED','WORKER_SUBMITTED','AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
+    'AWAITING_PAPER_RETURN','RECEIVED','FINALISED','REFUSED','REJECTED',
+    'CANCELLED','EXPIRED','SUPERSEDED'
+  )),
+  constraint candidate_submission_workflows_generation_ck check (generation > 0),
+  constraint candidate_submission_workflows_policy_ck check (jsonb_typeof(policy_snapshot_json) = 'object'),
+  constraint candidate_submission_workflows_input_ck check (jsonb_typeof(input_snapshot_json) = 'object'),
+  constraint candidate_submission_workflows_issues_ck check (jsonb_typeof(issue_codes) = 'array'),
+  constraint candidate_submission_workflows_idempotency_ck check (nullif(btrim(idempotency_key),'') is not null),
+  constraint candidate_submission_workflows_account_idempotency_uq unique (account_id,idempotency_key)
+);

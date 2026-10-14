@@ -1,0 +1,31 @@
+{
+  "schema": "AGENCY_PROTECTION_LINEAGE_STAGED_WHITESPACE_PROVENANCE_V1",
+  "source_only": true,
+  "raw_staged_whitespace_pass": false,
+  "raw_findings": 2,
+  "introduced_executable_findings": 0,
+  "findings": [
+    {
+      "artifact": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/lineage/test-mount/broker/src/weekly-source/errors.js",
+      "line": 13,
+      "kind": "BLANK_EOF",
+      "entire_parent_bytes_equal": true,
+      "parent_commit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "parent_path": "broker/src/weekly-source/errors.js",
+      "artifact_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "parent_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "artifact": "docs/healthroster-build/proposals/agency-check-only-protection-lineage-source-20261014/evidence/primary_26_4.md.txt",
+      "line": 85,
+      "kind": "BLANK_EOF_EXCERPT",
+      "owner_plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
+      "artifact_sha256": "0d6afb90bef19cdb3aa7395c61cb6da4495e3ef4a72bb15466bd5defab7c7de6",
+      "exact_contiguous_logical_parent_lines": true,
+      "parent_start_line": 1131,
+      "parent_finding_line": 1215,
+      "source_line_ending_only_normalisation_checked": true
+    }
+  ],
+  "frozen_source_not_edited": true
+}

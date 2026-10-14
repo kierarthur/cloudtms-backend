@@ -1,0 +1,20 @@
+create table private.bpay_next_work (
+  id uuid primary key default pg_catalog.gen_random_uuid(),
+  candidate_id uuid not null references public.candidates(id) on delete restrict,
+  contract_id uuid not null references public.contracts(id) on delete restrict,
+  original_timesheet_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+  booking_id text not null check (pg_catalog.char_length(booking_id) between 1 and 200),
+  work_kind text not null check (work_kind in ('ORDINARY','SOURCE','EXPENSE','ADJUSTMENT')),
+  week_ending_date date not null,
+  approval_state text not null default 'PENDING' check (approval_state in ('PENDING','APPROVED','WITHDRAWN')),
+  current_revision_id uuid,
+  applied_revision_id uuid,
+  current_revision_no bigint not null default 0 check (current_revision_no >= 0),
+  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  updated_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),
+  unique (id,candidate_id),
+  unique (id,original_timesheet_id),
+  unique (original_timesheet_id),
+  unique (booking_id),
+  check ((approval_state='APPROVED') = (current_revision_id is not null))
+);

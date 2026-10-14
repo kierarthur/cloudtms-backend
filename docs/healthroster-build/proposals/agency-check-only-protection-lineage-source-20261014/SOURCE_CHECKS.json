@@ -1,0 +1,77 @@
+{
+  "schema": "AGENCY_CHECK_ONLY_PROTECTION_LINEAGE_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "implementation_complete": false,
+  "native_compiled": false,
+  "native_qualified": false,
+  "private_protection_actions_present": false,
+  "native_nx_ai_6_present": false,
+  "paid_writer_purpose_present": false,
+  "public_checklist_owner_present": false,
+  "compiled_contract_sha256": null,
+  "checks": [
+    {
+      "name": "three full current-owner forwards and unique reverses",
+      "pass": true,
+      "owners": 3,
+      "hunks": 3,
+      "original_source_query_raw_identical": true
+    },
+    {
+      "name": "six complete closest stores with raw evidence pins",
+      "pass": true,
+      "stores": 6
+    },
+    {
+      "name": "owner-private planned store contains no pay/physical authority or grants",
+      "pass": true,
+      "native_state_or_intent_actions_invoked": false
+    },
+    {
+      "name": "exact current effect-free relative import closure",
+      "pass": true,
+      "objects": 11,
+      "edges": 14
+    },
+    {
+      "name": "actual mapper preserved Source and new Agency lineage refusals",
+      "pass": true,
+      "unit_only_tests": 15
+    },
+    {
+      "name": "transaction-neutral source SQL envelopes only",
+      "pass": true,
+      "files": 3,
+      "rows": [
+        {
+          "path": "native/07_check_only_shift_protection_store.sqlinc",
+          "raw_sha256": "0e5deb3c57ff9ac05dd1a07e421aa7e3189ea954995a1c3476018e2312525ab1",
+          "statements": 14
+        },
+        {
+          "path": "lineage/native/08_complete_native_protected_match.sqlinc",
+          "raw_sha256": "21eb2084a7cf530525312234f9db6502226139c75ff9a9ecc108591d7d677622",
+          "statements": 1
+        },
+        {
+          "path": "lineage/native/09_complete_native_projection_rows.sqlinc",
+          "raw_sha256": "70f8bdbe08482213d96ded8da2ba847442756590d2922c7e50b41b2cae42b978",
+          "statements": 1
+        }
+      ],
+      "postgres_compilation": false
+    },
+    {
+      "name": "pure source JavaScript syntax",
+      "pass": true,
+      "files": 15
+    },
+    {
+      "name": "high confidence credential scan",
+      "pass": true,
+      "files": 35,
+      "patterns": 4,
+      "findings": 0
+    }
+  ]
+}
