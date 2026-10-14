@@ -1,0 +1,146 @@
+{
+  "status": "BOUNDED_INDEPENDENT_SOURCE_REVIEW",
+  "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+  "SQL_executed": false,
+  "native": false,
+  "generators_executed": false,
+  "another_lane_edited": false,
+  "pins": [
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/COMPLETE_CURRENT_REVERSES.json",
+      "bytes": 19705,
+      "sha256": "c17e4e4e1b836ddd3168496b64fdb1b4644681704369cea2cebcd1445062e82f"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/SOURCE_BOUNDARY.md",
+      "bytes": 1646,
+      "sha256": "6c52f0dab1e2983bfa19ef1a1809a478c467da65ba67da630ea2b8268092656a"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/SOURCE_MANIFEST.json",
+      "bytes": 1709,
+      "sha256": "0a0d878f3aeaea76eb47de6e4102ce49206df1adf4a6b4a249a4cc1be45436dd"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/SOURCE_OBJECT_RELATIONS.json",
+      "bytes": 1535,
+      "sha256": "9874f3b5019c1a1d52fad778e93fb9c710a88aa0ba2d32f130de38bb7eb32420"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/before/01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 4793,
+      "sha256": "422c85b09b505a7900319c2b7fe059c20951e02b75b35908807a1887e77eaa41"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/before/02_complete_scalar_helpers.sqlinc",
+      "bytes": 22486,
+      "sha256": "e2c00e0d87bd7e9e52d98c9a45441101ce6495831c93d0d55909482c00660c8e"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/00_source_token_grammar.sqlinc",
+      "bytes": 4650,
+      "sha256": "d4ecf5d6339747d849cada02e81f83fd3cf1200852e6b33df62df3a130073a75"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6196,
+      "sha256": "a54ed8eb45d48a8154e250323a63c914dda3b8bbe5b38819b6197cbb4b63ac7a"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/02_complete_scalar_helpers.sqlinc",
+      "bytes": 22786,
+      "sha256": "1a6178b3a682c123dcd3e995f74d4f25f93330443207abce5da2be29529efea5"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 6606,
+      "sha256": "d44ec5faa03324446792905189fb415f28015056fc2bc84cb894a3524d0d807d"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/root-a0-source-selector-domain-source-20261014/SHA256_MANIFEST.json",
+      "bytes": 434,
+      "sha256": "237cddf50173df5204fb2633dc7ea1017815fdc6d9f888765d0f6e7f56e119c9"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/root-a0-source-selector-domain-source-20261014/SOURCE_CHECKS.json",
+      "bytes": 1648,
+      "sha256": "36fdf53f4225d07b34121e9d99470b4371b4e73b7686c86fb64de3bb73d3ca35"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/root-a0-source-selector-domain-source-20261014/SOURCE_TEST_OUTPUT.txt",
+      "bytes": 999,
+      "sha256": "95024f73f085bafef2584a009ad158e27006e2c0105447dff269ec551f78f74d"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "docs/healthroster-build/root-a0-source-selector-domain-source-20261014/build-source.mjs",
+      "bytes": 20096,
+      "sha256": "30d184010423f7f07580fcf6b5c307e3900e8512b724dd3da3925eff7f87656f"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "tests/healthroster-a0-source-selector-domain.test.mjs",
+      "bytes": 6428,
+      "sha256": "3503b1f1311c34aca67bc2cb7eb17ac7394b86a5adb38ba565227d6497f26871"
+    },
+    {
+      "commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_schema.sql",
+      "bytes": 4793,
+      "sha256": "422c85b09b505a7900319c2b7fe059c20951e02b75b35908807a1887e77eaa41"
+    },
+    {
+      "commit": "9755f656daa297a7e156111ae981bddb1f0e10aa",
+      "file": "docs/healthroster-build/proposals/a0-hidden-rr-owner-coverage-successor-20261014/sql/14102026_1216_a0_transaction_fence_helpers.sqlinc",
+      "bytes": 22486,
+      "sha256": "e2c00e0d87bd7e9e52d98c9a45441101ce6495831c93d0d55909482c00660c8e"
+    }
+  ],
+  "lexical": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/00_source_token_grammar.sqlinc",
+      "statements": 3,
+      "sha256": "d4ecf5d6339747d849cada02e81f83fd3cf1200852e6b33df62df3a130073a75"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/01_complete_same_arbiter_schema.sqlinc",
+      "statements": 7,
+      "sha256": "a54ed8eb45d48a8154e250323a63c914dda3b8bbe5b38819b6197cbb4b63ac7a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/02_complete_scalar_helpers.sqlinc",
+      "statements": 15,
+      "sha256": "1a6178b3a682c123dcd3e995f74d4f25f93330443207abce5da2be29529efea5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-source-selector-domain-construction-20261014/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "statements": 6,
+      "sha256": "d44ec5faa03324446792905189fb415f28015056fc2bc84cb894a3524d0d807d"
+    }
+  ],
+  "adaptation": {
+    "testFile": "tests/healthroster-a0-source-selector-domain.test.mjs",
+    "original_sha256": "3503b1f1311c34aca67bc2cb7eb17ac7394b86a5adb38ba565227d6497f26871",
+    "harness_source_sha256": "7e797a561aa7e290bf149714c848fd92f8170a85f03ea2b465a3f3d035b6b747",
+    "changes": "ESM imports bound to pinned scanner and built-ins; import.meta.url fixed to immutable virtual Git source. All nine test bodies/assertions unchanged."
+  }
+}
