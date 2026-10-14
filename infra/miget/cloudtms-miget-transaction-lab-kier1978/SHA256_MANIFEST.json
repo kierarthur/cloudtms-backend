@@ -1,0 +1,62 @@
+[
+  {
+    "sha256": "42f1d26d2c3f39921702f1ad82d91471868c14e62a9d3cbdf3c575a931607ce2",
+    "file": "wrangler.jsonc"
+  },
+  {
+    "sha256": "a8f1393047efb340a4eaa38a3adb946a801117207e0034433f2da1470b5d7c9e",
+    "file": "package.json"
+  },
+  {
+    "sha256": "f5413dd72dca5451adede5cdaca67fdcae14a0b300abdc40f45490fe3a2156ae",
+    "file": "package-lock.json"
+  },
+  {
+    "sha256": "188c009704231957d25dbb7490b30802dc759b1fe2e6b70958a7141c3d12801c",
+    "file": "src/index.ts"
+  },
+  {
+    "sha256": "8ce94d948a81e90f2bd9e82de55977ba314cac600be61b3765dcc6d1cd5dd516",
+    "file": "src/transaction-runner.ts"
+  },
+  {
+    "sha256": "9d6d5edcd55e8e2e5920770c06a997b4e374d483551aed3debb616fa78dd2f94",
+    "file": "src/sql-envelope.ts"
+  },
+  {
+    "sha256": "dfb2bfe70255d0bb6d92ee638089e34fb235e1bffcb8142c526c4858a2cf4f0c",
+    "file": "INHERITED_SOURCE_PINS.json"
+  },
+  {
+    "sha256": "a374d8d6d981827435a82156b6935e484dc5bcf56f82a04b6c7d07fbab114f9f",
+    "file": "prove-connector.mjs"
+  },
+  {
+    "sha256": "3fc76aca8d19ffeb779fa471cad49cfc3427ed749e87d26770c122ae34afb132",
+    "file": "ACCEPTANCE.json"
+  },
+  {
+    "sha256": "9e276a10508f95383a2a896f38b0e9d991bed28f497f31bb8c994c1e3c92e827",
+    "file": "ACCOUNT_AGENTS_SECTION.md"
+  },
+  {
+    "sha256": "40cfc5414637cad1ceb07fdd35b043d95f3ff4ab4ef8b3a0572038aa89ff94e8",
+    "file": "PLUGIN_REGISTRATION.json"
+  },
+  {
+    "sha256": "1cd48b9ced7ddb7196d983a005b891f15f86b786ba1514af4b22189db0cd35a1",
+    "file": "plugin-source/.mcp.json"
+  },
+  {
+    "sha256": "4929dae8d49288f9b0c4e03de75a830050b8698e5f1ef166ee225fe86a5dd050",
+    "file": "plugin-source/.codex-plugin/plugin.json"
+  },
+  {
+    "sha256": "00464f1e85bd569a31fd641a83c5fe12d6911000eaabf3872ea783a4f1af1f1f",
+    "file": "SETUP_PROGRESS.md"
+  },
+  {
+    "sha256": "d21b9221207f9c905cc441032527d173261b5e416b913918955c1f7d46bcde92",
+    "file": "README.md"
+  }
+]

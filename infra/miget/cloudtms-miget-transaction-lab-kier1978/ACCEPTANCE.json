@@ -1,0 +1,150 @@
+{
+  "account": "kierarthur1978@gmail.com",
+  "endpoint": "https://codex-kier1978-miget-transaction-lab.kier-88a.workers.dev/mcp",
+  "checkedAt": "2026-10-14T20:51:06.549Z",
+  "status": "HOSTED_ROLLBACK_CONNECTOR_ACCEPTANCE_PASS",
+  "nativeCodexToolPickup": "RESTART_AND_NEW_TASK_REQUIRED",
+  "secretsReturned": false,
+  "sourceCommit": "6829ffbc7d5323c9198443e652e6d4b7f03adf8f",
+  "sharedTurnEvents": [
+    {
+      "chat": "HealthRoster",
+      "task": "Kier1978 dedicated connector installation rollback acceptance",
+      "status": "TAKEN",
+      "takenAt": "2026-10-14T20:51:10.274Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "Kier1978 dedicated connector installation rollback acceptance",
+      "status": "RELEASED",
+      "takenAt": "2026-10-14T20:51:10.274Z",
+      "releasedAt": "2026-10-14T20:51:11.200Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "anonymousStatus": 401,
+  "operationsAnonymousStatus": 401,
+  "initialize": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": true
+      }
+    },
+    "serverInfo": {
+      "name": "CloudTMS Miget Transaction Lab",
+      "version": "0.1.0"
+    }
+  },
+  "toolNames": [
+    "miget_db_transaction_rollback"
+  ],
+  "proofSqlSha256": "6640327c6e1869e32f8a80f21e9388509b0a0f64280315e252e9bdd6740fb854",
+  "proofSql": "create table private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560(id integer primary key,value text not null);\n insert into private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560 values(1,'temporary');\n create function private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560_fn() returns text language sql as $$select 'temporary'::text$$;\n select current_database() as database,(select count(*)::integer from private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560) as temporary_rows,private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560_fn() as temporary_function;",
+  "verificationSql": "select current_database() as database,to_regclass('private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560') is null as table_absent,to_regprocedure('private.kier1978_rollback_probe_d7d136ca09f4f9c194f5c560_fn()') is null as function_absent;",
+  "turnIdentity": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 38680,
+    "turnId": "hr_turn_b32ace9468d929886cd06e721fc02771",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T20:51:10.274Z",
+    "task": "Kier1978 dedicated connector installation rollback acceptance"
+  },
+  "rollbackResult": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "Kier1978 isolated connector acceptance",
+    "sqlSha256": "6640327c6e1869e32f8a80f21e9388509b0a0f64280315e252e9bdd6740fb854",
+    "statementCount": 4,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "INSERT",
+        "rowCount": 1,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "database",
+          "temporary_rows",
+          "temporary_function"
+        ],
+        "rows": [
+          {
+            "database": "cloudtms_test_clone",
+            "temporary_rows": 1,
+            "temporary_function": "temporary"
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "database",
+            "table_absent",
+            "function_absent"
+          ],
+          "rows": [
+            {
+              "database": "cloudtms_test_clone",
+              "table_absent": true,
+              "function_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  },
+  "outerTransactionEscapeRefused": true,
+  "completedAt": "2026-10-14T20:51:11.243Z"
+}

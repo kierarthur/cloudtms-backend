@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cloudtms-miget-transaction-lab-kier1978": {
+      "url": "https://codex-kier1978-miget-transaction-lab.kier-88a.workers.dev/mcp",
+      "bearer_token_env_var": "CLOUDTMS_MIGET_TRANSACTION_LAB_KIER1978_TOKEN"
+    }
+  }
+}

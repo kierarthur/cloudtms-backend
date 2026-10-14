@@ -1,0 +1,21 @@
+{
+  "name": "cloudtms-miget-transaction-lab-kier1978",
+  "version": "0.1.0",
+  "description": "Kier1978 account-specific agency TEST rollback-only PostgreSQL connector.",
+  "author": {
+    "name": "Arthur Rai"
+  },
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "longDescription": "Dedicated to kierarthur1978@gmail.com; independent credential; agency TEST only; fresh read-only rollback verification; no LIVE or durable database writes.",
+    "shortDescription": "Run agency TEST SQL with unconditional rollback.",
+    "developerName": "Arthur Rai",
+    "defaultPrompt": "Test this SQL variation on agency TEST and prove rollback.",
+    "displayName": "CloudTMS TEST Transaction Lab - Kier1978",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Database",
+      "Rollback"
+    ]
+  }
+}
