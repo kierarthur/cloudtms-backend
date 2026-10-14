@@ -1,0 +1,193 @@
+{
+  "schema": "AGENCY_NATIVE_WHOLE_WEEK_VALIDATION_RUNTIME_FORWARD_MANIFEST_V1",
+  "source_only": true,
+  "native": false,
+  "root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "own_published_predecessor": "9fd542e8fcf25d646ce0f04736466f3da251faee",
+  "independent_review_pending": true,
+  "mount_ready": false,
+  "compiled_contract_sha256": null,
+  "qualification_receipt": null,
+  "entries": [
+    {
+      "path": "CURRENT_RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 68355,
+      "sha256": "a1c32d2710e2eb6e59542b7f6b324b86eb71ebe6fbf44481280cdd1d4ca29ecd"
+    },
+    {
+      "path": "CURRENT_SOURCE_INPUT_PINS.json",
+      "bytes": 377143,
+      "sha256": "8f5f3a3aa10ffa2cd2addd3145e03dabb1cf57566c382c9a8fc58f4a51af6bf6"
+    },
+    {
+      "path": "MOUNT_DEPENDENCIES.md",
+      "bytes": 1613,
+      "sha256": "d50fd4aab76569d6cf994fd521dbe8d0a501e7d09f5dfdbcdf632970f71a2dd5"
+    },
+    {
+      "path": "PURE_TEST_OUTPUT.txt",
+      "bytes": 4149,
+      "sha256": "3bd6116d4d5feb8e05a1f3ae0b74ac40b20d1c1ae74b4dc0978f0a5124697718"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 2844,
+      "sha256": "08547e0742f20fb8bebabf16b4e7b4eddcc0f254bc4fadedfb8cfe9f01b6e9eb"
+    },
+    {
+      "path": "SOURCE_DECLARATION_DELTA.json",
+      "bytes": 7900,
+      "sha256": "e636a3924ae202b067e4ffbf4ae3272ad4ddf53f4c1fc5df43cc6e8930f16e46"
+    },
+    {
+      "path": "construction/58_agency_native_week_facts.sqlinc",
+      "bytes": 25348,
+      "sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab"
+    },
+    {
+      "path": "construction/59_agency_sole_validation_writer.sqlinc",
+      "bytes": 14058,
+      "sha256": "1ba1c1c03dc21513f6bcb4d1a91a107d82b4c4224ceef6c0d12a78595572c8ba"
+    },
+    {
+      "path": "construction/60_agency_authorised_validation_context.sqlinc",
+      "bytes": 6744,
+      "sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a"
+    },
+    {
+      "path": "construction/61_agency_authorised_native_observation.sqlinc",
+      "bytes": 16313,
+      "sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e"
+    },
+    {
+      "path": "construction/62_complete_native_financial_observation_with_validation.sqlinc",
+      "bytes": 19347,
+      "sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c"
+    },
+    {
+      "path": "construction/63_complete_native_flags_with_validation_observation.sqlinc",
+      "bytes": 16927,
+      "sha256": "27e64b68763880ce64012e9189d23255e0dc582ce4d560a2fcc3943c65acd108"
+    },
+    {
+      "path": "construction/64_complete_authorise_with_native_validation_writer.sqlinc",
+      "bytes": 13298,
+      "sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f"
+    },
+    {
+      "path": "construction/65_complete_native_invalidation_with_single_writer.sqlinc",
+      "bytes": 5854,
+      "sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8"
+    },
+    {
+      "path": "construction/66_agency_actual_validation_hooks.sqlinc",
+      "bytes": 6729,
+      "sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130"
+    },
+    {
+      "path": "construction/67_authorised_worker_codec.fragment.mjs",
+      "bytes": 10482,
+      "sha256": "e40ffc8b639dec2b87c3d45a7fc76a553a3136f2d5b1768f75134d2bcc60b19a"
+    },
+    {
+      "path": "construction/68_complete_worker_index_with_native_return.js",
+      "bytes": 8933649,
+      "sha256": "a35ecd361a81555eeb05d1f6ead7637774395b4268ccc1405d14d5c93df9be64"
+    },
+    {
+      "path": "construction/69_complete_canonical_worker_with_authorised_validation.mjs",
+      "bytes": 27150,
+      "sha256": "70d655020686c7ae633f146e4919efeff9f2b4692422d8a3cf82bd87840ed824"
+    },
+    {
+      "path": "construction/70_complete_current_publication_with_agency_validation.sqlinc",
+      "bytes": 22324,
+      "sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23"
+    },
+    {
+      "path": "construction/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "bytes": 142656,
+      "sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0"
+    },
+    {
+      "path": "construction/AUTHORISED_NATIVE_FULL_REVERSE.json",
+      "bytes": 8064,
+      "sha256": "b556a5ac1ae23b2b473cd931ae1688e06adef1ab33d794c3acd371b3a527c59d"
+    },
+    {
+      "path": "construction/AUTHORISED_RUNTIME_FULL_REVERSE.json",
+      "bytes": 101087,
+      "sha256": "03baef59ee311edfbb083d0f042daf783df2f7c9eb463366ba24672b13e57f62"
+    },
+    {
+      "path": "construction/PUBLISHER_MODE_A_FULL_REVERSE.json",
+      "bytes": 2642,
+      "sha256": "7c39c0f10c2ce35639f8182b3e5e40e734850a0b14462dbea462c9ab05909261"
+    },
+    {
+      "path": "construction/SOURCE_CONSTRUCTION_STATUS.md",
+      "bytes": 4728,
+      "sha256": "87d36401d189df57eb8f02326d0b17086dbc229771be50ac9120c454c51974d5"
+    },
+    {
+      "path": "construction/agency-native-return.mjs",
+      "bytes": 2526,
+      "sha256": "a07f385d0c7ab197ddef522d2182506fc9b58a7f2619e11c8022721befce5816"
+    },
+    {
+      "path": "construction/authorised-validation.test.mjs",
+      "bytes": 17461,
+      "sha256": "4ff89fc735f6fcb2c89f0d8ced2f3aa871c8ec240548587002cb4b4979dac471"
+    },
+    {
+      "path": "construction/current-mode-a-before.sql.txt",
+      "bytes": 142488,
+      "sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61"
+    },
+    {
+      "path": "construction/current-publication-before.sql.txt",
+      "bytes": 22066,
+      "sha256": "5f595cf2ff14c774518a95aa921f17bf3a0a306e17fa9fcc9b085c8792bb36b3"
+    },
+    {
+      "path": "reference/43_agency_native_segment_flags.sqlinc",
+      "bytes": 15985,
+      "sha256": "6e8bce7229ef835636c714d7b4384db8d71271d73cb52098d8691f9665ca1538"
+    },
+    {
+      "path": "reference/45_complete_financial_observation_with_native_flags.sqlinc",
+      "bytes": 18868,
+      "sha256": "ea478004aa5f351491607b77b922fa3fd2c060d8bf9d48ebe0d722584ffca4d1"
+    },
+    {
+      "path": "reference/46_agency_native_authorise_step.sqlinc",
+      "bytes": 12290,
+      "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924"
+    },
+    {
+      "path": "reference/52_same_validation_store_typed_source.sqlinc",
+      "bytes": 1679,
+      "sha256": "c97fe113d927023fea276c492eb23e9803e9082d762bfe16fe656c4114df38c3"
+    },
+    {
+      "path": "reference/53_agency_same_draft_return_step.sqlinc",
+      "bytes": 10423,
+      "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804"
+    },
+    {
+      "path": "reference/54_return_step_service_reply.sqlinc",
+      "bytes": 1656,
+      "sha256": "9b4cac9d661e390272b25b84e02771d0aabd9c809961a67fcdffb3a8ee088fcb"
+    },
+    {
+      "path": "reference/57_complete_same_draft_with_unchanged_editor.sqlinc",
+      "bytes": 12145,
+      "sha256": "dc4a48d5f0b8345da3e27995cae81cfcee2a48146c53b1bfba236d91be9d3a9f"
+    },
+    {
+      "path": "reference/invalidation-before.sql.txt",
+      "bytes": 5252,
+      "sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7"
+    }
+  ]
+}

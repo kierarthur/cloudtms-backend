@@ -1,0 +1,49 @@
+{
+  "schema": "AGENCY_VALIDATION_CURRENT_PUBLISHER_MODE_A_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "joins": [
+    {
+      "input": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "source_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061",
+      "output": "70_complete_current_publication_with_agency_validation.sqlinc",
+      "before_file": "current-publication-before.sql.txt",
+      "before_sha256": "5f595cf2ff14c774518a95aa921f17bf3a0a306e17fa9fcc9b085c8792bb36b3",
+      "after_sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+      "hunks": [
+        {
+          "label": "native publication final/replay refresh 6",
+          "before": "\n      v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n",
+          "after": "\n      perform private.weekly_source_agency_publication_validation_v1(v_publication.id);\n      v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n"
+        },
+        {
+          "label": "native publication final/replay refresh 4",
+          "before": "\n    v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n",
+          "after": "\n    perform private.weekly_source_agency_publication_validation_v1(v_publication.id);\n    v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n"
+        },
+        {
+          "label": "native publication final/replay refresh 2",
+          "before": "\n  v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n",
+          "after": "\n  perform private.weekly_source_agency_publication_validation_v1(v_publication.id);\n  v_fingerprint:=private.weekly_source_sha256_jsonb_v1(\n"
+        }
+      ]
+    },
+    {
+      "input": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "source_sha256": "9559e417369550cfca8ffff0fd078034c1201abf1975f87d6bcc0b0a43909ace",
+      "output": "71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "before_file": "current-mode-a-before.sql.txt",
+      "before_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "after_sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+      "hunks": [
+        {
+          "label": "actual entry before original native mutations",
+          "before": "begin\n",
+          "after": "begin\n  -- Mode A/reference apply cannot feed a second validation writer for a preset.\n  perform private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id);\n",
+          "offset": 8362
+        }
+      ]
+    }
+  ]
+}

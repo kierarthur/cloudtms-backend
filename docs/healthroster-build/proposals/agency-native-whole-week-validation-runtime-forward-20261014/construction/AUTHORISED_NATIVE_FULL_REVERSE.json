@@ -1,0 +1,84 @@
+{
+  "schema": "AGENCY_AUTHORISED_VALIDATION_NATIVE_FULL_REVERSE_V1",
+  "source_only": true,
+  "native": false,
+  "joins": [
+    {
+      "input": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/45_complete_financial_observation_with_native_flags.sqlinc",
+      "output": "62_complete_native_financial_observation_with_validation.sqlinc",
+      "before_sha256": "ea478004aa5f351491607b77b922fa3fd2c060d8bf9d48ebe0d722584ffca4d1",
+      "after_sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c",
+      "hunks": [
+        {
+          "label": "frame actual authorised dispatch",
+          "before": "  if r.state<>'ACTIVE' or (p_mode='MANUAL' and r.phase<>'UNAUTHORISED')",
+          "after": "  if r.phase='AUTHORISED' and p_mode='RECOMPUTE' then\n    return private.weekly_source_agency_validation_frame_open_v1(r.id,p_snapshot,p_outbox_id);\n  end if;\n  if r.state<>'ACTIVE' or (p_mode='MANUAL' and r.phase<>'UNAUTHORISED')"
+        },
+        {
+          "label": "assert actual authorised dispatch",
+          "before": "  frame:=r.native_receipts->'financial_write_frame';\n  if jsonb_typeof(frame)",
+          "after": "  if r.phase='AUTHORISED' then\n    return private.weekly_source_agency_validation_write_assert_v1(p_timesheet_id,p_snapshot,p_actor_user_id,p_outbox_id);\n  end if;\n  frame:=r.native_receipts->'financial_write_frame';\n  if jsonb_typeof(frame)"
+        },
+        {
+          "label": "observe actual authorised dispatch before queue completion",
+          "before": " if not found then return; end if;\n perform private.weekly_source_query_require_service_v1();\n frame:=r.native_receipts->'financial_write_frame';",
+          "after": " if not found then return; end if;\n perform private.weekly_source_query_require_service_v1();\n if r.phase='AUTHORISED' then\n  perform private.weekly_source_agency_validation_write_observe_v1(p_timesheet_id,p_snapshot,p_outbox_id);\n  return;\n end if;\n frame:=r.native_receipts->'financial_write_frame';"
+        }
+      ]
+    },
+    {
+      "input": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/43_agency_native_segment_flags.sqlinc",
+      "output": "63_complete_native_flags_with_validation_observation.sqlinc",
+      "before_sha256": "6e8bce7229ef835636c714d7b4384db8d71271d73cb52098d8691f9665ca1538",
+      "after_sha256": "27e64b68763880ce64012e9189d23255e0dc582ce4d560a2fcc3943c65acd108",
+      "hunks": [
+        {
+          "label": "native authorised financial chain",
+          "before": "   or r.native_receipts#>>'{authorise,financial_id}' is distinct from f.id::text",
+          "after": "   or (r.native_receipts#>>'{authorise,financial_id}' is distinct from f.id::text\n    and coalesce((r.native_receipts#>>'{validation_write_frame,schema_version}'='WEEKLY_SOURCE_AGENCY_AUTHORISED_WRITE_FRAME_V1'\n      and r.native_receipts#>>'{validation_write_frame,request_id}'=r.id::text\n      and r.native_receipts#>>'{validation_write_frame,request_sha256}'=encode(r.request_sha256,'hex')\n      and r.native_receipts#>>'{validation_write_frame,transaction_id}'=pg_current_xact_id()::text\n      and r.native_receipts#>>'{validation_write_frame,backend_pid}'=pg_backend_pid()::text\n      and r.native_receipts#>>'{validation_write_frame,prior_financial_id}'=r.native_receipts#>>'{validation_refresh,financial_id}'\n      and exists(select 1 from public.timesheets_financials prior where prior.id::text=r.native_receipts#>>'{validation_write_frame,prior_financial_id}'\n        and not prior.is_current and prior.timesheet_id=t.timesheet_id and prior.authorised_at_utc=t.authorised_at_server)),false) is distinct from true)"
+        }
+      ]
+    },
+    {
+      "input": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/46_agency_native_authorise_step.sqlinc",
+      "output": "64_complete_authorise_with_native_validation_writer.sqlinc",
+      "before_sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924",
+      "after_sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f",
+      "hunks": [
+        {
+          "label": "authorise replay current genuine validation row",
+          "before": "   or r.native_receipts#>>'{authorise,financial_id}' is distinct from after_fin.id::text",
+          "after": "   or (r.native_receipts#>>'{authorise,financial_id}' is distinct from after_fin.id::text\n    and (r.native_receipts#>>'{validation_recompute,schema_version}' is distinct from 'WEEKLY_SOURCE_AGENCY_NATIVE_VALIDATION_RECOMPUTE_V1'\n      or r.native_receipts#>>'{validation_recompute,request_id}' is distinct from r.id::text\n      or r.native_receipts#>>'{validation_recompute,financial_id}' is distinct from after_fin.id::text\n      or r.native_receipts#>>'{validation_recompute,financial_row_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_AGENCY_VALIDATION_RECOMPUTE_ROW_V1',to_jsonb(after_fin)),'hex')))"
+        },
+        {
+          "label": "authorise replay actual writer refresh",
+          "before": "  return r;\n end if;\n if r.phase<>'FINANCIAL_CURRENT'",
+          "after": "  perform public.weekly_source_agency_week_validation_refresh_v1(r.current_timesheet_id,r.source_publication_id);\n  select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;\n  return r;\n end if;\n if r.phase<>'FINANCIAL_CURRENT'"
+        },
+        {
+          "label": "first actual authorise writer refresh after native receipt",
+          "before": "  insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)\n  values(gen_random_uuid(),transaction_timestamp(),p_actual_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,\n   'NATIVE_AUTHORISE_PHASE_COMPLETED'",
+          "after": "  perform public.weekly_source_agency_week_validation_refresh_v1(r.current_timesheet_id,r.source_publication_id);\n  select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;\n  insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)\n  values(gen_random_uuid(),transaction_timestamp(),p_actual_actor_user_id,actor.role,'WEEKLY_SOURCE_AGENCY_CHANGE',r.id::text,\n   'NATIVE_AUTHORISE_PHASE_COMPLETED'"
+        }
+      ]
+    },
+    {
+      "input": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/current-native/002_public_timesheets_invalidate_prevalidation_on_change.sql.txt",
+      "output": "65_complete_native_invalidation_with_single_writer.sqlinc",
+      "before_sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7",
+      "after_sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+      "hunks": [
+        {
+          "label": "invalidation local native facts",
+          "before": "  v_changed boolean := false;",
+          "after": "  v_changed boolean := false;\n  v_agency_main uuid; v_agency_facts jsonb;"
+        },
+        {
+          "label": "preset invalidation delegates sole writer",
+          "before": "  update public.timesheet_validations tvu\n     set status",
+          "after": "  if private.weekly_source_agency_invoice_check_only_v1(new.timesheet_id) is true then\n    select cw.timesheet_id into strict v_agency_main from public.contract_weeks cw\n      where cw.contract_id=new.contract_id and cw.week_ending_date=new.week_ending_date\n        and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment;\n    v_agency_facts:=private.weekly_source_agency_week_facts_v1(v_agency_main);\n    perform public.weekly_source_agency_week_validation_refresh_v1(v_agency_main,(v_agency_facts->>'publication_id')::uuid);\n    return new;\n  end if;\n  update public.timesheet_validations tvu\n     set status"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "schema": "AGENCY_VALIDATION_SOURCE_DECLARATION_DELTA_V1",
+  "source_only": true,
+  "native": false,
+  "declarations": [
+    {
+      "signature": "private.weekly_source_agency_week_facts_v1(uuid)",
+      "file": "58_agency_native_week_facts.sqlinc",
+      "source_sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_week_complete_v1(uuid)",
+      "file": "58_agency_native_week_facts.sqlinc",
+      "source_sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_agency_week_validation_refresh_v1(uuid,uuid)",
+      "file": "59_agency_sole_validation_writer.sqlinc",
+      "source_sha256": "1ba1c1c03dc21513f6bcb4d1a91a107d82b4c4224ceef6c0d12a78595572c8ba",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_agency_validation_source_guard_v1()",
+      "file": "59_agency_sole_validation_writer.sqlinc",
+      "source_sha256": "1ba1c1c03dc21513f6bcb4d1a91a107d82b4c4224ceef6c0d12a78595572c8ba",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_validation_context_v1(uuid)",
+      "file": "60_agency_authorised_validation_context.sqlinc",
+      "source_sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_agency_validation_context_v1(uuid)",
+      "file": "60_agency_authorised_validation_context.sqlinc",
+      "source_sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_agency_validation_frame_open_v1(uuid,jsonb,uuid)",
+      "file": "61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_validation_write_assert_v1(uuid,jsonb,uuid,uuid)",
+      "file": "61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_validation_write_observe_v1(uuid,jsonb,uuid)",
+      "file": "61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_agency_validation_apply_v1(uuid,bigint,text,jsonb)",
+      "file": "61_agency_authorised_native_observation.sqlinc",
+      "source_sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_agency_financial_frame_open_v1(uuid,text,jsonb,uuid)",
+      "file": "62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)",
+      "file": "62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "private.weekly_source_agency_financial_write_observe_v1(uuid,jsonb,uuid)",
+      "file": "62_complete_native_financial_observation_with_validation.sqlinc",
+      "source_sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_segment_flags_v1(uuid)",
+      "file": "63_complete_native_flags_with_validation_observation.sqlinc",
+      "source_sha256": "27e64b68763880ce64012e9189d23255e0dc582ce4d560a2fcc3943c65acd108",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_change_authorise_step_v1(uuid,uuid)",
+      "file": "64_complete_authorise_with_native_validation_writer.sqlinc",
+      "source_sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_agency_change_authorise_step_v1(uuid,uuid)",
+      "file": "64_complete_authorise_with_native_validation_writer.sqlinc",
+      "source_sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "public.timesheets_invalidate_prevalidation_on_change()",
+      "file": "65_complete_native_invalidation_with_single_writer.sqlinc",
+      "source_sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_publication_validation_v1(uuid)",
+      "file": "66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_authorise_validation_after_v1()",
+      "file": "66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "private.weekly_source_agency_legacy_import_validation_admit_v1(uuid)",
+      "file": "66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid)",
+      "file": "66_agency_actual_validation_hooks.sqlinc",
+      "source_sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130",
+      "browser_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "file": "70_complete_current_publication_with_agency_validation.sqlinc",
+      "source_sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+      "browser_execute": false,
+      "service_execute": false
+    },
+    {
+      "signature": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "file": "71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "source_sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+      "browser_execute": false,
+      "service_execute": false
+    }
+  ],
+  "new_store": false,
+  "typed_validation_columns_dependency": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/52_same_validation_store_typed_source.sqlinc",
+  "new_triggers": [
+    "private.weekly_source_agency_validation_source_guard_v1()",
+    "private.weekly_source_agency_authorise_validation_after_v1()"
+  ],
+  "classification_and_final_verifiers_pending": true
+}

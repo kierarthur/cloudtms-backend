@@ -1,0 +1,245 @@
+-- SOURCE construction. A frame is written only by the genuine native phase /
+-- current queued writer owner; it never comes from a browser capability/GUC.
+create or replace function private.weekly_source_agency_financial_frame_open_v1(
+  p_request_id uuid,p_mode text,p_snapshot jsonb,p_outbox_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  r private.weekly_source_agency_timesheet_change_requests%rowtype;
+  t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+  queue public.ts_financials_outbox%rowtype; claim jsonb; purpose jsonb; frame jsonb; receipts jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_mode not in('MANUAL','RECOMPUTE') or p_mode is null
+    or jsonb_typeof(p_snapshot) is distinct from 'object' or octet_length(p_snapshot::text)>1048576 then
+    raise exception 'AGENCY_CHANGE_FINANCIAL_FRAME_INVALID' using errcode='22023'; end if;
+  select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+  r:=private.weekly_source_agency_change_request_assert_v1(r.contract_week_id,r.reason,
+    r.initial_row_signature,r.request_key,r.updated_by_user_id);
+  if r.state<>'ACTIVE' or (p_mode='MANUAL' and r.phase<>'UNAUTHORISED')
+    or (p_mode='RECOMPUTE' and r.phase<>'RECOMPUTE_PENDING') then
+    raise exception 'AGENCY_CHANGE_FINANCIAL_PHASE_INVALID' using errcode='55000'; end if;
+  if p_mode='RECOMPUTE' then
+    select * into strict queue from public.ts_financials_outbox where id=p_outbox_id for update;
+    if p_outbox_id is distinct from r.outbox_id or queue.timesheet_id is distinct from r.current_timesheet_id
+      or queue.reason is distinct from r.outbox_reason then
+      raise exception 'AGENCY_CHANGE_NATIVE_OUTBOX_CHANGED' using errcode='40001'; end if;
+  elsif p_outbox_id is not null then
+    raise exception 'AGENCY_CHANGE_FINANCIAL_FRAME_INVALID' using errcode='22023';
+  end if;
+  select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id for update;
+  select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current for update;
+  if t.version is distinct from r.current_timesheet_version
+    or f.timesheet_version is distinct from t.version or f.id is distinct from r.current_financial_id
+    or f.locked_by_invoice_id is not null or t.authorised_at_server is not null
+    or exists(select 1 from public.invoice_lines l where l.timesheet_id=t.timesheet_id) then
+    raise exception 'AGENCY_CHANGE_FINANCIAL_BEFORE_CHANGED' using errcode='40001'; end if;
+  if p_snapshot->>'timesheet_id' is distinct from t.timesheet_id::text
+    or p_snapshot->>'timesheet_version' is distinct from t.version::text
+    or p_snapshot->'actual_schedule_json' is distinct from r.native_receipts#>'{original_capture,schedule}'
+    or (p_mode='RECOMPUTE' and t.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}') then
+    raise exception 'AGENCY_CHANGE_CANONICAL_TARGET_CHANGED' using errcode='40001'; end if;
+  -- The same existing policy/unit guards remain the financial admission owners.
+  perform public._ctms_assert_tsfin_snapshot_policy_v1(t.timesheet_id,p_snapshot);
+  claim:=private.weekly_source_agency_original_claim_recheck_v1(r.id);
+  purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);
+  -- Unavailable original hours stay unavailable to protection. The financial
+  -- purpose preserves the actual signed/document/old-financial identities;
+  -- it does not relabel a document view as an immutable worker claim.
+  frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_FINANCIAL_WRITE_FRAME_V1',
+    'request_id',r.id,'request_sha256',encode(r.request_sha256,'hex'),'mode',p_mode,
+    'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid(),
+    'phase_actor_user_id',r.updated_by_user_id,'timesheet_id',t.timesheet_id,'timesheet_version',t.version,
+    'prior_financial_id',f.id,'prior_financial_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_PRIOR_FINANCIAL_V1',to_jsonb(f)-array['is_current','updated_at']),'hex'),
+    'snapshot_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_CANONICAL_SNAPSHOT_V1',p_snapshot),'hex'),
+    'source_cas',r.source_cas,'original_submission_proved',claim->'available',
+    'paid_write_purpose_sha256',encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_PAID_WRITE_PURPOSE_V1',purpose),'hex'),
+    'original_submission_sha256',claim->'claim_sha256',
+    'original_submission_state',claim->'submission_state','prior_financial_updated_at',f.updated_at,'outbox_id',p_outbox_id);
+  receipts:=r.native_receipts||jsonb_build_object('financial_write_frame',frame);
+  if octet_length(receipts::text)>65536 then
+    raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED' using errcode='54000'; end if;
+  update private.weekly_source_agency_timesheet_change_requests set native_receipts=receipts,
+    version=version+1,updated_at_utc=transaction_timestamp() where id=r.id;
+  return frame;
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_CHANGE_FINANCIAL_BEFORE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_financial_frame_open_v1(uuid,text,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_financial_frame_open_v1(uuid,text,jsonb,uuid)
+  from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_agency_financial_write_assert_v1(
+  p_timesheet_id uuid,p_snapshot jsonb,p_actor_user_id uuid,p_outbox_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  r private.weekly_source_agency_timesheet_change_requests%rowtype;
+  t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+  frame jsonb; claim jsonb; purpose jsonb; invoice public.invoices%rowtype;
+  keys constant text[]:=array['schema_version','request_id','request_sha256','mode','transaction_id','backend_pid',
+    'phase_actor_user_id','timesheet_id','timesheet_version','prior_financial_id','prior_financial_sha256',
+    'snapshot_sha256','source_cas','original_submission_proved','paid_write_purpose_sha256',
+    'original_submission_sha256','original_submission_state','prior_financial_updated_at','outbox_id'];
+begin
+  select * into r from private.weekly_source_agency_timesheet_change_requests
+    where current_timesheet_id=p_timesheet_id and state='ACTIVE';
+  if not found then return null; end if;
+  perform private.weekly_source_query_require_service_v1();
+  frame:=r.native_receipts->'financial_write_frame';
+  if jsonb_typeof(frame) is distinct from 'object' or not(frame ?& keys) or frame-keys<>'{}'::jsonb
+    or frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_FINANCIAL_WRITE_FRAME_V1'
+    or frame->>'transaction_id' is distinct from pg_current_xact_id()::text
+    or frame->>'backend_pid' is distinct from pg_backend_pid()::text
+    or frame->>'request_id' is distinct from r.id::text
+    or frame->>'request_sha256' is distinct from encode(r.request_sha256,'hex')
+    or frame->>'phase_actor_user_id' is distinct from r.updated_by_user_id::text
+    or frame->>'timesheet_id' is distinct from r.current_timesheet_id::text
+    or frame->>'timesheet_version' is distinct from r.current_timesheet_version::text
+    or frame->'source_cas' is distinct from r.source_cas
+    or (frame->>'mode'='MANUAL' and (r.phase<>'UNAUTHORISED' or p_outbox_id is not null))
+    or (frame->>'mode'='RECOMPUTE' and (r.phase<>'RECOMPUTE_PENDING'
+      or frame->>'outbox_id' is distinct from r.outbox_id::text))
+    or frame->>'mode' is null or frame->>'mode' not in('MANUAL','RECOMPUTE')
+    or coalesce(frame->>'snapshot_sha256','')!~'^[0-9a-f]{64}$'
+    or coalesce(frame->>'prior_financial_sha256','')!~'^[0-9a-f]{64}$'
+    or jsonb_typeof(frame->'original_submission_proved') is distinct from 'boolean'
+    or coalesce(frame->>'paid_write_purpose_sha256','')!~'^[0-9a-f]{64}$'
+    or (frame->'original_submission_proved'='true'::jsonb
+      and coalesce(frame->>'original_submission_sha256','')!~'^[0-9a-f]{64}$')
+    or (frame->'original_submission_proved'='false'::jsonb
+      and (frame->'original_submission_sha256' is distinct from 'null'::jsonb
+        or frame->'original_submission_state' is distinct from 'null'::jsonb))
+    or (p_actor_user_id is not null and frame->>'phase_actor_user_id' is distinct from p_actor_user_id::text)
+    or (p_outbox_id is not null and frame->>'outbox_id' is distinct from p_outbox_id::text)
+    or (p_snapshot is not null and encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_CANONICAL_SNAPSHOT_V1',p_snapshot),'hex') is distinct from frame->>'snapshot_sha256') then
+    raise exception 'AGENCY_CHANGE_GENUINE_FINANCIAL_FRAME_REQUIRED' using errcode='55000'; end if;
+  -- Recheck immutable original input rather than trusting the stored digest.
+  if private.weekly_source_agency_change_request_sha256_v1(r.contract_week_id,r.reason,
+      r.initial_row_signature,r.request_key,r.actor_user_id,r.native_receipts->'original_capture')
+    is distinct from r.request_sha256 then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_REQUEST_DIGEST_INVALID' using errcode='55000'; end if;
+  if current_setting('transaction_isolation') is distinct from 'read committed' then
+    raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001'; end if;
+  if private.weekly_source_pay_actor_allowed_v1(r.updated_by_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+  perform private.weekly_source_office_authority_v1(r.updated_by_user_id,'VIEW_PAY_WORK',
+    r.source_group_id,r.client_id,r.week_ending_date);
+  if private.weekly_source_bulk_source_cas_v1(r.source_cycle_id,array[r.client_id]) is distinct from r.source_cas then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001'; end if;
+  if (private.weekly_source_effective_rule_set_v1(r.client_id,r.source_cycle_id)->>'rule_set_version_id')
+    is distinct from r.rule_set_version_id::text then
+    raise exception 'AGENCY_CHANGE_OPERATIONAL_RULE_UNAVAILABLE' using errcode='55000'; end if;
+  -- The genuine phase owner acquired original D1 before family/financial rows.
+  -- Re-reading here does not invent a second lock-order or an invoice chooser.
+  if r.original_draft_invoice_id is not null then
+    select * into strict invoice from public.invoices where id=r.original_draft_invoice_id;
+    if not r.return_hold or invoice.invoice_no is distinct from r.original_draft_invoice_no
+      or invoice.client_id is distinct from r.client_id or invoice.type is distinct from 'INVOICE'
+      or invoice.status not in('DRAFT','ON_HOLD') or invoice.issued_at_utc is not null or invoice.paid_at_utc is not null then
+      raise exception 'AGENCY_CHANGE_ORIGINAL_D1_CHANGED' using errcode='40001'; end if;
+  end if;
+  select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+  select * into strict f from public.timesheets_financials where timesheet_id=p_timesheet_id and is_current;
+  if t.is_current is distinct from true or t.version is distinct from r.current_timesheet_version
+    or t.contract_id is distinct from r.contract_id or t.week_ending_date is distinct from r.week_ending_date
+    or btrim(t.booking_id) is distinct from r.canonical_family_booking_id
+    or t.authorised_at_server is not null or t.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}'
+    or f.id::text is distinct from frame->>'prior_financial_id' or f.timesheet_version is distinct from t.version
+    or f.locked_by_invoice_id is not null or exists(select 1 from public.invoice_lines l where l.timesheet_id=t.timesheet_id)
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_PRIOR_FINANCIAL_V1',to_jsonb(f)-array['is_current','updated_at']),'hex')
+      is distinct from frame->>'prior_financial_sha256' then
+    raise exception 'AGENCY_CHANGE_FINANCIAL_BEFORE_CHANGED' using errcode='40001'; end if;
+  claim:=private.weekly_source_agency_original_claim_recheck_v1(r.id);
+  purpose:=private.weekly_source_agency_paid_write_purpose_v1(r.id);
+  if claim->'available' is distinct from frame->'original_submission_proved'
+    or coalesce(claim->'claim_sha256','null'::jsonb) is distinct from frame->'original_submission_sha256'
+    or coalesce(claim->'submission_state','null'::jsonb) is distinct from frame->'original_submission_state'
+    or encode(private.weekly_source_sha256_jsonb_v1('AGENCY_NATIVE_PAID_WRITE_PURPOSE_V1',purpose),'hex')
+      is distinct from frame->>'paid_write_purpose_sha256' then
+    raise exception 'AGENCY_CHANGE_NATIVE_PAID_WRITE_PURPOSE_CHANGED' using errcode='40001'; end if;
+  return frame;
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_CHANGE_GENUINE_FINANCIAL_FRAME_REQUIRED' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid)
+  from public,anon,authenticated,service_role;
+-- E7 is SECURITY INVOKER. This is the only nested service EXECUTE addition;
+-- it exposes no creator/frame write and cannot admit a standalone paid writer.
+grant execute on function private.weekly_source_agency_financial_write_assert_v1(uuid,jsonb,uuid,uuid) to service_role;
+
+create or replace function private.weekly_source_agency_financial_write_observe_v1(
+  p_timesheet_id uuid,p_snapshot jsonb,p_outbox_id uuid
+) returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ prior public.timesheets_financials%rowtype; frame jsonb; observation jsonb; receipts jsonb; signature jsonb; segment_flags_receipt jsonb;
+begin
+ select * into r from private.weekly_source_agency_timesheet_change_requests
+  where current_timesheet_id=p_timesheet_id and state='ACTIVE' for update;
+ if not found then return; end if;
+ perform private.weekly_source_query_require_service_v1();
+ frame:=r.native_receipts->'financial_write_frame';
+ if frame->>'transaction_id' is distinct from pg_current_xact_id()::text
+  or frame->>'backend_pid' is distinct from pg_backend_pid()::text
+  or frame->>'request_id' is distinct from r.id::text
+  or frame->>'snapshot_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_CANONICAL_SNAPSHOT_V1',p_snapshot),'hex')
+  or frame->>'outbox_id' is distinct from p_outbox_id::text then
+  raise exception 'AGENCY_CHANGE_FINANCIAL_OBSERVATION_FRAME_INVALID' using errcode='55000'; end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict f from public.timesheets_financials where timesheet_id=p_timesheet_id and is_current;
+ select * into strict prior from public.timesheets_financials where id=(frame->>'prior_financial_id')::uuid;
+ if f.id=prior.id or f.timesheet_version is distinct from t.version or prior.is_current
+  or f.paid_at_utc is not null or f.locked_by_invoice_id is not null
+  or t.version is distinct from r.current_timesheet_version or t.is_current is distinct from true
+  or f.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}'
+  or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_PRIOR_FINANCIAL_V1',to_jsonb(prior)-array['is_current','updated_at']),'hex')
+    is distinct from frame->>'prior_financial_sha256' then
+  raise exception 'AGENCY_CHANGE_NEW_FINANCIAL_ROW_UNPROVED' using errcode='55000'; end if;
+ if p_outbox_id is not null and not exists(select 1 from public.ts_financials_outbox q
+  where q.id=p_outbox_id and q.id=r.outbox_id and q.timesheet_id=t.timesheet_id and q.reason=r.outbox_reason) then
+  raise exception 'AGENCY_CHANGE_NATIVE_OUTBOX_CHANGED' using errcode='40001'; end if;
+ -- Retain the genuine new row under the original native XID/PID frame before
+ -- deriving its flags. The same existing segment writer runs after EVERY
+ -- observed request recompute; its actual post-write row is what is hashed.
+ update private.weekly_source_agency_timesheet_change_requests set current_financial_id=f.id,
+  version=version+1,updated_at_utc=transaction_timestamp() where id=r.id returning * into r;
+ segment_flags_receipt:=private.weekly_source_agency_segment_flags_apply_v1(r.id);
+ select * into strict f from public.timesheets_financials where id=r.current_financial_id and is_current;
+ observation:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_FINANCIAL_WRITE_V1',
+  'observed_outbox_id',p_outbox_id,'timesheet_id',t.timesheet_id,'timesheet_version',t.version,
+  'financial_id',f.id,'financial_row_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_AGENCY_RECOMPUTE_ROW_V1',to_jsonb(f)),'hex'),
+  'prior_financial_id',prior.id,'prior_financial_sha256',frame->'prior_financial_sha256',
+  'prior_paid_marker_retained',prior.paid_at_utc is not null,
+  'prior_financial_updated_at_before',frame->'prior_financial_updated_at',
+  'prior_financial_updated_at_after',prior.updated_at,
+  'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid(),
+  'native_phase_actor_user_id',frame->'phase_actor_user_id','snapshot_sha256',frame->'snapshot_sha256');
+ receipts:=(r.native_receipts-'financial_write_frame')||jsonb_build_object(
+   case when p_outbox_id is null then 'manual_financial_write' else 'recompute' end,observation,
+   'segment_flags',segment_flags_receipt);
+ if octet_length(receipts::text)>65536 then
+  raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED' using errcode='54000'; end if;
+ -- A newly written row is retained before queue success. No phase is completed
+ -- from a count, queue absence or financial status; the same native core resumes.
+ update private.weekly_source_agency_timesheet_change_requests set native_receipts=receipts,
+  current_financial_id=f.id,version=version+1,updated_at_utc=transaction_timestamp() where id=r.id;
+exception when no_data_found or too_many_rows then
+ raise exception 'AGENCY_CHANGE_NEW_FINANCIAL_ROW_UNPROVED' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_financial_write_observe_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_financial_write_observe_v1(uuid,jsonb,uuid)
+ from public,anon,authenticated,service_role;

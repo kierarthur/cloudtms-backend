@@ -1,0 +1,78 @@
+{
+  "schema": "AGENCY_NATIVE_WHOLE_WEEK_VALIDATION_RUNTIME_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "native": false,
+  "root_pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "current_input_count": 1722,
+  "saved_git_mismatches": 0,
+  "unit_only_cases": 52,
+  "syntax_files": 5,
+  "sql_lexical_envelopes": [
+    {
+      "file": "58_agency_native_week_facts.sqlinc",
+      "sha256": "82f9c09645bc8eff619fa6b33c208e774ce4ff2758cb14241ae60657c89627ab",
+      "lexical_statements": 6
+    },
+    {
+      "file": "59_agency_sole_validation_writer.sqlinc",
+      "sha256": "1ba1c1c03dc21513f6bcb4d1a91a107d82b4c4224ceef6c0d12a78595572c8ba",
+      "lexical_statements": 9
+    },
+    {
+      "file": "60_agency_authorised_validation_context.sqlinc",
+      "sha256": "8b3260574fef69e4bed46bc44571810caed680e3d87034355229567ff2f2ce1a",
+      "lexical_statements": 7
+    },
+    {
+      "file": "61_agency_authorised_native_observation.sqlinc",
+      "sha256": "25acb52aa781cd3559afd1b5fd297e15129e4e7bad5d98ec1cec7d61ea66d95e",
+      "lexical_statements": 13
+    },
+    {
+      "file": "62_complete_native_financial_observation_with_validation.sqlinc",
+      "sha256": "7a478777ccb1000de2585465ed966edd12db39d793b0181d36992a8232f7db4c",
+      "lexical_statements": 10
+    },
+    {
+      "file": "63_complete_native_flags_with_validation_observation.sqlinc",
+      "sha256": "27e64b68763880ce64012e9189d23255e0dc582ce4d560a2fcc3943c65acd108",
+      "lexical_statements": 3
+    },
+    {
+      "file": "64_complete_authorise_with_native_validation_writer.sqlinc",
+      "sha256": "dcb2bebdce98fb90f2451684836cac317248695bae163667c45f27dda976018f",
+      "lexical_statements": 7
+    },
+    {
+      "file": "65_complete_native_invalidation_with_single_writer.sqlinc",
+      "sha256": "52d09bbbb8241b652f3876f78f2ec2c770a11e35399657f74c96cab479f617a8",
+      "lexical_statements": 1
+    },
+    {
+      "file": "66_agency_actual_validation_hooks.sqlinc",
+      "sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130",
+      "lexical_statements": 15
+    },
+    {
+      "file": "70_complete_current_publication_with_agency_validation.sqlinc",
+      "sha256": "3abb11f954f9c10b94ee8f3f6e665e83d27b10977766327a873a5164b17a9d23",
+      "lexical_statements": 1
+    },
+    {
+      "file": "71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+      "lexical_statements": 1
+    }
+  ],
+  "complete_native_owner_reversals": 9,
+  "complete_publisher_mode_a_reversals": 4,
+  "complete_runtime_reversals": 8,
+  "static_objects": 138,
+  "static_relative_edges": 220,
+  "compiler_executed": false,
+  "postgresql_executed": false,
+  "managed_native_role_executed": false,
+  "qualification_receipt": null,
+  "compiled_contract_sha256": null,
+  "mount_ready": false
+}
