@@ -1,0 +1,15 @@
+{
+  "source_only": true,
+  "native": false,
+  "root_tuple": "324e3f1c3d819170aab5b319334eeb9a2af7c2d1",
+  "root_footprint_raw": "aad0dd848253abca76a4917765b8d20c4d128646",
+  "source_selector": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+  "source_core_critic": "b3cc71b07238c9e13f60d1e0f2645d178d3362af",
+  "tuple_critic": "71c0bfb2c7c7a97eab25e14563a8141295689466",
+  "native_invoice": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+  "native_invoice_critic": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+  "physical_contract_pending_review": "19efb87a26158e53fb4023676aa9b19e117b0685",
+  "money_legacy_correctfinal_pending_review": "638b38642f8905b3ceae0fb45ebaa119e7311734",
+  "rollback_native_tool_available": false,
+  "no_db_or_release": true
+}

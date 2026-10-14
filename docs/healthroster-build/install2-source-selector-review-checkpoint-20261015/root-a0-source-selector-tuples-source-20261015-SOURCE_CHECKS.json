@@ -1,0 +1,43 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "tests_pass": 15,
+  "new_tuple_tests_pass": 6,
+  "canonical_migrations": 399,
+  "canonical_repeatables": 1060,
+  "packet_artifacts": 10,
+  "lexical": [
+    {
+      "file": "00_source_token_grammar.sqlinc",
+      "bytes": 5376,
+      "sha256": "45ba69cdbdce62ce4d4387eb25709a46d1aaba1b8529d8b71450ce49b4664fae",
+      "statements": 3
+    },
+    {
+      "file": "01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6270,
+      "sha256": "42229f7aaefe2430b6944585147b51bd94750d76464a69823a684e160be302c0",
+      "statements": 7
+    },
+    {
+      "file": "02_complete_scalar_helpers.sqlinc",
+      "bytes": 23008,
+      "sha256": "20099783077400e257ce463c09e20a670bb89f2d4ec944eb8edc0cb5b026aea1",
+      "statements": 15
+    },
+    {
+      "file": "03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 6680,
+      "sha256": "3adde37fb33635dd58737539bcfea62918a4f1eb48d1b784befdd4f7766fe029",
+      "statements": 6
+    }
+  ],
+  "checkpoint_note": "First receipt parser expected TAP but default reporter returned spec; all fifteen cases passed then. Explicit TAP fixed receipt parser; no source change.",
+  "unfinished": [
+    "actual full Source footprint and OLD/NEW guards",
+    "Agency caller phases and inter-RPC refusal/recovery",
+    "canonical registry/verifier/contract integration",
+    "native rollback and acceptance"
+  ]
+}

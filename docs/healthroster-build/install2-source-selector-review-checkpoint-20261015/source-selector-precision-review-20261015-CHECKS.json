@@ -1,0 +1,18 @@
+{
+  "source_only": true,
+  "native": false,
+  "commit": "8291f6290044e21a3210bd04a8db0d9cfd2f81e8",
+  "before": {
+    "artifacts": 12,
+    "manifest_sha256": "c1c8341b9a910609393e2290bbc9085259975ca7b05aadbac3cf794c153df79b"
+  },
+  "after": {
+    "artifacts": 12,
+    "manifest_sha256": "c1c8341b9a910609393e2290bbc9085259975ca7b05aadbac3cf794c153df79b"
+  },
+  "forward_sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b",
+  "reverse_to_actual_prior_git": true,
+  "source_tests": 19,
+  "output_sha256": "c88788f3a07c1aae41582f9a20759d684ff0501606da1bb5c2a4d157adb8f58c",
+  "native_guards_or_caller_proved": false
+}

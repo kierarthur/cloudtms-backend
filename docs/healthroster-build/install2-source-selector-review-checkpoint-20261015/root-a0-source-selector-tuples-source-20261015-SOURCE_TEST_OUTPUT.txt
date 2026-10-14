@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: two complete proposed owners reverse exactly to current A0 Git inputs
+ok 1 - two complete proposed owners reverse exactly to current A0 Git inputs
+  ---
+  duration_ms: 149.3279
+  type: 'test'
+  ...
+# Subtest: source manifest retains every raw construction byte
+ok 2 - source manifest retains every raw construction byte
+  ---
+  duration_ms: 2.3983
+  type: 'test'
+  ...
+# Subtest: closed new identities are typed actual objects/pairs/singleton and native date coverage
+ok 3 - closed new identities are typed actual objects/pairs/singleton and native date coverage
+  ---
+  duration_ms: 0.5645
+  type: 'test'
+  ...
+# Subtest: original eight-domain path delegates once with original ABI and no Source selector
+ok 4 - original eight-domain path delegates once with original ABI and no Source selector
+  ---
+  duration_ms: 0.794
+  type: 'test'
+  ...
+# Subtest: coverage schema uses one arbiter, opposite intent classes and exact retained uniqueness
+ok 5 - coverage schema uses one arbiter, opposite intent classes and exact retained uniqueness
+  ---
+  duration_ms: 0.5974
+  type: 'test'
+  ...
+# Subtest: UNIT_ONLY selected exclusion predicates distinguish disjoint dates and do not merge retained scopes
+ok 6 - UNIT_ONLY selected exclusion predicates distinguish disjoint dates and do not merge retained scopes
+  ---
+  duration_ms: 0.393
+  type: 'test'
+  ...
+# Subtest: ordinary coverage deletes only own actual transaction range; timeout restores on either exit
+ok 7 - ordinary coverage deletes only own actual transaction range; timeout restores on either exit
+  ---
+  duration_ms: 0.4948
+  type: 'test'
+  ...
+# Subtest: new Source shape validates before scalar acquisition and range phases follow scalar identities
+ok 8 - new Source shape validates before scalar acquisition and range phases follow scalar identities
+  ---
+  duration_ms: 0.4836
+  type: 'test'
+  ...
+# Subtest: four construction leaves scan with no client SQL or executable database harness
+ok 9 - four construction leaves scan with no client SQL or executable database harness
+  ---
+  duration_ms: 2.7914
+  type: 'test'
+  ...
+# Subtest: four exact complete owners reverse eight unique hunks to independently reviewed Source core
+ok 10 - four exact complete owners reverse eight unique hunks to independently reviewed Source core
+  ---
+  duration_ms: 279.1246
+  type: 'test'
+  ...
+# Subtest: new domains distinguish real revision/client and revision/event from actual cycle pairs
+ok 11 - new domains distinguish real revision/client and revision/event from actual cycle pairs
+  ---
+  duration_ms: 0.6603
+  type: 'test'
+  ...
+# Subtest: resolution slot has a strict native integer between genuine raw row and Client UUIDs
+ok 12 - resolution slot has a strict native integer between genuine raw row and Client UUIDs
+  ---
+  duration_ms: 0.3985
+  type: 'test'
+  ...
+# Subtest: native selector counterexample: generation and Client cannot be collapsed into a raw-row-only identity
+ok 13 - native selector counterexample: generation and Client cannot be collapsed into a raw-row-only identity
+  ---
+  duration_ms: 0.1631
+  type: 'test'
+  ...
+# Subtest: schema, scalar validation/dependency order and compatibility wrapper recognise every exact domain
+ok 14 - schema, scalar validation/dependency order and compatibility wrapper recognise every exact domain
+  ---
+  duration_ms: 1.2935
+  type: 'test'
+  ...
+# Subtest: every tuple-successor source artifact is byte sealed; SQL remains lexical and unmounted
+ok 15 - every tuple-successor source artifact is byte sealed; SQL remains lexical and unmounted
+  ---
+  duration_ms: 5.0654
+  type: 'test'
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 444.0426

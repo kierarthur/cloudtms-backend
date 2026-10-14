@@ -1,0 +1,70 @@
+{
+  "source_only": true,
+  "artifacts": [
+    {
+      "file": "BUILD_A0_SOURCE_SELECTOR_DOMAIN_SOURCE_CRITIC_14102026.md",
+      "bytes": 3353,
+      "sha256": "391fde508ff369511c80e722eec4455117e5d8ffcb293d187cd9b84dd48a8e5a"
+    },
+    {
+      "file": "BUILD_A0_SOURCE_SELECTOR_TUPLES_SOURCE_CRITIC_15102026.md",
+      "bytes": 3187,
+      "sha256": "b76569d0c6e9a453c02685ea8c3e7ea04f4a7947e532c18212dd4d9b2e3ee17b"
+    },
+    {
+      "file": "BUILD_AGENCY_SOURCE_SELECTOR_PRECISION_SOURCE_CRITIC_15102026.md",
+      "bytes": 2825,
+      "sha256": "041deda6a0f13867002a278d7b5472492bbc2a2df7e03f37c6576ea66aafde88"
+    },
+    {
+      "file": "BUILD_CHECKLIST_NATIVE_INVOICE_BLOCK_SOURCE_CRITIC_15102026.md",
+      "bytes": 5732,
+      "sha256": "03a6f024fb0cba29f29865f5ae9cdc417b056f71dbd0449fc053f3ebb6be8935"
+    },
+    {
+      "file": "SOURCE_COMMITS.json",
+      "bytes": 746,
+      "sha256": "fbadfd9bd3aa33bbad7be0103710ef21e661ec383e7b1937b7a69822a97e7431"
+    },
+    {
+      "file": "root-a0-source-footprint-source-20261015-SOURCE_CHECKS.json",
+      "bytes": 1704,
+      "sha256": "ca5d8d9ac0793bf768b09dda6fa74925d86119bff38bc18ddef5d06f1528cb78"
+    },
+    {
+      "file": "root-a0-source-footprint-source-20261015-SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "root-a0-source-footprint-source-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 8540,
+      "sha256": "39f1bb7506fb4fc971a92adc7800d8b230076c42cfd9d7991f02effdfb3b822c"
+    },
+    {
+      "file": "root-a0-source-selector-tuples-source-20261015-SOURCE_CHECKS.json",
+      "bytes": 1414,
+      "sha256": "4ceec2571be57141ec2be3c1ff45e95d2efa4c9b3d901a8f7dfe0673daf72bdd"
+    },
+    {
+      "file": "root-a0-source-selector-tuples-source-20261015-SOURCE_INTEGRITY_OUTPUT.txt",
+      "bytes": 68,
+      "sha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26"
+    },
+    {
+      "file": "root-a0-source-selector-tuples-source-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 3739,
+      "sha256": "40272d51cac38346c6ef94458947e6b311374e9314813505f94d80b483dc3c52"
+    },
+    {
+      "file": "source-selector-precision-review-20261015-CHECKS.json",
+      "bytes": 639,
+      "sha256": "dda7da30eb1d8d7c6ba5bcd3e0fd3732d50db56434559870bed00a3c556039f7"
+    },
+    {
+      "file": "source-selector-precision-review-20261015-SOURCE_TEST_OUTPUT.txt",
+      "bytes": 4344,
+      "sha256": "c88788f3a07c1aae41582f9a20759d684ff0501606da1bb5c2a4d157adb8f58c"
+    }
+  ]
+}
