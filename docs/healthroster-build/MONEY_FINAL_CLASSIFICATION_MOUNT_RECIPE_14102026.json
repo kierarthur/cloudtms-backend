@@ -1,0 +1,270 @@
+{
+  "schema_version": "MONEY_FINAL_CLASSIFICATION_MOUNT_RECIPE_V1",
+  "source_only": true,
+  "source_packet_publication_commit": "USE_EXACT_REMOTE_MATCHED_OWN_PUBLICATION_CHECKPOINT_FROM_HANDBACK",
+  "packet_authoring_source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "current_root_selected_input_commit": "eb744b66809685c61a2db60249d617eb818115a4",
+  "no_whole_root_equivalence_claim": true,
+  "review_manifest": {
+    "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/REVIEW_MANIFEST.json",
+    "sha256": "816be983e3840c095022323f19b0f51f133983bcc235dc866abba10efdd93dec",
+    "artifacts": 30,
+    "manifests": 1
+  },
+  "source_checks": {
+    "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/SOURCE_CHECK_RESULT.json",
+    "sha256": "cdcd7e30bee675691c3e089fe6748ea0c2ed1a70591a2331b23468168207bf54"
+  },
+  "selected": [
+    {
+      "consumed_actual_current_input": {
+        "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+        "bytes": 58831,
+        "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+      },
+      "selected_forward": {
+        "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/support/healthroster_final_literal_classification/FINAL_LITERAL_CLASSIFICATION_SOURCE_FORWARD.sqlinc",
+        "bytes": 84832,
+        "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+      },
+      "destination": "NEW_UK_MINUTE_FINAL_REPEATABLE_CONTAINED_SUPPORT_AFTER_ALL_NATIVE_A0_REPORT",
+      "complete_reverse_proof_file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/COMPLETE_FORWARD_AND_REVERSE_PROOFS.json",
+      "reverse_hunks": 2,
+      "operation": "COMPLETE_CURRENT_SOURCE_FORWARD"
+    },
+    {
+      "consumed_actual_current_input": {
+        "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+        "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "bytes": 60506,
+        "sha256": "6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d"
+      },
+      "selected_forward": {
+        "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "bytes": 92707,
+        "sha256": "a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631"
+      },
+      "destination": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "complete_reverse_proof_file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/COMPLETE_FORWARD_AND_REVERSE_PROOFS.json",
+      "reverse_hunks": 11,
+      "operation": "COMPLETE_CURRENT_SOURCE_FORWARD"
+    },
+    {
+      "consumed_actual_current_input": {
+        "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+        "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+        "bytes": 7115,
+        "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+      },
+      "selected_forward": {
+        "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+        "bytes": 7115,
+        "sha256": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb"
+      },
+      "destination": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "complete_reverse_proof_file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/COMPLETE_FORWARD_AND_REVERSE_PROOFS.json",
+      "reverse_hunks": 1,
+      "operation": "COMPLETE_CURRENT_SOURCE_FORWARD"
+    },
+    {
+      "consumed_actual_current_input": {
+        "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+        "file": "supabase/release/current-release.json",
+        "bytes": 32352,
+        "sha256": "285e2fc9a9a50772e2f27390a28d69a216e65265f45ba018a642c9cd40d7a4df"
+      },
+      "selected_forward": {
+        "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/release/current-release.json",
+        "bytes": 35146,
+        "sha256": "5f6b8f64ca672982589eb3711d1789fb876afce64d4f6d3d9d0c39b7f6c36c0c"
+      },
+      "destination": "supabase/release/current-release.json",
+      "complete_reverse_proof_file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/COMPLETE_FORWARD_AND_REVERSE_PROOFS.json",
+      "reverse_hunks": 0,
+      "operation": "APPEND_ONLY_REQUIRED_VERIFIER_LIST_DELTA_PRESERVE_LATER_ROOT_RELEASE_ID_CONTRACT_FIELDS"
+    }
+  ],
+  "required_verifier_roots": [
+    "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+    "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+    "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+    "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+    "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+    "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+    "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+    "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+    "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+    "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+    "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+    "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+    "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+    "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+    "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql"
+  ],
+  "preserved_verifier_input_pins": [
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "bytes": 8958,
+      "sha256": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+      "bytes": 10564,
+      "sha256": "fd284e10ede8d670cc79b6aad63d8a14a5325e81c87f81c68f8c340ec0e3ab7a"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "bytes": 32400,
+      "sha256": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+      "bytes": 1508,
+      "sha256": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+      "bytes": 1637,
+      "sha256": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "bytes": 5393,
+      "sha256": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "bytes": 3404,
+      "sha256": "f57031b819cdceff1304c946aeead197944fb6697371bf1b49bb2e4871312f72"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/support/13102026_1412_f8_admission_vectors.sqlinc",
+      "bytes": 3898,
+      "sha256": "904c178e542156a364825fe35b8f075573d65ad1fd0c6812e58b1a6619df9562"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "bytes": 7509,
+      "sha256": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "bytes": 20608,
+      "sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "bytes": 6907,
+      "sha256": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+      "bytes": 2616,
+      "sha256": "0e8bc553a872ac7d4461fdc6b195fb461c7661bcf6e541ba58a62336ccbe6fdd"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/support/13102026_1544_report_row_vectors.sqlinc",
+      "bytes": 4299,
+      "sha256": "34c9089c47b97968c7be7fe5016c9dddb611ed47cca0ce2059bccc46587b127f"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "bytes": 3601,
+      "sha256": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+      "bytes": 4443,
+      "sha256": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+      "bytes": 4388,
+      "sha256": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "bytes": 2308,
+      "sha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "bytes": 7115,
+      "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+    },
+    {
+      "commit": "eb744b66809685c61a2db60249d617eb818115a4",
+      "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+      "bytes": 3280,
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a"
+    }
+  ],
+  "preserved_verifier_include_occurrences": [
+    "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+    "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+    "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+    "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+    "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+    "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+    "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+    "supabase/verification/support/13102026_1412_f8_admission_vectors.sqlinc",
+    "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+    "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+    "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+    "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+    "supabase/verification/support/13102026_1544_report_row_vectors.sqlinc",
+    "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+    "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+    "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+    "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+    "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+    "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql"
+  ],
+  "existing_full_verifier_prefixes": {
+    "verification": 158,
+    "new_verification": 159
+  },
+  "appended_existing_source_verifiers": 15,
+  "final_verifier_list_counts": {
+    "verification": 173,
+    "new_verification": 174
+  },
+  "mount_order": [
+    "Existing reviewed0400/0410/0420/0430/A00519/Report0541 native source remains current",
+    "Parent completes remaining reviewed current runtime and Office source",
+    "New final classification atomic repeatable wraps complete selected support with actual logical-owner adapter AFTER every latest native definition",
+    "Apply complete ACL and Local literal-hash verifier successors; preserve all other current native verifier inputs and vector includes",
+    "Append exact15 required verifier list entries without replacing later parent release/contract identity",
+    "Parent re-censuses final actual source and constructs genuine compiler/tool/catalogue/contract seal BEFORE any native qualification"
+  ],
+  "untouched_runtime_abi": {
+    "source39": true,
+    "recorder_request9_response13": true,
+    "report_slots2": true,
+    "shared_receipt_paths3": true
+  },
+  "new_private_service_browser_table_or_owner_signatures": false,
+  "hidden_rr_rc_native_security_financial_document_api_ui_phone_activation_and_release": "HOLD",
+  "actual_sql_runtime_setting_or_database_operation": false
+}

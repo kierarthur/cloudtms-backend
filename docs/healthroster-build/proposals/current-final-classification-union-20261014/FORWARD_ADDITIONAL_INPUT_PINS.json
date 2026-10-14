@@ -1,0 +1,114 @@
+{
+  "source_only": true,
+  "current_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "inputs": [
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 60506,
+      "sha256": "6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "bytes": 7115,
+      "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/18092026_0900_weekly_source_withdrawal_supersession.sql",
+      "bytes": 24230,
+      "sha256": "8287055ad7bb8cca88430d25b9affabd101f28fe331769ce6aef67a94e45f0c7"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/18092026_1500_weekly_source_external_publication_arrival.sql",
+      "bytes": 13697,
+      "sha256": "171cac481346929dd3e9b0bf9de2ee4b3933339b71e2f791381365fa6b63784a"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/18092026_1520_weekly_source_pending_release_review_items.sql",
+      "bytes": 7636,
+      "sha256": "be3a84fcad4b122cc93b6dc5ac7428d17d4d20366bf99903e13f2e6645daf767"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/18092026_1740_weekly_source_banking_pay_absence.sql",
+      "bytes": 9054,
+      "sha256": "0f78238b2069c533130b236ce3a026752e8c5158c1ab160819250c4f3144d19a"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/22092026_1645_weekly_source_workbench_inventory_projection.sql",
+      "bytes": 2932,
+      "sha256": "1662c3dc035d97c0ac3a0d2755793488b4e5582c5ca71155b9f6dd4ed4edfce2"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/22092026_1645_weekly_source_workbench_inventory_projection.sql",
+      "bytes": 2932,
+      "sha256": "1662c3dc035d97c0ac3a0d2755793488b4e5582c5ca71155b9f6dd4ed4edfce2"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/30092026_2052_weekly_source_import_preparation.sql",
+      "bytes": 986,
+      "sha256": "9f23daa59ebd8139bc3c7a32fa641872417c76b3539d7f95e4cec09b96906041"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/02102026_1600_weekly_source_manual_review.sql",
+      "bytes": 2231,
+      "sha256": "cadac3950ea836a35005eecf1f0b064bdf935d90d6f8b74f2a3377b7ae0afce4"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "bytes": 1988,
+      "sha256": "922970716a88115ff592a0d3f4c6bd900d4b32c35f8f99ecec05d18a1a3812b1"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "bytes": 4750,
+      "sha256": "f37a15755f4863ab415b9242de9c3a38ea60369856346300aff74745742e1448"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/migrations/05102026_0428_weekly_source_manual_review_commands.sql",
+      "bytes": 3654,
+      "sha256": "606142d073bbac41b2d8ddff13cc463b9a92f301e6cbaedc11a41789374ab591"
+    },
+    {
+      "commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+      "file": "supabase/release/current-release.json",
+      "bytes": 32352,
+      "sha256": "285e2fc9a9a50772e2f27390a28d69a216e65265f45ba018a642c9cd40d7a4df"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "schema_version": "CURRENT_FINAL_LITERAL_CLASSIFICATION_FROZEN_SOURCE_REVIEW_V1",
+  "source_only": true,
+  "current_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/14_complete_acl_verifier_union.sqlinc.current-input",
+      "bytes": 68399,
+      "sha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/15092026_1534_weekly_source_acl_contract_v1.sql.current-input",
+      "bytes": 60506,
+      "sha256": "6a25299914fc93cdac9938b240eb0dfa721875e11de2bbff8c7a9d31b6bd3f9d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/COMPLETE_FORWARD_AND_REVERSE_PROOFS.json",
+      "bytes": 157608,
+      "sha256": "18f3fe855f7455dc4a7a1040b996069749a46e80aaf4498ad84d0ff5872abb97"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_FINAL_DECLARATION_OWNERS.json",
+      "bytes": 2117075,
+      "sha256": "6f23cae01f6924de0ee8cf3ee4d101679aa195a22b1eade415ea83ccf9fdf25e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_LITERAL_CONTRACT_OWNERS.json",
+      "bytes": 86586,
+      "sha256": "475c70123782a9a02828b6b0b67892607cf7c02ae2c43f7970538423baa45c8c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_LITERAL_SERVICE_GRANT_CANDIDATES.json",
+      "bytes": 2266089,
+      "sha256": "ae37bb978017e763eafeacd30b531679dd899532b580ba985fff7873a59a221f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_LITERAL_WEEKLY_RELATION_DECLARATIONS.json",
+      "bytes": 34573,
+      "sha256": "e1ee2acb9aa42acc4ce2579b4927adc57957f4bc375539ba5c7f9bae94e997b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_SOURCE_INPUTS_AND_ORDER.json",
+      "bytes": 707748,
+      "sha256": "8443adf83982686c2506748b624c8ad4ed2eec4754db0ccbe6e2c38c4d63622d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/CURRENT_TOP_LEVEL_LITERAL_GRANTS.json",
+      "bytes": 3288312,
+      "sha256": "834915bb44e7f599c89d999b29e9ef75473ea9dcce76d690057ad9beb02bdb0f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/ENTIRE_CURRENT_DECLARATION_REVERSE.json",
+      "bytes": 624,
+      "sha256": "a75d485b1adf1d55fe6ec6377fa3cc51d2ee186a4b2d3dbb2188dc06741a04b2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/FINAL_LITERAL_CLASSIFICATION_UNION.json",
+      "bytes": 600544,
+      "sha256": "de16dbda2a31b08f439474a2fceee311d012436e37ba450461a1e319f2ef9b24"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/FORWARD_ADDITIONAL_INPUT_PINS.json",
+      "bytes": 4966,
+      "sha256": "46407867df4df30a9129372b813817742804e4b147076a35c9fbab0dbc332934"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/PRIVATE_NATIVE_TABLE_CLASSIFICATION.json",
+      "bytes": 56270,
+      "sha256": "960eae6d495373d15332f3e13a4ea148b3d4ee74b5c89c8f13dc1f450b378714"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/READY_FOR_SOURCE_CRITIC.md",
+      "bytes": 4286,
+      "sha256": "23b2d01301f1c45c5af4261d7f20289ea715968bac0f7eea72fca42e77b4ee92"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/REQUIRED_VERIFIER_UNION.json",
+      "bytes": 162571,
+      "sha256": "0c2713e3af6bdc3b101283f076299c4f33263070f4fb01702d5618a183bbfb14"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 3336,
+      "sha256": "cdcd7e30bee675691c3e089fe6748ea0c2ed1a70591a2331b23468168207bf54"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/_weekly_source_acl_lifecycle_column_contract_v1.current-input.sqlinc",
+      "bytes": 6688,
+      "sha256": "a61f54a3678926f263de6b5d28a8c746d502e7c09fc6ea65374770699333c470"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/_weekly_source_acl_private_helper_contract_v1.current-input.sqlinc",
+      "bytes": 17235,
+      "sha256": "c297e9f741df9692a17db9332ed28e54b4e5f20e952214b30ddc4e6dae02ab64"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/_weekly_source_acl_service_rpc_contract_v1.current-input.sqlinc",
+      "bytes": 10037,
+      "sha256": "eadf0ac5a00577fbb308a77c0656f94e37ec576ad70296569d2a6410635f5d4f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/_weekly_source_acl_table_contract_v1.current-input.sqlinc",
+      "bytes": 7606,
+      "sha256": "d1a9e98307cdd09caa9d8e93aa45ae7e6e0660524caa1ccc219640a14d0dd111"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/build-complete-forward.mjs",
+      "bytes": 13938,
+      "sha256": "5b981d0ad15af1b17c011d7b45004446545371455ded28fa177db5cc70f1d14e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/census-current-source.mjs",
+      "bytes": 6252,
+      "sha256": "bdec63353c553e301e70d0a4da263831739200ffb1433464719c5266c1a74f55"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/current-classification-source.test.mjs",
+      "bytes": 9857,
+      "sha256": "1e0ec717358a56054159ccaaaf2f56d037d10e1b5ecb08b47aa753bc9cc27ceb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/current-release.json.current-input",
+      "bytes": 32352,
+      "sha256": "285e2fc9a9a50772e2f27390a28d69a216e65265f45ba018a642c9cd40d7a4df"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/derive-classifications.mjs",
+      "bytes": 7545,
+      "sha256": "b70510b46ac0f6498122d254f068fdb6af137c48a532e086efa1d57d71f626b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/release/current-release.json",
+      "bytes": 35146,
+      "sha256": "5f6b8f64ca672982589eb3711d1789fb876afce64d4f6d3d9d0c39b7f6c36c0c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/support/healthroster_final_literal_classification/FINAL_LITERAL_CLASSIFICATION_SOURCE_FORWARD.sqlinc",
+      "bytes": 84832,
+      "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "bytes": 7115,
+      "sha256": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/forward/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 92707,
+      "sha256": "a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/current-final-classification-union-20261014/freeze-current-classification.mjs",
+      "bytes": 4707,
+      "sha256": "2d5f274bdb98c3e94319848651506ecf71f7b2a09a7991eb2f372b8ed26878bc"
+    }
+  ],
+  "source_check_sha256": "cdcd7e30bee675691c3e089fe6748ea0c2ed1a70591a2331b23468168207bf54",
+  "independent_critic": false,
+  "final_compiler_catalogue_native_rr_rc_release_gates_held": true
+}
