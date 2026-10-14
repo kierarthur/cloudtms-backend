@@ -1,0 +1,3196 @@
+{
+  "schema_version": "A0_PUBLICATION_INHERITED_WHITESPACE_SOURCE_PROOF_V1",
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "current_index_sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+  "git_added_full_artifact_whitespace_check_pass": false,
+  "all_reported_whitespace_inherited": true,
+  "introduced_findings": 0,
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/install2-a0-runtime-route-wiring-20261014/forward/broker/src/index.js",
+      "sha256": "42c67a57ee089ad45cad4a0d583ed5d68eaecca8013b23d8869ba6989bc0baee",
+      "inherited_findings": 264,
+      "introduced_findings": 0,
+      "proof": [
+        {
+          "new_line": 26,
+          "current_parent_line": 25,
+          "line_sha256": "c7b39c5926fb5dfaeefe68b853654cf433b2166b4abcd6fcc31f69500a90cf7b",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 627,
+          "current_parent_line": 626,
+          "line_sha256": "0fd7f33b4494b8242804d80d16d5ebae19b4fc322645dfbfb0d82f6844dfb4c4",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 6377,
+          "current_parent_line": 6376,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56279,
+          "current_parent_line": 56278,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56282,
+          "current_parent_line": 56281,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56289,
+          "current_parent_line": 56288,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56323,
+          "current_parent_line": 56322,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56394,
+          "current_parent_line": 56393,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56464,
+          "current_parent_line": 56463,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56482,
+          "current_parent_line": 56481,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56485,
+          "current_parent_line": 56484,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56489,
+          "current_parent_line": 56488,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56493,
+          "current_parent_line": 56492,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56503,
+          "current_parent_line": 56502,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56516,
+          "current_parent_line": 56515,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56522,
+          "current_parent_line": 56521,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56528,
+          "current_parent_line": 56527,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56537,
+          "current_parent_line": 56536,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56540,
+          "current_parent_line": 56539,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56547,
+          "current_parent_line": 56546,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56551,
+          "current_parent_line": 56550,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56556,
+          "current_parent_line": 56555,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56569,
+          "current_parent_line": 56568,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56574,
+          "current_parent_line": 56573,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56579,
+          "current_parent_line": 56578,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56582,
+          "current_parent_line": 56581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56607,
+          "current_parent_line": 56606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56732,
+          "current_parent_line": 56731,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56741,
+          "current_parent_line": 56740,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56802,
+          "current_parent_line": 56801,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56808,
+          "current_parent_line": 56807,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56812,
+          "current_parent_line": 56811,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56816,
+          "current_parent_line": 56815,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56824,
+          "current_parent_line": 56823,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56827,
+          "current_parent_line": 56826,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56842,
+          "current_parent_line": 56841,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56856,
+          "current_parent_line": 56855,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56865,
+          "current_parent_line": 56864,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56879,
+          "current_parent_line": 56878,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56892,
+          "current_parent_line": 56891,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56907,
+          "current_parent_line": 56906,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56922,
+          "current_parent_line": 56921,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56943,
+          "current_parent_line": 56942,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56955,
+          "current_parent_line": 56954,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56970,
+          "current_parent_line": 56969,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56977,
+          "current_parent_line": 56976,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56988,
+          "current_parent_line": 56987,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56999,
+          "current_parent_line": 56998,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57007,
+          "current_parent_line": 57006,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57021,
+          "current_parent_line": 57020,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57024,
+          "current_parent_line": 57023,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57028,
+          "current_parent_line": 57027,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57034,
+          "current_parent_line": 57033,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57037,
+          "current_parent_line": 57036,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57040,
+          "current_parent_line": 57039,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57047,
+          "current_parent_line": 57046,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57056,
+          "current_parent_line": 57055,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57067,
+          "current_parent_line": 57066,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57086,
+          "current_parent_line": 57085,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57152,
+          "current_parent_line": 57151,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57194,
+          "current_parent_line": 57193,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57197,
+          "current_parent_line": 57196,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57222,
+          "current_parent_line": 57221,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57300,
+          "current_parent_line": 57299,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57487,
+          "current_parent_line": 57486,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57496,
+          "current_parent_line": 57495,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57501,
+          "current_parent_line": 57500,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57511,
+          "current_parent_line": 57510,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57520,
+          "current_parent_line": 57519,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57528,
+          "current_parent_line": 57527,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57536,
+          "current_parent_line": 57535,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57548,
+          "current_parent_line": 57547,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57561,
+          "current_parent_line": 57560,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57564,
+          "current_parent_line": 57563,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57582,
+          "current_parent_line": 57581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57584,
+          "current_parent_line": 57583,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57607,
+          "current_parent_line": 57606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57618,
+          "current_parent_line": 57617,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57621,
+          "current_parent_line": 57620,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57628,
+          "current_parent_line": 57627,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57634,
+          "current_parent_line": 57633,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57637,
+          "current_parent_line": 57636,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57648,
+          "current_parent_line": 57647,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57655,
+          "current_parent_line": 57654,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57667,
+          "current_parent_line": 57666,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57669,
+          "current_parent_line": 57668,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57680,
+          "current_parent_line": 57679,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57683,
+          "current_parent_line": 57682,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57689,
+          "current_parent_line": 57688,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57694,
+          "current_parent_line": 57693,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57699,
+          "current_parent_line": 57698,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57701,
+          "current_parent_line": 57700,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57714,
+          "current_parent_line": 57713,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57818,
+          "current_parent_line": 57817,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57830,
+          "current_parent_line": 57829,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57851,
+          "current_parent_line": 57850,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57853,
+          "current_parent_line": 57852,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57862,
+          "current_parent_line": 57861,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57872,
+          "current_parent_line": 57871,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57880,
+          "current_parent_line": 57879,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57883,
+          "current_parent_line": 57882,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57895,
+          "current_parent_line": 57894,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57900,
+          "current_parent_line": 57899,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57903,
+          "current_parent_line": 57902,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57906,
+          "current_parent_line": 57905,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57911,
+          "current_parent_line": 57910,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57921,
+          "current_parent_line": 57920,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57930,
+          "current_parent_line": 57929,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57940,
+          "current_parent_line": 57939,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57950,
+          "current_parent_line": 57949,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57953,
+          "current_parent_line": 57952,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57958,
+          "current_parent_line": 57957,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57961,
+          "current_parent_line": 57960,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57964,
+          "current_parent_line": 57963,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57968,
+          "current_parent_line": 57967,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57983,
+          "current_parent_line": 57982,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57987,
+          "current_parent_line": 57986,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58006,
+          "current_parent_line": 58005,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58018,
+          "current_parent_line": 58017,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58030,
+          "current_parent_line": 58029,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58040,
+          "current_parent_line": 58039,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58056,
+          "current_parent_line": 58055,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58070,
+          "current_parent_line": 58069,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58072,
+          "current_parent_line": 58071,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58088,
+          "current_parent_line": 58087,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58101,
+          "current_parent_line": 58100,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58103,
+          "current_parent_line": 58102,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58112,
+          "current_parent_line": 58111,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58121,
+          "current_parent_line": 58120,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58126,
+          "current_parent_line": 58125,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58133,
+          "current_parent_line": 58132,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58138,
+          "current_parent_line": 58137,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58141,
+          "current_parent_line": 58140,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58144,
+          "current_parent_line": 58143,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58147,
+          "current_parent_line": 58146,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58150,
+          "current_parent_line": 58149,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58154,
+          "current_parent_line": 58153,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58179,
+          "current_parent_line": 58178,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58184,
+          "current_parent_line": 58183,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58191,
+          "current_parent_line": 58190,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58207,
+          "current_parent_line": 58206,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58209,
+          "current_parent_line": 58208,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58216,
+          "current_parent_line": 58215,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58219,
+          "current_parent_line": 58218,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58231,
+          "current_parent_line": 58230,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58235,
+          "current_parent_line": 58234,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58242,
+          "current_parent_line": 58241,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58246,
+          "current_parent_line": 58245,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58256,
+          "current_parent_line": 58255,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58265,
+          "current_parent_line": 58264,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58283,
+          "current_parent_line": 58282,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58299,
+          "current_parent_line": 58298,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58326,
+          "current_parent_line": 58325,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58329,
+          "current_parent_line": 58328,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58337,
+          "current_parent_line": 58336,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58339,
+          "current_parent_line": 58338,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58346,
+          "current_parent_line": 58345,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58353,
+          "current_parent_line": 58352,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58359,
+          "current_parent_line": 58358,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58370,
+          "current_parent_line": 58369,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58380,
+          "current_parent_line": 58379,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58385,
+          "current_parent_line": 58384,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58419,
+          "current_parent_line": 58418,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58432,
+          "current_parent_line": 58431,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58443,
+          "current_parent_line": 58442,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58457,
+          "current_parent_line": 58456,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58466,
+          "current_parent_line": 58465,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58471,
+          "current_parent_line": 58470,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58476,
+          "current_parent_line": 58475,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58479,
+          "current_parent_line": 58478,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58520,
+          "current_parent_line": 58519,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58524,
+          "current_parent_line": 58523,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58530,
+          "current_parent_line": 58529,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58542,
+          "current_parent_line": 58541,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58547,
+          "current_parent_line": 58546,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58549,
+          "current_parent_line": 58548,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58553,
+          "current_parent_line": 58552,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58563,
+          "current_parent_line": 58562,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58565,
+          "current_parent_line": 58564,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58569,
+          "current_parent_line": 58568,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58579,
+          "current_parent_line": 58578,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58582,
+          "current_parent_line": 58581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58586,
+          "current_parent_line": 58585,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58590,
+          "current_parent_line": 58589,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58607,
+          "current_parent_line": 58606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58613,
+          "current_parent_line": 58612,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58622,
+          "current_parent_line": 58621,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58625,
+          "current_parent_line": 58624,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58630,
+          "current_parent_line": 58629,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58635,
+          "current_parent_line": 58634,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58637,
+          "current_parent_line": 58636,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58652,
+          "current_parent_line": 58651,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58660,
+          "current_parent_line": 58659,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58662,
+          "current_parent_line": 58661,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58666,
+          "current_parent_line": 58665,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58670,
+          "current_parent_line": 58669,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58677,
+          "current_parent_line": 58676,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58680,
+          "current_parent_line": 58679,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58685,
+          "current_parent_line": 58684,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58694,
+          "current_parent_line": 58693,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58706,
+          "current_parent_line": 58705,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58714,
+          "current_parent_line": 58713,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58717,
+          "current_parent_line": 58716,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58725,
+          "current_parent_line": 58724,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58733,
+          "current_parent_line": 58732,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58736,
+          "current_parent_line": 58735,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58738,
+          "current_parent_line": 58737,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58757,
+          "current_parent_line": 58756,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58760,
+          "current_parent_line": 58759,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58761,
+          "current_parent_line": 58760,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58773,
+          "current_parent_line": 58772,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58785,
+          "current_parent_line": 58784,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58832,
+          "current_parent_line": 58831,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58839,
+          "current_parent_line": 58838,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58846,
+          "current_parent_line": 58845,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58853,
+          "current_parent_line": 58852,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58857,
+          "current_parent_line": 58856,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58861,
+          "current_parent_line": 58860,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58865,
+          "current_parent_line": 58864,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58869,
+          "current_parent_line": 58868,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58876,
+          "current_parent_line": 58875,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58879,
+          "current_parent_line": 58878,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58886,
+          "current_parent_line": 58885,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58890,
+          "current_parent_line": 58889,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58895,
+          "current_parent_line": 58894,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58911,
+          "current_parent_line": 58910,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58929,
+          "current_parent_line": 58928,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59016,
+          "current_parent_line": 59015,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59031,
+          "current_parent_line": 59030,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59103,
+          "current_parent_line": 59102,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59197,
+          "current_parent_line": 59196,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59238,
+          "current_parent_line": 59237,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59274,
+          "current_parent_line": 59273,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59314,
+          "current_parent_line": 59313,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59330,
+          "current_parent_line": 59329,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59342,
+          "current_parent_line": 59341,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59368,
+          "current_parent_line": 59367,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59387,
+          "current_parent_line": 59386,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59428,
+          "current_parent_line": 59427,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59504,
+          "current_parent_line": 59503,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59507,
+          "current_parent_line": 59506,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59743,
+          "current_parent_line": 59742,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 70017,
+          "current_parent_line": 70016,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 106561,
+          "current_parent_line": 106560,
+          "line_sha256": "0c457f1d8b81bc77cf986614e8103f73dd3215c58236320ede971c01552301d5",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 106562,
+          "current_parent_line": 106561,
+          "line_sha256": "3108fd92d322437aa34fe2fd663cd24c0d51a90f2daf0e03ecd773374819be5a",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 110098,
+          "current_parent_line": 110097,
+          "line_sha256": "3705530e5c8fa109c1cc547b62c842f2e2b5f4605d7627603d7102f199f80769",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 110099,
+          "current_parent_line": 110098,
+          "line_sha256": "a4d08ec81cda0096e382df7fbbd1ef077e88dcbba675511d42370326722c1175",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 135645,
+          "current_parent_line": 135644,
+          "line_sha256": "cc01b0ee114f2c32a6f52bb5afcbdff0f8634d18b15cdd235a827a4ef8b305e2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 135672,
+          "current_parent_line": 135671,
+          "line_sha256": "cc01b0ee114f2c32a6f52bb5afcbdff0f8634d18b15cdd235a827a4ef8b305e2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 152685,
+          "current_parent_line": 152684,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 155670,
+          "current_parent_line": 155669,
+          "line_sha256": "2b2c70d430b8381314d72ab4914e995287ae746a798905b0ff37e68a955a139c",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 198328,
+          "current_parent_line": 198235,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 198513,
+          "current_parent_line": 198420,
+          "line_sha256": "5f698520654d7b5d2cd62eaef8c4be0609f068b39ea497fa516b31e899c2e7a2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 199869,
+          "current_parent_line": 199776,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200430,
+          "current_parent_line": 200334,
+          "line_sha256": "63ad8e85349fe11819885976ef96cbe3f6f65c288b290713acadbdf9a9280388",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200431,
+          "current_parent_line": 200335,
+          "line_sha256": "63ad8e85349fe11819885976ef96cbe3f6f65c288b290713acadbdf9a9280388",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200617,
+          "current_parent_line": 200521,
+          "line_sha256": "8855c6119660c614d285554e51769066e94fcb75ff215ccc2fa6b4838b18756b",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200636,
+          "current_parent_line": 200540,
+          "line_sha256": "03e88438f3c62efefab36662464a3dcccbcdf8b7eca53a26090d101c3b5597e7",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201018,
+          "current_parent_line": 200922,
+          "line_sha256": "eb5dc672f4c4d107a8d8362b551c4f3faf96e4da53d41940757d1812b59ca6d2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201097,
+          "current_parent_line": 201001,
+          "line_sha256": "2106c36011520fe73876d45bfb9ef8bf7b2e9f4362096a320376d8ee9b27ef12",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201149,
+          "current_parent_line": 201053,
+          "line_sha256": "03e88438f3c62efefab36662464a3dcccbcdf8b7eca53a26090d101c3b5597e7",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201155,
+          "current_parent_line": 201059,
+          "line_sha256": "f6f1ba35223277c0f9b0336cf4304e7aff24aa92e160263c8b1b6a3636001051",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201168,
+          "current_parent_line": 201072,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201389,
+          "current_parent_line": 201293,
+          "line_sha256": "8855c6119660c614d285554e51769066e94fcb75ff215ccc2fa6b4838b18756b",
+          "exact_current_parent_bytes": true
+        }
+      ]
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-a0-runtime-refusal-successor-20261014/forward/broker/src/index.js",
+      "sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052",
+      "inherited_findings": 264,
+      "introduced_findings": 0,
+      "proof": [
+        {
+          "new_line": 26,
+          "current_parent_line": 25,
+          "line_sha256": "c7b39c5926fb5dfaeefe68b853654cf433b2166b4abcd6fcc31f69500a90cf7b",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 627,
+          "current_parent_line": 626,
+          "line_sha256": "0fd7f33b4494b8242804d80d16d5ebae19b4fc322645dfbfb0d82f6844dfb4c4",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 6377,
+          "current_parent_line": 6376,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56279,
+          "current_parent_line": 56278,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56282,
+          "current_parent_line": 56281,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56289,
+          "current_parent_line": 56288,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56323,
+          "current_parent_line": 56322,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56394,
+          "current_parent_line": 56393,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56464,
+          "current_parent_line": 56463,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56482,
+          "current_parent_line": 56481,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56485,
+          "current_parent_line": 56484,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56489,
+          "current_parent_line": 56488,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56493,
+          "current_parent_line": 56492,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56503,
+          "current_parent_line": 56502,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56516,
+          "current_parent_line": 56515,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56522,
+          "current_parent_line": 56521,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56528,
+          "current_parent_line": 56527,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56537,
+          "current_parent_line": 56536,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56540,
+          "current_parent_line": 56539,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56547,
+          "current_parent_line": 56546,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56551,
+          "current_parent_line": 56550,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56556,
+          "current_parent_line": 56555,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56569,
+          "current_parent_line": 56568,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56574,
+          "current_parent_line": 56573,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56579,
+          "current_parent_line": 56578,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56582,
+          "current_parent_line": 56581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56607,
+          "current_parent_line": 56606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56732,
+          "current_parent_line": 56731,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56741,
+          "current_parent_line": 56740,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56802,
+          "current_parent_line": 56801,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56808,
+          "current_parent_line": 56807,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56812,
+          "current_parent_line": 56811,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56816,
+          "current_parent_line": 56815,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56824,
+          "current_parent_line": 56823,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56827,
+          "current_parent_line": 56826,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56842,
+          "current_parent_line": 56841,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56856,
+          "current_parent_line": 56855,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56865,
+          "current_parent_line": 56864,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56879,
+          "current_parent_line": 56878,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56892,
+          "current_parent_line": 56891,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56907,
+          "current_parent_line": 56906,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56922,
+          "current_parent_line": 56921,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56943,
+          "current_parent_line": 56942,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56955,
+          "current_parent_line": 56954,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56970,
+          "current_parent_line": 56969,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56977,
+          "current_parent_line": 56976,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56988,
+          "current_parent_line": 56987,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 56999,
+          "current_parent_line": 56998,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57007,
+          "current_parent_line": 57006,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57021,
+          "current_parent_line": 57020,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57024,
+          "current_parent_line": 57023,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57028,
+          "current_parent_line": 57027,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57034,
+          "current_parent_line": 57033,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57037,
+          "current_parent_line": 57036,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57040,
+          "current_parent_line": 57039,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57047,
+          "current_parent_line": 57046,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57056,
+          "current_parent_line": 57055,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57067,
+          "current_parent_line": 57066,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57086,
+          "current_parent_line": 57085,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57152,
+          "current_parent_line": 57151,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57194,
+          "current_parent_line": 57193,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57197,
+          "current_parent_line": 57196,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57222,
+          "current_parent_line": 57221,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57300,
+          "current_parent_line": 57299,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57487,
+          "current_parent_line": 57486,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57496,
+          "current_parent_line": 57495,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57501,
+          "current_parent_line": 57500,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57511,
+          "current_parent_line": 57510,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57520,
+          "current_parent_line": 57519,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57528,
+          "current_parent_line": 57527,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57536,
+          "current_parent_line": 57535,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57548,
+          "current_parent_line": 57547,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57561,
+          "current_parent_line": 57560,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57564,
+          "current_parent_line": 57563,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57582,
+          "current_parent_line": 57581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57584,
+          "current_parent_line": 57583,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57607,
+          "current_parent_line": 57606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57618,
+          "current_parent_line": 57617,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57621,
+          "current_parent_line": 57620,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57628,
+          "current_parent_line": 57627,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57634,
+          "current_parent_line": 57633,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57637,
+          "current_parent_line": 57636,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57648,
+          "current_parent_line": 57647,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57655,
+          "current_parent_line": 57654,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57667,
+          "current_parent_line": 57666,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57669,
+          "current_parent_line": 57668,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57680,
+          "current_parent_line": 57679,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57683,
+          "current_parent_line": 57682,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57689,
+          "current_parent_line": 57688,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57694,
+          "current_parent_line": 57693,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57699,
+          "current_parent_line": 57698,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57701,
+          "current_parent_line": 57700,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57714,
+          "current_parent_line": 57713,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57818,
+          "current_parent_line": 57817,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57830,
+          "current_parent_line": 57829,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57851,
+          "current_parent_line": 57850,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57853,
+          "current_parent_line": 57852,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57862,
+          "current_parent_line": 57861,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57872,
+          "current_parent_line": 57871,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57880,
+          "current_parent_line": 57879,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57883,
+          "current_parent_line": 57882,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57895,
+          "current_parent_line": 57894,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57900,
+          "current_parent_line": 57899,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57903,
+          "current_parent_line": 57902,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57906,
+          "current_parent_line": 57905,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57911,
+          "current_parent_line": 57910,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57921,
+          "current_parent_line": 57920,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57930,
+          "current_parent_line": 57929,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57940,
+          "current_parent_line": 57939,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57950,
+          "current_parent_line": 57949,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57953,
+          "current_parent_line": 57952,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57958,
+          "current_parent_line": 57957,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57961,
+          "current_parent_line": 57960,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57964,
+          "current_parent_line": 57963,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57968,
+          "current_parent_line": 57967,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57983,
+          "current_parent_line": 57982,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 57987,
+          "current_parent_line": 57986,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58006,
+          "current_parent_line": 58005,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58018,
+          "current_parent_line": 58017,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58030,
+          "current_parent_line": 58029,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58040,
+          "current_parent_line": 58039,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58056,
+          "current_parent_line": 58055,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58070,
+          "current_parent_line": 58069,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58072,
+          "current_parent_line": 58071,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58088,
+          "current_parent_line": 58087,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58101,
+          "current_parent_line": 58100,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58103,
+          "current_parent_line": 58102,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58112,
+          "current_parent_line": 58111,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58121,
+          "current_parent_line": 58120,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58126,
+          "current_parent_line": 58125,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58133,
+          "current_parent_line": 58132,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58138,
+          "current_parent_line": 58137,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58141,
+          "current_parent_line": 58140,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58144,
+          "current_parent_line": 58143,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58147,
+          "current_parent_line": 58146,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58150,
+          "current_parent_line": 58149,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58154,
+          "current_parent_line": 58153,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58179,
+          "current_parent_line": 58178,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58184,
+          "current_parent_line": 58183,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58191,
+          "current_parent_line": 58190,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58207,
+          "current_parent_line": 58206,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58209,
+          "current_parent_line": 58208,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58216,
+          "current_parent_line": 58215,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58219,
+          "current_parent_line": 58218,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58231,
+          "current_parent_line": 58230,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58235,
+          "current_parent_line": 58234,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58242,
+          "current_parent_line": 58241,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58246,
+          "current_parent_line": 58245,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58256,
+          "current_parent_line": 58255,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58265,
+          "current_parent_line": 58264,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58283,
+          "current_parent_line": 58282,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58299,
+          "current_parent_line": 58298,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58326,
+          "current_parent_line": 58325,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58329,
+          "current_parent_line": 58328,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58337,
+          "current_parent_line": 58336,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58339,
+          "current_parent_line": 58338,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58346,
+          "current_parent_line": 58345,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58353,
+          "current_parent_line": 58352,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58359,
+          "current_parent_line": 58358,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58370,
+          "current_parent_line": 58369,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58380,
+          "current_parent_line": 58379,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58385,
+          "current_parent_line": 58384,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58419,
+          "current_parent_line": 58418,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58432,
+          "current_parent_line": 58431,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58443,
+          "current_parent_line": 58442,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58457,
+          "current_parent_line": 58456,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58466,
+          "current_parent_line": 58465,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58471,
+          "current_parent_line": 58470,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58476,
+          "current_parent_line": 58475,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58479,
+          "current_parent_line": 58478,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58520,
+          "current_parent_line": 58519,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58524,
+          "current_parent_line": 58523,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58530,
+          "current_parent_line": 58529,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58542,
+          "current_parent_line": 58541,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58547,
+          "current_parent_line": 58546,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58549,
+          "current_parent_line": 58548,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58553,
+          "current_parent_line": 58552,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58563,
+          "current_parent_line": 58562,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58565,
+          "current_parent_line": 58564,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58569,
+          "current_parent_line": 58568,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58579,
+          "current_parent_line": 58578,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58582,
+          "current_parent_line": 58581,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58586,
+          "current_parent_line": 58585,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58590,
+          "current_parent_line": 58589,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58607,
+          "current_parent_line": 58606,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58613,
+          "current_parent_line": 58612,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58622,
+          "current_parent_line": 58621,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58625,
+          "current_parent_line": 58624,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58630,
+          "current_parent_line": 58629,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58635,
+          "current_parent_line": 58634,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58637,
+          "current_parent_line": 58636,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58652,
+          "current_parent_line": 58651,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58660,
+          "current_parent_line": 58659,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58662,
+          "current_parent_line": 58661,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58666,
+          "current_parent_line": 58665,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58670,
+          "current_parent_line": 58669,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58677,
+          "current_parent_line": 58676,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58680,
+          "current_parent_line": 58679,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58685,
+          "current_parent_line": 58684,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58694,
+          "current_parent_line": 58693,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58706,
+          "current_parent_line": 58705,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58714,
+          "current_parent_line": 58713,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58717,
+          "current_parent_line": 58716,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58725,
+          "current_parent_line": 58724,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58733,
+          "current_parent_line": 58732,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58736,
+          "current_parent_line": 58735,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58738,
+          "current_parent_line": 58737,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58757,
+          "current_parent_line": 58756,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58760,
+          "current_parent_line": 58759,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58761,
+          "current_parent_line": 58760,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58773,
+          "current_parent_line": 58772,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58785,
+          "current_parent_line": 58784,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58832,
+          "current_parent_line": 58831,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58839,
+          "current_parent_line": 58838,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58846,
+          "current_parent_line": 58845,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58853,
+          "current_parent_line": 58852,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58857,
+          "current_parent_line": 58856,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58861,
+          "current_parent_line": 58860,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58865,
+          "current_parent_line": 58864,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58869,
+          "current_parent_line": 58868,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58876,
+          "current_parent_line": 58875,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58879,
+          "current_parent_line": 58878,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58886,
+          "current_parent_line": 58885,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58890,
+          "current_parent_line": 58889,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58895,
+          "current_parent_line": 58894,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58911,
+          "current_parent_line": 58910,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 58929,
+          "current_parent_line": 58928,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59016,
+          "current_parent_line": 59015,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59031,
+          "current_parent_line": 59030,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59103,
+          "current_parent_line": 59102,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59197,
+          "current_parent_line": 59196,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59238,
+          "current_parent_line": 59237,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59274,
+          "current_parent_line": 59273,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59314,
+          "current_parent_line": 59313,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59330,
+          "current_parent_line": 59329,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59342,
+          "current_parent_line": 59341,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59368,
+          "current_parent_line": 59367,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59387,
+          "current_parent_line": 59386,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59428,
+          "current_parent_line": 59427,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59504,
+          "current_parent_line": 59503,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59507,
+          "current_parent_line": 59506,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 59743,
+          "current_parent_line": 59742,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 70017,
+          "current_parent_line": 70016,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 106561,
+          "current_parent_line": 106560,
+          "line_sha256": "0c457f1d8b81bc77cf986614e8103f73dd3215c58236320ede971c01552301d5",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 106562,
+          "current_parent_line": 106561,
+          "line_sha256": "3108fd92d322437aa34fe2fd663cd24c0d51a90f2daf0e03ecd773374819be5a",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 110098,
+          "current_parent_line": 110097,
+          "line_sha256": "3705530e5c8fa109c1cc547b62c842f2e2b5f4605d7627603d7102f199f80769",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 110099,
+          "current_parent_line": 110098,
+          "line_sha256": "a4d08ec81cda0096e382df7fbbd1ef077e88dcbba675511d42370326722c1175",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 135645,
+          "current_parent_line": 135644,
+          "line_sha256": "cc01b0ee114f2c32a6f52bb5afcbdff0f8634d18b15cdd235a827a4ef8b305e2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 135672,
+          "current_parent_line": 135671,
+          "line_sha256": "cc01b0ee114f2c32a6f52bb5afcbdff0f8634d18b15cdd235a827a4ef8b305e2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 152685,
+          "current_parent_line": 152684,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 155670,
+          "current_parent_line": 155669,
+          "line_sha256": "2b2c70d430b8381314d72ab4914e995287ae746a798905b0ff37e68a955a139c",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 198328,
+          "current_parent_line": 198235,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 198513,
+          "current_parent_line": 198420,
+          "line_sha256": "5f698520654d7b5d2cd62eaef8c4be0609f068b39ea497fa516b31e899c2e7a2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 199869,
+          "current_parent_line": 199776,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200430,
+          "current_parent_line": 200334,
+          "line_sha256": "63ad8e85349fe11819885976ef96cbe3f6f65c288b290713acadbdf9a9280388",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200431,
+          "current_parent_line": 200335,
+          "line_sha256": "63ad8e85349fe11819885976ef96cbe3f6f65c288b290713acadbdf9a9280388",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200617,
+          "current_parent_line": 200521,
+          "line_sha256": "8855c6119660c614d285554e51769066e94fcb75ff215ccc2fa6b4838b18756b",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 200636,
+          "current_parent_line": 200540,
+          "line_sha256": "03e88438f3c62efefab36662464a3dcccbcdf8b7eca53a26090d101c3b5597e7",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201018,
+          "current_parent_line": 200922,
+          "line_sha256": "eb5dc672f4c4d107a8d8362b551c4f3faf96e4da53d41940757d1812b59ca6d2",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201097,
+          "current_parent_line": 201001,
+          "line_sha256": "2106c36011520fe73876d45bfb9ef8bf7b2e9f4362096a320376d8ee9b27ef12",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201149,
+          "current_parent_line": 201053,
+          "line_sha256": "03e88438f3c62efefab36662464a3dcccbcdf8b7eca53a26090d101c3b5597e7",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201155,
+          "current_parent_line": 201059,
+          "line_sha256": "f6f1ba35223277c0f9b0336cf4304e7aff24aa92e160263c8b1b6a3636001051",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201168,
+          "current_parent_line": 201072,
+          "line_sha256": "e16f1596201850fd4a63680b27f603cb64e67176159be3d8ed78a4403fdb1700",
+          "exact_current_parent_bytes": true
+        },
+        {
+          "new_line": 201389,
+          "current_parent_line": 201293,
+          "line_sha256": "8855c6119660c614d285554e51769066e94fcb75ff215ccc2fa6b4838b18756b",
+          "exact_current_parent_bytes": true
+        }
+      ]
+    }
+  ],
+  "source_only": true,
+  "native_calls": 0
+}

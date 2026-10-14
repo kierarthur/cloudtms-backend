@@ -1,0 +1,63 @@
+{
+  "schema_version": "A0_AUTH_TENANT_SOURCE_SUCCESSOR_FREEZE_V1",
+  "source_only": true,
+  "status": "FROZEN_FOR_INDEPENDENT_CRITIC_NATIVE_API_ISOLATION_AND_CONSUMERS_HELD",
+  "source_check_sha256": "df7e3e5108f86d791391e071a84cc2f1aae78c87e0676cfa4f7ef875a2c06089",
+  "actual_config_changes": 0,
+  "credential_scan": {
+    "all_artifacts": 10,
+    "findings": 0
+  },
+  "artifacts": [
+    {
+      "path": "actual-auth-owner.test.mjs",
+      "bytes": 2250,
+      "sha256": "877ad97af301a5b76c87cc8f4b78b368781b80b4c24d2b9d2639993cdcc23a29"
+    },
+    {
+      "path": "AUTH_TENANT_FULL_REVERSE.json",
+      "bytes": 1755,
+      "sha256": "75873f288b5d47adf3c051bedf07fbb2523d2a850bca001ba3a6866b35f3484f"
+    },
+    {
+      "path": "CURRENT_AUTH_OWNER_SOURCE.json",
+      "bytes": 2946,
+      "sha256": "f0e483280d7d20ca2608ed8cb8c5092518e05f67dc9a5b0e855e401dcdc85b9c"
+    },
+    {
+      "path": "forward/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 12517,
+      "sha256": "2930371dc338c1d5a864b584f789db4ad959b4972ddf52bf518f51bd80954ced"
+    },
+    {
+      "path": "freeze-auth-tenant-successor.mjs",
+      "bytes": 1637,
+      "sha256": "2faae2f1c5564992fe210958502ffeee65c229e4efb310bf6c76c55f806590cc"
+    },
+    {
+      "path": "office-auth-tenant-successor.test.mjs",
+      "bytes": 24867,
+      "sha256": "b660b739ab518da2884ff06e2bc8fb8e55a61daec2e86ee735d6a6652d995b47"
+    },
+    {
+      "path": "prepare-auth-tenant-successor.mjs",
+      "bytes": 7083,
+      "sha256": "ff097f5d201ff523d2d3886d64ef68a438165c86c990edc0800d4a29b3790f7c"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 566,
+      "sha256": "df7e3e5108f86d791391e071a84cc2f1aae78c87e0676cfa4f7ef875a2c06089"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 2335,
+      "sha256": "ae6b5f44d6f1677a8e916074a5068b7abbec0130c7e031c0665b640d67732ad8"
+    },
+    {
+      "path": "verify-auth-tenant-successor.mjs",
+      "bytes": 3140,
+      "sha256": "95aa99dd6f9aee59535c8220905c04136921f4985659ce25190ab211be060731"
+    }
+  ]
+}

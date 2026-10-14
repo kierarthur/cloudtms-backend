@@ -1,0 +1,982 @@
+{
+  "schema_version": "CURRENT_CHECKLIST_OWNERSHIP_SOURCE_CENSUS_V1",
+  "source_only": true,
+  "backend_pin": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "office_pin": "f2de35ec8a376a814aefab1db2d7cf099b888784",
+  "searched_backend": [
+    "ALL_COMMITTED_broker/src",
+    "ALL_COMMITTED_supabase/migrations",
+    "ALL_COMMITTED_supabase/repeatable"
+  ],
+  "searched_office": [
+    "ALL_COMMITTED_js",
+    "COMMITTED_index.html"
+  ],
+  "backend_hits": [
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:1:// Private Source consumer for the single native Checklist owner. No route,",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:14:export class ChecklistSourceError extends Error {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:15:  constructor(code, status = 409) { super(code); this.name = 'ChecklistSourceError'; this.code = code; this.status = status; }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:17:const fail = (code, status) => { throw new ChecklistSourceError(code, status); };",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:18:function object(v) { if (!v || typeof v !== 'object' || Array.isArray(v)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID'); return v; }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:19:function closed(v, keys) { object(v); if (Object.keys(v).some(k => !keys.includes(k))) fail('CHECKLIST_SOURCE_FIELD_NOT_ALLOWED', 400); }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:20:function uuid(v) { if (typeof v !== 'string' || !UUID.test(v)) fail('CHECKLIST_SOURCE_IDENTITY_INVALID'); return v.toLowerCase(); }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:21:function text(v, max = 2000) { if (typeof v !== 'string' || v.length > max) fail('CHECKLIST_SOURCE_CONTRACT_INVALID'); return v; }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:22:function count(v) { if (!Number.isSafeInteger(v) || v < 0) fail('CHECKLIST_SOURCE_CONTRACT_INVALID'); return v; }",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:28:  if (typeof scope.week_ending !== 'string' || !DATE.test(scope.week_ending)) fail('CHECKLIST_SOURCE_IDENTITY_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:39:  if (s.subtone != null && !TONES.has(s.subtone)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:44:export function decodeChecklistHold(value) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:47:      ![true, false, null].includes(value.pending_decision)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:50:      typeof value.authority.withholding_known !== 'boolean') fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:53:        value.pending_decision !== true) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:54:  } else if (typeof value.authority.hash !== 'string' || !HASH.test(value.authority.hash)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:56:    if (value.withheld_amount_pence !== null || value.authority.withholding_known !== false) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:60:      fail('CHECKLIST_WITHHELD_AMOUNT_UNPROVED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:62:    if (value.holds_pay ? amount === '0' : amount !== '0') fail('CHECKLIST_WITHHELD_AMOUNT_CONTRADICTION');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:64:  if (value.holds_pay === true && !['SHIFT', 'TIMESHEET'].includes(value.holds_pay_scope)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:65:  if (value.holds_pay_scope !== null && !['SHIFT', 'TIMESHEET'].includes(value.holds_pay_scope)) fail('CHECKLIST_HOLD_EVIDENCE_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:69:export function unavailableChecklistHold() {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:76:  if (!LINKS.has(l.kind) || l.native_allowed !== true) fail('CHECKLIST_SOURCE_ACTION_NOT_PERMITTED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:86:    if (['source_group_id', 'client_id', 'source_cycle_id'].includes(k) && !same(v, scope[k])) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:90:  if (required.some(k => !OWN(l.target, k) || l.target[k] == null)) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:91:  if (l.kind === 'QUERIES' && (typeof l.target.row_key !== 'string' || !l.target.row_key || l.target.row_key.length > 512)) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:96:  if (![true, false, null].includes(c.value)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:106:export function projectChecklistItem(item, actor) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:113:      typeof item.permitted_pay_subject !== 'boolean') fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:121:        item.subject !== 'INFORMATION' || item.permitted_pay_subject !== false) fail('CHECKLIST_SOURCE_INFORMATION_TARGET_FORBIDDEN');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:124:    if (item.source_information_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:137:      fail('CHECKLIST_PENDING_SUBMISSION_ACTION_UNAVAILABLE');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:140:  const hold = decodeChecklistHold(item.hold), s = status(item.status), correction = item.correction_binding;",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:144:    if (!['WAITING', 'APPLIED', 'CANCELLED'].includes(correction.state) || !Number.isSafeInteger(correction.state_revision) || correction.state_revision < 1) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:147:    if (!same(item.counted_timesheet_id, expected) || same(item.counted_timesheet_id, correction.reversal_timesheet_id)) fail('CHECKLIST_CORRECTION_MEMBER_SELECTION_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:150:  if (item.route === 'SIGNED_TIMESHEETS' && action?.kind === 'FINALISE') fail('CHECKLIST_SIGNED_FINALISE_NOT_ALLOWED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:153:    fail('CHECKLIST_CORRECTION_ACTION_TARGET_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:155:  if (correction?.state === 'WAITING' && /reminder/i.test(action?.label ?? '')) fail('CHECKLIST_CORRECTION_REMINDER_NOT_ALLOWED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:161:export function projectChecklistRow(row, actor) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:165:  if (!ROUTES.has(row.route)) fail('CHECKLIST_SOURCE_ROUTE_UNSUPPORTED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:168:  if (typeof row.retention.has_open_items !== 'boolean' || !DATE.test(row.retention.most_recent_ended_week)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:170:  const hold = decodeChecklistHold(row.hold); count(row.permitted_pay_item_count);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:171:  if (!Array.isArray(row.admin_actions) || row.admin_actions.length > 2) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:174:    if (!['NO_ONE_WORKED', 'UNDO_NO_ONE_WORKED'].includes(a.kind) || a.native_allowed !== true) fail('CHECKLIST_SOURCE_ACTION_NOT_PERMITTED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:178:      if (!same(a.payload[k], row.scope[k])) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:180:    if (!Number.isSafeInteger(a.payload.expected_cycle_version) || a.payload.expected_cycle_version < 1) fail('CHECKLIST_SOURCE_ACTION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:188:    if ([checked, completed, pay].some(c => c.link?.kind === 'FINALISE')) fail('CHECKLIST_SIGNED_FINALISE_NOT_ALLOWED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:199: * Root callbacks compose the existing native Checklist owner and private Source",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:202:export function createHealthRosterChecklistSourceReader(deps) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:204:      typeof deps?.loadAuthoritativeEvidence !== 'function') fail('CHECKLIST_NATIVE_SOURCE_OWNER_UNAVAILABLE', 503);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:208:    if (!VIEWS.has(actor.permission_view) || actor.active !== true || actor.ok === false) fail('CHECKLIST_SOURCE_ACTOR_NOT_ALLOWED', 403);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:213:    if (!['CHECKLIST', 'CHECKLIST_ISSUES'].includes(payload.command) || !SORTS.has(payload.sort ?? 'week_ending') ||",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:215:        (payload.limit ?? 50) < 1 || (payload.limit ?? 50) > 100) fail('CHECKLIST_SOURCE_REQUEST_INVALID', 400);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:217:    if (payload.week_ending != null && !DATE.test(payload.week_ending)) fail('CHECKLIST_SOURCE_REQUEST_INVALID', 400);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:219:    if (payload.command === 'CHECKLIST_ISSUES') bindScope(Object.fromEntries(",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:224:    if (!native || native.ok !== true) fail(native?.code ?? 'CHECKLIST_NATIVE_SOURCE_READ_FAILED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:228:    if (frame.contract !== 'WEEKLY_SOURCE_CHECKLIST_SOURCE_FRAME_V1' || !same(frame.actor_user_id, actor.actor_user_id) ||",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:237:      fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:239:    if (frame.refresh_required) fail('CHECKLIST_ANCHORED_REFRESH_REQUIRED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:241:    if ((payload.command === 'CHECKLIST' && frame.items.length) || (payload.command === 'CHECKLIST_ISSUES' && frame.rows.length)) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:242:      fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:244:    const rows = frame.rows.map(r => projectChecklistRow(r, actor)).filter(Boolean);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:245:    const items = frame.items.map(i => projectChecklistItem(i, actor)).filter(Boolean);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:246:    if (new Set(rows.map(r => r.row_id)).size !== rows.length || new Set(items.map(i => i.item_id)).size !== items.length) fail('CHECKLIST_SOURCE_IDENTITY_DUPLICATED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:250:    if (rows.length !== frame.rows.length || items.length !== frame.items.length) fail('CHECKLIST_NATIVE_VIEW_FILTER_NOT_APPLIED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:253:      (payload.week_ending != null && record.scope.week_ending !== payload.week_ending))) fail('CHECKLIST_SOURCE_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:254:    if (payload.command === 'CHECKLIST_ISSUES' && items.some(i => !sameScope(i.scope, payload))) fail('CHECKLIST_SOURCE_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:260:      fail('CHECKLIST_NATIVE_TIMESHEET_READ_OWNER_UNAVAILABLE', 503);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:264:        !same(source.actor_user_id, actor.actor_user_id)) fail('CHECKLIST_SOURCE_IDENTITY_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:274:export function createChecklistSession({ compareRecords }) {",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:275:  if (typeof compareRecords !== 'function') fail('CHECKLIST_NATIVE_ORDER_OWNER_UNAVAILABLE');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:278:    if (disposed) fail('CHECKLIST_SESSION_DISPOSED'); text(key, 4096);",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:286:      if (s.binding !== null && s.binding !== page.binding) fail('CHECKLIST_SESSION_SCOPE_CHANGED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:287:      if (s.revision !== null && s.revision !== page.read_revision && !anchoredRefresh) fail('CHECKLIST_ANCHORED_REFRESH_REQUIRED');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:303:    remember(key, anchor, scrollTop) { const s = state(key); if (anchor != null) text(anchor, 512); if (!Number.isFinite(scrollTop) || scrollTop < 0) fail('CHECKLIST_SOURCE_CONTRACT_INVALID'); s.anchor = anchor; s.scrollTop = scrollTop; },",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/healthroster-checklist-source.mjs:306:    attachObserver(key, observer) { const s = state(key); if (typeof observer?.disconnect !== 'function') fail('CHECKLIST_SOURCE_CONTRACT_INVALID'); s.observer?.disconnect(); s.observer = observer; },",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:broker/src/weekly-source/routes.js:148:// R-234: Checklist readers join this view only when WP-U3 installs them. They",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql:3469:        'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql:4224:      'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql:1736:        'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc:1713:        'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc:94:  -- Keep the existing Office version/offset cursor contract. Checklist has its",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql:197:    ('private.weekly_source_healthroster_checklist_leaf_v1(jsonb)'),",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql:1:-- Adjacent owner-private facts for the single native Checklist; no public route.",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc:208:    ('private.weekly_source_healthroster_checklist_leaf_v1(jsonb)'),",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc:347:    ('private.weekly_source_healthroster_checklist_leaf_v1(jsonb)'),",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql:3449:        'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql:4195:      'checklist',jsonb_build_object('available',false,'read_only',true,'pay_only',true,'action_links',false)));",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc:1:-- One private Source projection reused by Queries and Checklist. No query",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc:22:    raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023';",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc:45:    exception when others then raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end;",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc:146:    -- missing-source advisories never create a Checklist row or Timesheet count.",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc:209:    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:1:-- Private Source leaf for the one Banking/native Checklist owner after root",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:3:create or replace function private.weekly_source_healthroster_checklist_leaf_v1(p_request jsonb)",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:14:    'WEEKLY_SOURCE_CHECKLIST_LEAF_REQUEST_INVALID');",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:17:    raise exception 'WEEKLY_SOURCE_CHECKLIST_LEAF_REQUEST_INVALID' using errcode='22023';",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:28:    raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023';",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:162:  return jsonb_build_object('applies',true,'admitted',true,'contract','WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:170:      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_ACTUAL_SET_V1',v_actual),'hex'),",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:174:    'pay_financial_evidence_required',true,'root_checklist_union_required',true,",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:175:    'read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:181:alter function private.weekly_source_healthroster_checklist_leaf_v1(jsonb) owner to postgres;",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc:182:revoke all on function private.weekly_source_healthroster_checklist_leaf_v1(jsonb) from public,anon,authenticated,service_role;",
+    "b5c1ea1b002b2d6b756707c020b6a170cc9fea80:supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc:2:-- No public Checklist owner, ledger/store, writes, source shadow materialisation or rate lookup."
+  ],
+  "office_hits": [
+    "f2de35ec8a376a814aefab1db2d7cf099b888784:js/weekly-source/import-workspace.js:302:        checklist: { available: false, read_only: true, pay_only: true, action_links: false }"
+  ],
+  "checklist_named_declarations": [
+    {
+      "schema": "private",
+      "name": "weekly_source_healthroster_checklist_leaf_v1",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "sha256": "ef88892d73f9525e3295fa43459040bacc3c243506ea50827eedc9517863e140"
+    }
+  ],
+  "reviewed_transport_graph_entries": 133,
+  "transport_graph": [
+    {
+      "path": "broker/src/banking-pay-create-draft-headroom.js",
+      "sha256": "b214645ea33df165a66e2c413c8e1099c626a44ba7b792d08d21b71837b1fac5",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay-draft-certified-v8.js",
+      "sha256": "7673977ea63b4e0189e657ad1439b256bce8cc9d21d21d58990560c768fda6fa",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay-draft-insert-items.js",
+      "sha256": "33fe591333d21b99bdef9b3f7a60da36ce63628524e2e928ab83646ace9f2b67",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay-modal-v2.js",
+      "sha256": "547da9e281772719dd034383e75fead41e7eea4d77724a3d353785a0e3fc2aa8",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-authoring.mjs",
+      "sha256": "67bff9ac76aa2b6ac71e0e4a34f921f10bd01293a9c2889e4c9997f76018777f",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "sha256": "1c70ca14d9893096ae9a0ff04865bdb54dc7021cb1dc1418f46e8c0d9e185ca8",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-publication.mjs",
+      "sha256": "2a9a1f6d06eed3637b1de2f11de3023e87cd3d71ab686a847fc616a0d405be7e",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-raw-rpc.mjs",
+      "sha256": "fb6c9a55414821c6a17effeb1a5f2e0dfe2fa10c8743f72dfb050ed62e51eb8f",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-stream.mjs",
+      "sha256": "45aacb4a33e17d9d8b41d80a225a7bae678e4098e95fd8f7cf19cf941b26f00c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-busy.js",
+      "sha256": "f9de3b1fd722ce592868fe5b13f65d01494c88d83d082fcd1bd214bc99c16932",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-background.js",
+      "sha256": "7858985806b52d045ec88300946c47ebc2fa4b1da01c7e23b57e16dbbdde7edd",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-case-audit-contract.js",
+      "sha256": "7bf3adeae214d26f435cb93cbbaf5c842f493214369e1ce30e9db949b92fd399",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-case-contract.js",
+      "sha256": "de0e678903aade1dcd2043ef6f4e88d2e95971a7773e019051794dabd7fb03d6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "a1ee88cfc37deab4e20fbd109d5f4bd70740b04bdea0004e6b505c3e3a383bab",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "7ccd7b32616382eeefbd043d66e1cfc5c3fbb7b2baba38aa40a748ec33597eda",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-decisions-clear.js",
+      "sha256": "cca0befe84b805d6e15460399c211e63bd8828d64bbd4d66601d39c056498bca",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-environment.js",
+      "sha256": "82d0339fd2a3881d94cc73a7237fd27c5e5755a60ca9133c1a0a460dabfa3424",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "cfc112f97ad79a8e209d5d644eaef49581d7edd487fc2003875ee5ee039c56e1",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice-rpc.js",
+      "sha256": "acf94f66927911c3252f2f59d5e4bc4ab2ec4ae3d7e550e4d4d0100b8bf80549",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice.js",
+      "sha256": "00bda626dc69226264e814cfc3fb5ab41cc159bc35ca58ac681ae93d1e25f021",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "sha256": "ab352c72df54319c2c2d46dc9f3dfcd36959a1b45f5dd9ca382e110bb5de7b5c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-rpc.js",
+      "sha256": "6ddbc1ecb64873714e9a9c9a05bc4fcb2dae5d7fca95236a4f75976594a4e83c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-history.js",
+      "sha256": "1262a7961045a44b294939257db93e2ef54a3cf0754f76f90e8ebc52982335e0",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "sha256": "fd39b0999b1625a267b13ce0b394a3108300687368bf0e91d6755d25cb7b7460",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "50729687b91e0aa9b99195ca6e50ce19e2a81a62a3ea6711c1ef320d8661d2c0",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-email.js",
+      "sha256": "3a3684860794faf2a59dd4a3f7667e5ecb95696d82c48dcca7784a01dfafed65",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "sha256": "0a7e0f87af882e1d0d39a98498fed7814bbdad77c444ac9b0f9058bc4c5f24b8",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-retirement.js",
+      "sha256": "7850a2fc72c72c462b67fef51d29a8258904f4b605127cb2c3f1d2d6a0ad588a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-pay-method-change.js",
+      "sha256": "4a09461f35b62c1cc0c2c05b5d974e408ffd076e60199fa3ac7beee03e153432",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-paye-net-contract.js",
+      "sha256": "2633a73b574a123a2173f94d5f0f4103ca9bc2a76c8cd692e8ddb2828083057e",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-expiry-rpc.js",
+      "sha256": "f173c7e0a9b1f037f32c324b711581115b72dc64162fcfd1582571c680d8fec4",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-rpc.js",
+      "sha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "720af44911181d00acebfdf901c87b6ee251aab74d7104ad93b77aaba7e449a2",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-resolution.js",
+      "sha256": "19ee29d29692a3874ba09130f2429fc8ffeb2fe7670405df644baccf04a43793",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "97f043498d6c8cc2030742ba59ef826f6ffc093ccbb1a937ca6fee22644bbb84",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-snooze-reader.js",
+      "sha256": "f90b01fa46c30b235931abc538094f2b8084a5bda14a15520617bee670a1a07b",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-snooze.js",
+      "sha256": "90fc75a066232f1d8e4b7f74aba2ee85f194134f01e64e81b905a0d3d17d5af9",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "b82cb07c6b3e6d283dc7b5ddc979fcc08bb9e4932e49db0f7d30c12e21b66f25",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bulk-authorise-evidence-policy.js",
+      "sha256": "bfc5d336a72a3ace11d7a56f69312c656aa73a2a93b0f006928c90e1a142d5a6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bulk-authorise-watch.js",
+      "sha256": "04cb2672214908c832ed326d82b5a093110059623879cf3e473542394e549935",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/bulk-row-freshness.js",
+      "sha256": "2992afcd12a7547c256a472ab454d960029fb2311c718c07ee33e29c560e6356",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256": "345741edbd5569cc2d27dee2a73a51d510e6498e0d2e761c9c158d050c3e1587",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.js",
+      "sha256": "6fbec686f6fc775bda6fb35ea4c24a333c3427e5292b85c49ea971934899027c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-correction-v1.validator.js",
+      "sha256": "3eb48eaf91e55fce5d60572e71c56a863eda17ec52c7441040799b0e3c514a99",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-daily-contract-v1.js",
+      "sha256": "2cb13da9329a220c472893a1cedd9e67bbc99cd55d0246ae200f7daf53420e29",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-daily-hmac-v1.js",
+      "sha256": "5ff83b61d1c5a6a6538fe6c0bd90ee4b3a883ed8b66677c6e0b1dad0cff0983f",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-daily-phase1b.js",
+      "sha256": "8e50491e4f869947de7838894a670e351855c0737bd782ad07113ed4dcccc704",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-daily-specialist.js",
+      "sha256": "5c3ce22e2eb3739ac84972f8b138d2a69c69c73cb6f6d7db8a3e124eb7250a30",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-expense-reservation-summary.mjs",
+      "sha256": "be1e5840ac5bdbe43410538cffdb84ce736bca906da7229b54ccca6d696eeefe",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-manager-email-e2e-proof.js",
+      "sha256": "2c44b735447941623e0f473e6b7c783eb87308230a20bcbb9ac8f03a0bcc89a8",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-manager-provider-authority.js",
+      "sha256": "8043801f1ea468e68c54566c18f16ee3a8a01770ebf872eb7acdfac3126deb64",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-paper-page-image.js",
+      "sha256": "3b720eb9679b320ada4efaeb18c63b5c6817cd047311baa83fbdf273b8ed9cc0",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-paper-provider-authority.js",
+      "sha256": "e8224aa15ef41c5079af58dac6556598112f5343af452a6d657f999dc6fd572a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-route-context.js",
+      "sha256": "baef31166a116307f763fb82029370a5da163771a77b276e1551da31d5be68f1",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/candidate-service-auth.js",
+      "sha256": "f77b227838f56b6501b354b625ef055040d2c9e317a3b49c70b419b4efcf099f",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/contract-worked-date-guard.js",
+      "sha256": "e4906fdec7fdc1753df177ff1f33772bed3006cd28d286a06557f72f1911eee3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/daily-canonical-authority.js",
+      "sha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/daily-roster-compat.js",
+      "sha256": "c73138702daaa5bbba2cf640c7aa7523b83be37f51afec7a2021844df22f43d3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/daily-schedule-authority.js",
+      "sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/import-review-follow-up.js",
+      "sha256": "6ffe533b364a2b57b6bd8ac3d86924fbc8576b0bf566ee4e3fcf9389db8b40ab",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/import-review.js",
+      "sha256": "a3d4ba81cc42cb3d3d432275a4f3b781b1b0ff40c2e82fa02d7c24407752a9ef",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-async-http.js",
+      "sha256": "77120b6ef29f010ebd9864e9fbe1507f64b0cdfd261ec02f3fa98a1c9bdcd9f3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-document-access.js",
+      "sha256": "477bf4cb4926717b7fdc3e7780f425d47ecb91b4213a992355f5ab9d38a7b2f3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-document-templates.js",
+      "sha256": "3acf89db285a6eb1834cf773f3763ed9bd33abe0ce4e8eca26f3beb0e4026346",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-presentation-contract.js",
+      "sha256": "2552b98979eadbdf6b42313b2a4b8fb260890c9b1e02080be31c6d117148e4a1",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-queue-runtime.js",
+      "sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/invoice-queue-security.js",
+      "sha256": "d63aee0a2fc6f1e5651389c4fb77ac815f87faae1654436832601504d859505d",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/miget-postgrest-compat.js",
+      "sha256": "2ae733235b6bd3f33222e939c50f008577b0775446a14d7acac690dfb6983061",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/mytms-manager-control-adapter.js",
+      "sha256": "a8e42836d9574c6b3800f0b28aac70c0871072ae1a5e8ce20fe35240f7eb72c3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/mytms-office-control.js",
+      "sha256": "6d1f90b496a4b93f37e5b0b0bb9b2c7888c36d105f52f1498e8ce8ba317bcc1b",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/office-candidate-paper-pack-evidence.js",
+      "sha256": "f69c9d9d27959a40422198970662fe4e2ad59bde7e984398a5aeb13ddb3bc696",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/test-csv-execution-bypass.js",
+      "sha256": "76cdae644079e1a68b0401ad6e17215b722b237fba892eb367c52518c7d590cd",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-correction-office-routes.mjs",
+      "status": "PROPOSED_NEW_ROUTE_NOT_CURRENT_SOURCE",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-expense-presentation.js",
+      "sha256": "dbbcb245620ca6fcca9be64bedf47a0731bea1c5789fff2baaa496b16f0a8e93",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-official-pdf.js",
+      "sha256": "7756bede5744641f729f0a44dd528f13cd0ed15de28fcd754b8dce47e3bfa2ed",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-qr-payload.js",
+      "sha256": "7440e0ddf768b1ae3e314a1495b9d3d4ef7eb7a05b56e5c62363a6918bf71f45",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timesheet-route-sort.js",
+      "sha256": "71c111e59db24da9d4c41accbd8082d18fa369b7389600f1916eb8bc146765f6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/timestamp-normalisation.js",
+      "sha256": "51d1fae45d5a6b6848e409a8e2732379d34b9f68c1efbbf4f4e51669bbb82311",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/agency-invoice-credit-consumer.mjs",
+      "sha256": "6a15c7c9113929811333ed740933a6d06c456af4e3c6776ef651e73336265ac9",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/authorise-routing.mjs",
+      "sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/completed-pack-copy.mjs",
+      "sha256": "c034b67254b52ae49e3c69a10005b003124827f1627db81b88390ee6d8eb4811",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/correct-final-source-snapshot-adapter.mjs",
+      "sha256": "1069db84f23fa62a77ec542085b1522d1082198d0ff0756817e240b18afc6e77",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-auth.mjs",
+      "sha256": "8796554cc64798d1c51a415ee486a225c624fdc145e286d703c121e50dc533a3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-runtime.mjs",
+      "sha256": "747e79b759efe1d4552828f58c5868abc635219f4da81c020ea86b0844d4ddbb",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/finalisation-pay-orchestrator.mjs",
+      "sha256": "549e63d14c160eb1ad932089dc4febced99854f843bec7d36edb81f649dcfd0b",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/guard-refusal-record.mjs",
+      "sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/invoice-batch-integration.mjs",
+      "sha256": "822aaf45171b37b0fd02c4d4ea71e2380676414df4858321debf0f2539005397",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/invoice-render-qualification.js",
+      "sha256": "1ad4a720a103840e035903ba3c51e97e0b0daf12a058186f734a11e7208a02ac",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/next-paid-evidence.mjs",
+      "sha256": "729909c4b1ff3350130ca835dc9e4ebb49dd069636b10138b0b6928d72bcf404",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/pending-entitlement-release-worker.mjs",
+      "sha256": "1574803df2dc741156bfdfd8567def2066cab517693b759dae3d3ccd33c3d006",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "sha256": "5352ef8bcc66e87b090d5a1d4f40ba872cf7a542d38f60aaf690ec1eea80f3c3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/protected-component-identity.mjs",
+      "sha256": "9fb74a4ceb4ed1bbd2a4ed558adce0b1474f314e5d3e4fc4810922511ca02f48",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 1
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/unauthorise-routing.mjs",
+      "sha256": "64cb2495467daf7166d294f98bb6e4ee2e652d45380568081a55e70f5d07e0f7",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "candidate-broker/src/control-plane-client.js",
+      "sha256": "da5696a1f91b5417ede9574253f715c7851b2b74e66773933e9fa7fc6f705363",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    },
+    {
+      "path": "shared/invoice-processor-security.js",
+      "sha256": "629a68fcc1052777ea241dea67d4df73ef7eb01e8d677f37c1aa5e0bf513a9aa",
+      "status": "ACTUAL_CURRENT_GIT",
+      "checklist_occurrences": 0
+    }
+  ],
+  "controlling_source_documents": [
+    {
+      "path": "docs/healthroster-build/WP_U3_READ_OWNER_INVENTORY.md",
+      "sha256": "b6b5bacba555f339fb60207e273caaa049c790b404040f0808d640a018255b73",
+      "ownership_lines": [
+        "Active source lane only; nothing installed or exposed. Frozen CN adapter five inputs and Report 39 inputs remain unchanged. Root owns public native Checklist composition after Banking first-install integration; this lane creates no competing public Checklist RPC, sidebar, ledger, query system or store. The existing Source `weekly_source_workspace_scopes_v1` offset/cursor and NHSP/nonpreset consumers remain unchanged.",
+        "Controlling plan: approved v2 `03_IMPLEMENTATION_PLAN.md` §11, §24.10, §26.14, §28.7–28.8; `05_ACCEPTANCE.md` Checklist C/CL/IJ rows. The prior absence is explicit in §28.8: no public Checklist implementation existed at that source. Root confirms Banking first-install now includes a separately owned overlay, currently uninstalled and unavailable to inspect under the two-file boundary. Its public union is an integration gate, not a second Source owner.",
+        "- Report `13102026_1344_workspace_scopes.sqlinc`: actual group/client/cycle membership, accepted publication pointers, exact report-scope history and source obligations. It uses a version-bound offset cursor and is not reused as the new Checklist's traversal.",
+        "Final source status is recorded in `WP_U3_SOURCE_MANIFEST.json`; local syntax and callback/source guards are distinguished from native database/API/Office acceptance. The private proposals add four owner-only read signatures and no tables, indices, public/service RPCs or mutations. Root must reconcile the public Banking-owned Checklist path, actual signed/Daily discovery/canonical cycle preparation, native reason/hold/action selection before public paging, No one worked/Undo native CAS, next-paid evidence and all real native/Office fixtures before exposure. No installed/runtime completion of WP-U3 is claimed."
+      ]
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_CONSUMER_CONTRACT.md",
+      "sha256": "aba55b7e9e1100a14435f58802d23cafdcf451d3a3c3a51512b45815dfa90fa5",
+      "ownership_lines": [
+        "Source-only proposal, unmounted and uninstalled. Banking owns the single public native Checklist overlay. It is part of the first-install candidate but unavailable for inspection in this lane. Root must reconcile this Source leaf and consumer with that exact installed owner; no competing public Checklist RPC, API, sidebar, query store or state ledger is supplied.",
+        "All are STABLE read-only proposals with fixed search paths, logical `postgres` ownership and no PUBLIC/anon/authenticated/service_role grants. Root owns logical owner mapping, final native/public Checklist composition, generated contract and central ACL verifier. No table, index, public RPC or migration is added. Included `.sqlinc` files stay outside canonical `.sql` roots until root deliberately includes them in its reviewed chronological closure. Their repeatable directory preserves the existing include envelope. Four owner-private signatures, zero service-exposed signatures. The separate `supabase/verification/support/wp_u3_native_read_vectors.sqlinc` is fixture-dependent verification only; never include it in an install repeatable.",
+        "The Source leaf takes the actual native Checklist scope (`actor_user_id,source_cycle_id,source_group_id,client_id,week_ending`) and optional command CONTEXT/ISSUES, cursor and limit. It validates actual cycle/client/group and dated membership, then calls unchanged native Office authority for the admin or reduced pay view. Non-ROSTER, disabled or nonpreset scopes return `applies:false,preserve_native:true`. NHSP/nonpreset public output remains the native owner's responsibility and is not reclassified by this leaf. Week ending maps to a real Sunday cycle, while retaining the client's own week ending. This proposal uses a strict ended-date read (`own week < group-local current date`); root must explicitly prove C-1b/C-9c around Sunday midnight against the final installed native calendar contract before exposure.",
+        "The signed query helper is shared by Queries and Checklist, including Daily-only scope with no weekly publication. It reads the normal current `import_review_decisions` at exact `import_review_states.preview_generation`, normal validation status/reason/last_source, normal issue/delivery-items/outbox records, waiting correction relation and exact D10 issued-signed query evidence. Pending-native Daily read rows have no query evidence/actions and do not invoke D10 eligibility. It does not call a mutation catalogue, enqueue, mark, validator or writer. It adds no discrepancy inference: issue reasons and summaries are native records. SENT_VERIFIED requires the existing successful delivery/item/outbox provenance. There is no invented send or delivery from queued state. Read-only pay users retain actual TS/correction facts for native pay-subject admission, with invoice query recipients/history/evidence redacted. Missing current issue snapshot is explicitly `CURRENT_IMPORT_REVIEW_ISSUE_SNAPSHOT_UNAVAILABLE`.",
+        "The private raw projection keyset uses `(native folded worker name, actual work date, immutable item ID)` with one actual item per Timesheet plus noncounted native advisories, maximum 100, default 50. Cursor binds actor/view/cycle/client/week/filter and the full read revision; a changed read requests `WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED`, not a false end. This raw traversal is not the final public Checklist issue page: root's native owner must apply permission/subject selection, flatten its native issue semantics and order by native reason rank before public slicing. No independent rank/classifier is invented here. Root's main-list owner also supplies every requested main sort/direction, actor/filter-bound cursor, full row identity and anchored range refresh. The old Source scopes offset cursor stays byte-identical.",
+        "The context leaf supplies process facts, not financial labels: accepted checking upload plus ACCEPTED attempt, actual confirmed coverage, expected noncancelled base Contract weeks, completion history, separate final revision/client manifest history, exact report scope pointers, actual submitted set hash/count/latest week/earlier open week count and qualified WAIT count. Checking due is the following group-local Monday, separate from import acceptance. Unproved submission reasons remain named/count-bound internal diagnostics and cannot create a row. Current completion alone cannot stand for Acacium export pay plus report invoice. A qualified WAIT never becomes `paid=true`. Missing/ambiguous WAIT remains null with an engineering gate; the count is not fake zero. This leaf is internal; root must not serialize raw native contexts as public rows.",
+        "Waiting correction's counted item is T0 but its permitted Timesheet action binds exact P0; after apply only P0 is counted, never R0. Reminder is forbidden once a waiting correction is chosen. Signed rows never acquire Finalise. Link kinds are exact UPLOAD_DETAIL/FINALISE/QUERIES/TIMESHEET/DAILY_REVIEW/UPLOAD with scope-bound targets, no synthetic URL or new modal. Root wires them to existing `openTimesheet`, Queries expansion and `openReview(importId,{returnTo})` owners. Group route labels and status/sub-lines arrive from native server evidence; Daily appears only on the issue's day.",
+        "`readTimesheetInformation` delegates the existing native Timesheet presentation and existing `applyNextPaidEvidence` V3 decoder. The consumer does not infer paid or processing hours from current/authorised/status/WAIT. Missing native informational proof stays unavailable. This lane reads the existing broker decoder, not the unavailable future Banking Checklist overlay.",
+        "1. After Banking first install and source contract reconciliation, call the private Source context leaf only from the existing public native Checklist union for its real in-scope group/client/own-week/cycle. Preserve its NHSP/nonpreset paths and actor/permission/page order. No second public owner or sidebar.",
+        "2. In existing TIMESHEET_AUTHORITY Queries page/count, including Daily-only/no-publication, consume the same private check-only query helper. Existing `office_query_groups_v1` and bulk Ask Candidate/Send Manager/Accept System Hours stay unchanged and cannot see these rows.",
+        "7. Root alone adds the four signatures to current generated/ACL contract, chronological include, native public union coupling and release proof. Actual-only own-week discovery and pending-Daily read binding are detailed in `WP_U3_INTEGRATION_HUNKS.md`. No release or exposure is implied by this handoff."
+      ]
+    },
+    {
+      "path": "docs/healthroster-build/WP_U3_INTEGRATION_HUNKS.md",
+      "sha256": "c60bd8da4e81963e27a3451678393a7b39d981ea7d80979760aaa86c489183ac",
+      "ownership_lines": [
+        "Source-only, unmounted. Root owns the Banking Checklist union, SQL closure, ACL, contract, API/Office and native acceptance. This lane changes none of those owners and does not inspect the unavailable Banking overlay.",
+        "The installed single native Checklist discovery needs an additive actual-submission arm before native dedup/retention/permission selection and keyset slicing. The following is an exact relational hunk, not a second public query or a cycle creator. Root supplies its actual actor/filter bounding and canonical cycle-resolution context:",
+        "  from public.timesheets t",
+        "  join public.weekly_source_group_clients member on member.client_id=a.client_id",
+        "Union those identities into the existing native expected-work discovery. Do not require a Contract expectation/import/weekly publication and do not use source-only information as admission. The private Source leaf requires one real cycle with `cycleSunday-7 < ownWeek <= cycleSunday`, correct group/Client scope and real own week. The root native canonical cycle/prepare owner resolves/creates that bookkeeping outside these reads; missing/ambiguous canonical cycle is a held integration gate, never a fabricated UUID or guessed grouping. Preserve current Source scopes' offset cursor. This discovery has no fixed lookback: dated membership and actual submission control the set; late older submission can return an open earlier own-week.",
+        "For signed Queries/Checklist items, reuse `weekly_source_check_only_query_rows_v1` with the same exact scope and actual actor. It is a private raw traversal. Root uses native reason/subject/action/withholding owners to flatten and select final public items, including native reason rank, before final public pagination. Neither `office_query_groups_v1` nor existing bulk Ask Candidate/Send Manager/Accept System Hours gains these rows. Invoice query provenance comes only from current native review decisions and existing HR issue/delivery/outbox records. Strict issued D10 is read only, and all validation/ref/invoice mutations retain their existing fences.",
+        "Pending Daily has `submission_read_context.route_state=SUBMITTED_PENDING_NATIVE_MATERIALISATION`, `query_route_available:false`, `actions_held:true`; copy its exact immutable workflow/generation/Candidate/Client/TS/date/SHA witness into the optional closed service pending fragment. Root must prove these identities from the private witness before serialization. Show actual submitted/pending native state, no finalized/READY claim and no actions. Do not route this read predicate into correction Send, manager authority, paired Authorise, ordinary query eligibility or financial admission. Those owners keep unchanged F1/native prerequisites. Actual native materialisation later clears the pending read state through the normal native witness, not through a client flag.",
+        "Waiting correction raw context owns one read item: count T0 once, suppress ordinary unauthorised duplication/reminders, and use only exact P0 for the existing Timesheet workspace action. Applied request counts genuine P0 and excludes displaced T0/R0. The read projection supplies the exact request/P0/workflow witness; the native authority supplies alignment/paired-authorise/same-draft-return subject permissions. Reduced pay actors get those permitted subjects as text only, no invoice-only editing/credit/issue/hold-release subject and no query recipients/history. Root must apply the subject filter before public slicing.",
+        "Import the standalone module only after callback binding is native-proved. Inject the existing native actor guard, native public Checklist page owner and authoritative Source/NEXT/ordinary evidence callback; preserve exact actor/scope/cursor/error order. Inject existing Timesheet presentation and `applyNextPaidEvidence` decoder for informational paid schedules. No network/provider/payment/mutation callback is added. Preserve existing Office infinite-scroll/session/modal entry points; each expansion has its own observer/root/cursor and child-return range refresh. Admin No one worked and Undo are only descriptors for the actual installed native attest/superseding-CAS/audit owner; no mutator is supplied here."
+      ]
+    }
+  ],
+  "no_current_public_checklist_or_index_consumer": true,
+  "disposition": "ENGINEERING_OWNERSHIP_CONFLICT_UNSEEN_BANKING_OVERLAY_ASSUMPTION_NOT_ACTUAL_CURRENT_PRODUCER",
+  "no_competing_owner_added": true,
+  "private_raw_contexts_exposed": false,
+  "native_calls": 0
+}

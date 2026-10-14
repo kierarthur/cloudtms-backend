@@ -1,0 +1,18 @@
+{
+  "schema_version": "A0_OFFICE_RUNTIME_SOURCE_CHECKS_V1",
+  "source_only": true,
+  "input_commit": "c432594d9203421f009d3c7f21780f8c7df4f24e",
+  "full_current_reverse": true,
+  "unique_hunks": 3,
+  "current_native_source_files": 27,
+  "runtime_literal_import_closure_files": 133,
+  "syntax_files": 11,
+  "unit_tests": 20,
+  "unit_pass": 20,
+  "unit_output_sha256": "5d1026280b8a5505f1aaca5730e64d24c63468a5245491af31df33da00ec4d6e",
+  "prior_publication_files_unchanged": 137,
+  "native_calls": 0,
+  "qualification_receipts_created": 0,
+  "native_compiled_contract": null,
+  "actual_api_ui_phone_acceptance": false
+}

@@ -1,0 +1,23 @@
+{
+  "source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "config": {
+    "path": "wrangler.toml",
+    "sha256": "abe27f2dff0d9c0c07a4af699d2125b8c6bd0c60948e5d2f7a5d18632455903d",
+    "nonsecret_test_vars": {
+      "CANDIDATE_APP_ENVIRONMENT": "TEST",
+      "MYTMS_OFFICE_AGENCY_ID": "6d0aadb2-ddc8-4ee4-ab37-871bae4a0d88",
+      "BANKING_PAY_CORRECTION_TENANT_ID_V1": "8467e881-9691-4181-a738-f9834922d747"
+    },
+    "no_config_mutation": true
+  },
+  "index": {
+    "path": "broker/src/index.js",
+    "sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+    "tenant_owner_source": "function bankingPayCorrectionTenantAuthority(env, options = {}) {\n  const value = String(env?.BANKING_PAY_CORRECTION_TENANT_ID_V1 || '').trim().toLowerCase();\n  if (!value) {\n    if (options.required === true) throw Object.assign(new Error('Banking Pay tenant authority is unavailable.'), { code: 'REAUTH_SESSION_TENANT_REQUIRED' });\n    return null;\n  }\n  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {\n    throw Object.assign(new Error('Banking Pay tenant authority is invalid.'), { code: 'REAUTH_SESSION_TENANT_INVALID' });\n  }\n  return value;\n}\n\n",
+    "tenant_owner_sha256": "01f7003f4a965ce9aa610e28e618b506849eeeb4840fc219c22931c9814de8ca",
+    "require_user_source": "async function requireUser(env, req, allowedRoles = []) {\n  const hdr = req.headers.get('authorization') || '';\n  const m = hdr.match(/^Bearer\\s+(.+)$/i);\n  if (!m) return null;\n\n  const ver = await verifyToken(sessionSecret(env), m[1]);\n  if (!ver.ok) return null;\n\n  const p = ver.payload || {};\n  if (p.typ !== 'access' || !p.sub) return null;\n\n  // Ensure the user still exists, is active, and session_version matches\n  const user = await sbGetUserById(env, p.sub);\n  if (!user || user.is_active !== true) return null;\n  if ((user.session_version|0) !== (p.sv|0)) return null;\n\n  if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(user.role)) return null;\n  let tenantId = null;\n  try {\n    const configuredTenantId = bankingPayCorrectionTenantAuthority(env);\n    const tokenTenantId = String(p.tenant_id || '').trim().toLowerCase();\n    tenantId = configuredTenantId && tokenTenantId === configuredTenantId ? configuredTenantId : null;\n  } catch {\n    return null;\n  }\n  return {\n    id: user.id,\n    email: user.email,\n    role: user.role,\n    is_active: user.is_active === true,\n    payment_authoriser: user.payment_authoriser === true,\n    payment_golden_key: user.payment_golden_key === true,\n    sv: user.session_version|0,\n    sid: p.sid,\n    session_id: p.sid,\n    tenant_id: tenantId,\n    session_issued_at_epoch_seconds: Number(p.iat)\n  };\n}\n\n",
+    "require_user_sha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88"
+  },
+  "identities_are_distinct": true,
+  "native_call": false
+}

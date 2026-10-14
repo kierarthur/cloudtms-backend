@@ -1,0 +1,58 @@
+{
+  "schema_version": "A0_CURRENT_REFUSAL_SUCCESSOR_FREEZE_V1",
+  "source_only": true,
+  "status": "FROZEN_FOR_SOURCE_CRITIC_NATIVE_ROUTE_ISOLATION_AND_CONSUMER_ACCEPTANCE_HELD",
+  "source_check_sha256": "9fa2df0931b26d02298220c2e61c6e606a3d19d603879ff710cf5430a96500ae",
+  "prior19_manifest_sha256": "0bd3742eca2bc387d3dcfd521ea4b1c7de7d559aa479aee598ebd593fefca9c9",
+  "credential_scan": {
+    "all_artifacts": 9,
+    "findings": 0
+  },
+  "artifacts": [
+    {
+      "path": "CURRENT_GUARD_REFUSAL_OWNER.json",
+      "bytes": 938,
+      "sha256": "7f67a3c257358ff1d91ab02fb6377566dd4c916446ca1848572bade4f005be35"
+    },
+    {
+      "path": "CURRENT_REFUSAL_FULL_REVERSE.json",
+      "bytes": 1043,
+      "sha256": "c58de556826b63f468777cec1b5807576517ca8bf57e807629c206995cbb6da3"
+    },
+    {
+      "path": "forward/broker/src/index.js",
+      "bytes": 8922018,
+      "sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052"
+    },
+    {
+      "path": "freeze-refusal-successor.mjs",
+      "bytes": 1759,
+      "sha256": "1a3194337f0c731daba96945ca507ad13a314d95b1e367a5b7d3159b704b35e8"
+    },
+    {
+      "path": "office-route-wiring-successor.test.mjs",
+      "bytes": 23448,
+      "sha256": "9b185e8da6f043684fd8332dbe00e35bf7b886fd0d1db8cc914f35b712e37f23"
+    },
+    {
+      "path": "prepare-refusal-successor.mjs",
+      "bytes": 5552,
+      "sha256": "81cebeb61fe2a9db689fa915abe0919ba9b9e4220a7231afb827091a2a91e8f7"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 458,
+      "sha256": "9fa2df0931b26d02298220c2e61c6e606a3d19d603879ff710cf5430a96500ae"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 1371,
+      "sha256": "4f05d9ae660982ffa9f2724e29f09775c31378c2f0360059d5ea1ccb5a6d4e82"
+    },
+    {
+      "path": "verify-refusal-successor.mjs",
+      "bytes": 2638,
+      "sha256": "9699584f63994c1b9aa073e6b5bca1f1215f6e89aeb5d83dafc6fd27d235614f"
+    }
+  ]
+}

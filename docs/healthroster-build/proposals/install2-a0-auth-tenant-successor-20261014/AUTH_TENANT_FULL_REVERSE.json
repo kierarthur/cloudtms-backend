@@ -1,0 +1,19 @@
+{
+  "source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "owner": "broker/src/timesheet-correction-office-routes.mjs",
+  "before_sha256": "b828121d410bfba13e55b429ea57c2c576a25680fcc7b7b3d15c39db2e38b938",
+  "after_sha256": "2930371dc338c1d5a864b584f789db4ad959b4972ddf52bf518f51bd80954ced",
+  "hunks": [
+    {
+      "original": "// The deployment identity and current authenticated user are server values.\n// This is transport admission, never a certificate or a browser capability.",
+      "replacement": "// The MyTMS Office agency identifies Source deployment; the independently\n// configured auth tenant is the authority used by existing requireUser tokens.\n// Both are server values. This is admission, never a qualification capability."
+    },
+    {
+      "original": "  required(object(user) && user.role === 'admin' && user.is_active === true && UUID.test(user.id || '') &&\n    same(user.tenant_id, env.MYTMS_OFFICE_AGENCY_ID), 'CORRECTION_ACTOR_NOT_ALLOWED', 403);",
+      "replacement": "  const authTenant = env?.BANKING_PAY_CORRECTION_TENANT_ID_V1;\n  required(typeof authTenant === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(authTenant),\n    'CORRECTION_DEPLOYMENT_UNAVAILABLE', 503);\n  required(object(user) && user.role === 'admin' && user.is_active === true && UUID.test(user.id || '') &&\n    same(user.tenant_id, authTenant), 'CORRECTION_ACTOR_NOT_ALLOWED', 403);"
+    }
+  ],
+  "prior19_manifest_sha256": "0bd3742eca2bc387d3dcfd521ea4b1c7de7d559aa479aee598ebd593fefca9c9",
+  "prior10_manifest_sha256": "471786b4e046e3b4a49093ac9d2665550f25c6ab97a76da0df4de999d50eba10",
+  "index10_preserved_sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052"
+}
