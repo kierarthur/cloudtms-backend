@@ -1,0 +1,61 @@
+{
+  "sourceOnly": true,
+  "nativeFixtureExecuted": false,
+  "files": [
+    {
+      "file": "FIXTURE_INSERT_COLUMN_CHECK.json",
+      "bytes": 8214,
+      "sha256": "4fc407ae90149eb77c1dbc74f5ec7371d77c42a404deb13f72cb305dae97194f"
+    },
+    {
+      "file": "FIXTURE_TRIGGER_CALLEE_INSTALLED_F743_SOURCE_CENSUS.json",
+      "bytes": 2488788,
+      "sha256": "605db411721a64c792f4cf71b21b1e19b05b38b033e8e178201991e96f152e31"
+    },
+    {
+      "file": "FIXTURE_TRIGGER_CALLEE_SOURCE_CENSUS.json",
+      "bytes": 2682829,
+      "sha256": "33fe136845fecd9284a332eee82a1b78003e682a66c84a9ec3202e719c4314fe"
+    },
+    {
+      "file": "FIXTURE_TRIGGER_CALLEE_SOURCE_CENSUS_QUALIFIED_BASELINE_FORWARD.json",
+      "bytes": 2776128,
+      "sha256": "83ec0cec8ea4a30c1a3fc2f5b83864a411770b800ce88e28b18dfca7783221b0"
+    },
+    {
+      "file": "INSTALLED_FIXTURE_CATALOG_PRECHECK.json",
+      "bytes": 154557,
+      "sha256": "89a929841a3165db039bf93429cb858c0524cff8e78f9461edeb76fd40b04cfb"
+    },
+    {
+      "file": "INSTALLED_FIXTURE_CATALOG_SUPPLEMENT.json",
+      "bytes": 15972,
+      "sha256": "f0dc6d118aefa33fd977cc8a60fc9b05d246ae5d4e34040c7227cc5aefdd6a47"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4936,
+      "sha256": "e0d148edec50c6de0a87d31e863253817a9f76dae007ab481b1ce5a079a47ed2"
+    },
+    {
+      "file": "TERMINAL_EXPENSE_REPLACE_NATIVE_BODY_RECONSTRUCTION.json",
+      "bytes": 14762,
+      "sha256": "e1223f9dc26706f04c391e811381d2691fd73b73fc122b085b283fc9c47634be"
+    },
+    {
+      "file": "build-source-census.mjs",
+      "bytes": 10086,
+      "sha256": "c3b76813018eaafe224506eccf981bc78fec83cccbddd20da23f748fd028abc0"
+    },
+    {
+      "file": "check-installed-fixture-columns.mjs",
+      "bytes": 2512,
+      "sha256": "02859d6a694342d03b5cac7c5e5fbecd02cf2aba730ea8e2ab1ac595fbd23c64"
+    },
+    {
+      "file": "reconstruct-terminal-expense-source.mjs",
+      "bytes": 3758,
+      "sha256": "3b01819f996298884757be83b0f867bed6b071825d8d4c3900f8b3e3813db294"
+    }
+  ]
+}

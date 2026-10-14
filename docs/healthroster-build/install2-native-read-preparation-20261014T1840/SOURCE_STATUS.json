@@ -1,0 +1,41 @@
+{
+  "status": "SOURCE_AND_READONLY_PREPARATION_NOT_NATIVE_FIXTURE_OR_INSTALL2_PROOF",
+  "checkedAt": "2026-10-14T18:50:54.127Z",
+  "installedBackend": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "installedOffice": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "publishedReceipt": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "install2SourceBackup": "f394a202a99fc9143dcc864d8105c139d2956708",
+  "nativeSource": "144e49b9ec630ad15d6dc61d7e8637530fbc615e",
+  "normalInstallsRemaining": 1,
+  "noOwnerAnswerPending": true,
+  "coreSourceUnchanged": true,
+  "readOnlyPrecheck": {
+    "database": "cloudtms_test_clone",
+    "release": {
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "status": "VERIFIED"
+    },
+    "postmasterStart": "2026-10-14T09:07:33.240096+00:00",
+    "observedAt": "2026-10-14T18:22:54.616248+00:00",
+    "allFiniteFixtureCountsZero": true,
+    "uniqueIndexes": 27,
+    "insertTriggers": 16,
+    "insertRoutineSourceBodiesMatched": 11,
+    "fixtureExecuted": false,
+    "ownTurnsReleased": [
+      "2026-10-14T18:11:01.770Z",
+      "2026-10-14T18:22:53.268Z"
+    ]
+  },
+  "findingDisposition": {
+    "sourceClosed": [
+      "Checklist P1-CHECKLIST-RETENTION1",
+      "Checklist P2-CHECKLIST-DTO1",
+      "Root corrected alias03 fixture and pure52-statement preparation source; no additional P0/P1 in final32acf critic."
+    ],
+    "heldPredecessor": "Root P1-ALIAS-FIXTURE1 overlapping dated client group memberships;02 unchanged/never executed.",
+    "newD10Critic": "Confirmed actor switch during awaited native navigation can render old actor-bound review; whole caller source successor required.",
+    "successorNativeAtCheckpoint": "Source accepted; focused native first-use had not executed at this preparation checkpoint. Later native receipt60445841 separately records actual SQL/restoration and retained wrapper failure."
+  },
+  "remaining": "Historical real-witness metadata caller, R254 reminder, D10 actor continuation fix, actual Same/Separate/NONE and Agency writer/observer/Return, final owner composition/current safety review/contract/native qualification/full I2 rehearsal/protected release/features/acceptance/EAS/phone/PartB."
+}

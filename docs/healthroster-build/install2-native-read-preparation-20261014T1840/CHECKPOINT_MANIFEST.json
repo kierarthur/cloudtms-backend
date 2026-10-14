@@ -1,0 +1,30 @@
+{
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "ALIAS_INSTALLED_CATALOG_SOURCE_MANIFEST.json",
+      "bytes": 2014,
+      "sha256": "1e5c16c916d15ba42e3a9066037f67421e81664ff1f36afa15c6fbbc7d2e20d8"
+    },
+    {
+      "file": "BUILD_CHECKLIST_RETENTION_DTO_SOURCE_CLOSURE_14102026.md",
+      "bytes": 3734,
+      "sha256": "679d4dc82ac7f721bdc5d31f261b9235b98e368161b1b39afbd5e2eb4c36f6e7"
+    },
+    {
+      "file": "BUILD_REKEY_ALIAS_NATIVE_FIXTURE_SOURCE_CRITIC_14102026.md",
+      "bytes": 12176,
+      "sha256": "32acf64e990fe50128735879babe3f4e13a05850172871e76fa759a5ddff9056"
+    },
+    {
+      "file": "NATIVE_PUBLISHED_SOURCE_PINS.json",
+      "bytes": 20231,
+      "sha256": "d2c8d36f853a51474503c2985c39d409828825aed9d2deb83508e2b8051f2960"
+    },
+    {
+      "file": "SOURCE_STATUS.json",
+      "bytes": 2188,
+      "sha256": "cd665e4efd72ae6507d30b277dc9c6159813c5e52b5cb75427f80dfa48b9b240"
+    }
+  ]
+}
