@@ -1,0 +1,10 @@
+    v_vat_rate:=case when v_current.source_expense_vat_enabled
+      then v_expense_policy.invoice_vat_rate_pct else 0 end;
+    v_vat:=pg_catalog.round((v_new_pence::numeric/100)*(v_vat_rate/100),2);
+    v_total:=v_new_pence::numeric/100+v_vat;
+    v_replacement_pay_vector:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1','kind','PAY',
+      'source_expense_pence',v_new_pence,
+      'source_expense_vat_enabled',v_current.source_expense_vat_enabled
+    );
+    v_replacement_charge_vector:=v_replacement_pay_vector||pg_catalog.jsonb_build_object('kind','CHARGE');

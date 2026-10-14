@@ -1,0 +1,43 @@
+{
+  "source_only": true,
+  "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+  "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+  "input_bytes": 206075,
+  "input_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+  "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+  "before_sha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a",
+  "after_definition_sha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1",
+  "after_leaf_sha256": "aa1c112c2863fa70051b6aa308caf6edc963cefcd99d21be29f0018b847c24f2",
+  "hunks": [
+    {
+      "name": "native values delegate state",
+      "before": "  v_count integer:=0;",
+      "after": "  v_values jsonb;\n  v_count integer:=0;"
+    },
+    {
+      "name": "single immutable-policy-bound native expense VAT/vector owner",
+      "before": "    v_vat_rate:=case when v_current.source_expense_vat_enabled\n      then v_expense_policy.invoice_vat_rate_pct else 0 end;\n    v_vat:=pg_catalog.round((v_new_pence::numeric/100)*(v_vat_rate/100),2);\n    v_total:=v_new_pence::numeric/100+v_vat;\n    v_replacement_pay_vector:=pg_catalog.jsonb_build_object(\n      'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1','kind','PAY',\n      'source_expense_pence',v_new_pence,\n      'source_expense_vat_enabled',v_current.source_expense_vat_enabled\n    );\n    v_replacement_charge_vector:=v_replacement_pay_vector||pg_catalog.jsonb_build_object('kind','CHARGE');",
+      "after": "    -- The existing scope/current/prior/policy equality guards above remain\n    -- the write authority. This reads that exact immutable policy snapshot.\n    v_values:=private.weekly_source_fixed_expense_invoice_values_v1(v_expense_policy.id);\n    v_vat_rate:=(v_values->>'vat_rate_pct')::numeric(5,2);\n    v_vat:=(v_values->>'vat_amount')::numeric(12,2);\n    v_total:=(v_values->>'total_inc_vat')::numeric(12,2);\n    v_replacement_pay_vector:=v_values->'pay_vector';\n    v_replacement_charge_vector:=v_values->'charge_vector';"
+    }
+  ],
+  "whole_reverse_verified": true,
+  "extracted_native_block_bytes": 610,
+  "extracted_native_block_sha256": "32a829b0e4599a843ad4520b2cbdcb46c2807c00896bb2b49441aa450e23a757",
+  "single_values_owner": true,
+  "original_native_scope_and_current_prior_reversal_guards_retained": true,
+  "source_policy_equality_precedes_delegate": true,
+  "exact_case_census": {
+    "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+    "path": "docs/healthroster-build/proposals/root-effective-body-amendment-census-case-forward-20261014/BODY_AMENDMENT_CENSUS.json",
+    "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+    "roots": 1484,
+    "inputs": 1745,
+    "occurrences": 2160,
+    "guarded_body_reads": 22
+  },
+  "effective_native_catalogue_claim": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "source_invoice_only_expense_producer_complete": false
+}

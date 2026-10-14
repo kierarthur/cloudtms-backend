@@ -1,0 +1,71 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "writer_input_commit": "b0e5db406b904589bb6aaa9e7531a75ff9674743",
+  "current_SQL_input_commit": "973625f17cd51a49803872a819638e10f13bbbff",
+  "preceding_writer58_manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+  "one_time_source_order": [
+    "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/one-time/00_paid_shift_choice_fields.sqlinc",
+    "one-time/08_complete_snapshot_origin_constraints.sqlinc"
+  ],
+  "excluded_alternative_origin_leaf": "docs/healthroster-build/proposals/paid-shift-match-writer-none-construction-20261014/one-time/01_invoice_snapshot_origins.sqlinc",
+  "previous_origin_leaf_already_installed_requires_separate_upgrade_disposition": true,
+  "repeatable_selected_order": [
+    "forward/01_native_expense_invoice_values.sqlinc",
+    "forward/02_complete_native_expense_materialiser.sqlinc",
+    "forward/05_complete_hours_companion.sqlinc",
+    "forward/04_expense_invoice_origin_assert.sqlinc",
+    "forward/06_complete_origin_dispatch.sqlinc",
+    "forward/03_expense_invoice_companion.sqlinc",
+    "forward/07_complete_fin4_expense.sqlinc",
+    "forward/09_complete_invoice_admission.sqlinc"
+  ],
+  "unchanged_writer58_leaves_retained_except_selected_complete_successors": [
+    {
+      "excluded": "paid-shift-match-writer-none-construction-20261014/forward/08_paid_match_invoice_producer.sqlinc",
+      "selected": "forward/05_complete_hours_companion.sqlinc",
+      "sha256": "4196885e47db4ad21e4dcc583118d61dffe26433a1e7bdbf1e84857a32f2df05"
+    },
+    {
+      "excluded": "paid-shift-match-writer-none-construction-20261014/forward/09_paid_match_invoice_origin_assert.sqlinc",
+      "selected": "forward/06_complete_origin_dispatch.sqlinc",
+      "sha256": "55084c0f3421b1afc729b12181bef3d3dc81489f28c128225bb66fce5b80e7a4"
+    },
+    {
+      "excluded": "paid-shift-match-writer-none-construction-20261014/forward/06_complete_fin4.sqlinc",
+      "selected": "forward/07_complete_fin4_expense.sqlinc",
+      "sha256": "3e9693b1c001c0af06dc7915705ebea9cf2eb16991f16aca2d1986e5b085aa26"
+    },
+    {
+      "excluded": "paid-shift-match-writer-none-construction-20261014/one-time/01_invoice_snapshot_origins.sqlinc",
+      "selected": "one-time/08_complete_snapshot_origin_constraints.sqlinc",
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    },
+    {
+      "excluded": "paid-shift-match-writer-none-construction-20261014/forward/13_complete_invoice_admission.sqlinc",
+      "selected": "forward/09_complete_invoice_admission.sqlinc",
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    }
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+    "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+    "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)"
+  ],
+  "new_private_acl": "logical postgres; PUBLIC/anon/authenticated/service_role revoked; owner only",
+  "new_public_signatures": [],
+  "new_business_tables": 0,
+  "new_columns": 0,
+  "existing_public_invoice_admit_ACL": "logical postgres; PUBLIC/anon/authenticated revoked; service_role only",
+  "native_Source_expense_calculation_copied_once": true,
+  "duplicate_money_classifier": false,
+  "payable_expense_generation_created_for_NONE": false,
+  "source_expense_invoice_companion_construction": true,
+  "complete_prepared_pay_root_census": false,
+  "Office_OFF_NHSP_CorrectFinal_Legacy_Report_complete": false,
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "remaining_gates": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md"
+}

@@ -1,0 +1,48 @@
+{
+  "source_only": true,
+  "inputs": [
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "bytes": 206075,
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "bytes": 2281,
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "bytes": 16112,
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "bytes": 229113,
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+      "file": "docs/healthroster-build/proposals/root-effective-body-amendment-census-case-forward-20261014/BODY_AMENDMENT_CENSUS.json",
+      "bytes": 437551,
+      "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d"
+    }
+  ],
+  "writer58_manifest_sha256": "41b09a6b804db5604003c632dd4ca0e506ba44db4b537dc68fc7e3b4c0fd2453",
+  "writer58_saved_committed_preserved": true,
+  "corrected_case_census": {
+    "commit": "973625f17cd51a49803872a819638e10f13bbbff",
+    "path": "docs/healthroster-build/proposals/root-effective-body-amendment-census-case-forward-20261014/BODY_AMENDMENT_CENSUS.json",
+    "sha256": "f91d748d59a034caa123227cad577cf082bfd347ad276509df11d500d682bc3d",
+    "roots": 1484,
+    "inputs": 1745,
+    "occurrences": 2160,
+    "guarded_body_reads": 22
+  },
+  "effective_body_closure": false,
+  "native_catalogue_claim": false
+}

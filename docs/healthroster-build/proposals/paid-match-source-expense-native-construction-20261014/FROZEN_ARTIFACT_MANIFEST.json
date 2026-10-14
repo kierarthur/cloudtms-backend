@@ -1,0 +1,142 @@
+{
+  "schema_version": "PAID_SAME_NONE_SOURCE_FIXED_EXPENSE_NATIVE_CONSTRUCTION_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "canonical_mounted": false,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "full_primary_complete": false,
+  "artifact_count": 26,
+  "artifacts": [
+    {
+      "file": "CURRENT_SOURCE_INPUT_PINS.json",
+      "bytes": 2048,
+      "sha256": "a2b455ebc6228f8f1742c452fbfd13067070e5983cd70f815e1d819f1300ef3d"
+    },
+    {
+      "file": "EXPENSE_WRITER_REVERSES.json",
+      "bytes": 10776,
+      "sha256": "b587271c462e12c80841b6ab631220db16888b47398b1c0c4f35bbe82e2949a8"
+    },
+    {
+      "file": "NATIVE_VALUES_REVERSE.json",
+      "bytes": 3061,
+      "sha256": "15718c19adec035785b40dfd03abd4c31215cb8e43d29257354b88d63b93b66f"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 3778,
+      "sha256": "f351941a07ef55b84ed7dab2a74616b33c258b35d9787079e1ea6d5621158e54"
+    },
+    {
+      "file": "SOURCE_BOUNDARY_AND_REMAINING_CODE.md",
+      "bytes": 4424,
+      "sha256": "35db3fd4090bf814868c07fe5bfe4e1fe3e8ff1f88648b1e97dddd768a224064"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1001,
+      "sha256": "6d831a61bb98e0bb07627b80d50f0b7cd4d3e42d84a1aa39d0e9e77764232dff"
+    },
+    {
+      "file": "before/02_complete_native_expense_materialiser.sqlinc",
+      "bytes": 16902,
+      "sha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a"
+    },
+    {
+      "file": "before/05_complete_hours_companion.sqlinc",
+      "bytes": 9224,
+      "sha256": "b139b1d3cb52670a88848292da34db24a15fef6d35c254a5c76616f586c3dd59"
+    },
+    {
+      "file": "before/06_complete_origin_dispatch.sqlinc",
+      "bytes": 11216,
+      "sha256": "8e94bbaa234cdf5d6a9b4652b8e923b0f0fedda7d31094080ff7c381a52f023a"
+    },
+    {
+      "file": "before/07_complete_fin4_expense.sqlinc",
+      "bytes": 121748,
+      "sha256": "1e5d0bbfbbe8fe9e4af2449c5413fa416d791e820742ec52730b684fc6182b67"
+    },
+    {
+      "file": "before/08_complete_snapshot_origin_constraints.sqlinc",
+      "bytes": 5777,
+      "sha256": "7bdbc8cb99e7794a1e6c8617f538c844977785aad3c756e5e0bd0fe7ddad5344"
+    },
+    {
+      "file": "before/09_complete_invoice_admission.sqlinc",
+      "bytes": 49310,
+      "sha256": "8fddbb729fe54854038288afc988df8463f2908569230f4893f433878bed0145"
+    },
+    {
+      "file": "build-expense-writer.mjs",
+      "bytes": 9992,
+      "sha256": "1d6cf18294a7aeefd4433adb1a7fe0878a2e28c719493164db7686ff87bed1f3"
+    },
+    {
+      "file": "build-native-values.mjs",
+      "bytes": 7485,
+      "sha256": "f67874fd77a9c1c0a2933a47590693f7cbbeb3c4d9dde3b2dea5d83e1564be5e"
+    },
+    {
+      "file": "expense-source.test.mjs",
+      "bytes": 7780,
+      "sha256": "cd6cd3bbdd6b981402cebaeb1f36c385e83303753a8e8a842b2617230edfd412"
+    },
+    {
+      "file": "forward/01_native_expense_invoice_values.sqlinc",
+      "bytes": 2731,
+      "sha256": "c759bc4094ceeca3cc923d08b82fb57a384877b2d592505fa3e33834ba80a584"
+    },
+    {
+      "file": "forward/02_complete_native_expense_materialiser.sqlinc",
+      "bytes": 17153,
+      "sha256": "aa1c112c2863fa70051b6aa308caf6edc963cefcd99d21be29f0018b847c24f2"
+    },
+    {
+      "file": "forward/03_expense_invoice_companion.sqlinc",
+      "bytes": 6445,
+      "sha256": "d94046dd1b625d3382beee8ab47b1b1c660f0392d838273cb05372d6029cf360"
+    },
+    {
+      "file": "forward/04_expense_invoice_origin_assert.sqlinc",
+      "bytes": 7749,
+      "sha256": "89a63355d8cd7401ecc5684b049eecaefe024a7b64f243ef5b02e738bbb1f400"
+    },
+    {
+      "file": "forward/05_complete_hours_companion.sqlinc",
+      "bytes": 9268,
+      "sha256": "4196885e47db4ad21e4dcc583118d61dffe26433a1e7bdbf1e84857a32f2df05"
+    },
+    {
+      "file": "forward/06_complete_origin_dispatch.sqlinc",
+      "bytes": 11410,
+      "sha256": "55084c0f3421b1afc729b12181bef3d3dc81489f28c128225bb66fce5b80e7a4"
+    },
+    {
+      "file": "forward/07_complete_fin4_expense.sqlinc",
+      "bytes": 122604,
+      "sha256": "3e9693b1c001c0af06dc7915705ebea9cf2eb16991f16aca2d1986e5b085aa26"
+    },
+    {
+      "file": "forward/09_complete_invoice_admission.sqlinc",
+      "bytes": 50147,
+      "sha256": "70a0dd096052fba1a30b282c3c46c663b1be47e661a25f643bb54d86804b525e"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 7353,
+      "sha256": "b5398e800d7164eeff4195fe7531dd2a32d85b1aa974dd93e0661926d412a493"
+    },
+    {
+      "file": "input/exact_native_expense_values.sqlinc",
+      "bytes": 610,
+      "sha256": "32a829b0e4599a843ad4520b2cbdcb46c2807c00896bb2b49441aa450e23a757"
+    },
+    {
+      "file": "one-time/08_complete_snapshot_origin_constraints.sqlinc",
+      "bytes": 6509,
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    }
+  ]
+}

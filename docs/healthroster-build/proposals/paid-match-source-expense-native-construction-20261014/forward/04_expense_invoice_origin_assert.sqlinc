@@ -1,0 +1,83 @@
+-- Historical raw Source/policy invoice proof. This never admits a pay writer.
+create or replace function private.weekly_source_paid_match_expense_invoice_origin_assert_v1(p_movement_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare m public.weekly_source_billing_movements%rowtype;h public.weekly_source_billing_movements%rowtype;
+  s public.weekly_source_final_snapshot_lines%rowtype;p public.weekly_source_row_expense_policy_snapshots%rowtype;
+  r public.weekly_source_final_revisions%rowtype;v_values jsonb;v_pay jsonb;v_mapping bytea;v_state jsonb;
+begin
+  select * into strict m from public.weekly_source_billing_movements where id=p_movement_id;
+  if m.pay_effect<>'NONE' or m.invoice_only_snapshot_line_id is null or m.source_line_kind<>'SOURCE_FIXED_EXPENSE'
+    or m.movement_role<>'EXPENSE_POSITIVE' or m.transition_id is not null or m.nhsp_upload_row_id is not null
+    or m.expense_authority_generation_id is not null or m.self_bill_report_row_id is not null
+    or m.vat_rounding_revision_id is not null or m.prior_movement_id is not null or m.correction_unit_id is not null
+    or m.total_pay_ex_vat<>0 or m.price_check_result<>'NOT_APPLICABLE' or m.price_check_fingerprint is not null
+    or m.charge_acceptance_id is not null then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_ORIGIN_UNBOUND' using errcode='55000';end if;
+  select * into strict s from public.weekly_source_final_snapshot_lines where id=m.invoice_only_snapshot_line_id;
+  select * into strict r from public.weekly_source_final_revisions where id=m.final_revision_id;
+  select * into strict h from public.weekly_source_billing_movements
+    where id=(m.source_facts_json->>'hours_companion_movement_id')::uuid;
+  if h.source_line_kind<>'SOURCE_REBILL_LINE' or h.invoice_only_snapshot_line_id is distinct from s.id
+    or h.pay_effect<>'NONE' or h.final_revision_id is distinct from r.id then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_HOURS_ORIGIN_UNBOUND' using errcode='55000';end if;
+  perform private.weekly_source_paid_match_invoice_origin_assert_v1(h.id);
+  select * into strict p from public.weekly_source_row_expense_policy_snapshots
+    where id=(m.source_facts_json->>'row_expense_policy_snapshot_id')::uuid;
+  if p.source_expense_pence is null or p.source_expense_pence<=0
+    or p.row_resolution_id is distinct from s.row_resolution_id or p.upload_row_id is distinct from s.upload_row_id
+    or p.work_event_id is distinct from s.work_event_id or p.contract_id is distinct from s.contract_id
+    or p.candidate_id is distinct from s.candidate_id or p.client_id is distinct from s.client_id
+    or p.source_expense_pence is distinct from s.source_expense_pence
+    or m.finalisation_cycle_id is distinct from r.source_cycle_id or m.work_event_id is distinct from s.work_event_id
+    or m.contract_id is distinct from s.contract_id or m.actual_client_id is distinct from s.client_id
+    or m.candidate_id is distinct from s.candidate_id or m.source_profile_kind is distinct from s.source_profile_kind
+    or m.invoice_timesheet_id is distinct from h.invoice_timesheet_id
+    or m.source_facts_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_MATCH_FIXED_EXPENSE_FACTS_V1'
+    or m.source_facts_json->>'snapshot_line_id' is distinct from s.id::text
+    or m.source_facts_json->>'snapshot_line_hash' is distinct from encode(s.snapshot_line_hash,'hex')
+    or m.source_facts_json->>'upload_row_id' is distinct from s.upload_row_id::text
+    or m.source_facts_json->>'bound_row_resolution_id' is distinct from s.row_resolution_id::text
+    or m.source_facts_json->>'paid_overlap_choice_id' is distinct from s.paid_overlap_choice_id::text
+    or m.source_facts_json->>'pay_effect' is distinct from 'NONE' or m.source_facts_json ? 'row_resolution_id'
+    or m.source_facts_json->>'rule_set_version_id' is distinct from r.rule_set_version_id::text
+    or m.source_facts_json->'invoice_window_cycle_id' is distinct from h.source_facts_json->'invoice_window_cycle_id'
+    or m.source_facts_json->'invoice_window_scope' is distinct from h.source_facts_json->'invoice_window_scope' then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_POLICY_UNBOUND' using errcode='55000';end if;
+  v_values:=private.weekly_source_fixed_expense_invoice_values_v1(p.id);
+  v_pay:=v_values->'pay_vector'||jsonb_build_object('source_expense_pence',0);
+  if m.source_facts_json->'invoice_values' is distinct from v_values
+    or m.canonical_pay_vector_json is distinct from v_pay or m.canonical_charge_vector_json is distinct from v_values->'charge_vector'
+    or m.calculated_comparison_charge_pence is distinct from p.source_expense_pence
+    or m.source_validation_charge_pence is distinct from p.source_expense_pence
+    or m.invoice_presentation_charge_pence is distinct from p.source_expense_pence
+    or m.vat_rate_pct is distinct from (v_values->>'vat_rate_pct')::numeric(5,2)
+    or m.vat_amount is distinct from (v_values->>'vat_amount')::numeric(12,2)
+    or m.total_inc_vat is distinct from (v_values->>'total_inc_vat')::numeric(12,2) then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_NATIVE_VALUES_CHANGED' using errcode='55000';end if;
+  v_mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PAID_MATCH_EXPENSE_MAPPING_V1',
+    jsonb_build_object('snapshot_line_id',s.id,'snapshot_line_hash',encode(s.snapshot_line_hash,'hex'),
+      'row_expense_policy_snapshot_id',p.id,'invoice_vat_policy_fingerprint',encode(p.invoice_vat_policy_fingerprint,'hex'),
+      'hours_companion_movement_id',h.id,'paid_overlap_choice_id',s.paid_overlap_choice_id));
+  if v_mapping is distinct from m.mapping_rate_policy_fingerprint then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_MAPPING_CHANGED' using errcode='55000';end if;
+  v_state:=jsonb_build_object('invoice_only_snapshot_line_id',s.id,'pay_effect','NONE','final_revision_id',r.id,
+    'finalisation_cycle_id',r.source_cycle_id,'actual_client_id',s.client_id,'candidate_id',s.candidate_id,
+    'contract_id',s.contract_id,'work_event_id',s.work_event_id,'movement_role','EXPENSE_POSITIVE',
+    'source_profile_kind',s.source_profile_kind,'source_line_kind','SOURCE_FIXED_EXPENSE','source_facts',m.source_facts_json,
+    'pay_vector',v_pay,'charge_vector',v_values->'charge_vector','total_pay_pence',0,
+    'calculated_comparison_charge_pence',p.source_expense_pence,'source_validation_charge_pence',p.source_expense_pence,
+    'invoice_presentation_charge_pence',p.source_expense_pence,'vat_rate_pct',m.vat_rate_pct,'vat_amount',m.vat_amount,
+    'total_inc_vat',m.total_inc_vat,'price_check_result','NOT_APPLICABLE','price_check_fingerprint',null,'charge_acceptance_id',null,
+    'mapping_rate_policy_fingerprint',encode(v_mapping,'hex'),'invoice_timesheet_id',h.invoice_timesheet_id);
+  if private.weekly_source_billing_movement_hash_v1(v_state) is distinct from m.movement_economic_hash then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_HASH_UNBOUND' using errcode='55000';end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_FIXED_EXPENSE_ORIGIN_V1',
+    'movement_id',m.id,'snapshot_line_id',s.id,'upload_row_id',s.upload_row_id,'work_event_id',s.work_event_id,
+    'row_resolution_id',s.row_resolution_id,'row_expense_policy_snapshot_id',p.id,'paid_overlap_choice_id',s.paid_overlap_choice_id,
+    'hours_companion_movement_id',h.id,'pay_effect','NONE','paid_writer_permission',null);
+end;
+$function$;
+alter function private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid) from public,anon,authenticated,service_role;
