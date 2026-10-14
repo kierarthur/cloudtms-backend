@@ -9,6 +9,10 @@ begin;
 \ir 03_operational_dispatch.sqlinc
 \ir 04_complete_fin.sqlinc
 \ir 05_complete_feature_setup.sqlinc
+-- Merge these complete replacements over the actual same current 1700 owners,
+-- preserving every later root hunk and the paired Money nullable Report clone.
+\ir 15_complete_native_report_admission.sqlinc
+\ir 14_complete_native_snapshot_assembler.sqlinc
 \ir 07_owner_acl.sqlinc
 -- Do not blindly include current-only 239 registry/ACL if Q/A0/Prepared or
 -- other later helpers exist. Root substitutes the complete literal final union.

@@ -13,6 +13,6 @@ const lexical=fs.readdirSync(dir).filter(file=>file.endsWith('.sqlinc')).map(fil
 fs.writeFileSync(path.join(dir,'METADATA_PIN_FORWARD_AND_LEXICAL_RECEIPT.json'),JSON.stringify({schema_version:'REPORT_AB_SOURCE_PIN_FORWARD_AND_LEXICAL_V1',
  prior_root_commit:prior,current_root_commit:pins.root_commit,inputs:inputForward,
  changed_tracked_paths:git(['diff','--name-only',prior,pins.root_commit]).toString('utf8').trim().split('\n').filter(Boolean),lexical,
- native_compile:'NOT_RUN',native_ab_financial:'NOT_RUN',off_prerequisite:'PROVISIONAL_UNPINNED_HELD',
- statement:'All 29 controlling saved/native/proposal inputs remain byte-identical across this metadata-only pin-forward; complete tracked execution trees differ and require actual fresh R1/R2 proof.'},null,2)+'\n');
+ native_compile:'NOT_RUN',native_ab_financial:'NOT_RUN',off_prerequisite:'FINAL_SOURCE_PINS_SEPARATELY_MEASURED_ROOT_COMPOSITION_NATIVE_ACCEPTANCE_HELD',
+ statement:'All 29 controlling saved/native/proposal inputs remain byte-identical across this input pin-forward; the complete tracked execution tree differs and requires genuine same-Install2 execution proof. Paired current native owners have separate complete reverse proofs.'},null,2)+'\n');
 console.log(JSON.stringify({exact_inputs:inputForward.length,lexical_files:lexical.length,root_commit:pins.root_commit}));

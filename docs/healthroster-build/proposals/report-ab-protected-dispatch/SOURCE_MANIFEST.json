@@ -1,7 +1,7 @@
 {
   "schema_version": "REPORT_AB_PROTECTED_DISPATCH_SOURCE_PACKAGE_V1",
-  "root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
-  "status": "REVIEWED_WIP_SAME_INSTALL_RECORDER_CONTRACT_PENDING_NO_SELECTED_VARIANT",
+  "root_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+  "status": "SOURCE_FROZEN_FOR_ROOT_CRITIC_NO_NATIVE_QUALIFICATION_NO_SELECTED_VARIANT",
   "new_private_signatures": [
     "private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)",
     "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)",
@@ -11,17 +11,60 @@
     "private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)",
     "private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)"
   ],
-  "private_union": "Seven new owner-only signatures; complete future Q/A0/Prepared/Money/later union is root-owned, not current-only 239.",
+  "private_union": "Seven new owner-only signatures; complete Q/A0/Prepared/Money/later union is root-owned. Preserve the larger final union; never overwrite it with current-only 239.",
+  "money_dependency": {
+    "source_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+    "manifest_sha256": "e03db5673f81c6fb3a2eb8e18ca9209064b0821c2cb68474b92e8a7a087a23d0",
+    "checks_sha256": "a0d197b705b5cc8a6e891a1df9bde3cc5990197eeb7bfb55597f95c478128e81",
+    "artifacts": 98
+  },
+  "paired_native_owners": [
+    {
+      "proof": "REPORT_ADMISSION_REVERSE.json",
+      "input": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "input_sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+      "output": "15_complete_native_report_admission.sqlinc",
+      "output_sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "source_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+      "full_reverse": true
+    },
+    {
+      "proof": "REPORT_ORDER_REVERSE.json",
+      "input": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "input_sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+      "output": "14_complete_native_snapshot_assembler.sqlinc",
+      "output_sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "source_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
+      "full_reverse": true
+    }
+  ],
+  "recorder_abi": {
+    "request_fields": 9,
+    "response_fields": 13,
+    "report_slots": 2,
+    "existing_bundle_exceptions": 3,
+    "new_helper_signatures": 7
+  },
+  "raw_collector": {
+    "schema_version": "WEEKLY_SOURCE_REPORT_FIN_RAW_COLLECTOR_V1",
+    "max_trace_bytes": 262144,
+    "max_bundle_bytes": 2097152,
+    "max_variant_traces": 14,
+    "absent_genuine_document_or_gate_mapper": "WAITING_NATIVE_GATES_NO_RECORDABLE_RECEIPT"
+  },
   "tests": {
-    "offline_cases": 46,
-    "passed": 46,
+    "offline_cases": 97,
+    "passed": 97,
     "node_syntax": "PASS",
+    "javascript_files": 19,
+    "sql_lexical_files": 13,
     "database_compile": "NOT_RUN",
     "financial_ab": "NOT_RUN",
+    "native_document": "NOT_RUN",
     "exposure": "HELD",
-    "release_design": "Same-Install2 recorder ABI aligned in provisional complete source; final Money source pins/closure review and all native/remote qualification remain held; no third release."
+    "release_design": "Complete same-Install2 source recorder/session/raw receipt rederivation. Root composition/review and every genuine native/remote qualification remain held; no third release."
   },
-  "package_sha256": "fa2cdeb1a4ece7e0d35b9ae93a2ea8c3045391bc350fb9108475e42c7a843d65",
+  "package_sha256": "477ecd30188e5c7db9de770c5505cdfff94d723369271779748b68a7b31f2fb7",
   "artifacts": [
     {
       "path": "01_certificate.sqlinc",
@@ -65,8 +108,8 @@
     },
     {
       "path": "09_complete_operational_evidence.mjs",
-      "sha256": "b63ecd610935c684d5bb1d48734e9982eb229db8ecbee3f9c981aa4cdf1566e5",
-      "bytes": 17862
+      "sha256": "bd980105941083067da15044aa8f7c5744cce505e3f41d7730da4e6961542a5f",
+      "bytes": 18084
     },
     {
       "path": "10_complete_current_release_caller.mjs",
@@ -89,29 +132,54 @@
       "bytes": 12162
     },
     {
+      "path": "14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+      "bytes": 123180
+    },
+    {
+      "path": "15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+      "bytes": 47770
+    },
+    {
       "path": "CONTROLLING_INPUTS.json",
-      "sha256": "e96e808e2c9c667d99657ec98a2c42323dc1bf800102c3c17ec807a17359398e",
+      "sha256": "b5096f40c8f1d7a348b384f6dc612e9cdc8fbe687978fe61f20bc912f09ede04",
       "bytes": 7446
     },
     {
       "path": "FULL_REVERSE_RECEIPT.json",
-      "sha256": "43bd84b6d29c51ea249e99700373d4d135eb32c8a8b5eb40c636f6097eb99722",
-      "bytes": 10737
+      "sha256": "2247590a19bb9410f4fb7bdc3b451802464b5fc1857f64a0a99ebb90175ba2fd",
+      "bytes": 10962
+    },
+    {
+      "path": "HISTORICAL_FIXTURE_GUARD_TRACE.md",
+      "sha256": "47d0ea8dc896d807d9f8f8325196adb90cce65ac21f3e0b3a7cb71fe15790d2c",
+      "bytes": 4632
     },
     {
       "path": "METADATA_PIN_FORWARD_AND_LEXICAL_RECEIPT.json",
-      "sha256": "d568a69815484197257e8c633dd18293495159a83f482705060544778be5a40d",
-      "bytes": 17439
+      "sha256": "de2a04e59b107702999c4c49a2603379816d6879cded0b97fc30789579015046",
+      "bytes": 17982
+    },
+    {
+      "path": "MONEY_DEPENDENCY_PINS.json",
+      "sha256": "edc6bae5d96c8caf23e3bd40609c985561e515671f81a28f32b9a7c3230736a2",
+      "bytes": 27764
+    },
+    {
+      "path": "NATIVE_CAPTURE_ABI.md",
+      "sha256": "2171f5146d99eb7aa02b7920357160bf4226693b15e7bd88e74f04a7a9ca7c20",
+      "bytes": 7403
     },
     {
       "path": "NATIVE_PROOF_RECIPE.md",
-      "sha256": "e69486335fb460fb743134061798e26ae7f6b7cbf564d43282092e8fe7dbdf8e",
-      "bytes": 7706
+      "sha256": "4d7078133e0e10db24b0bd80d594db9afd84491b11b3f6bfc4634a565c23a8aa",
+      "bytes": 10097
     },
     {
       "path": "OFF_CONTEXT_PREREQUISITE.md",
-      "sha256": "c492204ca9d9978bba73bf46c61701eb1b21b2e6b6a03c4a9f81126e0e91bb09",
-      "bytes": 4858
+      "sha256": "c97aa2b3675a7612fa20380ad4a9349aa67b9a78e1c3604be82e5ec5bf1cfa22",
+      "bytes": 5196
     },
     {
       "path": "PRIVATE_SIGNATURES.json",
@@ -120,28 +188,43 @@
     },
     {
       "path": "README.md",
-      "sha256": "3808d88195760e4a8f5e2de851c11426c61cfa30a9a099595de59429fe9322ec",
-      "bytes": 11864
+      "sha256": "80584024366ffc8fb67ecdb02d517cccbb2aa5f4490585468e037a8292bbb410",
+      "bytes": 13680
     },
     {
       "path": "RECORDER_ABI.md",
-      "sha256": "79d5bca71391ef24a0e81486e52f9e55ed11a8112cef43f8b2c19494608b0be3",
-      "bytes": 4372
+      "sha256": "20f9f49f17dea203fe146be46d016d5a86cf4cd993a9d2f7a65ec274dfe06734",
+      "bytes": 5097
+    },
+    {
+      "path": "REPORT_ADMISSION_REVERSE.json",
+      "sha256": "1aaf3946e4e3f2cacf068ed8f8693abfd38fe8e476089eb4b926eee57f10fb7a",
+      "bytes": 13125
+    },
+    {
+      "path": "REPORT_ORDER_REVERSE.json",
+      "sha256": "92c06022589ec9cd4d2410c5bf48719f82207fbcc0184c250389953ea6be8283",
+      "bytes": 12573
+    },
+    {
+      "path": "RESUMED_SOURCE_HANDOFF_20261014.md",
+      "sha256": "8989419f539e15f164bebd27b36fef4ce7b177f3840a592bc4391219e4e20c2e",
+      "bytes": 6948
     },
     {
       "path": "ROOT_CLOSURE_TEMPLATE.sqlinc",
-      "sha256": "71445370395b105e592f952d3f55263ec366b572dcb9d429eca3e51403312c89",
-      "bytes": 748
+      "sha256": "c9fa44a6b6afa9322e3ec6f0b8071446a962c0656b57e971f74f5c2bbb815c5d",
+      "bytes": 1003
     },
     {
       "path": "SOURCE_TEST_RESULTS.txt",
-      "sha256": "7b4f5e9b3bf3d332d0a948ef92d7d9541799546ae20adbac71b3785346674169",
-      "bytes": 3901
+      "sha256": "22d603de07423595d6572b024ce12424672a65b7d39821a3d5c3faf1c71f8b2b",
+      "bytes": 8330
     },
     {
       "path": "TWO_INSTALL_RECONCILIATION.md",
-      "sha256": "34ad69a336a4c8ccf49f0d4344cf1ff21417235c6e83e68322e1f956ffcfe5cf",
-      "bytes": 6563
+      "sha256": "1c0f87451b363296ebdda0839c3442b7c0e2e7d25b25a9f8302b0e7a9f181f5c",
+      "bytes": 7292
     },
     {
       "path": "adapt-same-install.mjs",
@@ -150,13 +233,23 @@
     },
     {
       "path": "build-proposal.mjs",
-      "sha256": "a2470252876aba3b83e20550c40de85a36b433deb93359cc7d2bd2a34aaac6ce",
-      "bytes": 9806
+      "sha256": "98f55b0e847ad837f21cfb7dabd80734f9f04b0abb74a28f588bfa480338dd7d",
+      "bytes": 10031
+    },
+    {
+      "path": "compose-report-native-admission.mjs",
+      "sha256": "cc66dbf5b9390d463632cf06cef2a3bd5a23dc9ca022b330b7c67121d49532c9",
+      "bytes": 13826
+    },
+    {
+      "path": "compose-report-native-order.mjs",
+      "sha256": "082f7cdbdaef04f254304d9eb8aa1ad0c7d566d499c8cb17fad3b3f687a56603",
+      "bytes": 13545
     },
     {
       "path": "freeze.mjs",
-      "sha256": "81ce171f3465c815a32b28866906a4b04e972e881869dcc6ec5c63613c2937a6",
-      "bytes": 5537
+      "sha256": "687584f23cc97ba4bbf12c2d3e0edc2c40b73c2edacebd2dea3beefd6767c0d3",
+      "bytes": 7015
     },
     {
       "path": "pin-inputs.mjs",
@@ -164,14 +257,34 @@
       "bytes": 3934
     },
     {
+      "path": "pin-money-inputs.mjs",
+      "sha256": "36d2864565dc5f5b13d82054c155d27250d80d481fcfb96bcf6d37da8c8afafd",
+      "bytes": 2381
+    },
+    {
       "path": "report-ab-dispatch.test.mjs",
-      "sha256": "0a54ca38ea5c269d0e305205af144bcb1db5bdbd02d0b4a33cdf6d8861d555f0",
-      "bytes": 22041
+      "sha256": "0e5233a5ac773c655c113645405e33540f0ec2ff4a82fe27388c27b74b0e56ab",
+      "bytes": 29863
+    },
+    {
+      "path": "report-fin-native-collector.test.mjs",
+      "sha256": "5d74535b133adb3c1ec943888715ed822428f7e7c385a58766d1c243e1a35c8b",
+      "bytes": 18333
+    },
+    {
+      "path": "unit-raw-collector-fixture.mjs",
+      "sha256": "b304bf0459d3b1bbe9acaa4ee86119af1bbc4bfcf419d795f78b6de778619fc7",
+      "bytes": 11306
+    },
+    {
+      "path": "update-native-capture-forward.mjs",
+      "sha256": "a4dab659393cea7c0bb7da6c632c8546c0d668cecbb965dce83a76bcc9d2a893",
+      "bytes": 1458
     },
     {
       "path": "verify-source.mjs",
-      "sha256": "67943f4e4d5bb13c3bf1933fe065b5db9779ac9480c3a4b87524aca92f1ab634",
-      "bytes": 2309
+      "sha256": "7f1ae65eec31712f169b9bd5d53d4f1818154f203b5249d4c49f27909cd28889",
+      "bytes": 2439
     },
     {
       "path": "weekly-source-protected-execution-tree.mjs",
@@ -185,8 +298,13 @@
     },
     {
       "path": "weekly-source-report-fin-ab-evidence.mjs",
-      "sha256": "3538c1f61b80fa07d482c0b9b2ef38fb5e0041c85a3c36556a19d7591510d66b",
-      "bytes": 23320
+      "sha256": "6ad747ae935aef57e55f51bb8ba04c37ed18ef8da2ecacf099a5f54afcbd15e8",
+      "bytes": 30888
+    },
+    {
+      "path": "weekly-source-report-fin-native-collector.mjs",
+      "sha256": "cdc27a729099c77a455ac5eb588b70eb4da5131080aa08e6d82fccb1e2e41b34",
+      "bytes": 52683
     }
   ]
 }

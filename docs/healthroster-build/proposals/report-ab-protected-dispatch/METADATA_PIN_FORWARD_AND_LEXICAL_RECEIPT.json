@@ -1,7 +1,7 @@
 {
   "schema_version": "REPORT_AB_SOURCE_PIN_FORWARD_AND_LEXICAL_V1",
   "prior_root_commit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
-  "current_root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
+  "current_root_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
   "inputs": [
     {
       "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
@@ -217,6 +217,7 @@
     "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26.json",
     "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26_GIT_PINNED.json",
     "docs/healthroster-build/checkpoint13102026/FULL_VERIFIER_SOURCE_PROTOCOL_CENSUS_V2.json",
+    "docs/healthroster-build/checkpoint13102026/INSTALL1_NATIVE_TURN_PRECHECK_14102026.json",
     "docs/healthroster-build/checkpoint13102026/INSTALL1_SOURCE_READINESS_REVIEW.md",
     "docs/healthroster-build/checkpoint13102026/NEW_VERIFIER_SOURCE_SAFETY_REVIEW_AB26.json",
     "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2.sql",
@@ -304,14 +305,26 @@
       "status": "LEXICAL_ONLY_NO_PG_COMPILE"
     },
     {
+      "file": "14_complete_native_snapshot_assembler.sqlinc",
+      "statements": 4,
+      "meta": 1,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
+      "file": "15_complete_native_report_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "status": "LEXICAL_ONLY_NO_PG_COMPILE"
+    },
+    {
       "file": "ROOT_CLOSURE_TEMPLATE.sqlinc",
       "statements": 3,
-      "meta": 8,
+      "meta": 10,
       "status": "LEXICAL_ONLY_NO_PG_COMPILE"
     }
   ],
   "native_compile": "NOT_RUN",
   "native_ab_financial": "NOT_RUN",
-  "off_prerequisite": "PROVISIONAL_UNPINNED_HELD",
-  "statement": "All 29 controlling saved/native/proposal inputs remain byte-identical across this metadata-only pin-forward; complete tracked execution trees differ and require actual fresh R1/R2 proof."
+  "off_prerequisite": "FINAL_SOURCE_PINS_SEPARATELY_MEASURED_ROOT_COMPOSITION_NATIVE_ACCEPTANCE_HELD",
+  "statement": "All 29 controlling saved/native/proposal inputs remain byte-identical across this input pin-forward; the complete tracked execution tree differs and requires genuine same-Install2 execution proof. Paired current native owners have separate complete reverse proofs."
 }

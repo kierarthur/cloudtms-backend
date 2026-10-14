@@ -76,7 +76,7 @@ const writer=q+'14_complete_managed_release.mjs';
 compose(writer,'06_complete_managed_release.mjs',[]);
 compose(q+'weekly-source-protected-operational-evidence.mjs','09_complete_operational_evidence.mjs',[
  {id:'CLOSED_OPTIONAL_REPORT_BUNDLE_SECTION',old:" exact(bundle,['schema_version','qualifications'],'OPERATIONAL_BUNDLE_INVALID');",
-  new:" exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),\n  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'OPERATIONAL_BUNDLE_INVALID');"},
+  new:" exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),\n  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs']),\n  ...(bundle.report_fin_native_artifacts===undefined?[]:['report_fin_native_artifacts'])],'OPERATIONAL_BUNDLE_INVALID');"},
  {id:'REPORT_ONLY_BUNDLE_WITHOUT_CAPABILITY_FABRICATION',old:"  ||!bundle.qualifications.length||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');",
   new:"  ||(!bundle.qualifications.length&&!(Array.isArray(bundle.report_fin_qualifications)&&bundle.report_fin_qualifications.length)\n   &&!(Array.isArray(bundle.report_fin_native_inputs)&&bundle.report_fin_native_inputs.length))\n  ||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');"}]);
 compose(q+'15_complete_current_release_caller.mjs','10_complete_current_release_caller.mjs',[]);

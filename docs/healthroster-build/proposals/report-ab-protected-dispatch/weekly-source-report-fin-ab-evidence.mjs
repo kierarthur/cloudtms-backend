@@ -3,6 +3,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {exact,domainHash,sha256} from './weekly-source-protected-release-qualification.mjs';
 import {proveCommittedSources,assertExecutionTreeProof,loadCommittedBundle,sourceInventory} from './weekly-source-protected-execution-tree.mjs';
+import {assertReportNativeArtifacts} from './weekly-source-report-fin-native-collector.mjs';
 
 const fail=code=>{throw Error(code);},hex=/^[0-9a-f]{64}$/,commit=/^[0-9a-f]{40}$/,
  uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -134,7 +135,8 @@ export function loadReportFinInputs(root,release,context){
  const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');
  if(bundle===null||bundle.report_fin_qualifications===undefined)return [];
  exact(bundle,['schema_version','qualifications','report_fin_qualifications',
-  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs']),
+  ...(bundle.report_fin_native_artifacts===undefined?[]:['report_fin_native_artifacts'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
   ||!Array.isArray(bundle.report_fin_qualifications)||!bundle.report_fin_qualifications.length||bundle.report_fin_qualifications.length>100)
   fail('REPORT_AB_COMMITTED_BUNDLE_INVALID');
@@ -228,7 +230,8 @@ export async function preparePostVerifiedReportRequest({root,expectedExecution,a
  if(descriptor.path!==file||!hex.test(descriptor.sha256))fail('REPORT_AB_COMMITTED_DESCRIPTOR_INVALID');
  const {bytes,value:bundle}=committedReportJson(root,receiptInputCommit,file);
  exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),
-  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs']),
+  ...(bundle.report_fin_native_artifacts===undefined?[]:['report_fin_native_artifacts'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
  if(sha256(bytes)!==descriptor.sha256||bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'
   ||!Array.isArray(bundle.qualifications)||bundle.qualifications.length>100)fail('REPORT_AB_COMMITTED_BUNDLE_INVALID');
  const context={environment:'TEST',expectedDatabase:expectedExecution.database,mode:'UPGRADE',releaseId:expectedExecution.release_id,
@@ -238,6 +241,7 @@ export async function preparePostVerifiedReportRequest({root,expectedExecution,a
  if(artifactSlot==='weekly_source_report_fin_native_comparisons'){
   if(!Array.isArray(bundle.report_fin_native_inputs)||!bundle.report_fin_native_inputs.length||bundle.report_fin_native_inputs.length>14)
    fail('REPORT_AB_COMMITTED_NATIVE_INPUT_REQUIRED');
+  assertReportNativeArtifacts(bundle.report_fin_native_inputs,bundle.report_fin_native_artifacts);
   artifacts=buildNativeComparisons(expectedExecution,bundle.report_fin_native_inputs.map(input=>{
    exact(input,['receipt_id','receipt','receipt_sha256'],'REPORT_AB_COMMITTED_NATIVE_INPUT_INVALID');
    if(typeof input.receipt!=='string')fail('REPORT_AB_COMMITTED_NATIVE_INPUT_INVALID');
@@ -258,7 +262,7 @@ export async function preparePostVerifiedReportRequest({root,expectedExecution,a
 }
 // Root-only source interface to Money's actual owner-session recorder. It
 // neither installs/resumes a release nor writes the release ledger directly.
-// Exact recorder/receipt ABI remains provisional until Money's full freeze.
+// Exact recorder/receipt ABI is source-pinned; native/root review remains held.
 export const postVerifiedReceiptKeys=Object.freeze(['schema_version','execution','receipt_input_commit','receipt_tree_sha256',
  'artifact_slot','artifacts_sha256','prior_evidence_sha256','evidence_sha256','actor_user_id','recorded_at_utc',
  'replayed','operational_settings_changed','receipt_sha256']);

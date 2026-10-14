@@ -101,7 +101,8 @@ export function activationReceiptReady(value,assignment){
 export function loadOperationalJourneys(root,release,context){
  const bundle=loadCommittedBundle(root,release,context,'weeklySourceProtectedOperational');if(bundle===null)return [];
  exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),
-  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'OPERATIONAL_BUNDLE_INVALID');
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs']),
+  ...(bundle.report_fin_native_artifacts===undefined?[]:['report_fin_native_artifacts'])],'OPERATIONAL_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
   ||(!bundle.qualifications.length&&!(Array.isArray(bundle.report_fin_qualifications)&&bundle.report_fin_qualifications.length)
    &&!(Array.isArray(bundle.report_fin_native_inputs)&&bundle.report_fin_native_inputs.length))

@@ -68,13 +68,13 @@
       "input": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
       "output": "09_complete_operational_evidence.mjs",
       "input_sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
-      "output_sha256": "e9edeac22a6eaae4fdeeb8bba2985006e783ec5f4ef0b79cb54b0e75552dcb7e",
+      "output_sha256": "bd980105941083067da15044aa8f7c5744cce505e3f41d7730da4e6961542a5f",
       "full_reverse": true,
       "hunks": [
         {
           "id": "CLOSED_OPTIONAL_REPORT_BUNDLE_SECTION",
           "old": " exact(bundle,['schema_version','qualifications'],'OPERATIONAL_BUNDLE_INVALID');",
-          "new": " exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),\n  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'OPERATIONAL_BUNDLE_INVALID');"
+          "new": " exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),\n  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs']),\n  ...(bundle.report_fin_native_artifacts===undefined?[]:['report_fin_native_artifacts'])],'OPERATIONAL_BUNDLE_INVALID');"
         },
         {
           "id": "REPORT_ONLY_BUNDLE_WITHOUT_CAPABILITY_FABRICATION",

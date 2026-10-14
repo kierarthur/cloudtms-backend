@@ -1,6 +1,6 @@
 {
   "schema_version": "REPORT_AB_CONTROLLING_SOURCE_INPUTS_V1",
-  "root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
+  "root_commit": "f7afa8f66133b5b58abadbe1c3654a1e80b475a0",
   "runtime_base": "cea15289e0283e3383e71f0acb8b18ce184647c2",
   "status": "SOURCE_ONLY_NO_NATIVE_ACCEPTANCE",
   "inputs": [

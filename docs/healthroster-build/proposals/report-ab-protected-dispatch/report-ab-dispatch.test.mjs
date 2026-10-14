@@ -5,6 +5,7 @@ import {domainHash} from './weekly-source-protected-release-qualification.mjs';
 import {sourceInventory} from './weekly-source-protected-execution-tree.mjs';
 import childProcess from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
 import {preparePostVerifiedReportRequest,recordPostVerifiedReportEvidence} from './weekly-source-report-fin-ab-evidence.mjs';
+import {unitRawInput} from './unit-raw-collector-fixture.mjs';
 const dir=path.dirname(fileURLToPath(import.meta.url)),read=f=>fs.readFileSync(path.join(dir,f),'utf8'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const hash='a'.repeat(64),id='10000000-0000-4000-8000-000000000001';
 const execution={release_id:'UNIT_ONLY_R1_NOT_NATIVE_EVIDENCE',source_commit:'a'.repeat(40),contract_sha256:hash,installation_id:id,
@@ -203,8 +204,9 @@ test('receipt bundle lookup never silently uses the installed source as receipt 
 // database or network mutation occurs; these bytes are not native evidence.
 async function withUnitCommittedBundle(t,change,run){
  const unitRoot='UNIT_ONLY_ROOT',bundlePath=sourceInventory.receiptBundles.weeklySourceProtectedOperational;
+ const captured=['A','B'].map(variant=>unitRawInput(execution,variant));
  const bundle={schema_version:'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1',qualifications:[],
-  report_fin_native_inputs:fixture().slice(0,2).map(input=>({receipt_id:input.receipt_id,receipt:input.receipt_bytes,receipt_sha256:input.receipt_sha256}))};
+  report_fin_native_inputs:captured.map(row=>row.input),report_fin_native_artifacts:captured.map(row=>row.artifact)};
  change?.(bundle);
  const bundleBytes=Buffer.from(JSON.stringify(bundle));
  const beforeManifest=Buffer.from(JSON.stringify({releaseId:execution.release_id,untouched_native_authority:'UNIT_ONLY'}));
@@ -243,13 +245,14 @@ test('default committed producer derives partial artifacts from exact bound raw 
  await withUnitCommittedBundle(t,null,async root=>{const request=await preparePostVerifiedReportRequest(producerOptions(root));
   assert.equal(request.artifacts.length,2);assert.equal(request.receipt_input_commit,receiptCommit);
   assert.equal(request.expected_execution.source_commit,execution.source_commit);
-  assert.deepEqual(request.artifacts,buildNativeComparisons(execution,fixture().slice(0,2)));
+  assert.deepEqual(request.artifacts,buildNativeComparisons(execution,['A','B'].map(variant=>{const {input}=unitRawInput(execution,variant);
+   return {receipt_id:input.receipt_id,receipt_bytes:input.receipt,receipt_sha256:input.receipt_sha256};})));
   assert.ok(request.receipt_tree_proof.receipt_bindings.some(row=>row.path===sourceInventory.receiptBundles.weeklySourceProtectedOperational));
  });
 });
 test('correct bundle descriptor cannot hide changed raw native bytes or extra caller fields',async t=>{
  for(const change of [bundle=>bundle.report_fin_native_inputs[0].receipt+=' ',bundle=>bundle.report_fin_native_inputs[0].variant='A'])
-  await withUnitCommittedBundle(t,change,root=>assert.rejects(preparePostVerifiedReportRequest(producerOptions(root)),/ARTIFACT_INVALID|INPUT_INVALID/));
+  await withUnitCommittedBundle(t,change,root=>assert.rejects(preparePostVerifiedReportRequest(producerOptions(root)),/ARTIFACT_INVALID|INPUT_INVALID|NOT_REDERIVED/));
 });
 test('owner session commits only after exact returned receipt validation',async t=>{
  await withUnitCommittedBundle(t,null,async root=>{const request=await preparePostVerifiedReportRequest(producerOptions(root)),calls=[];
