@@ -1,0 +1,89 @@
+{
+  "status": "UNMOUNTED_INVOICE_DECISION_TRANSPORT_SOURCE_SUCCESSOR",
+  "source_commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+  "native": false,
+  "public_root_mounted": false,
+  "predecessor_mutated": false,
+  "proofs": [
+    {
+      "source_commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "source_path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "saved": "input/healthroster-checklist-source.mjs",
+      "output": "forward/healthroster-checklist-source.mjs",
+      "before_bytes": 32111,
+      "before_sha256": "01df944f9da2ad8343b003f07957865e8a552dcdaaaf78bdf8da1277c1c3cba9",
+      "after_bytes": 34376,
+      "after_sha256": "9b89ea8ee0e1dd8b9ec738eededb7be339cd297f9acbe839e7ceae8524648596",
+      "hunks": [
+        {
+          "label": "finite native pending-decision authority",
+          "before": "'SOURCE_QUERY_EX_VAT', 'SOURCE_INVOICE_BLOCK', 'NEXT'",
+          "after": "'SOURCE_QUERY_EX_VAT', 'SOURCE_INVOICE_BLOCK', 'SOURCE_INVOICE_DECISION', 'NEXT'"
+        },
+        {
+          "label": "positive pending-decision holds no pay quantity",
+          "before": "  return copy(value);\n}\n\nexport function unavailableChecklistHold()",
+          "after": "  if (value.authority.owner === 'SOURCE_INVOICE_DECISION' && (value.holds_pay !== null || value.holds_pay_scope !== null ||\n      value.withheld_amount_pence !== null || value.holds_invoice !== true || value.pending_decision !== true ||\n      value.authority.withholding_known !== false)) fail('CHECKLIST_SOURCE_INVOICE_DECISION_GRAIN_INVALID');\n  return copy(value);\n}\n\nexport function unavailableChecklistHold()"
+        },
+        {
+          "label": "closed item adds exact optional decision witness",
+          "before": "'queries_parent_witness', 'native_invoice_witness']);",
+          "after": "'queries_parent_witness', 'native_invoice_witness', 'native_invoice_decision_witness']);"
+        },
+        {
+          "label": "bind complete actual decision witness to exact base invoice actor scope and member",
+          "before": "      fail('CHECKLIST_NATIVE_INVOICE_TARGET_INVALID');\n    }\n  } else {\n    uuid(item.counted_timesheet_id);",
+          "after": "      fail('CHECKLIST_NATIVE_INVOICE_TARGET_INVALID');\n    }\n    if (item.native_invoice_decision_witness != null) {\n      const decision=item.native_invoice_decision_witness;\n      closed(decision,['owner','actor_user_id','scope','billing_movement_id','client_manifest_id','upload_row_id',\n        'invoice_block_read_proof_hash','source_row_hash','authority_scope_version','hold_kind','qualification_choice','read_proof_hash']);\n      uuid(decision.actor_user_id);bindScope(decision.scope);\n      for(const key of ['billing_movement_id','client_manifest_id','upload_row_id'])uuid(decision[key]);\n      for(const key of ['invoice_block_read_proof_hash','source_row_hash','read_proof_hash']) {\n        if(typeof decision[key]!=='string'||!HASH.test(decision[key]))fail('CHECKLIST_NATIVE_INVOICE_DECISION_INVALID');\n      }\n      if(decision.owner!=='private.weekly_source_invoice_hold_release_context_core_v1'||\n        !same(decision.actor_user_id,actor.actor_user_id)||!sameScope(decision.scope,item.scope)||\n        !['billing_movement_id','client_manifest_id','upload_row_id'].every(k=>same(decision[k],witness[k]))||\n        decision.invoice_block_read_proof_hash!==witness.read_proof_hash||\n        !Number.isSafeInteger(decision.authority_scope_version)||decision.authority_scope_version<0||\n        decision.hold_kind!=='VAT_FIT'||decision.qualification_choice!=='BILL_AT_NET_PLUS_20'||\n        item.hold?.authority?.owner!=='SOURCE_INVOICE_DECISION'||item.hold.authority.hash!==decision.read_proof_hash) {\n        fail('CHECKLIST_NATIVE_INVOICE_DECISION_INVALID');\n      }\n    }\n  } else {\n    uuid(item.counted_timesheet_id);"
+        },
+        {
+          "label": "decision witness cannot escape invoice item grain",
+          "before": "  if (item.item_kind !== 'NATIVE_INVOICE' && item.native_invoice_witness != null) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');",
+          "after": "  if (item.item_kind !== 'NATIVE_INVOICE' && (item.native_invoice_witness != null || item.native_invoice_decision_witness != null)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');"
+        },
+        {
+          "label": "separate exact base and qualified decision hold bindings",
+          "before": "  if ((hold.authority.owner === 'SOURCE_INVOICE_BLOCK') !== (item.item_kind === 'NATIVE_INVOICE') ||\n      (item.item_kind === 'NATIVE_INVOICE' && hold.authority.hash !== item.native_invoice_witness.read_proof_hash)) {\n    fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');\n  }",
+          "after": "  const invoiceOwner=['SOURCE_INVOICE_BLOCK','SOURCE_INVOICE_DECISION'].includes(hold.authority.owner);\n  if (invoiceOwner !== (item.item_kind === 'NATIVE_INVOICE') ||\n      (hold.authority.owner === 'SOURCE_INVOICE_BLOCK' && hold.authority.hash !== item.native_invoice_witness.read_proof_hash)) {\n    fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');\n  }\n  if (hold.authority.owner === 'SOURCE_INVOICE_DECISION' && item.native_invoice_decision_witness == null) {\n    fail('CHECKLIST_NATIVE_INVOICE_DECISION_INVALID');\n  }"
+        },
+        {
+          "label": "finite invoice decision cannot certify whole main row",
+          "before": "  if (hold.authority.owner === 'SOURCE_INVOICE_BLOCK') fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');",
+          "after": "  if (['SOURCE_INVOICE_BLOCK','SOURCE_INVOICE_DECISION'].includes(hold.authority.owner)) fail('CHECKLIST_SOURCE_INVOICE_BLOCK_GRAIN_INVALID');"
+        }
+      ]
+    },
+    {
+      "source_commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "source_path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
+      "saved": "input/wp_u3_native_checklist.sqlinc",
+      "output": "forward/wp_u3_native_checklist.sqlinc",
+      "before_bytes": 56664,
+      "before_sha256": "ec98215b8442db9c0e79d9ea8f7c6bbb6fdc58b45b863305f31e98cf77ff9927",
+      "after_bytes": 56807,
+      "after_sha256": "699b4dac2f2e30ad77e689e22a34b01ab129f4d74a73ac9cfaf953c09e2de3b2",
+      "hunks": [
+        {
+          "label": "one scope-local invoice decision composition",
+          "before": "invoice_blocks:=private.weekly_source_checklist_source_invoice_block_items_v1(row_scope,actor.id);",
+          "after": "invoice_blocks:=private.weekly_source_checklist_source_invoice_decision_items_v1(row_scope,actor.id);"
+        },
+        {
+          "label": "native qualified decision gets literal pending text without action",
+          "before": "'subtext','Invoice held: source net and gross do not fit 20% VAT.','subtone','muted'),",
+          "after": "'subtext',case when raw#>>'{hold,pending_decision}'='true' then 'Office decision needed: native VAT_FIT release is qualified.'\n              else 'Invoice held: source net and gross do not fit 20% VAT.' end,'subtone','muted'),"
+        }
+      ]
+    },
+    {
+      "source_commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "source_path": "broker/src/weekly-source/checklist-read.mjs",
+      "saved": "input/checklist-read.mjs",
+      "output": "forward/checklist-read.mjs",
+      "before_bytes": 6041,
+      "before_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "after_bytes": 6041,
+      "after_sha256": "54a1f85d6c42e626ca0ad7bfc0bed09fbd12327e12cda104c2ae07dfe8b41b07",
+      "hunks": []
+    }
+  ]
+}

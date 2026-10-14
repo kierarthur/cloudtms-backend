@@ -1,0 +1,63 @@
+create or replace function private.weekly_source_invoice_hold_release_context_core_v1(p_request jsonb,p_native_locks boolean)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $release_context$
+declare actor uuid; row_id uuid; expected_hash bytea; expected_version bigint; kind text; choice text;
+  s public.weekly_source_upload_rows%rowtype; u public.weekly_source_uploads%rowtype; c public.weekly_source_cycles%rowtype;
+  g public.weekly_source_groups%rowtype; scope_row public.weekly_source_report_scopes%rowtype; rules jsonb; v_client_id uuid; existing public.weekly_source_invoice_hold_releases%rowtype;
+  net bigint; vat bigint; gross bigint; h bytea; id uuid;
+begin
+  if p_native_locks is null then raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_NATIVE_MODE_INVALID' using errcode='55000'; end if;
+  perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','upload_row_id','source_cycle_id','report_scope_id','expected_source_row_hash','expected_authority_scope_version','hold_kind','action'],'WEEKLY_SOURCE_INVOICE_HOLD_REQUEST_INVALID');
+  begin actor:=(p_request->>'actor_user_id')::uuid; row_id:=(p_request->>'upload_row_id')::uuid;
+    expected_hash:=private.weekly_source_finalisation_hex32_v1(p_request->>'expected_source_row_hash','WEEKLY_SOURCE_INVOICE_HOLD_HASH_INVALID');
+    expected_version:=(p_request->>'expected_authority_scope_version')::bigint;
+    kind:=p_request->>'hold_kind'; choice:=coalesce(p_request->>'action',case when kind='VAT_FIT' then 'BILL_AT_NET_PLUS_20' else 'BILL_AS_FILE' end);
+  exception when others then raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_REQUEST_INVALID' using errcode='22023'; end;
+  perform private._weekly_source_settings_require_admin_v1(actor);
+  if kind is null or choice is null or kind not in ('VAT_FIT','DUPLICATE_REQUEST_ID') or choice not in ('BILL_AT_NET_PLUS_20','BILL_AS_FILE')
+    or (kind='DUPLICATE_REQUEST_ID' and choice<>'BILL_AS_FILE') then raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_CHOICE_INVALID' using errcode='22023'; end if;
+  select * into strict s from public.weekly_source_upload_rows where weekly_source_upload_rows.id=row_id;
+  select * into strict u from public.weekly_source_uploads where weekly_source_uploads.id=s.upload_id;
+  if p_native_locks then
+  select * into strict g from public.weekly_source_groups where weekly_source_groups.id=(select source_group_id from public.weekly_source_cycles where weekly_source_cycles.id=u.source_cycle_id) for update;
+  else
+  select * into strict g from public.weekly_source_groups where weekly_source_groups.id=(select source_group_id from public.weekly_source_cycles where weekly_source_cycles.id=u.source_cycle_id);
+  end if;
+  if p_native_locks then
+  select * into strict c from public.weekly_source_cycles where weekly_source_cycles.id=u.source_cycle_id for update;
+  else
+  select * into strict c from public.weekly_source_cycles where weekly_source_cycles.id=u.source_cycle_id;
+  end if;
+  if u.report_scope_id is not null then
+    if p_native_locks then
+    select * into strict scope_row from public.weekly_source_report_scopes where weekly_source_report_scopes.id=u.report_scope_id for update;
+    else
+    select * into strict scope_row from public.weekly_source_report_scopes where weekly_source_report_scopes.id=u.report_scope_id;
+    end if;
+    if scope_row.source_cycle_id<>c.id or scope_row.source_group_id<>g.id or scope_row.current_complete_upload_id is distinct from u.id
+      or s.row_finalisation_state<>'SOURCE_REPORT_LINE' then raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_REPORT_SCOPE_INVALID' using errcode='55000'; end if;
+  elsif c.current_complete_upload_id is distinct from u.id and u.state<>'CORRECTION_READY' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_SCOPE_STALE' using errcode='40001'; end if;
+  if u.report_scope_id is distinct from nullif(p_request->>'report_scope_id','')::uuid or c.id is distinct from nullif(p_request->>'source_cycle_id','')::uuid or s.normalised_row_hash is distinct from expected_hash
+    or coalesce(scope_row.version,c.version) is distinct from expected_version or u.state not in ('CURRENT','CORRECTION_READY') or not g.active or g.source_family<>'ROSTER' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_SCOPE_STALE' using errcode='40001'; end if;
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  v_client_id:=coalesce(scope_row.client_id,c.scope_client_id,nullif(u.file_metadata_json->>'client_id','')::uuid);
+  if v_client_id is null or (nullif(u.file_metadata_json->>'client_id','')::uuid is not null and nullif(u.file_metadata_json->>'client_id','')::uuid<>v_client_id) or (c.scope_client_id is not null and nullif(u.file_metadata_json->>'client_id','')::uuid is distinct from c.scope_client_id) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_CLIENT_SCOPE_INVALID' using errcode='55000'; end if;
+  perform private.weekly_source_office_authority_v1(actor,'FINALISE_WEEK',g.id,v_client_id,c.finalisation_week_ending);
+  rules:=private.weekly_source_effective_rule_set_v1(v_client_id,c.id)->'values';
+  if rules is null or rules->>'invoice_sender'<>'CLIENT_SELF_BILL' or rules->>'invoice_amount_basis'<>'SOURCE_AMOUNT'
+    or s.source_money_parse_state<>'VALID' or s.source_shift_charge_pence is null or s.source_gross_pence is null or s.source_vat_pence is null then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_NOT_ELIGIBLE' using errcode='55000'; end if;
+  if kind='VAT_FIT' and (rules->>'source_amount_basis'<>'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+    or abs(5::numeric*s.source_gross_pence-6::numeric*s.source_shift_charge_pence)<=5) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HOLD_NOT_ELIGIBLE' using errcode='55000'; end if;
+  if kind='DUPLICATE_REQUEST_ID' and (u.report_scope_id is null or s.row_finalisation_state<>'SOURCE_REPORT_LINE' or rules->>'self_bill_source' is distinct from 'SEPARATE_FINAL_REPORT' or rules->>'source_amount_basis' is distinct from 'REPORT_LINE_NET') then raise exception 'WEEKLY_SOURCE_INVOICE_DUPLICATE_HOLD_NOT_PROVED' using errcode='55000'; end if;
+  if kind='DUPLICATE_REQUEST_ID' and private.weekly_source_self_bill_report_duplicate_prior_v1(s.id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_INVOICE_DUPLICATE_HOLD_NOT_PROVED' using errcode='55000'; end if;
+  return jsonb_build_object('actor_user_id',actor,'upload_row_id',row_id,'expected_source_row_hash',encode(expected_hash,'hex'),
+    'expected_authority_scope_version',expected_version,'hold_kind',kind,'choice',choice,'row',to_jsonb(s),'upload',to_jsonb(u),
+    'group',to_jsonb(g),'cycle',to_jsonb(c),'report_scope',to_jsonb(scope_row),'rules',rules,'client_id',v_client_id);
+end;
+$release_context$;

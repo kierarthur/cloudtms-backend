@@ -1,0 +1,71 @@
+create or replace function private.weekly_source_rule_qualification_authorization_v1(p_cycle_id uuid,p_actor_id uuid,p_purpose text)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; auth jsonb; n integer; recorded_at timestamptz;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if current_database()<>'cloudtms_test_clone' or r.status<>'VERIFIED' or r.completed_at_utc is null
+    or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or jsonb_typeof(r.evidence_json->'weekly_source_protected_test_setup_authorizations') is distinct from 'array'
+    or p_purpose not in ('SOURCE_FIXTURE_SETUP','AUTOMATIC_JOURNEY') then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
+  select count(*),jsonb_agg(value)->0 into n,auth
+    from jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where value->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1'
+      and value->>'source_cycle_id'=p_cycle_id::text and value->>'journey_actor_user_id'=p_actor_id::text
+      and value->>'purpose'=p_purpose;
+  select coalesce(max((audit.after_json->>'recorded_at_utc')::timestamptz),r.completed_at_utc) into recorded_at
+    from public.audit_events audit where audit.object_type='weekly_source_post_verified_evidence'
+      and audit.object_id_text=r.release_id and audit.action='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'artifact_slot'='weekly_source_protected_test_setup_authorizations'
+      and exists(select 1 from jsonb_array_elements(audit.after_json->'artifacts') item
+        where item->>'authorization_sha256'=auth->>'authorization_sha256');
+  if n<>1 or not private.weekly_source_qualification_closed_object_v1(auth,array['schema_version','authorization_id','scope_id',
+    'release_id','source_commit','contract_sha256','agency_id','source_group_id','source_cycle_id','setup_actor_user_id',
+    'journey_actor_user_id','purpose','week_ending','expires_at_utc','fixture_namespace','fixture_manifest','assignment_id',
+    'assignment_version','assignment_sha256','rule_set_version_id','rule_values_sha256','original_source_cas',
+    'allowed_operations','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256','authorization_sha256'])
+    or auth->>'release_id' is distinct from r.release_id or auth->>'source_commit' is distinct from r.git_commit
+    or auth->>'contract_sha256' is distinct from r.installed_contract_sha256
+    or auth->>'fixture_namespace' is distinct from 'WSQ_TEST_'
+    or auth->>'authorization_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1',auth-'authorization_sha256'),'hex')
+    or exists(select 1 from unnest(array['authorization_id','scope_id','agency_id','source_group_id','source_cycle_id',
+      'setup_actor_user_id','journey_actor_user_id','assignment_id','rule_set_version_id']) key
+      where coalesce(auth->>key,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['contract_sha256','assignment_sha256','rule_values_sha256',
+      'banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256']) key
+      where coalesce(auth->>key,'') !~ '^[0-9a-f]{64}$')
+    or coalesce(auth->>'assignment_version','') !~ '^[1-9][0-9]*$'
+    or coalesce(auth->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or extract(dow from (auth->>'week_ending')::date)<>0
+    or (auth->>'expires_at_utc')::timestamptz<=clock_timestamp()
+    or (auth->>'expires_at_utc')::timestamptz>recorded_at+
+      case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end
+    or private.weekly_source_protected_qualification_release_v1()->>'release_id' is distinct from r.release_id then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
+  -- These actual evidence bindings are measured by the protected writer, never
+  -- a function-presence test or an arbitrary caller hash. No operational PASS.
+  perform private.weekly_source_off_rule_setup_shape_assert_v1(auth);
+  if r.evidence_json#>>'{weekly_source_off_rule_test_controls,banking_install_receipt_sha256}' is distinct from auth->>'banking_install_receipt_sha256'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,security_receipt_sha256}' is distinct from auth->>'security_receipt_sha256'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,source_effects_review_sha256}' is distinct from auth->>'source_effects_review_sha256' then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_CONTROLS_REQUIRED' using errcode='55000'; end if;
+  if not private.weekly_source_qualification_closed_object_v1(r.evidence_json->'weekly_source_off_rule_test_controls',array[
+    'schema_version','release_id','source_commit','contract_sha256','banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256',
+    'banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls'])
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,schema_version}' is distinct from 'WEEKLY_SOURCE_OFF_RULE_TEST_CONTROLS_V1'
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,release_id}' is distinct from r.release_id
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,source_commit}' is distinct from r.git_commit
+    or r.evidence_json#>>'{weekly_source_off_rule_test_controls,contract_sha256}' is distinct from r.installed_contract_sha256
+    or exists(select 1 from unnest(array['banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls']) key
+      where r.evidence_json#>array['weekly_source_off_rule_test_controls',key] is distinct from 'true'::jsonb) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_CONTROLS_REQUIRED' using errcode='55000'; end if;
+  return auth;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000';
+end;
+$function$;

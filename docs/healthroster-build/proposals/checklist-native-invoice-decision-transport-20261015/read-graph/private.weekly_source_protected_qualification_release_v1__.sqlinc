@@ -1,0 +1,27 @@
+create or replace function private.weekly_source_protected_qualification_release_v1()
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; i private.cloudtms_database_identity%rowtype;
+begin
+  select * into strict i from private.cloudtms_database_identity where singleton and environment='TEST';
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if current_database()<>'cloudtms_test_clone' or r.status is distinct from 'VERIFIED'
+    or r.completed_at_utc is null or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,schema_version}'
+      is distinct from 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_CATALOGUE_V1'
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,contract_sha256}' is distinct from r.installed_contract_sha256
+    or r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from encode(
+      private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_QUALIFICATION_INSTALLED_CATALOGUE_V1',
+        private.weekly_source_protected_qualification_current_catalogue_v1()),'hex') then
+    raise exception 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_RELEASE_REQUIRED' using errcode='55000'; end if;
+  return jsonb_build_object('release_id',r.release_id,'source_commit',r.git_commit,
+    'contract_sha256',r.installed_contract_sha256,'installation_id',i.installation_id,
+    'environment',i.environment,'database',current_database(),
+    'managed_manifest_sha256',r.evidence_json#>>'{managed_release,manifest_sha256}',
+    'installed_catalogue_jsonb_sha256',r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}');
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_QUALIFICATION_INSTALLED_RELEASE_REQUIRED' using errcode='55000';
+end;
+$function$;

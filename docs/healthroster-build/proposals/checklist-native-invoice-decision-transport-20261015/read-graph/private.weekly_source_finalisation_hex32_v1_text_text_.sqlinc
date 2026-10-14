@@ -1,0 +1,17 @@
+create or replace function private.weekly_source_finalisation_hex32_v1(
+  p_value text,
+  p_error_code text
+) returns bytea
+language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_value text:=pg_catalog.lower(pg_catalog.btrim(coalesce(p_value,'')));
+begin
+  if v_value!~'^[0-9a-f]{64}$' then
+    raise exception '%',coalesce(nullif(p_error_code,''),'WEEKLY_SOURCE_HASH_INVALID')
+      using errcode='22023';
+  end if;
+  return pg_catalog.decode(v_value,'hex');
+end;
+$function$;

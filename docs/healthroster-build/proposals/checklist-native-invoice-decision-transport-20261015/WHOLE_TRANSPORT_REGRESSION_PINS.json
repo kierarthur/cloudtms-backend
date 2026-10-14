@@ -1,0 +1,34 @@
+{
+  "source_only": true,
+  "native": false,
+  "pins": [
+    {
+      "commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "file": "tests/healthroster-checklist-source.test.mjs",
+      "original_sha256": "b93a73a6e76e3aeda2f53dc82f42e53e0d9e22068fcbb3e300cf691129898e74",
+      "adapted_sha256": "b1ba4a6f690e653d035a56dee11da164749838f6929d0fe983ac32415a4040f5",
+      "changes": "Only relative imports/import.meta resolved to actual pinned predecessor location and whole successor DTO/transport. All test bodies/assertions unchanged."
+    },
+    {
+      "commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "original_sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "adapted_sha256": "a800712ef1e11b93b7051918fbcc01f3c33c9508e2c7ea6d901f168291169fe5",
+      "changes": "Only relative imports/import.meta resolved to actual pinned predecessor location and whole successor DTO/transport. All test bodies/assertions unchanged."
+    },
+    {
+      "commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "file": "tests/healthroster-checklist-source-query-money.test.mjs",
+      "original_sha256": "0e2d0ffd65297edf3eb4d0a01aed269554d6345f17a36744668f8a08cab87e67",
+      "adapted_sha256": "e51c4cf323dcdaa52a7595273c234a098331f319b2f9293e516e8c22f4ddcf0c",
+      "changes": "Only relative imports/import.meta resolved to actual pinned predecessor location and whole successor DTO/transport. All test bodies/assertions unchanged."
+    },
+    {
+      "commit": "aea33728bb76c4d2c57a9e82abffa570e743a0f0",
+      "file": "tests/healthroster-checklist-source-invoice-block.test.mjs",
+      "original_sha256": "ff2945dbc3f1f21c41b015f90279d82ced8c5f252ccf6d23dca70b5e56ae891b",
+      "adapted_sha256": "337dbab1b9cfad0cb9c88d18c468685999eb3538e88d9fd8fffd4f2ae0cb33d6",
+      "changes": "Only relative imports/import.meta resolved to actual pinned predecessor location and whole successor DTO/transport. All test bodies/assertions unchanged."
+    }
+  ]
+}
