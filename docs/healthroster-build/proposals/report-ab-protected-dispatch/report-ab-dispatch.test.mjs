@@ -3,6 +3,8 @@ import {caseIds,assertionsForCase,buildNativeComparisons,assertNativeComparisons
  assertPostVerifiedReportReceipt,postVerifiedReceiptKeys,loadReportFinInputs} from './weekly-source-report-fin-ab-evidence.mjs';
 import {domainHash} from './weekly-source-protected-release-qualification.mjs';
 import {sourceInventory} from './weekly-source-protected-execution-tree.mjs';
+import childProcess from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+import {preparePostVerifiedReportRequest,recordPostVerifiedReportEvidence} from './weekly-source-report-fin-ab-evidence.mjs';
 const dir=path.dirname(fileURLToPath(import.meta.url)),read=f=>fs.readFileSync(path.join(dir,f),'utf8'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const hash='a'.repeat(64),id='10000000-0000-4000-8000-000000000001';
 const execution={release_id:'UNIT_ONLY_R1_NOT_NATIVE_EVIDENCE',source_commit:'a'.repeat(40),contract_sha256:hash,installation_id:id,
@@ -196,4 +198,89 @@ test('receipt bundle lookup never silently uses the installed source as receipt 
  const source=read('weekly-source-report-fin-ab-evidence.mjs');
  assert.match(source,/loadCommittedBundle\(root,release,\{\.\.\.context,gitCommit:context\.receiptInputCommit\}/);
  assert.match(source,/'rev-parse',context\.receiptInputCommit\+':'\+file/);
+});
+// Built-in I/O is intercepted only for UNIT_ONLY_ROOT. No Git, filesystem,
+// database or network mutation occurs; these bytes are not native evidence.
+async function withUnitCommittedBundle(t,change,run){
+ const unitRoot='UNIT_ONLY_ROOT',bundlePath=sourceInventory.receiptBundles.weeklySourceProtectedOperational;
+ const bundle={schema_version:'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1',qualifications:[],
+  report_fin_native_inputs:fixture().slice(0,2).map(input=>({receipt_id:input.receipt_id,receipt:input.receipt_bytes,receipt_sha256:input.receipt_sha256}))};
+ change?.(bundle);
+ const bundleBytes=Buffer.from(JSON.stringify(bundle));
+ const beforeManifest=Buffer.from(JSON.stringify({releaseId:execution.release_id,untouched_native_authority:'UNIT_ONLY'}));
+ const afterManifest=Buffer.from(JSON.stringify({releaseId:execution.release_id,untouched_native_authority:'UNIT_ONLY',
+  weeklySourceProtectedOperational:{path:bundlePath,sha256:sha(bundleBytes)}}));
+ const blobs=new Map(),object=bytes=>{const oid=crypto.createHash('sha1').update(bytes).digest('hex');blobs.set(oid,bytes);return oid;};
+ const native=sourceInventory.required.map(file=>({path:file,mode:'100644',type:'blob',
+  blob:object(file===sourceInventory.manifest?beforeManifest:Buffer.from('UNIT_ONLY_NATIVE '+file))}));
+ const after=native.map(row=>row.path===sourceInventory.manifest?{...row,blob:object(afterManifest)}:row);
+ after.push({path:bundlePath,mode:'100644',type:'blob',blob:object(bundleBytes)});
+ const tree=rows=>Buffer.from(rows.map(row=>row.mode+' '+row.type+' '+row.blob+'\t'+row.path+'\0').join(''));
+ const originalRead=fs.readFileSync,originalGit=childProcess.execFileSync;
+ const fsMock=t.mock.method(fs,'readFileSync',(file,...args)=>{
+  const prefix=unitRoot+path.sep;if(typeof file==='string'&&file.startsWith(prefix)){
+   const relative=file.slice(prefix.length).replaceAll(path.sep,'/');const bytes=relative===sourceInventory.manifest?afterManifest:relative===bundlePath?bundleBytes:null;
+   if(!bytes)throw Error('UNIT_ONLY_UNEXPECTED_DISK_READ '+relative);return args[0]==='utf8'?bytes.toString('utf8'):bytes;}
+  return originalRead(file,...args);
+ });
+ const gitMock=t.mock.method(childProcess,'execFileSync',(command,args,options)=>{
+  if(command!=='git'||options?.cwd!==unitRoot)return originalGit(command,args,options);
+  const query=args.slice(4);
+  if(query[0]==='ls-tree')return tree(query.at(-1)===execution.source_commit?native:after);
+  if(query[0]==='cat-file')return Buffer.concat(options.input.trim().split('\n').map(oid=>{
+   const bytes=blobs.get(oid);assert.ok(bytes);return Buffer.concat([Buffer.from(oid+' blob '+bytes.length+'\n'),bytes,Buffer.from('\n')]);}));
+  if(query[0]==='show'||query[0]==='rev-parse'){
+   const [revision,...parts]=query[1].split(':'),file=parts.join(':'),row=(revision===execution.source_commit?native:after).find(row=>row.path===file);
+   assert.ok(row);return query[0]==='show'?blobs.get(row.blob):row.blob+'\n';}
+  throw Error('UNIT_ONLY_UNEXPECTED_GIT_CALL '+query.join(' '));
+ });syncBuiltinESMExports();
+ try{return await run(unitRoot);}finally{gitMock.mock.restore();fsMock.mock.restore();syncBuiltinESMExports();}
+}
+const producerOptions=root=>({root,expectedExecution:execution,actorUserId:id,expectedEvidenceSha256:hash,receiptInputCommit:receiptCommit,
+ artifactSlot:'weekly_source_report_fin_native_comparisons',reason:recordRequest().reason,turnBackendPid:123,
+ execute:async()=>{throw Error('UNIT_ONLY_NATIVE_PREPARATION_MUST_NOT_QUERY_DB');},literal:value=>"'"+value.replaceAll("'","''")+"'"});
+test('default committed producer derives partial artifacts from exact bound raw bytes without SQL',async t=>{
+ await withUnitCommittedBundle(t,null,async root=>{const request=await preparePostVerifiedReportRequest(producerOptions(root));
+  assert.equal(request.artifacts.length,2);assert.equal(request.receipt_input_commit,receiptCommit);
+  assert.equal(request.expected_execution.source_commit,execution.source_commit);
+  assert.deepEqual(request.artifacts,buildNativeComparisons(execution,fixture().slice(0,2)));
+  assert.ok(request.receipt_tree_proof.receipt_bindings.some(row=>row.path===sourceInventory.receiptBundles.weeklySourceProtectedOperational));
+ });
+});
+test('correct bundle descriptor cannot hide changed raw native bytes or extra caller fields',async t=>{
+ for(const change of [bundle=>bundle.report_fin_native_inputs[0].receipt+=' ',bundle=>bundle.report_fin_native_inputs[0].variant='A'])
+  await withUnitCommittedBundle(t,change,root=>assert.rejects(preparePostVerifiedReportRequest(producerOptions(root)),/ARTIFACT_INVALID|INPUT_INVALID/));
+});
+test('owner session commits only after exact returned receipt validation',async t=>{
+ await withUnitCommittedBundle(t,null,async root=>{const request=await preparePostVerifiedReportRequest(producerOptions(root)),calls=[];
+  const session={execute:async sql=>{calls.push(sql);
+   if(sql.startsWith('select pg_try_advisory_lock'))return 't';
+   if(sql.startsWith('select jsonb_build_object'))return JSON.stringify({execution,evidence_sha256:hash});
+   if(sql.startsWith('select private.weekly_source_post_verified_evidence_record_v1'))return JSON.stringify(unitRecorderReceipt(request));
+   return '';
+  }};
+  await recordPostVerifiedReportEvidence({session,root,actorUserId:id,receiptInputCommit:receiptCommit,
+   artifactSlot:request.artifact_slot,reason:request.reason,turnBackendPid:123});
+  assert.equal(calls.filter(sql=>sql==='commit;').length,1);assert.ok(calls.indexOf('commit;')>calls.findIndex(sql=>sql.includes('evidence_record_v1')));
+  assert.ok(calls.at(-1).startsWith('select pg_advisory_unlock'));assert.ok(!calls.includes('rollback;'));
+ });
+});
+test('owner session rolls back malformed returns and partially begun authority failures',async t=>{
+ for(const kind of ['RETURN_FAILURE','BEGIN_AUTHORITY_FAILURE'])await withUnitCommittedBundle(t,null,async root=>{
+  const calls=[],failure=Error('UNIT_ONLY_NATIVE_AUTHORITY_FAILURE');const session={execute:async sql=>{calls.push(sql);
+   if(sql.startsWith('select pg_try_advisory_lock'))return 't';
+   if(sql.startsWith('begin;')&&kind==='BEGIN_AUTHORITY_FAILURE')throw failure;
+   if(sql.startsWith('select jsonb_build_object'))return JSON.stringify({execution,evidence_sha256:hash});
+   if(sql.startsWith('select private.weekly_source_post_verified_evidence_record_v1'))return JSON.stringify({ok:false});return '';
+  }};
+  await assert.rejects(recordPostVerifiedReportEvidence({session,root,actorUserId:id,receiptInputCommit:receiptCommit,
+   artifactSlot:'weekly_source_report_fin_native_comparisons',reason:recordRequest().reason,turnBackendPid:123}),/AUTHORITY_FAILURE|RECEIPT_INVALID/);
+  assert.ok(calls.includes('rollback;'));assert.ok(!calls.includes('commit;'));assert.ok(calls.at(-1).startsWith('select pg_advisory_unlock'));
+ });
+});
+test('busy writer admission never begins, reads artifacts, rolls back, or unlocks an unowned mutex',async()=>{
+ const calls=[];await assert.rejects(recordPostVerifiedReportEvidence({session:{execute:async sql=>{calls.push(sql);return 'f';}},
+  root:'UNIT_ONLY_UNUSED',actorUserId:id,receiptInputCommit:receiptCommit,artifactSlot:'weekly_source_report_fin_native_comparisons',
+  reason:recordRequest().reason,turnBackendPid:123}),/MANAGED_WRITER_BUSY/);
+ assert.equal(calls.length,1);
 });

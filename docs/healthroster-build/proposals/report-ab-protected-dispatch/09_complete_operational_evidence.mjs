@@ -100,9 +100,11 @@ export function activationReceiptReady(value,assignment){
 }
 export function loadOperationalJourneys(root,release,context){
  const bundle=loadCommittedBundle(root,release,context,'weeklySourceProtectedOperational');if(bundle===null)return [];
- exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications'])],'OPERATIONAL_BUNDLE_INVALID');
+ exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'OPERATIONAL_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
-  ||(!bundle.qualifications.length&&(bundle.report_fin_qualifications===undefined||!Array.isArray(bundle.report_fin_qualifications)||!bundle.report_fin_qualifications.length))
+  ||(!bundle.qualifications.length&&!(Array.isArray(bundle.report_fin_qualifications)&&bundle.report_fin_qualifications.length)
+   &&!(Array.isArray(bundle.report_fin_native_inputs)&&bundle.report_fin_native_inputs.length))
   ||bundle.qualifications.length>100)fail('OPERATIONAL_BUNDLE_INVALID');
  return bundle.qualifications.map(row=>{
   exact(row,['native_context','native_gate_inputs','remote_gate_inputs','setup_closure'],'OPERATIONAL_BUNDLE_SCOPE_INVALID');

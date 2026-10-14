@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {exact,domainHash,sha256} from './weekly-source-protected-release-qualification.mjs';
-import {proveCommittedSources,assertExecutionTreeProof,loadCommittedBundle} from './weekly-source-protected-execution-tree.mjs';
+import {proveCommittedSources,assertExecutionTreeProof,loadCommittedBundle,sourceInventory} from './weekly-source-protected-execution-tree.mjs';
 
 const fail=code=>{throw Error(code);},hex=/^[0-9a-f]{64}$/,commit=/^[0-9a-f]{40}$/,
  uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -133,7 +133,8 @@ export function loadReportFinInputs(root,release,context){
  // separate receipt-data commit, never silently relabels installed execution.
  const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');
  if(bundle===null||bundle.report_fin_qualifications===undefined)return [];
- exact(bundle,['schema_version','qualifications','report_fin_qualifications'],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
+ exact(bundle,['schema_version','qualifications','report_fin_qualifications',
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
   ||!Array.isArray(bundle.report_fin_qualifications)||!bundle.report_fin_qualifications.length||bundle.report_fin_qualifications.length>100)
   fail('REPORT_AB_COMMITTED_BUNDLE_INVALID');
@@ -199,6 +200,62 @@ export async function prepareReportFinQualifications({root,context,verified,inpu
   &&domainHash('REPORT_AB_QUALIFICATION_REPLAY',prior)!==domainHash('REPORT_AB_QUALIFICATION_REPLAY',q)))))fail('REPORT_AB_EVIDENCE_REPLACEMENT_REFUSED');
  return rows;
 }
+function committedReportJson(root,revision,file){
+ if(!commit.test(revision)||(!Object.values(sourceInventory.receiptBundles).includes(file)&&file!==sourceInventory.manifest))
+  fail('REPORT_AB_COMMITTED_PATH_INVALID');
+ const bytes=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','show',revision+':'+file],
+  {cwd:root,encoding:null,maxBuffer:32*1024*1024});
+ if(!bytes.equals(fs.readFileSync(path.join(root,file))))fail('REPORT_AB_COMMITTED_BYTES_CHANGED');
+ let decoded;try{decoded=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{fail('REPORT_AB_COMMITTED_UTF8_INVALID');}
+ if(!Buffer.from(decoded).equals(bytes))fail('REPORT_AB_COMMITTED_UTF8_INVALID');
+ return {bytes,value:JSON.parse(decoded)};
+}
+// Real default producer: re-read only the original bound receipt bundle/Git
+// objects. No arbitrary prebuilt artifact array, file selector or code install.
+export async function preparePostVerifiedReportRequest({root,expectedExecution,actorUserId,expectedEvidenceSha256,receiptInputCommit,
+ artifactSlot,reason,turnBackendPid,execute,literal}){
+ execution(expectedExecution);
+ if(!uuid.test(actorUserId)||!hex.test(expectedEvidenceSha256)||!commit.test(receiptInputCommit)
+  ||!['weekly_source_report_fin_native_comparisons','weekly_source_report_fin_qualifications'].includes(artifactSlot)
+  ||typeof reason!=='string'||reason.trim()!==reason||reason.length<1||reason.length>1000
+  ||!Number.isSafeInteger(turnBackendPid)||turnBackendPid<1||typeof execute!=='function'||typeof literal!=='function')
+  fail('REPORT_AB_POST_VERIFIED_INPUT_INVALID');
+ const proof=proveCommittedSources(root,expectedExecution.source_commit,receiptInputCommit);
+ const {value:manifest}=committedReportJson(root,receiptInputCommit,sourceInventory.manifest);
+ if(manifest.releaseId!==expectedExecution.release_id)fail('REPORT_AB_COMMITTED_RELEASE_RELABELLED');
+ const descriptor=manifest.weeklySourceProtectedOperational,file=sourceInventory.receiptBundles.weeklySourceProtectedOperational;
+ exact(descriptor,['path','sha256'],'REPORT_AB_COMMITTED_DESCRIPTOR_INVALID');
+ if(descriptor.path!==file||!hex.test(descriptor.sha256))fail('REPORT_AB_COMMITTED_DESCRIPTOR_INVALID');
+ const {bytes,value:bundle}=committedReportJson(root,receiptInputCommit,file);
+ exact(bundle,['schema_version','qualifications',...(bundle.report_fin_qualifications===undefined?[]:['report_fin_qualifications']),
+  ...(bundle.report_fin_native_inputs===undefined?[]:['report_fin_native_inputs'])],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
+ if(sha256(bytes)!==descriptor.sha256||bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'
+  ||!Array.isArray(bundle.qualifications)||bundle.qualifications.length>100)fail('REPORT_AB_COMMITTED_BUNDLE_INVALID');
+ const context={environment:'TEST',expectedDatabase:expectedExecution.database,mode:'UPGRADE',releaseId:expectedExecution.release_id,
+  gitCommit:expectedExecution.source_commit,receiptInputCommit,expectedHash:expectedExecution.contract_sha256,
+  manifestHash:expectedExecution.managed_manifest_sha256};
+ let artifacts;
+ if(artifactSlot==='weekly_source_report_fin_native_comparisons'){
+  if(!Array.isArray(bundle.report_fin_native_inputs)||!bundle.report_fin_native_inputs.length||bundle.report_fin_native_inputs.length>14)
+   fail('REPORT_AB_COMMITTED_NATIVE_INPUT_REQUIRED');
+  artifacts=buildNativeComparisons(expectedExecution,bundle.report_fin_native_inputs.map(input=>{
+   exact(input,['receipt_id','receipt','receipt_sha256'],'REPORT_AB_COMMITTED_NATIVE_INPUT_INVALID');
+   if(typeof input.receipt!=='string')fail('REPORT_AB_COMMITTED_NATIVE_INPUT_INVALID');
+   return {receipt_id:input.receipt_id,receipt_bytes:Buffer.from(input.receipt,'utf8'),receipt_sha256:input.receipt_sha256};
+  }));
+ }else{
+  const inputs=loadReportFinInputs(root,manifest,context);
+  if(!inputs.length)fail('REPORT_AB_COMMITTED_DECISION_REQUIRED');
+  // These two fields come from the actual native execution reader's current
+  // catalogue binding, not an invented successful verifier/financial receipt.
+  const verified={evidence:{weekly_source_protected_qualification_catalogue:{contract_sha256:expectedExecution.contract_sha256,
+   jsonb_sha256:expectedExecution.installed_catalogue_jsonb_sha256}}};
+  artifacts=await prepareReportFinQualifications({root,context,verified,inputs,execute,literal});
+ }
+ return {schema_version:'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORD_V1',expected_execution:expectedExecution,
+  expected_evidence_sha256:expectedEvidenceSha256,receipt_input_commit:receiptInputCommit,receipt_tree_proof:proof,
+  artifact_slot:artifactSlot,artifacts,reason,turn_backend_pid:turnBackendPid};
+}
 // Root-only source interface to Money's actual owner-session recorder. It
 // neither installs/resumes a release nor writes the release ledger directly.
 // Exact recorder/receipt ABI remains provisional until Money's full freeze.
@@ -260,4 +317,32 @@ export async function recordPostVerifiedReportArtifacts({actorUserId,expectedExe
   sqlJson(request,literal)+')::text;');
  let result;try{result=JSON.parse(returned);}catch{fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');}
  return assertPostVerifiedReportReceipt(result,request,actorUserId);
+}
+const ownerLiteral=value=>"'"+String(value).replaceAll("'","''")+"'";
+// Root supplies one fresh owned session and the separate actual SEND7 lock PID.
+// This module creates no connection and performs no effect when imported.
+export async function recordPostVerifiedReportEvidence({session,root,actorUserId,receiptInputCommit,artifactSlot,reason,turnBackendPid}){
+ if(!session||typeof session.execute!=='function')fail('REPORT_AB_OWNER_SESSION_REQUIRED');
+ let held=false,begun=false,committed=false;
+ try{
+  const acquired=await session.execute("select pg_try_advisory_lock(hashtextextended('cloudtms_database_release_admission_v1',0));");
+  if(acquired.trim()!=='t')fail('REPORT_AB_MANAGED_WRITER_BUSY');held=true;
+  begun=true;await session.execute("begin; set local lock_timeout='5s'; set local statement_timeout='120s'; select private.weekly_source_protected_qualification_owner_v1();");
+  const state=JSON.parse(await session.execute("select jsonb_build_object('execution',private.weekly_source_protected_qualification_release_v1(),"
+   +"'evidence_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_RELEASE_EVIDENCE_V1',r.evidence_json),'hex'))::text "
+   +"from private.cloudtms_database_releases r order by started_at_utc desc,release_id desc limit 1;"));
+  exact(state,['execution','evidence_sha256'],'REPORT_AB_OWNER_STATE_INVALID');
+  const request=await preparePostVerifiedReportRequest({root,expectedExecution:state.execution,actorUserId,
+   expectedEvidenceSha256:state.evidence_sha256,receiptInputCommit,artifactSlot,reason,turnBackendPid,
+   execute:sql=>session.execute(sql),literal:ownerLiteral});
+  const receipt=await recordPostVerifiedReportArtifacts({actorUserId,expectedExecution:state.execution,
+   expectedEvidenceSha256:state.evidence_sha256,receiptInputCommit,receiptTreeProof:request.receipt_tree_proof,
+   artifactSlot,artifacts:request.artifacts,reason,turnBackendPid,execute:sql=>session.execute(sql),literal:ownerLiteral});
+  await session.execute('commit;');committed=true;return receipt;
+ }finally{
+  if(begun&&!committed)try{await session.execute('rollback;');}catch{}
+  // An uncertain commit/connection remains root-owned; never open an unguarded
+  // replacement writer or claim fresh rollback/financial acceptance here.
+  if(held)try{await session.execute("select pg_advisory_unlock(hashtextextended('cloudtms_database_release_admission_v1',0));");}catch{}
+ }
 }
