@@ -233,3 +233,73 @@ test('D10 Queries target requires exact returned parent and fresh actor/import/C
     const bad=copy(i);mutate(bad);assert.throws(()=>projectChecklistItem(bad,actor));
   }
 });
+
+test('new Source and D10 witness hashes reject coerced arrays through the actual full closed read decoder',()=>{
+  const source=nativeItem('incident'),actual=nativeItem('missing');delete actual.native_source_witness;
+  Object.assign(actual,{item_kind:'ACTUAL_TIMESHEET',item_id:`timesheet:${id(30)}`,counted_timesheet_id:id(30),route:'SIGNED_TIMESHEETS',
+    queries_parent_witness:{item_id:`timesheet:${id(30)}`,parent_group_key:`d10g_${H}`,owner:'private.weekly_source_check_only_query_groups_v1',
+      actor_user_id:actor.actor_user_id,permission_view:'ADMIN',import_id:id(31),preview_generation:2,state_version:4,preview_fingerprint:H,proof_hash:H}});
+  actual.action.target.row_key=actual.queries_parent_witness.parent_group_key;
+  const request={command:'CHECKLIST_ISSUES',...scope,sort:'worker',direction:'ASC',limit:50};
+  const page=item=>({ok:true,contract:'WEEKLY_SOURCE_CHECKLIST_V1',command:request.command,actor_user_id:actor.actor_user_id,permission_view:'ADMIN',
+    binding:H,read_revision:H,rows:[],items:[item],has_more:false,next_cursor:null,refresh_required:false,anchor:null});
+  for(const [item,witness,key] of [[source,'native_source_witness','evidence_fingerprint'],[actual,'queries_parent_witness','preview_fingerprint'],
+    [actual,'queries_parent_witness','proof_hash']]){
+    assert.equal(decodeChecklistRead(page(item),request,{id:actor.actor_user_id,payView:false}).items.length,1);
+    for(const invalid of [[H],[],[H,H],null,123,{value:H}]){
+      const bad=copy(item);bad[witness][key]=invalid;
+      assert.throws(()=>projectChecklistItem(bad,actor));
+      assert.throws(()=>decodeChecklistRead(page(bad),request,{id:actor.actor_user_id,payView:false}),
+        error=>error.code==='WEEKLY_SOURCE_CHECKLIST_RESPONSE_INVALID');
+    }
+  }
+  const badParent=copy(actual);badParent.queries_parent_witness.parent_group_key=[`d10g_${H}`];
+  assert.throws(()=>decodeChecklistRead(page(badParent),request,{id:actor.actor_user_id,payView:false}));
+});
+
+test('retention reads the one raw open fact before old-week admission, using real native email and unfinished Daily evidence',()=>{
+  const leaf=read('wp_u3_client_week_context.sqlinc'),raw=read('wp_u3_check_only_query_rows.sqlinc'),producer=read('wp_u3_native_checklist.sqlinc');
+  const native=fs.readFileSync(new URL('../supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql',import.meta.url),'utf8');
+  for(const kind of ['EMAIL_ISSUE','EMAIL_REMINDER']){
+    assert.ok(native.includes(`'${kind}'`));assert.ok(raw.includes(`'${kind}'`));
+  }
+  assert.doesNotMatch(leaf,/EMAIL_WEEKLY_ISSUES|EMAIL_DAILY_ISSUES|EMAIL_MISSING_FROM_IMPORT|from public\.import_review_decisions/);
+  const fact=raw.slice(raw.indexOf("'open_read_item',x.request_id"),raw.indexOf("'engineering_gate',",raw.indexOf("'open_read_item',x.request_id")));
+  for(const pin of ['x.request_id is not null','SUBMITTED_PENDING_NATIVE_MATERIALISATION','x.authorised_at_server is null',
+    'review.unfinished_daily_review',"jsonb_array_length(coalesce(issues.value,'[]'::jsonb))>0",'VALIDATION_OK','READY_FOR_HR'])assert.ok(fact.includes(pin),pin);
+  assert.ok(raw.includes("'counts_for_row_admission',false,'open_read_item',false"));
+  assert.ok(leaf.indexOf('v_page:=private.weekly_source_check_only_query_rows_v1(')<leaf.indexOf("if v_route='SIGNED_TIMESHEETS' and (v_count=0"));
+  assert.match(leaf,/r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'\{submission_witness,actual_submitted\}'='true'::jsonb/);
+  assert.match(leaf,/v_scope_count>0 and v_scope_open>0 and v_read_scope\.week_ending_date<v_latest_week/);
+  assert.match(leaf,/preferred\.scope_client_id=v_client/);assert.match(leaf,/v_revision is distinct from v_page->>'read_revision'/);
+  assert.doesNotMatch(leaf,/generate_series|interval '\d+ (?:day|week|month)|insert into/i);
+  assert.ok(producer.includes("d10_groups->>'source_read_revision' is distinct from leaf->>'native_query_read_revision'"));
+  assert.ok(producer.includes("if raw->'open_read_item'='false'::jsonb then continue; end if;"));
+  // These are native raw-frame boundary vectors, not SQL execution or a new
+  // discrepancy classifier. Open truth is supplied by the existing raw owner.
+  const actualRow=(open,extra={})=>({item_kind:'ACTUAL_TIMESHEET',submission_witness:{actual_submitted:true},open_read_item:open,...extra});
+  const information={item_kind:'SOURCE_INFORMATION',counts_for_row_admission:false,open_read_item:false};
+  const retention=(rows,latest)=>{
+    const counted=rows.filter(row=>row.item_kind==='ACTUAL_TIMESHEET'&&row.submission_witness.actual_submitted===true);
+    const open=counted.filter(row=>row.open_read_item===true).length;
+    return {admitted:counted.length>0&&(latest||open>0),completed:open===0,actual:counted.length,open};
+  };
+  for(const kind of ['EMAIL_ISSUE','EMAIL_REMINDER'])assert.deepEqual(retention([actualRow(true,{native_issues:[{action_kind:kind}]})],false),{admitted:true,completed:false,actual:1,open:1});
+  assert.equal(retention([actualRow(true,{unfinished_daily_review:true})],false).admitted,true);
+  assert.equal(retention([actualRow(true,{correction_owns_read_item:true})],false).admitted,true);
+  assert.equal(retention([actualRow(true,{submission_read_context:{route_state:'SUBMITTED_PENDING_NATIVE_MATERIALISATION'}})],false).admitted,true);
+  assert.deepEqual(retention([actualRow(false),information],false),{admitted:false,completed:true,actual:1,open:0});
+  assert.equal(retention([actualRow(false),information],true).admitted,true);
+  assert.equal(retention([information],true).admitted,false);
+  assert.equal(retention([{...actualRow(true),submission_witness:{actual_submitted:false}}],false).admitted,false);
+});
+
+test('retention native acceptance vectors require real old-week query/preview fixtures, with no absent-case or source-only qualification',()=>{
+  const verifier=fs.readFileSync(new URL('../supabase/verification/support/wp_u3_retention_vectors.sqlinc',import.meta.url),'utf8');
+  assert.equal(scanManagedSql(exactAtomicBody(verifier)).statements.length,1);
+  for(const kind of ['OLDER_EMAIL_ISSUE','OLDER_EMAIL_REMINDER','OLDER_DAILY_PREVIEW','OLDER_PENDING_DAILY','OLDER_CORRECTION',
+    'OLDER_CLOSED','OLDER_CLOSED_R254','LATEST_CLOSED','NO_ACTUAL_TIMESHEET'])assert.ok(verifier.includes(kind),kind);
+  for(const owner of ['private.weekly_source_check_only_query_rows_v1','private.weekly_source_healthroster_checklist_leaf_v1',
+    'public.weekly_source_checklist_v1'])assert.ok(verifier.includes(owner),owner);
+  assert.match(verifier,/RETENTION_NATIVE_FIXTURES_REQUIRED/);assert.match(verifier,/RETENTION_NATIVE_FIXTURE_CASE_REQUIRED/);
+});

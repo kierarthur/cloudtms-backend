@@ -130,7 +130,7 @@ export function projectChecklistItem(item, actor) {
     closed(witness, ['owner', 'projection_publication_id', 'work_event_id', 'upload_row_id', 'row_resolution_id',
       'incident_id', 'comparison_revision_id', 'manual_review_id', 'native_row_key', 'parent_group_key', 'evidence_fingerprint']);
     if (witness.owner !== 'private.weekly_source_office_query_groups_v1' ||
-        !HASH.test(witness.evidence_fingerprint ?? '') || !['SELF_BILL', 'AGENCY_INVOICE', 'NATIVE'].includes(item.route) ||
+        typeof witness.evidence_fingerprint !== 'string' || !HASH.test(witness.evidence_fingerprint) || !['SELF_BILL', 'AGENCY_INVOICE', 'NATIVE'].includes(item.route) ||
         item.counted_timesheet_id !== null || item.correction_binding !== null || item.submission_read != null ||
         item.source_information_witness != null || item.action === undefined || item.action?.kind === 'TIMESHEET') fail('CHECKLIST_NATIVE_SOURCE_TARGET_INVALID');
     uuid(witness.projection_publication_id); uuid(witness.work_event_id);
@@ -160,8 +160,9 @@ export function projectChecklistItem(item, actor) {
       'preview_generation','state_version','preview_fingerprint','proof_hash']);
     uuid(parent.actor_user_id);uuid(parent.import_id);
     if(parent.owner!=='private.weekly_source_check_only_query_groups_v1'||parent.item_id!==item.item_id||
-      !/^d10g_[0-9a-f]{64}$/.test(parent.parent_group_key??'')||!same(parent.actor_user_id,actor.actor_user_id)||
-      parent.permission_view!==actor.permission_view||!HASH.test(parent.preview_fingerprint??'')||!HASH.test(parent.proof_hash??'')||
+      typeof parent.parent_group_key!=='string'||!/^d10g_[0-9a-f]{64}$/.test(parent.parent_group_key)||!same(parent.actor_user_id,actor.actor_user_id)||
+      parent.permission_view!==actor.permission_view||typeof parent.preview_fingerprint!=='string'||!HASH.test(parent.preview_fingerprint)||
+      typeof parent.proof_hash!=='string'||!HASH.test(parent.proof_hash)||
       !Number.isSafeInteger(parent.preview_generation)||parent.preview_generation<0||!Number.isSafeInteger(parent.state_version)||parent.state_version<0||
       item.item_kind==='NATIVE_SOURCE'||item.action?.kind!=='QUERIES'||item.action.target?.row_key!==parent.parent_group_key) {
       fail('CHECKLIST_CHECK_ONLY_QUERY_PARENT_INVALID');

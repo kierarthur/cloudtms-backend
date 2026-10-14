@@ -141,6 +141,9 @@ begin
       d10_groups:=private.weekly_source_check_only_query_groups_v1(scope.cycle_id,scope.client_id,
         jsonb_build_object('actor_user_id',actor.id,'source_group_id',scope.group_id,'week_ending',own_week));
       query_targets:=d10_groups->'item_targets';
+      if route='SIGNED_TIMESHEETS' and d10_groups->>'source_read_revision' is distinct from leaf->>'native_query_read_revision' then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+      end if;
       fingerprints:=fingerprints||jsonb_build_array(jsonb_build_object('row_id',row_id,'native_d10_groups',d10_groups));
     end if;
     if route='SIGNED_TIMESHEETS' then
@@ -174,6 +177,9 @@ begin
           end if;
         else
           witness:=raw->'submission_witness';
+          if jsonb_typeof(raw->'open_read_item') is distinct from 'boolean' then
+            raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000';
+          end if;
           hold_facts:=private.weekly_source_checklist_timesheet_hold_facts_v1((raw->>'timesheet_id')::uuid,row_scope,actor.id);
           item_hold:=hold_facts->'hold'; financial_facts:=financial_facts||jsonb_build_array(hold_facts->'native_facts');
           if raw#>>'{validation,last_source}' is not null and exists(select 1 from public.hr_imports hi
@@ -182,6 +188,7 @@ begin
               and hi.source_system::text in('HEALTHROSTER','HEALTHROSTER_DAILY')) then
             checked_count:=checked_count+1;
           end if;
+          if raw->'open_read_item'='false'::jsonb then continue; end if;
           if raw->'correction_owns_read_item'='true'::jsonb then
             select jsonb_build_object('request_id',r.id,'state',r.state,'state_revision',r.state_revision,
               'original_timesheet_id',r.reversed_timesheet_id,'replacement_timesheet_id',r.replacement_timesheet_id,

@@ -9,6 +9,8 @@ declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%row
   v_route text; v_actual jsonb; v_facts jsonb; v_unproved jsonb; v_gate jsonb:='[]'::jsonb;
   v_latest_week date; v_latest_timesheet_week date; v_calendar_authority jsonb;
   v_open integer; v_earlier_open integer; v_count integer; v_wait integer:=0; v_wait_fact jsonb; v_event record;
+  v_read_scope record; v_page jsonb; v_cursor text; v_rows jsonb; v_revision text; v_query_revision text;
+  v_scope_count integer; v_scope_open integer; v_retention_reads jsonb:='[]'::jsonb;
 begin
   perform private._weekly_source_settings_assert_request_v1(p_request,
     array['actor_user_id','source_cycle_id','source_group_id','client_id','week_ending','command','cursor','limit'],
@@ -69,36 +71,80 @@ begin
       and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client
         and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))
   ), counted as (
-    select *,authorised_at_server is null or validation_status is distinct from 'VALIDATION_OK'
-      or processing_status='READY_FOR_HR' or correction_waiting
-      or exists(select 1 from public.import_review_decisions d join public.import_review_states st on st.import_id=d.import_id
-          and st.preview_generation=d.preview_generation and st.superseded_at_utc is null and st.abandoned_at_utc is null
-        join public.hr_imports hi on hi.id=d.import_id and hi.pruned_at is null
-        where d.timesheet_id=scoped.timesheet_id and d.client_id=v_client and d.is_current
-          and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')
-          and hi.id=(select current_import.id from public.hr_imports current_import
-            where current_import.pruned_at is null and (current_import.id=scoped.validation_import_id
-              or exists(select 1 from public.import_review_decisions current_decision
-              join public.import_review_states current_state on current_state.import_id=current_decision.import_id
-                and current_state.preview_generation=current_decision.preview_generation
-                and current_state.superseded_at_utc is null and current_state.abandoned_at_utc is null
-              where current_decision.import_id=current_import.id and current_decision.timesheet_id=scoped.timesheet_id
-                and current_decision.client_id=v_client and current_decision.is_current))
-            order by current_import.uploaded_at_utc desc,current_import.id desc limit 1)) open_read_item
-    from scoped where (witness->>'actual_submitted')::boolean is true and (route_read->>'eligible')::boolean is true
+    select * from scoped where (witness->>'actual_submitted')::boolean is true and (route_read->>'eligible')::boolean is true
   ) select max(week_ending_date),count(*) filter(where week_ending_date=v_week)::integer,
-    count(*) filter(where week_ending_date=v_week and open_read_item)::integer,
+    null::integer,
     coalesce(jsonb_agg(jsonb_build_object('timesheet_id',timesheet_id,'witness',witness,'submission_read_context',route_read,
       'ordinary_authorised',authorised_at_server is not null,'validation_status',validation_status,
-      'processing_status',processing_status,'correction_waiting',correction_waiting,'open_read_item',open_read_item)
+      'processing_status',processing_status,'correction_waiting',correction_waiting)
       order by timesheet_id) filter(where week_ending_date=v_week),'[]'::jsonb),
-    count(distinct week_ending_date) filter(where open_read_item and week_ending_date<v_latest_week)::integer,
+    null::integer,
     coalesce((select jsonb_agg(jsonb_build_object('code',reason,'unproved_timesheet_count',number) order by reason)
       from(select witness->>'reason' reason,count(distinct timesheet_id) number from scoped
         where week_ending_date=v_week and witness->>'support_state'='UNPROVED'
         group by witness->>'reason') unproved),'[]'::jsonb)
     into v_latest_timesheet_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;
   v_gate:=v_gate||v_unproved;
+  if v_route='SIGNED_TIMESHEETS' then
+    -- P1-CHECKLIST-RETENTION1: obtain open work from the actual raw owner
+    -- before old-week admission. Discover real submitted weeks/cycles only;
+    -- no fixed lookback, fake cycle or R254 information-only admission.
+    v_count:=0; v_open:=0; v_earlier_open:=0; v_actual:='[]'::jsonb; v_latest_timesheet_week:=null;
+    for v_read_scope in
+      with signed_weeks as materialized (
+        select distinct t.week_ending_date from public.timesheets t
+        cross join lateral(select private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,g.id) context) signed_read
+        where signed_read.context->'eligible'='true'::jsonb
+          and signed_read.context#>'{submission_witness,actual_submitted}'='true'::jsonb
+          and signed_read.context#>>'{submission_witness,client_id}'=v_client::text and t.week_ending_date<v_today
+          and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client
+            and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))
+      ) select week.week_ending_date,owner.cycle_id,owner.owner_count from signed_weeks week
+      cross join lateral(select count(*) owner_count,(array_agg(cycle.id order by cycle.id))[1] cycle_id
+        from public.weekly_source_cycles cycle where cycle.source_group_id=g.id
+          and week.week_ending_date between cycle.finalisation_week_ending-6 and cycle.finalisation_week_ending
+          and (cycle.scope_client_id=v_client or (cycle.scope_client_id is null and not exists(
+            select 1 from public.weekly_source_cycles preferred where preferred.source_group_id=g.id
+              and preferred.scope_client_id=v_client
+              and week.week_ending_date between preferred.finalisation_week_ending-6 and preferred.finalisation_week_ending)))) owner
+      order by week.week_ending_date
+    loop
+      if v_read_scope.owner_count<>1 then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+      if v_read_scope.week_ending_date=v_week and v_read_scope.cycle_id<>c.id then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+      end if;
+      v_cursor:=null; v_revision:=null; v_rows:='[]'::jsonb;
+      loop
+        v_page:=private.weekly_source_check_only_query_rows_v1(v_read_scope.cycle_id,v_client,
+          jsonb_strip_nulls(jsonb_build_object('actor_user_id',v_actor,'source_group_id',g.id,
+            'week_ending',v_read_scope.week_ending_date,'limit',100,'cursor',v_cursor)));
+        if v_page->'ok' is distinct from 'true'::jsonb then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
+        if v_revision is not null and v_revision is distinct from v_page->>'read_revision' then
+          raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+        end if;
+        v_revision:=v_page->>'read_revision'; v_rows:=v_rows||v_page->'rows';
+        exit when v_page->'has_more'='false'::jsonb;
+        if v_cursor is not distinct from v_page->>'next_cursor' then raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000'; end if;
+        v_cursor:=v_page->>'next_cursor';
+      end loop;
+      if exists(select 1 from jsonb_array_elements(v_rows) r where r->>'item_kind'='ACTUAL_TIMESHEET'
+        and jsonb_typeof(r->'open_read_item') is distinct from 'boolean') then
+        raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_READ_UNAVAILABLE' using errcode='55000';
+      end if;
+      select count(*)::integer,count(*) filter(where r->'open_read_item'='true'::jsonb)::integer
+        into v_scope_count,v_scope_open from jsonb_array_elements(v_rows) r
+        where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb;
+      if v_scope_count>0 then v_latest_timesheet_week:=v_read_scope.week_ending_date; end if;
+      if v_scope_count>0 and v_scope_open>0 and v_read_scope.week_ending_date<v_latest_week then v_earlier_open:=v_earlier_open+1; end if;
+      if v_read_scope.week_ending_date=v_week then
+        v_count:=v_scope_count; v_open:=v_scope_open; v_query_revision:=v_revision;
+        select coalesce(jsonb_agg(r order by r->>'timesheet_id'),'[]'::jsonb) into v_actual from jsonb_array_elements(v_rows) r
+          where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>'{submission_witness,actual_submitted}'='true'::jsonb;
+      end if;
+      v_retention_reads:=v_retention_reads||jsonb_build_array(jsonb_build_object('week_ending',v_read_scope.week_ending_date,
+        'source_cycle_id',v_read_scope.cycle_id,'read_revision',v_revision,'actual_timesheet_count',v_scope_count,'open_read_items',v_scope_open));
+    end loop;
+  end if;
   if v_route='SIGNED_TIMESHEETS' and (v_count=0 or (v_week<>v_latest_week and v_open=0)) then
     return jsonb_build_object('applies',true,'admitted',false,'route',v_route,'preserve_native',false,
       'actual_timesheet_count',v_count,'engineering_gates',v_gate);
@@ -177,14 +223,14 @@ begin
     'most_recent_ended_timesheet_week',v_latest_timesheet_week,
     'most_recent_ended_client_week',v_latest_week,
     'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint','open_timesheet_read_items',v_open,
-    'earlier_open_weeks',v_earlier_open,
+    'earlier_open_weeks',v_earlier_open,'native_query_read_revision',v_query_revision,
     'qualified_waiting_count',v_wait,'engineering_gates',v_gate,
     'pay_financial_evidence_required',true,'root_checklist_union_required',true,
     'read_revision',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',
       jsonb_build_object('scope',p_request-'cursor'-'limit','cycle_version',c.version,'actual',v_actual,'facts',v_facts,
         'latest_week',v_latest_week,'latest_timesheet_week',v_latest_timesheet_week,
         'client_week_authority_fingerprint',v_calendar_authority->>'authority_fingerprint',
-        'earlier_open_weeks',v_earlier_open,'actual_count',v_count,'open_read_items',v_open,
+        'earlier_open_weeks',v_earlier_open,'actual_count',v_count,'open_read_items',v_open,'retention_reads',v_retention_reads,
         'wait_count',v_wait,'gates',v_gate)),'hex'));
 end;
 $function$;

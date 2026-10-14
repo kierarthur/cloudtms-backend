@@ -1,0 +1,77 @@
+-- ROOT-ONLY NATIVE ACCEPTANCE: genuine fixture preparation is explicit.
+-- Required pg_temp.wp_u3_retention_fixtures columns: kind text, actor_user_id
+-- uuid, source_group_id uuid, client_id uuid, source_cycle_id uuid, week_ending
+-- date, expected_admitted boolean, expected_actual_count integer,
+-- expected_open_count integer, expected_earlier_open_weeks integer.
+-- No data is fabricated here and missing real cases fail rather than pass.
+do $verify$
+declare fixture record; v_kind text; request jsonb; leaf jsonb; page jsonb; raw jsonb;
+  cursor text; rows jsonb; counted integer; open_count integer; current_row jsonb;
+begin
+  if to_regclass('pg_temp.wp_u3_retention_fixtures') is null then
+    raise exception 'RETENTION_NATIVE_FIXTURES_REQUIRED';
+  end if;
+  foreach v_kind in array array['OLDER_EMAIL_ISSUE','OLDER_EMAIL_REMINDER','OLDER_DAILY_PREVIEW','OLDER_PENDING_DAILY','OLDER_CORRECTION',
+    'OLDER_CLOSED','OLDER_CLOSED_R254','LATEST_CLOSED','NO_ACTUAL_TIMESHEET'] loop
+    if not exists(select 1 from pg_temp.wp_u3_retention_fixtures f where f.kind=v_kind) then
+      raise exception 'RETENTION_NATIVE_FIXTURE_CASE_REQUIRED:%',v_kind;
+    end if;
+  end loop;
+  for fixture in select f.* from pg_temp.wp_u3_retention_fixtures f order by f.kind loop
+    request:=jsonb_build_object('actor_user_id',fixture.actor_user_id,'source_group_id',fixture.source_group_id,
+      'client_id',fixture.client_id,'source_cycle_id',fixture.source_cycle_id,'week_ending',fixture.week_ending);
+    rows:='[]'::jsonb; cursor:=null;
+    loop
+      raw:=private.weekly_source_check_only_query_rows_v1(fixture.source_cycle_id,fixture.client_id,
+        jsonb_strip_nulls(jsonb_build_object('actor_user_id',fixture.actor_user_id,'source_group_id',fixture.source_group_id,
+          'week_ending',fixture.week_ending,'limit',100,'cursor',cursor)));
+      rows:=rows||raw->'rows'; exit when raw->'has_more'='false'::jsonb;
+      cursor:=raw->>'next_cursor';
+    end loop;
+    select count(*)::integer,count(*) filter(where r->'open_read_item'='true'::jsonb)::integer into counted,open_count
+      from jsonb_array_elements(rows) r where r->>'item_kind'='ACTUAL_TIMESHEET'
+        and r#>'{submission_witness,actual_submitted}'='true'::jsonb;
+    if counted is distinct from fixture.expected_actual_count or open_count is distinct from fixture.expected_open_count then
+      raise exception 'RETENTION_NATIVE_RAW_FACT_MISMATCH:%',fixture.kind;
+    end if;
+    if fixture.kind in('OLDER_EMAIL_ISSUE','OLDER_EMAIL_REMINDER') and not exists(
+      select 1 from jsonb_array_elements(rows) r cross join lateral jsonb_array_elements(coalesce(r->'native_issues','[]'::jsonb)) issue
+        where r->>'item_kind'='ACTUAL_TIMESHEET' and issue->>'action_kind'=replace(fixture.kind,'OLDER_','')
+          and r->'ordinary_authorised'='true'::jsonb and r#>>'{validation,status}'='VALIDATION_OK') then
+      raise exception 'RETENTION_NATIVE_REAL_EMAIL_CASE_UNPROVED:%',fixture.kind;
+    end if;
+    if fixture.kind='OLDER_DAILY_PREVIEW' and not exists(select 1 from jsonb_array_elements(rows) r
+      where r->>'item_kind'='ACTUAL_TIMESHEET' and r->'unfinished_daily_review'='true'::jsonb) then
+      raise exception 'RETENTION_NATIVE_REAL_DAILY_PREVIEW_UNPROVED';
+    end if;
+    if fixture.kind='OLDER_PENDING_DAILY' and not exists(select 1 from jsonb_array_elements(rows) r
+      where r->>'item_kind'='ACTUAL_TIMESHEET' and r#>>'{submission_read_context,route_state}'='SUBMITTED_PENDING_NATIVE_MATERIALISATION') then
+      raise exception 'RETENTION_NATIVE_REAL_PENDING_DAILY_UNPROVED';
+    end if;
+    if fixture.kind='OLDER_CORRECTION' and not exists(select 1 from jsonb_array_elements(rows) r
+      where r->>'item_kind'='ACTUAL_TIMESHEET' and r->'correction_owns_read_item'='true'::jsonb) then
+      raise exception 'RETENTION_NATIVE_REAL_CORRECTION_UNPROVED';
+    end if;
+    if fixture.kind='OLDER_CLOSED_R254' and not exists(select 1 from jsonb_array_elements(rows) r
+      where r->>'item_kind'='SOURCE_INFORMATION' and r->'counts_for_row_admission'='false'::jsonb and r->'open_read_item'='false'::jsonb) then
+      raise exception 'RETENTION_NATIVE_REAL_R254_UNPROVED';
+    end if;
+    leaf:=private.weekly_source_healthroster_checklist_leaf_v1(request);
+    if leaf->'admitted' is distinct from to_jsonb(fixture.expected_admitted)
+      or (leaf->>'actual_timesheet_count')::integer is distinct from counted then
+      raise exception 'RETENTION_NATIVE_LEAF_ADMISSION_MISMATCH:%',fixture.kind;
+    end if;
+    if fixture.expected_admitted and (leaf->>'earlier_open_weeks')::integer is distinct from fixture.expected_earlier_open_weeks then
+      raise exception 'RETENTION_NATIVE_EARLIER_OPEN_MISMATCH:%',fixture.kind;
+    end if;
+    page:=public.weekly_source_checklist_v1(request||jsonb_build_object('command','CHECKLIST','limit',100));
+    select r into current_row from jsonb_array_elements(page->'rows') r where r->'scope'=request-'actor_user_id';
+    if (current_row is not null) is distinct from fixture.expected_admitted then
+      raise exception 'RETENTION_NATIVE_PUBLIC_ADMISSION_MISMATCH:%',fixture.kind;
+    end if;
+    if fixture.expected_admitted and current_row#>'{completed,value}' is distinct from to_jsonb(open_count=0) then
+      raise exception 'RETENTION_NATIVE_PUBLIC_COMPLETION_MISMATCH:%',fixture.kind;
+    end if;
+  end loop;
+end;
+$verify$;

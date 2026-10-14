@@ -3,7 +3,7 @@
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 72,
+    "passed": 75,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -12,11 +12,11 @@
   "source_pins": [
     {
       "path": "broker/src/weekly-source/healthroster-checklist-source.mjs",
-      "saved_sha256": "1c3296998aad26e07e70dce543dfeebb4134ff0c1995c36b90782411fef61429"
+      "saved_sha256": "6663d6d14c408cf44fce8375321bbdbd9e60deb5e28e68c3334cf48d26219005"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_checklist.sqlinc",
-      "saved_sha256": "64f4169e9bf3c51700ea1bdc68d34a077917b620e93d3d2fa9245a61b92b7cdd"
+      "saved_sha256": "eb4d2fc34cc0682c7473214ec6b7be92bf854c8cf36548938a53c8ad0816dded"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_native_page.sqlinc",
@@ -44,11 +44,11 @@
     },
     {
       "path": "tests/healthroster-checklist-native-producer.test.mjs",
-      "saved_sha256": "8a68a0850bbfe55e67d2fa2f884b0f4aea1b86fb6da8f1af757d0f279c7f0b46"
+      "saved_sha256": "015db0fd944550115748e4bb931a73557da4c4e89fe71acd33a1711a58d7cd11"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/README.md",
-      "saved_sha256": "7bf471249097008b5f7952e9ad8a3357d8c2c70b2ae940cf7586e10283f1297e"
+      "saved_sha256": "287c1b05cb1659e58aa1c805d32534a51f94dbca3244427fee6900e2336f0ace"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/CANDIDATE_OWNER_CENSUS.md",
@@ -68,7 +68,7 @@
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
-      "saved_sha256": "d9e3b94a2fcaf1cc581ceadbe329ccfd07008f4081b9312a2558047c6fb720ee"
+      "saved_sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd"
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_cycle_admit.sqlinc",
@@ -149,6 +149,14 @@
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/DAILY_SAVE_OWNER_CENSUS.md",
       "saved_sha256": "17f0e2a225ba80c9a6147a1da6c515a6a6a8d41c65dd982e559814ac2b80a3ea"
+    },
+    {
+      "path": "supabase/verification/support/wp_u3_retention_vectors.sqlinc",
+      "saved_sha256": "6ffa4a2f4f258febbefce43f21a57de0f854609c800ebf39cdc86d7d7e456070"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_CORRECTIONS_14102026.md",
+      "saved_sha256": "c03de9f21013aee4271df4ba46d74c75d55c57bd7fad2372ba6998de90e2c0cf"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -284,7 +292,7 @@
     "REPORT_NHSP_AGENCY_PROCESS_POPULATION_RETENTION_CURSOR_ANCHOR_ACCEPTANCE",
     "NATIVE_API_UI_RUNTIME_PHONE_FEATURE_QUALIFICATION"
   ],
-  "predecessor_source_increment": "6430d24b7dba9abb5288f6bb45703e9eb3fe4bbc",
+  "predecessor_source_increment": "4084befffd78361938f81dded7f876e3c65dac64",
   "db_source_check": {
     "passed": true,
     "migrations": 399,
@@ -296,5 +304,16 @@
     "head": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
     "saved_sha256": "d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847",
     "claim": "pinned read-only caller source; exact forward/reverse proposal only; not installed Office"
+  },
+  "source_review": {
+    "critic_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_CHECKLIST_NATIVE_PRODUCER_SOURCE_CRITIC_14102026.md",
+    "critic_sha256": "7a3ed6745a589c0fcf05ef8cd7b25eec1aa613e7fe38ca392350d3a33078711c",
+    "predecessor": "4084befffd78361938f81dded7f876e3c65dac64",
+    "findings": [
+      "P1-CHECKLIST-RETENTION1",
+      "P2-CHECKLIST-DTO1"
+    ],
+    "successor_disposition": "CORRECTIONS_AUTHORED_INDEPENDENT_CLOSURE_REQUESTED_THROUGH_ROOT",
+    "native_retention_fixture_execution": false
   }
 }
