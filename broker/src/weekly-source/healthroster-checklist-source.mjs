@@ -107,7 +107,7 @@ export function projectChecklistItem(item, actor) {
   closed(item, ['item_id', 'item_kind', 'scope', 'route', 'worker', 'work_date', 'sheet_scope', 'reason_code', 'status', 'hold', 'subject',
     'permitted_pay_subject', 'action', 'counted_timesheet_id', 'correction_binding', 'source_information_witness', 'submission_read']);
   identity(item); text(item.worker, 250); text(item.reason_code, 200);
-  if (!DATE.test(item.work_date) || !['WEEKLY', 'DAILY'].includes(item.sheet_scope) ||
+  if (typeof item.work_date !== 'string' || !DATE.test(item.work_date) || !['WEEKLY', 'DAILY'].includes(item.sheet_scope) ||
       !['PAY', 'PAY_AND_INVOICE', 'INVOICE_ONLY', 'INFORMATION'].includes(item.subject) ||
       !ROUTES.has(item.route) || !['ACTUAL_TIMESHEET', 'SOURCE_INFORMATION'].includes(item.item_kind) ||
       typeof item.permitted_pay_subject !== 'boolean') fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
@@ -115,7 +115,7 @@ export function projectChecklistItem(item, actor) {
     const witness = item.source_information_witness;
     closed(witness, ['native_action_id', 'evidence_fingerprint', 'import_id', 'hr_row_id', 'existing_row_id', 'counts_for_row_admission']);
     text(witness.native_action_id, 512); uuid(witness.import_id); uuid(witness.hr_row_id); text(witness.existing_row_id, 512);
-    if (!witness.native_action_id || !witness.existing_row_id || !HASH.test(witness.evidence_fingerprint) ||
+    if (!witness.native_action_id || !witness.existing_row_id || typeof witness.evidence_fingerprint !== 'string' || !HASH.test(witness.evidence_fingerprint) ||
         witness.counts_for_row_admission !== false || item.item_id !== `native-action:${witness.native_action_id}` ||
         item.counted_timesheet_id !== null || item.correction_binding !== null || item.action !== null ||
         item.subject !== 'INFORMATION' || item.permitted_pay_subject !== false) fail('CHECKLIST_SOURCE_INFORMATION_TARGET_FORBIDDEN');
@@ -165,7 +165,7 @@ export function projectChecklistRow(row, actor) {
   if (!ROUTES.has(row.route)) fail('CHECKLIST_SOURCE_ROUTE_UNSUPPORTED');
   closed(row.retention, ['actual_timesheet_count', 'most_recent_ended_week', 'has_open_items', 'earlier_open_weeks']);
   count(row.retention.actual_timesheet_count); count(row.retention.earlier_open_weeks);
-  if (typeof row.retention.has_open_items !== 'boolean' || !DATE.test(row.retention.most_recent_ended_week)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
+  if (typeof row.retention.has_open_items !== 'boolean' || typeof row.retention.most_recent_ended_week !== 'string' || !DATE.test(row.retention.most_recent_ended_week)) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
   const checked = cell(row.checked, row.scope), completed = cell(row.completed, row.scope), pay = cell(row.pay_completed, row.scope);
   const hold = decodeChecklistHold(row.hold); count(row.permitted_pay_item_count);
   if (!Array.isArray(row.admin_actions) || row.admin_actions.length > 2) fail('CHECKLIST_SOURCE_CONTRACT_INVALID');
@@ -214,7 +214,7 @@ export function createHealthRosterChecklistSourceReader(deps) {
         !['ASC', 'DESC'].includes(payload.direction ?? 'DESC') || !Number.isInteger(payload.limit ?? 50) ||
         (payload.limit ?? 50) < 1 || (payload.limit ?? 50) > 100) fail('CHECKLIST_SOURCE_REQUEST_INVALID', 400);
     for (const k of ['source_group_id', 'client_id', 'source_cycle_id']) if (payload[k] != null) uuid(payload[k]);
-    if (payload.week_ending != null && !DATE.test(payload.week_ending)) fail('CHECKLIST_SOURCE_REQUEST_INVALID', 400);
+    if (payload.week_ending != null && (typeof payload.week_ending !== 'string' || !DATE.test(payload.week_ending))) fail('CHECKLIST_SOURCE_REQUEST_INVALID', 400);
     for (const k of ['cursor', 'anchor']) if (payload[k] != null) text(payload[k], 4096);
     if (payload.command === 'CHECKLIST_ISSUES') bindScope(Object.fromEntries(
       ['source_group_id', 'client_id', 'source_cycle_id', 'week_ending'].map(k => [k, payload[k]])));

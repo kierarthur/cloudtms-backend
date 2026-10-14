@@ -76,3 +76,12 @@ test('a response-size failure is a contained read failure and never retries or c
 test('Checklist is GET-only; no No one worked or Undo is dispatched through the read route',async()=>{
  for(const method of ['POST','PUT','DELETE']){const {response,calls}=await dispatch('',actor,frame(),method);assert.equal(response.status,404);assert.equal(calls.length,0);}
 });
+
+test('native date and source-information fingerprint arrays cannot cross the closed read boundary',async()=>{
+ const retained=frame();retained.rows[0].retention.most_recent_ended_week=['2026-10-11'];assert.equal((await dispatch('',actor,retained)).response.status,502);
+ const dated=frame('CHECKLIST_ISSUES');dated.items[0].work_date=['2026-10-07'];assert.equal((await dispatch(issuesQuery(),actor,dated)).response.status,502);
+ const information=frame('CHECKLIST_ISSUES');information.items[0]={...item(),item_id:'native-action:real-source-row',item_kind:'SOURCE_INFORMATION',counted_timesheet_id:null,subject:'INFORMATION',permitted_pay_subject:false,
+   source_information_witness:{native_action_id:'real-source-row',evidence_fingerprint:H,import_id:id(8),hr_row_id:id(9),existing_row_id:'real-existing-row',counts_for_row_admission:false}};
+ assert.equal((await dispatch(issuesQuery(),actor,information)).response.status,200);
+ information.items[0].source_information_witness.evidence_fingerprint=[H];assert.equal((await dispatch(issuesQuery(),actor,information)).response.status,502);
+});

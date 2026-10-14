@@ -1,0 +1,58 @@
+{
+  "status": "P2_CLOSED_REPLY_SCALAR_TYPES_SOURCE_PASS_NATIVE_UNFINISHED",
+  "beforeCommit": "8685b8cf855f46b5b35100d338e294459d87317c",
+  "pins": [
+    {
+      "file": "broker/src/weekly-source/healthroster-checklist-source.mjs",
+      "bytes": 24176,
+      "sha256": "9519e434de8549dcfebb446197d4421de037a90a05a91a80091f4aa9f3bc2757",
+      "syntaxExitCode": 0
+    },
+    {
+      "file": "tests/healthroster-checklist-read-transport.test.mjs",
+      "bytes": 11326,
+      "sha256": "24a6335214cdaf26c0cc6e74121d9d2afaa88a0ff744e6745a183dadd394c55a",
+      "syntaxExitCode": 0
+    }
+  ],
+  "groups": [
+    {
+      "files": [
+        "tests/healthroster-checklist-read-transport.test.mjs",
+        "tests/healthroster-checklist-source.test.mjs",
+        "tests/weekly-source/weekly-source-routes.test.mjs"
+      ],
+      "exitCode": 0,
+      "summary": [
+        "# tests 59",
+        "# pass 59",
+        "# fail 0"
+      ],
+      "outputSha256": "c4c41a39c19393f3d7e8cf6f94e2e5e74d7b82bdc9eb8a2147d25aedffe47b54"
+    },
+    {
+      "files": [
+        "tests/weekly-source/weekly-source-pay-auth-transport.test.mjs",
+        "tests/weekly-source/weekly-source-pay-view.test.mjs",
+        "tests/weekly-source/weekly-source-settings-routes.test.mjs",
+        "tests/healthroster-checklist-sql-source.test.mjs"
+      ],
+      "exitCode": 0,
+      "summary": [
+        "# tests 22",
+        "# pass 22",
+        "# fail 0"
+      ],
+      "outputSha256": "7740869d741d24a49f87c3cbba2c80966e0f7d75de8067cd29c3d2fc15614670"
+    }
+  ],
+  "wholeFileReverseCheck": true,
+  "reverseDiffSha256": "52eabc2a1169bdcb231d72b2e29b5588f2cb992a534a94059b800cfd34c8eee1",
+  "scalarGuards": 4,
+  "credentialValuesPresent": false,
+  "historical224CheckpointUnchanged": true,
+  "independentReview": "critic_money_off source correction accepted; no native verdict",
+  "native": false,
+  "installation": false,
+  "publication": false
+}
