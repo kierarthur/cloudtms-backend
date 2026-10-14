@@ -1,0 +1,81 @@
+{
+  "schema_version": "PAID_MATCH_LEGACY_CURRENT_VIEWER_CONSUMER_SOURCE_FREEZE_V1",
+  "source_only": true,
+  "independent_review": "PENDING",
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false,
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "file": "COMPLETE_REVERSE_AND_INPUT_PINS.json",
+      "bytes": 8153,
+      "sha256": "03604077c630554b17a091cbbf4786eec7e73db469b009113ee5b69778f944a3"
+    },
+    {
+      "file": "CONSTRUCTION_BOUNDARY.md",
+      "bytes": 2857,
+      "sha256": "a40c952a37d1dde44bac2d870b17bbf5b876fb221955ee3b2be8c56a6e0674e4"
+    },
+    {
+      "file": "SELECTED_SOURCE_RECIPE.json",
+      "bytes": 4678,
+      "sha256": "4a25b19e30fd834e5bdc0dfbaf95b6d72696a350ae1665f91ecd7af09daa2419"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULT.json",
+      "bytes": 561,
+      "sha256": "8a2535a59ff7d50b56e4854265e3471c7a89d65ced97b8fc890796502ab34840"
+    },
+    {
+      "file": "before/01_complete_choice_current.sqlinc",
+      "bytes": 11946,
+      "sha256": "6c1d9cc6990666228a61f993f58c46267d5bc045da30653ba61fc2160b90fc52"
+    },
+    {
+      "file": "build-source.mjs",
+      "bytes": 8127,
+      "sha256": "bb5432f619fae94ec9dec2975cc4519230e15c10b98ef787d4088bd49b968fec"
+    },
+    {
+      "file": "forward/01_complete_choice_current.sqlinc",
+      "bytes": 14996,
+      "sha256": "e9098bc075e96ec8f8eb1e05b94faf16b3d4fa241968db3075df861475a4676f"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 5122,
+      "sha256": "a7c00add85b39ee070265c0c76c03798b526aed652fd96dd42ae4784522bf36b"
+    },
+    {
+      "file": "input/01_complete_overlap_inputs.sqlinc",
+      "bytes": 8194,
+      "sha256": "752a4b5afb469af41b9f144c59e35764f8b439f4c33c21ef7b4b5a3c65f95f7e"
+    },
+    {
+      "file": "input/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "file": "input/04_complete_payment_facts.sqlinc",
+      "bytes": 13986,
+      "sha256": "d24607fbce88c8e8fddcce69c3b31a6021cd656038bc83fd95bef23172fecc52"
+    },
+    {
+      "file": "input/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "file": "input/private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "viewer-source.test.mjs",
+      "bytes": 11747,
+      "sha256": "c0f49ebe2aecf9e716c19977da9420c8a80a5cf9f375a940411bbf0edff4ad19"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "source_only": true,
+  "independent_review": "PENDING",
+  "containing_checkpoint": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+  "controlling_native_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "selected_complete_owner": "forward/01_complete_choice_current.sqlinc",
+  "replaces_complete_leaf": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/07_complete_choice_current.sqlinc",
+  "existing_signatures": [
+    "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+    "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)"
+  ],
+  "changed_signature": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+  "unchanged_projection_lock": true,
+  "new_private_signatures": [],
+  "new_public_signatures": [],
+  "new_store_column_calculator": 0,
+  "prerequisites": [
+    {
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "file": "docs/healthroster-build/proposals/paid-match-legacy-native-consumer-construction-20261014/forward/02_legacy_signed_source_membership.sqlinc",
+      "saved": "input/02_legacy_signed_source_membership.sqlinc",
+      "bytes": 13825,
+      "sha256": "60fe932ecc18a0d5ac0acfb0e56a2c09e2888ee9a5d59bab412f35667164a3df"
+    },
+    {
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/forward/04_complete_payment_facts.sqlinc",
+      "saved": "input/04_complete_payment_facts.sqlinc",
+      "bytes": 13986,
+      "sha256": "d24607fbce88c8e8fddcce69c3b31a6021cd656038bc83fd95bef23172fecc52"
+    },
+    {
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "file": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/01_complete_overlap_inputs.sqlinc",
+      "saved": "input/01_complete_overlap_inputs.sqlinc",
+      "bytes": 8194,
+      "sha256": "752a4b5afb469af41b9f144c59e35764f8b439f4c33c21ef7b4b5a3c65f95f7e"
+    },
+    {
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/input/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "saved": "input/private.weekly_source_office_authority_v1_uuid_text_uuid_uuid_date_.sqlinc",
+      "bytes": 3526,
+      "sha256": "5138472b977cf10416f4a8dd0f9367a88c0ffe6b38adb48097a2143bb9f1c611"
+    },
+    {
+      "commit": "1a7ad79f9c4e2796fe067a05c253e39bd07482c7",
+      "file": "docs/healthroster-build/proposals/source-next-paid-purpose-current-consumer-20261015/input/private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "saved": "input/private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    }
+  ],
+  "preserved": [
+    {
+      "packet": "paid-match-legacy-native-consumer-construction-20261014",
+      "artifacts": 30,
+      "manifest_sha256": "4b0e81a2a8cea04b7b32f8725fe9f9f8e33ec9290f2581f257e726b0ba574a97"
+    },
+    {
+      "packet": "paid-match-correct-final-choice-construction-20261014",
+      "artifacts": 33,
+      "manifest_sha256": "a65b170fd68d43012d562f80a91a1d04a5f44a705ba89d578ba454eaad7e84d5"
+    },
+    {
+      "packet": "source-next-paid-purpose-current-consumer-20261015",
+      "artifacts": 23,
+      "manifest_sha256": "eca309accc589dea4b40dfa09c5c50f06e68d85373128bd68ef4633245b64928"
+    },
+    {
+      "packet": "paid-match-legacy-retained-basis-consumer-20261015",
+      "artifacts": 10,
+      "manifest_sha256": "13957cc01181a536023467ebba66a60193eb8032119a55dd964cc580ee840dd3"
+    },
+    {
+      "packet": "paid-match-off-physical-contract-current-owner-20261015",
+      "artifacts": 11,
+      "manifest_sha256": "1374a8f0b70667cec2b7e260da9469ab897dc3e7764c9a594f77262b03968efd"
+    },
+    {
+      "packet": "qualification-physical-contract-identity-successor-20261014",
+      "artifacts": 27,
+      "manifest_sha256": "173622063cd1f6f5a655fb7cdd3ba1b6847d9eac7f787f3c8e48ad676e8719b9"
+    }
+  ],
+  "raw_confirmer_and_current_viewer_hashes_preserved": true,
+  "native_current_authority_unchanged": true,
+  "only_literal_Legacy_reader_identity_fields_omitted_for_local_equality": true,
+  "NEXT_payload_and_original_paid_predicate_unchanged": true,
+  "canonical_Banking_owners_modified": false,
+  "Source39_and_recorder9_13_three_bundles_unchanged": true,
+  "root_Report_Office_U3_Undo_current_union_required": true,
+  "SQL_compiled": false,
+  "native_proof": false,
+  "canonical_mounted": false,
+  "whole_primary_complete": false
+}
