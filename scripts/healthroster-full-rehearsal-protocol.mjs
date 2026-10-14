@@ -116,6 +116,12 @@ export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
 // Diagnostics never retain server DETAIL/CONTEXT or arbitrary primary text.
 // Source object identity comes from the independently sealed statement census.
 export function closedRehearsalDiagnostic(line, lineMap, allowedCodes = new Set()) {
+  const client = line.match(/^psql:<stdin>:(\d+):\s+(?:error|fatal):/);
+  if(client){
+    const number=Number(client[1]),location=lineMap.find(x=>number>=x.startLine&&number<=x.endLine);
+    return {file:location?.file??'HARNESS_CONTROL',kind:location?.kind??'control',statement:location?.statement??null,
+      object:location?.object??null,line:number,sqlstate:null,error:'PSQL_CLIENT_ERROR'};
+  }
   const match = line.match(/^psql:<stdin>:(\d+):\s+(ERROR|FATAL):\s+([0-9A-Z]{5}):\s*(.*)$/);
   if (!match) return null;
   const number = Number(match[1]);
