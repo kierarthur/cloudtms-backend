@@ -1,0 +1,65 @@
+-- Primary 26.5.1's single positional business owner. Existing native owners
+-- retain all actor, source, physical, financial, claim and same-D1 admission.
+-- This source proposal is not mounted or qualified until the joint Source
+-- arbiter/caller/foreign-writer composition and native gates are complete.
+create or replace function public.weekly_source_agency_timesheet_change_v1(
+ p_contract_week_id uuid,p_reason text,p_expected_signature text,p_request_key text,p_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.weekly_source_agency_timesheet_change_requests%rowtype; continuation text; result jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ -- Begin rechecks the original immutable business digest, the real current
+ -- scoped actor and the native physical/Source phase postconditions on replay.
+ -- It never substitutes a new Source capture or an actor for the original click.
+ r:=private.weekly_source_agency_change_begin_v1(p_contract_week_id,p_reason,
+   p_expected_signature,p_request_key,p_actor_user_id);
+ -- A prior causal refusal is not a permanent resume prohibition. Each owner
+ -- rederives its actual postconditions before retrying the SAME request.
+ if r.state='ACTIVE' and r.phase='FINANCIAL_CURRENT' then
+  r:=private.weekly_source_agency_change_authorise_step_v1(r.id,p_actor_user_id);
+ end if;
+ if r.state='ACTIVE' and r.phase='AUTHORISED' then
+  r:=private.weekly_source_agency_change_return_step_v1(r.id,p_actor_user_id);
+ end if;
+ if r.environment is distinct from 'TEST' or r.contract_week_id is distinct from p_contract_week_id
+  or r.request_key is distinct from p_request_key or r.reason is distinct from p_reason
+  or r.initial_row_signature is distinct from p_expected_signature
+  or r.current_timesheet_id is distinct from r.initial_timesheet_id
+  or r.current_timesheet_version is distinct from r.initial_timesheet_version
+  or r.version not between 1 and 9007199254740991
+  or r.state not in('ACTIVE','COMPLETED') then
+  raise exception 'AGENCY_CHANGE_NATIVE_BUSINESS_RESULT_INVALID' using errcode='55000';end if;
+ if r.state='COMPLETED' and (r.phase<>'COMPLETED' or r.return_hold
+  or r.completed_receipt is null or r.completed_by_user_id is null or r.completed_at_utc is null or r.last_refusal_code is not null
+  or r.completed_receipt->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_NATIVE_COMPLETED_V1'
+  or r.completed_receipt->>'request_id' is distinct from r.id::text
+  or r.completed_receipt->>'request_sha256' is distinct from encode(r.request_sha256,'hex')
+  or r.completed_receipt->>'timesheet_id' is distinct from r.current_timesheet_id::text
+  or r.completed_receipt->>'completed_actor_user_id' is distinct from r.completed_by_user_id::text) then
+  raise exception 'AGENCY_CHANGE_GENUINE_COMPLETION_RECEIPT_REQUIRED' using errcode='55000';end if;
+ continuation:=case when r.state='COMPLETED' then 'NONE'
+  when r.phase='UNAUTHORISED' then 'MANUAL'
+  when r.phase in('RECOMPUTE_PENDING','AUTHORISED') then 'WORKER' else 'NONE' end;
+ result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_BUSINESS_RESULT_V1',
+  'request_id',r.id,'request_key',r.request_key,'request_sha256',encode(r.request_sha256,'hex'),
+  'request_version',r.version,'state',r.state,'phase',r.phase,'view_actor_user_id',p_actor_user_id,
+  'contract_week_id',r.contract_week_id,'timesheet_id',r.current_timesheet_id,
+  'timesheet_version',r.current_timesheet_version,'current_row_signature',r.current_row_signature,
+  'completed',r.state='COMPLETED','completed_actor_user_id',r.completed_by_user_id,
+  'return_invoice_no',case when r.state='COMPLETED' then r.original_draft_invoice_no end,
+  'completion_sha256',case when r.state='COMPLETED' then encode(private.weekly_source_sha256_jsonb_v1(
+   'WEEKLY_SOURCE_AGENCY_NATIVE_COMPLETED_RECEIPT_V1',r.completed_receipt),'hex') end,
+  'last_refusal_code',r.last_refusal_code,'return_hold',r.return_hold,'continuation',continuation,
+  'code',case when r.state='COMPLETED' then 'OK' when r.last_refusal_code is not null then r.last_refusal_code
+    else 'AGENCY_INVOICE_TSFIN_NOT_READY' end);
+ if octet_length(result::text)>16384 then
+  raise exception 'AGENCY_CHANGE_NATIVE_BUSINESS_RESULT_BOUND_EXCEEDED' using errcode='54000';end if;
+ return result;
+end;
+$function$;
+alter function public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid)
+ from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_agency_timesheet_change_v1(uuid,text,text,text,uuid) to service_role;

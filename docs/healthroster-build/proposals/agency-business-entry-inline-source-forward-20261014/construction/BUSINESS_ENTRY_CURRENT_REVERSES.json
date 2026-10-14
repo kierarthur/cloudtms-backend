@@ -1,0 +1,88 @@
+{
+  "source_only": true,
+  "native": false,
+  "reverses": [
+    {
+      "input_path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/construction/10_complete_worker_index_with_native_source_crosscheck.js",
+      "output": "81_complete_worker_index_with_one_click_agency_continuation.js",
+      "input_sha256": "faa1d2b92b63cc118ec5988b9e5487cbdf5e431890d37480e9c7c901c455f925",
+      "forward_sha256": "c4430ed25062c7df12c7ce5fee62963ad3fff16dc4485aafb9842c581a450472",
+      "hunks": [
+        {
+          "label": "literal existing canonical MANUAL import",
+          "before": "import { decodeAgencyWorkerTargets, runAgencyLeasedCanonicalRecompute, decodeAgencyAuthoriseStepResult, runAgencyLeasedAuthorisedValidation, agencyNativeCausalCode } from './weekly-source/agency-canonical-worker.mjs';",
+          "after": "import { decodeAgencyWorkerTargets, runAgencyLeasedCanonicalRecompute, runAgencyCanonicalManual, decodeAgencyAuthoriseStepResult, runAgencyLeasedAuthorisedValidation, agencyNativeCausalCode } from './weekly-source/agency-canonical-worker.mjs';"
+        },
+        {
+          "label": "bounded actual runtime import",
+          "before": "import { decodeAgencyReturnStep } from './weekly-source/agency-native-return.mjs';",
+          "after": "import { decodeAgencyReturnStep } from './weekly-source/agency-native-return.mjs';\nimport { createAgencyTimesheetChangeRuntime } from './weekly-source/agency-timesheet-change-runtime.mjs';"
+        },
+        {
+          "label": "actual factory dependencies and existing one-Timesheet worker",
+          "before": "        // WP-37 (WP-31 hostile review of WP-04, finding F2). The Mode A",
+          "after": "        // Primary26.5.1: one genuine click; calculator/native writer and\n        // existing targeted lease owner, with fresh stored phase observations.\n        orchestrateAgencyTimesheetChange: createAgencyTimesheetChangeRuntime({\n          nativeCommand: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_timesheet_change_v1', args),\n          runManual: requestId => runAgencyCanonicalManual({\n            requestId,\n            readContext: id => sbRpc(env, 'weekly_source_agency_change_worker_context_v1', { p_request_id: id }),\n            buildWeeklySnapshot: (ts, cw, contract, curFin, options) =>\n              buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options),\n            applySnapshot: args => sbRpcRecordingGuardRefusal(env, 'weekly_source_agency_change_worker_apply_v1', args)\n          }),\n          runWorkerOnce: timesheetId => runTsfinWorkerOnce(env, { limit: 1, onlyTimesheetIds: [timesheetId] })\n        }),\n        // WP-37 (WP-31 hostile review of WP-04, finding F2). The Mode A"
+        }
+      ]
+    },
+    {
+      "input_path": "docs/healthroster-build/proposals/agency-mode-a-preset-policy-source-successor-20261014/construction/25_complete_current_routes_with_native_mode_a_continuation.js",
+      "output": "82_complete_current_routes_with_one_click_agency_command.js",
+      "input_sha256": "17df5abcff20a95c24bf8727b2dc3e34fa18626776df0a251953c18504e03649",
+      "forward_sha256": "ab61c5f7f4ef471018ae4b83d2e6fc05d4caf1d48999e5e30e74efcb27b5f6e4",
+      "hunks": [
+        {
+          "label": "closed primary business input codec",
+          "before": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';",
+          "after": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';\nimport {agencyBusinessRequest,decodeAgencyInlineReply} from './agency-timesheet-change-runtime.mjs';"
+        },
+        {
+          "label": "same native scoped payment actor action",
+          "before": "  'ACCEPT_SYSTEM_HOURS', 'FIRST_AUTHORISE', 'WITHDRAW_FIRST_AUTHORISATION',",
+          "after": "  'ACCEPT_SYSTEM_HOURS', 'FIRST_AUTHORISE', 'WITHDRAW_FIRST_AUTHORISATION', 'AGENCY_TIMESHEET_CHANGE',"
+        },
+        {
+          "label": "actual command branch before legacy dispatch",
+          "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+          "after": "  if (action === 'AGENCY_TIMESHEET_CHANGE') {\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'payload')) {\n      fail('AGENCY_CHANGE_BUSINESS_REQUEST_INVALID', 'This Timesheet action is invalid.', 400);\n    }\n    const deployment = weeklySourceDeploymentContext(env);\n    if (deployment.environment !== 'TEST') {\n      fail('AGENCY_CHANGE_TEST_SCOPE_REQUIRED', 'This Timesheet action is unavailable in this environment.', 403);\n    }\n    try {\n      // Closed input has only the primary business fields. Actor/T0/D1/source,\n      // financial snapshots, phase and qualification are server-owned.\n      const args = agencyBusinessRequest(payload, user.id);\n      if (typeof dependencies.orchestrateAgencyTimesheetChange !== 'function') {\n        fail('AGENCY_CHANGE_INLINE_DEPENDENCY_INVALID', 'This Timesheet action is unavailable. Try again shortly.', 503);\n      }\n      const result = decodeAgencyInlineReply(await dependencies.orchestrateAgencyTimesheetChange({ request: payload, actor: user }), args);\n      const native = result.result;\n      // The actual mounted orchestrator strictly decodes this native result.\n      // A queue acceptance/count never supplies the HTTP success predicate.\n      return jsonResponse(native?.completed === true ? 200 : 409, {\n        ok: native?.completed === true,\n        code: result.runtime_refusal_code || native.code,\n        result: native\n      });\n    } catch (error) {\n      const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,199}$/.test(error.code)\n        ? error.code : typeof error?.json?.message === 'string' && /^[A-Z][A-Z0-9_]{0,199}$/.test(error.json.message)\n          ? error.json.message : 'AGENCY_CHANGE_INLINE_NATIVE_DEPENDENCY_UNAVAILABLE';\n      const status = code === 'AGENCY_CHANGE_BUSINESS_REQUEST_INVALID' ? 400\n        : error?.json?.code === '42501' ? 403\n          : error?.json?.code === 'PGRST202' || /DEPENDENCY|RESULT_INVALID|TARGET_CHANGED/.test(code) ? 503 : 409;\n      fail(code, status === 400 ? 'This Timesheet action is invalid.'\n        : status === 403 ? 'This Timesheet action is not available for this user.'\n          : 'The Timesheet change has not been confirmed. Retry the same action after refreshing its status.', status);\n    }\n  }\n\n  if (action === 'LATER_CHANGE_DECISION') {"
+        }
+      ]
+    },
+    {
+      "input_path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/69_complete_canonical_worker_with_authorised_validation.mjs",
+      "output": "83_complete_canonical_worker_with_manual_typed_validation.mjs",
+      "input_sha256": "70d655020686c7ae633f146e4919efeff9f2b4692422d8a3cf82bd87840ed824",
+      "forward_sha256": "be0257c4ff2dbf0eb79bb5103d27488eca5a03eb615500379b14aae0372860df",
+      "hunks": [
+        {
+          "label": "actual MANUAL validation DTO marker",
+          "before": "['timesheet_id','status','reason_code','validated_at_utc','updated_at'],code);",
+          "after": "['timesheet_id','status','reason_code','validated_at_utc','updated_at','validation_source_kind'],code);"
+        },
+        {
+          "label": "closed native validation kind in MANUAL frame",
+          "before": "if(value.weekly_validation.timesheet_id!==ts||typeof value.weekly_validation.status!=='string')fail(code);",
+          "after": "if(value.weekly_validation.timesheet_id!==ts||typeof value.weekly_validation.status!=='string'\n      ||!['LEGACY','AGENCY_INVOICE_WEEK'].includes(value.weekly_validation.validation_source_kind))fail(code);"
+        },
+        {
+          "label": "same native marker to existing readiness calculator",
+          "before": "hr_validation_reason_code:frame.weekly_validation?.reason_code??null});",
+          "after": "hr_validation_reason_code:frame.weekly_validation?.reason_code??null,\n    hr_validation_source_kind:frame.weekly_validation?.validation_source_kind??null});"
+        }
+      ]
+    },
+    {
+      "input_path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/39_complete_worker_context_with_native_paid_purpose.sqlinc",
+      "output": "84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "input_sha256": "1a21d0f74592edf8e283ff2a9f8fe2d7ee83e13f0ce6420ba5018bef2e327e69",
+      "forward_sha256": "899bcda05f68cdf61c2a614fffe19dd7aafe51ac1f1d762ab50f3e014f76d678",
+      "hunks": [
+        {
+          "label": "actual stored typed marker from native validation row",
+          "before": "'validated_at_utc',v.validated_at_utc,'updated_at',v.updated_at) into validation",
+          "after": "'validated_at_utc',v.validated_at_utc,'updated_at',v.updated_at,\n   'validation_source_kind',v.validation_source_kind) into validation"
+        }
+      ]
+    }
+  ]
+}

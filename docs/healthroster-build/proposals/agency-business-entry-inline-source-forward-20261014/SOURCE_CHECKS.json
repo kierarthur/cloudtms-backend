@@ -1,0 +1,27 @@
+{
+  "source_only": true,
+  "native": false,
+  "test_cases": 58,
+  "test_kind": "UNIT_ONLY_ACTUAL_MODULE_CALLER_AND_CODECS",
+  "syntax_checks": 7,
+  "complete_reverse_owners": 4,
+  "unique_full_reverse_hunks": 10,
+  "static_import_objects": 139,
+  "static_import_edges": 222,
+  "sql_lexical_pages": [
+    {
+      "path": "80_native_agency_business_entry.sqlinc",
+      "lexical_statements": 4
+    },
+    {
+      "path": "84_complete_native_worker_context_with_manual_typed_validation.sqlinc",
+      "lexical_statements": 11
+    }
+  ],
+  "sql_compiled": false,
+  "native_seal": null,
+  "canonical_mount": false,
+  "preserved": "Source20 and all prior frozen37/13/32/45/31/12 remain byte-exact; repository saved/Git verification occurs separately.",
+  "raw_whitespace_pass": false,
+  "raw_whitespace_disposition": "Inherited full-owner evidence findings remain; no blanket raw-whitespace PASS."
+}

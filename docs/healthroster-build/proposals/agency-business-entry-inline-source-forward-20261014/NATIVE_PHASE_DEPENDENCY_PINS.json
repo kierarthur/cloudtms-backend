@@ -1,0 +1,50 @@
+[
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-scalar-removal-hold-successor-20261014/construction/42_complete_native_begin_with_actual_removal_hold.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9",
+    "bytes": 13285
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-authorise-phase-forward-20261014/construction/46_agency_native_authorise_step.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924",
+    "bytes": 12290
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-typed-validation-native-return-construction-20261014/construction/53_agency_same_draft_return_step.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804",
+    "bytes": 10423
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/19_agency_native_worker_apply.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e",
+    "bytes": 14688
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/dependencies/00_agency_request_schema.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "4e5e59d5600f84cb917875246390c21cf4c8230c5d5e9418b8525ae7704f0aa0",
+    "bytes": 8644
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/36_complete_request_authority_with_candidate_admission.sqlinc",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230",
+    "bytes": 13742
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/agency-native-return.mjs",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "a07f385d0c7ab197ddef522d2182506fc9b58a7f2619e11c8022721befce5816",
+    "bytes": 2526
+  },
+  {
+    "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/reference/cloudtms-managed-release-sql.mjs",
+    "commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+    "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+    "bytes": 7853
+  }
+]
