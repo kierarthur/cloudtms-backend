@@ -1,0 +1,73 @@
+-- Purpose-bound pure-read use of the one current native release qualification.
+-- Actual native admission block is separately proved by its SAME owner.
+-- No action, release, VAT calculation, fake paid amount or read-side write.
+create or replace function private.weekly_source_checklist_source_invoice_decision_v1(
+  p_billing_movement_id uuid,p_scope jsonb,p_actor_user_id uuid
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $decision_read$
+declare blocks jsonb; again jsonb; item jsonb; count_rows integer; row_id uuid;
+  source_row public.weekly_source_upload_rows%rowtype; cycle public.weekly_source_cycles%rowtype;
+  request jsonb; context jsonb; context_again jsonb; facts jsonb; proof text;
+begin
+  -- This one existing private census proves service, fresh active Admin,
+  -- VIEW_SOURCE_PROGRESS, dated membership, current manifest conservation,
+  -- real upload row/date/Candidate and exact current native VAT_FIT block.
+  blocks:=private.weekly_source_checklist_source_invoice_block_items_v1(p_scope,p_actor_user_id);
+  select count(*) into count_rows from jsonb_array_elements(blocks->'items') i
+    where i#>>'{native_invoice_witness,billing_movement_id}'=p_billing_movement_id::text;
+  if count_rows<>1 then
+    return jsonb_build_object('known',false,'reason','NATIVE_CURRENT_INVOICE_BLOCK_NOT_PROVED','native_facts',blocks->'native_facts'); end if;
+  select i into item from jsonb_array_elements(blocks->'items') i
+    where i#>>'{native_invoice_witness,billing_movement_id}'=p_billing_movement_id::text;
+  row_id:=(item#>>'{native_invoice_witness,upload_row_id}')::uuid;
+  select s.* into strict source_row from public.weekly_source_upload_rows s where s.id=row_id;
+  select c.* into strict cycle from public.weekly_source_cycles c where c.id=(p_scope->>'source_cycle_id')::uuid;
+  if octet_length(source_row.normalised_row_hash) is distinct from 32 then
+    return jsonb_build_object('known',false,'reason','NATIVE_RELEASE_ROW_HASH_UNAVAILABLE','native_facts',blocks->'native_facts'); end if;
+  request:=jsonb_build_object('actor_user_id',p_actor_user_id,'upload_row_id',row_id,'source_cycle_id',cycle.id,
+    'report_scope_id',null,'expected_source_row_hash',encode(source_row.normalised_row_hash,'hex'),
+    'expected_authority_scope_version',cycle.version,'hold_kind','VAT_FIT','action','BILL_AT_NET_PLUS_20');
+  facts:=jsonb_build_object('native_block_facts',blocks->'native_facts','native_release_request',request);
+  begin
+    -- FALSE is a private purpose literal, never a browser/request mode switch.
+    context:=private.weekly_source_invoice_hold_release_context_core_v1(request,false);
+    perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+    context_again:=private.weekly_source_invoice_hold_release_context_core_v1(request,false);
+    perform private.weekly_source_invoice_hold_first_invoice_assert_v1(row_id);
+  exception when sqlstate '55000' or sqlstate '40001' or sqlstate '22023' then
+    -- Qualification failure is unknown decision truth, not a cleared hold.
+    -- Actor/permission (42501) and unexpected native errors propagate.
+    return jsonb_build_object('known',false,'reason','NATIVE_RELEASE_QUALIFICATION_UNAVAILABLE',
+      'native_facts',facts||jsonb_build_object('qualification_sqlstate',sqlstate,'qualification_code',sqlerrm));
+  end;
+  facts:=facts||jsonb_build_object('native_release_context',context,'native_release_context_again',context_again);
+  again:=private.weekly_source_checklist_source_invoice_block_items_v1(p_scope,p_actor_user_id);
+  if context is distinct from context_again or blocks is distinct from again then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+  -- Exact native Client/row/cycle bindings remain purpose-bound. Null/missing
+  -- native rule facts do not become a positive Office decision certificate.
+  if context->>'actor_user_id' is distinct from p_actor_user_id::text
+    or context->>'upload_row_id' is distinct from row_id::text
+    or context->>'client_id' is distinct from p_scope->>'client_id'
+    or context#>>'{cycle,id}' is distinct from p_scope->>'source_cycle_id'
+    or context#>>'{group,id}' is distinct from p_scope->>'source_group_id'
+    or context#>>'{upload,report_scope_id}' is not null or context->>'hold_kind' is distinct from 'VAT_FIT'
+    or context->>'choice' is distinct from 'BILL_AT_NET_PLUS_20'
+    or context#>>'{rules,invoice_sender}' is distinct from 'CLIENT_SELF_BILL'
+    or context#>>'{rules,invoice_amount_basis}' is distinct from 'SOURCE_AMOUNT'
+    or context#>>'{rules,source_amount_basis}' is distinct from 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY' then
+    return jsonb_build_object('known',false,'reason','NATIVE_RELEASE_DECISION_GRAIN_UNAVAILABLE','native_facts',facts); end if;
+  if exists(select 1 from public.weekly_source_invoice_hold_releases r where r.upload_row_id=row_id and r.hold_kind='VAT_FIT') then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end if;
+  proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECKLIST_NATIVE_INVOICE_DECISION_V1',facts),'hex');
+  return jsonb_build_object('known',true,'pending_decision',true,'native_facts',facts,
+    'decision_witness',jsonb_build_object('owner','private.weekly_source_invoice_hold_release_context_core_v1',
+      'actor_user_id',p_actor_user_id,'scope',p_scope,'billing_movement_id',p_billing_movement_id,
+      'client_manifest_id',item#>>'{native_invoice_witness,client_manifest_id}','upload_row_id',row_id,
+      'source_row_hash',encode(source_row.normalised_row_hash,'hex'),'authority_scope_version',cycle.version,
+      'hold_kind','VAT_FIT','read_proof_hash',proof));
+end;
+$decision_read$;
+alter function private.weekly_source_checklist_source_invoice_decision_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_checklist_source_invoice_decision_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;

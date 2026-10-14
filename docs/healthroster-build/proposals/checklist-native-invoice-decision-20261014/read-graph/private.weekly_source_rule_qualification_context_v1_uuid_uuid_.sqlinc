@@ -1,0 +1,23 @@
+create or replace function private.weekly_source_rule_qualification_context_v1(p_client_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare frame jsonb; auth jsonb; n integer; stack text;
+begin
+  select count(*),jsonb_agg(audit.after_json)->0 into n,frame from public.audit_events audit
+    where audit.object_type='weekly_source_off_rule_command' and audit.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'transaction_id'=pg_current_xact_id_if_assigned()::text
+      and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+      and not exists(select 1 from public.audit_events closed where closed.object_type=audit.object_type and closed.object_id_text=audit.object_id_text
+        and closed.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED' and closed.event_sequence_is_authoritative);
+  if n=0 then return null; end if;
+  get diagnostics stack=pg_context;
+  if n<>1 or stack !~ 'PL/pgSQL function (private\.)?weekly_source_rule_qualification_execute_v1\(jsonb\)'
+    or frame->>'source_cycle_id' is distinct from p_cycle_id::text or frame->'operational_ready' is distinct from 'false'::jsonb
+    or frame->>'command_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_COMMAND_V1',frame-'command_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_COMMAND_UNAVAILABLE' using errcode='55000'; end if;
+  auth:=private.weekly_source_rule_qualification_scope_assert_v1(frame->'authorization',(frame->>'actor_user_id')::uuid,false);
+  if p_client_id is not null and not(auth#>'{fixture_manifest,client_ids}' @> jsonb_build_array(p_client_id)) then
+    raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_FOREIGN_CLIENT' using errcode='42501'; end if;
+  return auth;
+end;
+$function$;

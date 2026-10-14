@@ -1,0 +1,64 @@
+create or replace function private._candidate_manager_authoriser_effective_v2(
+  p_client_policy jsonb,
+  p_contract_policy jsonb default null
+)
+returns jsonb
+language plpgsql
+immutable
+parallel safe
+set search_path=''
+as $function$
+declare
+  v_client jsonb:=private._candidate_manager_authoriser_policy_normalize_v2(p_client_policy,'CLIENT');
+  v_contract_source jsonb:=case when pg_catalog.jsonb_typeof(p_contract_policy)='object' then p_contract_policy else '{"mode":"INHERIT"}'::jsonb end;
+  v_mode text:=pg_catalog.upper(pg_catalog.btrim(coalesce(v_contract_source->>'mode','INHERIT')));
+  v_contract jsonb;
+  v_emails jsonb;
+  v_domains jsonb;
+  v_allow_free boolean;
+  v_source_mode text;
+begin
+  if p_contract_policy is null or v_mode='INHERIT' then
+    return v_client||pg_catalog.jsonb_build_object('source_mode','INHERIT');
+  end if;
+
+  if v_mode in ('EXTEND','CONTRACT_ONLY') then
+    v_contract:=private._candidate_manager_authoriser_policy_normalize_v2(v_contract_source,'CONTRACT_WRITE');
+  else
+    -- Compatibility: the former resolver treated every non-INHERIT value as a
+    -- complete replacement. Preserve that meaning without rewriting stored rows.
+    v_contract:=private._candidate_manager_authoriser_policy_normalize_v2(v_contract_source,'EFFECTIVE');
+  end if;
+
+  if v_mode='EXTEND' then
+    select coalesce(pg_catalog.jsonb_agg(x.value order by x.value),'[]'::jsonb)
+      into v_emails
+    from (
+      select distinct value
+      from pg_catalog.jsonb_array_elements_text((v_client->'approved_emails')||(v_contract->'approved_emails'))
+    ) x;
+    select coalesce(pg_catalog.jsonb_agg(x.value order by x.value),'[]'::jsonb)
+      into v_domains
+    from (
+      select distinct value
+      from pg_catalog.jsonb_array_elements_text((v_client->'approved_domains')||(v_contract->'approved_domains'))
+    ) x;
+    v_allow_free:=coalesce((v_client->>'allow_free_business_email')::boolean,false);
+    v_source_mode:='EXTEND';
+  elsif v_mode='CONTRACT_ONLY' then
+    v_emails:=v_contract->'approved_emails';
+    v_domains:=v_contract->'approved_domains';
+    v_allow_free:=false;
+    v_source_mode:='CONTRACT_ONLY';
+  else
+    v_emails:=v_contract->'approved_emails';
+    v_domains:=v_contract->'approved_domains';
+    v_allow_free:=coalesce((v_contract->>'allow_free_business_email')::boolean,false);
+    v_source_mode:='LEGACY_REPLACEMENT';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'approved_emails',v_emails,'approved_domains',v_domains,
+    'allow_free_business_email',v_allow_free,'source_mode',v_source_mode
+  );
+end;
+$function$;

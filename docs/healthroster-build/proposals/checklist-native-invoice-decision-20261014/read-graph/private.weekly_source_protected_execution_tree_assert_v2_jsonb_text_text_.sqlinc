@@ -1,0 +1,39 @@
+create or replace function private.weekly_source_protected_execution_tree_assert_v2(p_proof jsonb,p_execution_commit text,p_installation_commit text)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare file jsonb;
+begin
+  -- PostgreSQL cannot read Git objects. This asserts the closed receipt DTO;
+  -- the protected managed writer MUST remeasure the literal complete Git tree.
+  -- A caller JSON/hash assertion is never source equivalence authority.
+  if not private.weekly_source_qualification_closed_object_v1(p_proof,array['schema_version','execution_source_commit','installation_source_commit',
+      'inventory_schema','files','receipt_bindings','source_equivalence_sha256'])
+    or p_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_COMMITTED_EXECUTION_TREE_EQUIVALENCE_V2'
+    or p_proof->>'inventory_schema' is distinct from 'WEEKLY_SOURCE_NATIVE_RELEASE_TOOLCHAIN_VERIFIER_INVENTORY_V2'
+    or p_proof->>'execution_source_commit' is distinct from p_execution_commit
+    or p_proof->>'installation_source_commit' is distinct from p_installation_commit
+    or p_proof->>'source_equivalence_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_COMMITTED_EXECUTION_TREE_EQUIVALENCE_V2',p_proof-'source_equivalence_sha256'),'hex')
+    or jsonb_typeof(p_proof->'files') is distinct from 'array' or jsonb_array_length(p_proof->'files')=0
+    or jsonb_typeof(p_proof->'receipt_bindings') is distinct from 'array'
+    or (select count(distinct value->>'path') from jsonb_array_elements(p_proof->'files') value)<>jsonb_array_length(p_proof->'files')
+    or exists(select 1 from unnest(array['.node-version','.gitattributes','osv-scanner.toml','.github/workflows/database-release.yml','supabase/release/export_contract.sql',
+      'supabase/release/current-release.json','supabase/release/current-contract.json','scripts/cloudtms-db-release.mjs']) required_path
+      where not exists(select 1 from jsonb_array_elements(p_proof->'files') item where item->>'path'=required_path)) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_EXECUTION_TREE_CHANGED' using errcode='55000'; end if;
+  for file in select value from jsonb_array_elements(p_proof->'files') value loop
+    if not private.weekly_source_qualification_closed_object_v1(file,array['path','git_mode','git_type','execution_blob_oid','installation_blob_oid',
+        'execution_sha256','installation_sha256','comparison','comparison_sha256'])
+      or nullif(file->>'path','') is null or file->>'git_mode' not in ('100644','100755') or file->>'git_type' is distinct from 'blob'
+      or exists(select 1 from unnest(array['execution_sha256','installation_sha256','comparison_sha256']) k
+        where coalesce(file->>k,'') !~ '^[0-9a-f]{64}$')
+      or exists(select 1 from unnest(array['execution_blob_oid','installation_blob_oid']) k where coalesce(file->>k,'') !~ '^[0-9a-f]{40}$')
+      or (file->>'path'<>'supabase/release/current-release.json' and
+        (file->>'comparison' is distinct from 'EXACT_GIT_OBJECT' or file->>'execution_blob_oid' is distinct from file->>'installation_blob_oid'
+          or file->>'execution_sha256' is distinct from file->>'installation_sha256'))
+      or (file->>'path'='supabase/release/current-release.json'
+        and file->>'comparison' is distinct from 'RELEASE_AUTHORITY_EXCEPT_CLOSED_RECEIPT_DESCRIPTORS') then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_EXECUTION_TREE_CHANGED' using errcode='55000'; end if;
+  end loop;
+end;
+$function$;
