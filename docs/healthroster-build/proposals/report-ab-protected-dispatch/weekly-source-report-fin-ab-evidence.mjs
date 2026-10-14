@@ -128,14 +128,17 @@ export function buildQualification(installation,recordedExecution,rows,reviewedD
 }
 const sqlJson=(value,literal)=>literal(JSON.stringify(value))+'::jsonb';
 export function loadReportFinInputs(root,release,context){
- const bundle=loadCommittedBundle(root,release,context,'weeklySourceProtectedOperational');
+ if(!commit.test(context.receiptInputCommit))fail('REPORT_AB_RECEIPT_INPUT_COMMIT_REQUIRED');
+ // Installed source remains context.gitCommit. This read explicitly binds the
+ // separate receipt-data commit, never silently relabels installed execution.
+ const bundle=loadCommittedBundle(root,release,{...context,gitCommit:context.receiptInputCommit},'weeklySourceProtectedOperational');
  if(bundle===null||bundle.report_fin_qualifications===undefined)return [];
  exact(bundle,['schema_version','qualifications','report_fin_qualifications'],'REPORT_AB_COMMITTED_BUNDLE_INVALID');
  if(bundle.schema_version!=='WEEKLY_SOURCE_PROTECTED_OPERATIONAL_INPUT_BUNDLE_V1'||!Array.isArray(bundle.qualifications)
   ||!Array.isArray(bundle.report_fin_qualifications)||!bundle.report_fin_qualifications.length||bundle.report_fin_qualifications.length>100)
   fail('REPORT_AB_COMMITTED_BUNDLE_INVALID');
  const file='supabase/release/weekly-source-protected-operational.json',descriptor=release.weeklySourceProtectedOperational;
- const blob=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','rev-parse',context.gitCommit+':'+file],
+ const blob=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','rev-parse',context.receiptInputCommit+':'+file],
   {cwd:root,encoding:'utf8'}).trim();
  return bundle.report_fin_qualifications.map((input,index)=>{
   exact(input,['execution_release_id','decision'],'REPORT_AB_COMMITTED_INPUT_INVALID');
@@ -199,26 +202,62 @@ export async function prepareReportFinQualifications({root,context,verified,inpu
 // Root-only source interface to Money's actual owner-session recorder. It
 // neither installs/resumes a release nor writes the release ledger directly.
 // Exact recorder/receipt ABI remains provisional until Money's full freeze.
+export const postVerifiedReceiptKeys=Object.freeze(['schema_version','execution','receipt_input_commit','receipt_tree_sha256',
+ 'artifact_slot','artifacts_sha256','prior_evidence_sha256','evidence_sha256','actor_user_id','recorded_at_utc',
+ 'replayed','operational_settings_changed','receipt_sha256']);
+export function assertPostVerifiedReportReceipt(result,request,actorUserId){
+ try{
+ exact(result,postVerifiedReceiptKeys,'REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');
+ const {receipt_sha256,...body}=result;
+ const stamp=result.recorded_at_utc;
+ if(result.schema_version!=='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1'
+  ||domainHash('REPORT_AB_EXECUTION',result.execution)!==domainHash('REPORT_AB_EXECUTION',request.expected_execution)
+  ||result.receipt_input_commit!==request.receipt_input_commit
+  ||result.receipt_tree_sha256!==request.receipt_tree_proof.source_equivalence_sha256
+  ||result.artifact_slot!==request.artifact_slot
+  ||result.artifacts_sha256!==domainHash('WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_SET_V1',request.artifacts)
+  ||result.prior_evidence_sha256!==request.expected_evidence_sha256||!hex.test(result.evidence_sha256)
+  ||result.actor_user_id!==actorUserId||typeof result.replayed!=='boolean'||result.operational_settings_changed!==false
+  ||(result.replayed!==(result.prior_evidence_sha256===result.evidence_sha256))
+  ||typeof stamp!=='string'||!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(stamp)
+  ||!date(stamp.slice(0,10))||!Number.isFinite(Date.parse(stamp))
+  ||receipt_sha256!==domainHash('WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1',body))
+  fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');
+ // New evidence is not reconstructed from an invented empty prior ledger.
+ // Root's controlling recorder/readback owns the full evidence body and CAS.
+ return result;
+ }catch{fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');}
+}
 export async function recordPostVerifiedReportArtifacts({actorUserId,expectedExecution,expectedEvidenceSha256,receiptInputCommit,
  receiptTreeProof,artifactSlot,artifacts,reason,turnBackendPid,execute,literal}){
  execution(expectedExecution);
  if(!uuid.test(actorUserId)||!hex.test(expectedEvidenceSha256)||!commit.test(receiptInputCommit)
   ||!['weekly_source_report_fin_native_comparisons','weekly_source_report_fin_qualifications'].includes(artifactSlot)
-  ||!Array.isArray(artifacts)||!artifacts.length||typeof reason!=='string'||reason.trim()!==reason||reason.length<1||reason.length>1000
-  ||!Number.isSafeInteger(turnBackendPid)||turnBackendPid<1)fail('REPORT_AB_POST_VERIFIED_INPUT_INVALID');
+  ||!Array.isArray(artifacts)||!artifacts.length||artifacts.length>100||typeof reason!=='string'||reason.trim()!==reason||reason.length<1||reason.length>1000
+  ||!Number.isSafeInteger(turnBackendPid)||turnBackendPid<1||typeof execute!=='function'||typeof literal!=='function')fail('REPORT_AB_POST_VERIFIED_INPUT_INVALID');
  assertExecutionTreeProof(receiptTreeProof,expectedExecution.source_commit,receiptInputCommit);
  if(artifactSlot==='weekly_source_report_fin_native_comparisons')assertNativeComparisons(expectedExecution,artifacts);
- else for(const q of artifacts){
-  if(q.installation?.release_id!==expectedExecution.release_id||q.receipt_input_commit!==receiptInputCommit
-   ||domainHash(schema,(({qualification_sha256,...body})=>body)(q))!==q.qualification_sha256)fail('REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
-  assertNativeComparisons(expectedExecution,q.native_comparisons,{complete:true});
+ else {
+  for(const q of artifacts){
+   exact(q,['schema_version','phase','installation','receipt_input_commit','scope','execution','native_comparisons','decision',
+    'decision_binding','source_equivalence','qualification_sha256'],'REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
+   if(q.receipt_input_commit!==receiptInputCommit
+    ||domainHash('REPORT_AB_EXECUTION',q.installation)!==domainHash('REPORT_AB_EXECUTION',expectedExecution)
+    ||domainHash('REPORT_AB_EXECUTION',q.execution)!==domainHash('REPORT_AB_EXECUTION',expectedExecution))
+    fail('REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
+   const rebuilt=buildQualification(q.installation,q.execution,q.native_comparisons,q.decision,q.decision_binding,
+    q.source_equivalence,q.receipt_input_commit);
+   if(domainHash('REPORT_AB_CERTIFICATE_REBUILD',rebuilt)!==domainHash('REPORT_AB_CERTIFICATE_REBUILD',q))
+    fail('REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
+  }
+  if(new Set(artifacts.map(q=>domainHash('REPORT_AB_SCOPE',q.scope))).size!==artifacts.length)
+   fail('REPORT_AB_POST_VERIFIED_CERTIFICATE_INVALID');
  }
  const request={schema_version:'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORD_V1',expected_execution:expectedExecution,
   expected_evidence_sha256:expectedEvidenceSha256,receipt_input_commit:receiptInputCommit,receipt_tree_proof:receiptTreeProof,
   artifact_slot:artifactSlot,artifacts,reason,turn_backend_pid:turnBackendPid};
- const result=JSON.parse(await execute('select private.weekly_source_post_verified_evidence_record_v1('+literal(actorUserId)+'::uuid,'+
-  sqlJson(request,literal)+')::text;'));
- if(!result||typeof result!=='object'||Array.isArray(result)
-  ||result.schema_version!=='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1')fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');
- return result;
+ const returned=await execute('select private.weekly_source_post_verified_evidence_record_v1('+literal(actorUserId)+'::uuid,'+
+  sqlJson(request,literal)+')::text;');
+ let result;try{result=JSON.parse(returned);}catch{fail('REPORT_AB_POST_VERIFIED_RECEIPT_INVALID');}
+ return assertPostVerifiedReportReceipt(result,request,actorUserId);
 }

@@ -1,37 +1,37 @@
 {
   "schema_version": "REPORT_AB_PROTECTED_DISPATCH_SOURCE_PACKAGE_V1",
-  "root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
   "status": "REVIEWED_WIP_SAME_INSTALL_RECORDER_CONTRACT_PENDING_NO_SELECTED_VARIANT",
   "new_private_signatures": [
     "private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)",
-    "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)",
-    "private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)",
+    "private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)",
+    "private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)",
     "private.weekly_source_report_fin_strategy_v1(uuid)",
     "private.weekly_source_report_fin_dispatch_v1(jsonb)",
     "private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)",
     "private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)"
   ],
-  "private_union": "Five new owner-only signatures; complete future Q/A0/Prepared/later union is root-owned, not current-only 237.",
+  "private_union": "Seven new owner-only signatures; complete future Q/A0/Prepared/Money/later union is root-owned, not current-only 239.",
   "tests": {
-    "offline_cases": 28,
-    "passed": 28,
+    "offline_cases": 46,
+    "passed": 46,
     "node_syntax": "PASS",
     "database_compile": "NOT_RUN",
     "financial_ab": "NOT_RUN",
     "exposure": "HELD",
-    "release_design": "Distinct-release draft held; authoritative same-Install2 recorder/reader/F1 contract pending; no third release."
+    "release_design": "Same-Install2 recorder ABI aligned in provisional complete source; final Money source pins/closure review and all native/remote qualification remain held; no third release."
   },
-  "package_sha256": "13fe90802646b4fb779d3aeb961d7de0067db3e67c1f7cbfdff6ccc6efaf344c",
+  "package_sha256": "fa2cdeb1a4ece7e0d35b9ae93a2ea8c3045391bc350fb9108475e42c7a843d65",
   "artifacts": [
     {
       "path": "01_certificate.sqlinc",
-      "sha256": "de110b11f5b26aff8864cf98faaa94d79535bfa04b02f97344e131d7fd3c0a9b",
-      "bytes": 8220
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3",
+      "bytes": 8677
     },
     {
       "path": "02_release_feature_strategy.sqlinc",
-      "sha256": "313ccd4974b432db7cfdc3cd04898d0bccab9eafa65003ae9fe36e457ed56dd4",
-      "bytes": 7995
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a",
+      "bytes": 9046
     },
     {
       "path": "03_operational_dispatch.sqlinc",
@@ -45,8 +45,8 @@
     },
     {
       "path": "05_complete_feature_setup.sqlinc",
-      "sha256": "87e8ca8d11a1dbea62b691e049c0a8b53b5fc2cefe31e45b7879759f23decb05",
-      "bytes": 22033
+      "sha256": "e1ad74dc0620e7dc40b12b0f25ea2303ce1163d99dc57e9b876b6fb81731497a",
+      "bytes": 22135
     },
     {
       "path": "06_complete_managed_release.mjs",
@@ -55,13 +55,13 @@
     },
     {
       "path": "07_owner_acl.sqlinc",
-      "sha256": "0b6a2f7d09eafd34c909b380018a541d501ac6cc37207cf3aaa5fecaaab9c71c",
-      "bytes": 1914
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724",
+      "bytes": 1938
     },
     {
       "path": "08_datafree_verifier.sqlinc",
-      "sha256": "c9e6c06ad44bbb17b6f5ceebf4d38f19e6ea65089ee18101fee5eeb7f35d1154",
-      "bytes": 3268
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+      "bytes": 3280
     },
     {
       "path": "09_complete_operational_evidence.mjs",
@@ -75,53 +75,58 @@
     },
     {
       "path": "11_complete_registry_current_union.sqlinc",
-      "sha256": "5512aca2fb2997f3a389693f12843c3c04d77ae708706c0dd3e34d66214ae060",
-      "bytes": 36213
+      "sha256": "4480742d7f10283e77131666d8b142533cc5cffe19bf432dcbbffe854c83180c",
+      "bytes": 36225
     },
     {
       "path": "12_complete_acl_current_union.sqlinc",
-      "sha256": "2d71f59c118334e85331aa72d6c5c658f51e1949d0a4fcaa75b2ae18d0d4399f",
-      "bytes": 59382
+      "sha256": "0ecd4a95e02a927ba89a2874493ded15bd9e705418fcb217c7c3849fa33b8299",
+      "bytes": 59394
     },
     {
       "path": "13_slot_validators.sqlinc",
-      "sha256": "814f969a6de723f57c5978458160b63b042b4027e3cf5d2f0a7f9cec2a48e256",
-      "bytes": 10366
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12",
+      "bytes": 12162
     },
     {
       "path": "CONTROLLING_INPUTS.json",
-      "sha256": "c220659e7845b0a29f51c30a789636f330e06e7c9bb104f58bd22ed80bcc583d",
-      "bytes": 7405
+      "sha256": "e96e808e2c9c667d99657ec98a2c42323dc1bf800102c3c17ec807a17359398e",
+      "bytes": 7446
     },
     {
       "path": "FULL_REVERSE_RECEIPT.json",
-      "sha256": "4ebbe8c4df2c97956840829cab8e6fee1c16be585ae667cdd76d4d66ec4dc4b6",
-      "bytes": 10949
+      "sha256": "43bd84b6d29c51ea249e99700373d4d135eb32c8a8b5eb40c636f6097eb99722",
+      "bytes": 10737
     },
     {
       "path": "METADATA_PIN_FORWARD_AND_LEXICAL_RECEIPT.json",
-      "sha256": "4efd36ed5ed9aaf9aa8c3fcd1b117e8924a8533df6df24766c88de58421f5367",
-      "bytes": 16685
+      "sha256": "d568a69815484197257e8c633dd18293495159a83f482705060544778be5a40d",
+      "bytes": 17439
     },
     {
       "path": "NATIVE_PROOF_RECIPE.md",
-      "sha256": "fbdccf6c749073ef0e567af233438c04efa9aefab0ae02628b3cf7e375896d38",
-      "bytes": 7184
+      "sha256": "e69486335fb460fb743134061798e26ae7f6b7cbf564d43282092e8fe7dbdf8e",
+      "bytes": 7706
     },
     {
       "path": "OFF_CONTEXT_PREREQUISITE.md",
-      "sha256": "b194cc785dbca524501c53a2e42ceee2886f825a9c425424910b60b1fae52917",
-      "bytes": 4038
+      "sha256": "c492204ca9d9978bba73bf46c61701eb1b21b2e6b6a03c4a9f81126e0e91bb09",
+      "bytes": 4858
     },
     {
       "path": "PRIVATE_SIGNATURES.json",
-      "sha256": "388575ffb7bf42134faa674c8bc07aba80936b1b8f1fb283f8ac3d2036f1d5ef",
-      "bytes": 934
+      "sha256": "ef88e0aa587bbc6d293698aaa450ac1940512d65508cd84939eed434afd28d49",
+      "bytes": 946
     },
     {
       "path": "README.md",
-      "sha256": "b62a1d63ca3917a2e1b7a69230f285a4b9c0137587b4b51eddfb3da5dab0aa93",
-      "bytes": 11077
+      "sha256": "3808d88195760e4a8f5e2de851c11426c61cfa30a9a099595de59429fe9322ec",
+      "bytes": 11864
+    },
+    {
+      "path": "RECORDER_ABI.md",
+      "sha256": "79d5bca71391ef24a0e81486e52f9e55ed11a8112cef43f8b2c19494608b0be3",
+      "bytes": 4372
     },
     {
       "path": "ROOT_CLOSURE_TEMPLATE.sqlinc",
@@ -130,13 +135,13 @@
     },
     {
       "path": "SOURCE_TEST_RESULTS.txt",
-      "sha256": "684e2694ae2d34a2b4fe87007e848fd0fc37059404350dadeeaf39b0c28986ff",
-      "bytes": 2362
+      "sha256": "7b4f5e9b3bf3d332d0a948ef92d7d9541799546ae20adbac71b3785346674169",
+      "bytes": 3901
     },
     {
       "path": "TWO_INSTALL_RECONCILIATION.md",
-      "sha256": "b6de4f7df00f7268ffcc94414b0d6c46ba99a3e0d6347ccd51a124247996d926",
-      "bytes": 5869
+      "sha256": "34ad69a336a4c8ccf49f0d4344cf1ff21417235c6e83e68322e1f956ffcfe5cf",
+      "bytes": 6563
     },
     {
       "path": "adapt-same-install.mjs",
@@ -145,23 +150,23 @@
     },
     {
       "path": "build-proposal.mjs",
-      "sha256": "4bd69cb7ab434c865498fe52113d047660f23ce495378522f3471cce2be84ab2",
-      "bytes": 9976
+      "sha256": "a2470252876aba3b83e20550c40de85a36b433deb93359cc7d2bd2a34aaac6ce",
+      "bytes": 9806
     },
     {
       "path": "freeze.mjs",
-      "sha256": "577c0c069dc68aad8662510b598c8d9b9eeb36b0e2e74d860cf8a0d1ff311ff1",
-      "bytes": 5234
+      "sha256": "81ce171f3465c815a32b28866906a4b04e972e881869dcc6ec5c63613c2937a6",
+      "bytes": 5537
     },
     {
       "path": "pin-inputs.mjs",
-      "sha256": "fe7fd2193a507f0e2bcecac8de00f43d9ae8401f96556f791a67cab6b72f1487",
-      "bytes": 3663
+      "sha256": "7d10bbb0a69f18507bfe168d5af5c8c5af197268cca98b3de5e9ff56d6b5eacc",
+      "bytes": 3934
     },
     {
       "path": "report-ab-dispatch.test.mjs",
-      "sha256": "d272074772bc36dea43d7acd6ca45c93c909fba84702d04e3fa6d600722613cb",
-      "bytes": 12917
+      "sha256": "0a54ca38ea5c269d0e305205af144bcb1db5bdbd02d0b4a33cdf6d8861d555f0",
+      "bytes": 22041
     },
     {
       "path": "verify-source.mjs",
@@ -180,8 +185,8 @@
     },
     {
       "path": "weekly-source-report-fin-ab-evidence.mjs",
-      "sha256": "7f4c9d0ccef9419ba41d102149818586fcc0661eb1b3104ce05ff578514412ef",
-      "bytes": 20333
+      "sha256": "3538c1f61b80fa07d482c0b9b2ef38fb5e0041c85a3c36556a19d7591510d66b",
+      "bytes": 23320
     }
   ]
 }

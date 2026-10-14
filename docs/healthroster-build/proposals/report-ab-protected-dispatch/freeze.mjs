@@ -53,6 +53,9 @@ fs.writeFileSync(path.join(dir,'08_datafree_verifier.sqlinc'),verifier);
 const result=spawnSync(process.execPath,['--test',path.join(dir,'report-ab-dispatch.test.mjs')],{encoding:'utf8'});
 fs.writeFileSync(path.join(dir,'SOURCE_TEST_RESULTS.txt'),result.stdout+result.stderr);
 if(result.status!==0){process.stdout.write(result.stdout+result.stderr);throw Error('SOURCE_TEST_FAILED');}
+const tests=Number(result.stdout.match(/(?:# |ℹ )tests (\d+)/)?.[1]);
+const passed=Number(result.stdout.match(/(?:# |ℹ )pass (\d+)/)?.[1]);
+if(!Number.isSafeInteger(tests)||tests!==passed)throw Error('SOURCE_TEST_COUNT_UNPROVED');
 for(const file of fs.readdirSync(dir).filter(f=>f.endsWith('.mjs'))){const syntax=spawnSync(process.execPath,['--check',path.join(dir,file)],{encoding:'utf8'});
  if(syntax.status!==0)throw Error('SYNTAX_FAILED '+file+' '+syntax.stderr);}
 const inputs=JSON.parse(fs.readFileSync(path.join(dir,'CONTROLLING_INPUTS.json'),'utf8'));
@@ -60,8 +63,8 @@ const artifacts=fs.readdirSync(dir).filter(f=>f!=='SOURCE_MANIFEST.json').sort()
 const package_sha256=sha(JSON.stringify(artifacts));
 fs.writeFileSync(path.join(dir,'SOURCE_MANIFEST.json'),JSON.stringify({schema_version:'REPORT_AB_PROTECTED_DISPATCH_SOURCE_PACKAGE_V1',
  root_commit:inputs.root_commit,status:'REVIEWED_WIP_SAME_INSTALL_RECORDER_CONTRACT_PENDING_NO_SELECTED_VARIANT',new_private_signatures:signatures,
- private_union:'Five new owner-only signatures; complete future Q/A0/Prepared/later union is root-owned, not current-only 237.',
- tests:{offline_cases:28,passed:28,node_syntax:'PASS',database_compile:'NOT_RUN',financial_ab:'NOT_RUN',exposure:'HELD',
- release_design:'Distinct-release draft held; authoritative same-Install2 recorder/reader/F1 contract pending; no third release.'},
+ private_union:'Seven new owner-only signatures; complete future Q/A0/Prepared/Money/later union is root-owned, not current-only 239.',
+ tests:{offline_cases:tests,passed,node_syntax:'PASS',database_compile:'NOT_RUN',financial_ab:'NOT_RUN',exposure:'HELD',
+ release_design:'Same-Install2 recorder ABI aligned in provisional complete source; final Money source pins/closure review and all native/remote qualification remain held; no third release.'},
  package_sha256,artifacts},null,2)+'\n');
 console.log(JSON.stringify({artifacts:artifacts.length,package_sha256,manifest_sha256:sha(fs.readFileSync(path.join(dir,'SOURCE_MANIFEST.json')))}));

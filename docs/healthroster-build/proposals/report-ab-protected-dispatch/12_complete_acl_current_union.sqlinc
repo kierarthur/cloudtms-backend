@@ -264,8 +264,8 @@ set search_path to 'pg_catalog','pg_temp'
 as $function$
   values
     ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),
-    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),
-    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),
+    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)'),
+    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)'),
     ('private.weekly_source_report_fin_strategy_v1(uuid)'),
     ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),
     ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),

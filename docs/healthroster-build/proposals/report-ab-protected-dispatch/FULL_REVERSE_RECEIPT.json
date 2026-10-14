@@ -1,6 +1,6 @@
 {
   "schema_version": "REPORT_AB_COMPLETE_SOURCE_REVERSE_V1",
-  "root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
   "status": "SOURCE_ONLY_NO_NATIVE_PROOF",
   "owners": [
     {
@@ -26,7 +26,7 @@
       "input": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
       "output": "05_complete_feature_setup.sqlinc",
       "input_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
-      "output_sha256": "87e8ca8d11a1dbea62b691e049c0a8b53b5fc2cefe31e45b7879759f23decb05",
+      "output_sha256": "e1ad74dc0620e7dc40b12b0f25ea2303ce1163d99dc57e9b876b6fb81731497a",
       "full_reverse": true,
       "hunks": [
         {
@@ -37,22 +37,17 @@
         {
           "id": "REPLAY_REPORT_CERTIFICATE",
           "old": "    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);",
-          "new": "    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then\n      perform private.weekly_source_report_fin_certificate_assert_v1(v_assignment.feature_receipt_json->'report_fin_qualification',\n        v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);\n    end if;\n    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);"
+          "new": "    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then\n      if v_assignment.feature_receipt_json->'report_fin_qualification' is distinct from\n        private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,\n          v_assignment.feature_receipt_json->'protected_capability_qualification') then\n        raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000';\n      end if;\n    end if;\n    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);"
         },
         {
           "id": "LOCKED_ACTUAL_REPORT_BINDING",
           "old": "  if v_assignment.feature_enabled=v_enabled then\n",
-          "new": "  -- Server-derived Report binding, using only the actual saved immutable\n  -- version/range. No browser strategy/hash field and no default A/B.\n  if v_enabled and v_purpose='RULE_SET' then\n    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);\n  end if;\n  if v_assignment.feature_enabled=v_enabled then\n"
+          "new": "  -- Server-derived Report binding, using only the actual saved immutable\n  -- version/range. No browser strategy/hash field and no default A/B.\n  if v_enabled and v_purpose='RULE_SET' then\n    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,v_qualification);\n  end if;\n  if v_assignment.feature_enabled=v_enabled then\n"
         },
         {
-          "id": "REPORT_REQUALIFICATION_ONLY",
-          "old": "    if not v_enabled or v_qualification is null or v_assignment.feature_purpose is distinct from v_purpose then",
-          "new": "    if not v_enabled or (v_qualification is null and v_report_qualification is null) or v_assignment.feature_purpose is distinct from v_purpose then"
-        },
-        {
-          "id": "PRESERVE_CAPABILITY_REPORT_REQUAL_RECEIPT",
+          "id": "REPORT_REQUALIFICATION_RECEIPT",
           "old": "      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false);",
-          "new": "      'request_id',v_request_id,'requalification',true,'replayed',false)\n      ||case when v_qualification is null then '{}'::jsonb else jsonb_build_object('protected_capability_qualification',v_qualification) end\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"
+          "new": "      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false)\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"
         },
         {
           "id": "REPORT_INITIAL_RECEIPT",
@@ -100,13 +95,13 @@
       "input": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
       "output": "11_complete_registry_current_union.sqlinc",
       "input_sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
-      "output_sha256": "5512aca2fb2997f3a389693f12843c3c04d77ae708706c0dd3e34d66214ae060",
+      "output_sha256": "4480742d7f10283e77131666d8b142533cc5cffe19bf432dcbbffe854c83180c",
       "full_reverse": true,
       "hunks": [
         {
-          "id": "ONLY_FIVE_REPORT_PRIVATE_HELPERS",
+          "id": "ONLY_SEVEN_REPORT_PRIVATE_HELPERS",
           "old": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n",
-          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
+          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
         }
       ]
     },
@@ -114,13 +109,13 @@
       "input": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
       "output": "12_complete_acl_current_union.sqlinc",
       "input_sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
-      "output_sha256": "2d71f59c118334e85331aa72d6c5c658f51e1949d0a4fcaa75b2ae18d0d4399f",
+      "output_sha256": "0ecd4a95e02a927ba89a2874493ded15bd9e705418fcb217c7c3849fa33b8299",
       "full_reverse": true,
       "hunks": [
         {
-          "id": "ONLY_FIVE_REPORT_PRIVATE_HELPERS",
+          "id": "ONLY_SEVEN_REPORT_PRIVATE_HELPERS",
           "old": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n",
-          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
+          "new": "create or replace function private._weekly_source_acl_private_helper_contract_v1()\nreturns table(function_signature text)\nlanguage sql\nimmutable\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  values\n    ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)'),\n    ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)'),\n    ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)'),\n    ('private.weekly_source_report_fin_strategy_v1(uuid)'),\n    ('private.weekly_source_report_fin_dispatch_v1(jsonb)'),\n    ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)'),\n    ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)'),\n"
         }
       ]
     }

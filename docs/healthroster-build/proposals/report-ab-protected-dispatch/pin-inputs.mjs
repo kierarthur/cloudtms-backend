@@ -25,10 +25,13 @@ const files=[
 ];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const inputs=files.map(file=>{const b=fs.readFileSync(path.join(root,file));return {path:file,sha256:sha(b),bytes:b.length};});
+const pinFile=path.join(out,'CONTROLLING_INPUTS.json');
+const prior=fs.existsSync(pinFile)?JSON.parse(fs.readFileSync(pinFile,'utf8')):null;
+if(prior&&JSON.stringify(prior.inputs)!==JSON.stringify(inputs))throw Error('CONTROLLING_OWNER_CHANGED_REVIEW_REQUIRED');
 const head=execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
-fs.writeFileSync(path.join(out,'CONTROLLING_INPUTS.json'),JSON.stringify({schema_version:'REPORT_AB_CONTROLLING_SOURCE_INPUTS_V1',root_commit:head,
+fs.writeFileSync(pinFile,JSON.stringify({schema_version:'REPORT_AB_CONTROLLING_SOURCE_INPUTS_V1',root_commit:head,
  runtime_base:'cea15289e0283e3383e71f0acb8b18ce184647c2',status:'SOURCE_ONLY_NO_NATIVE_ACCEPTANCE',inputs,
  preserve:['Frozen Prepared30/array11/Report/Automatic/CN/A0 inputs','All root dirty evidence','All Banking worktree/source bytes'],
  native_admission:'Existing exact Source pay-query guard body/call retained; no downstream Banking definition changed or followed.',
- execution_equivalence:'Runtime byte equality is not whole-tree equivalence. Real qualification must compare every tracked object at actual R1/R2 using the final strict forward.'},null,2)+'\n');
+ execution_equivalence:'Runtime byte equality is not whole-tree equivalence. Real qualification compares every tracked object at actual installed source and separate receipt-input commit using the final strict forward.'},null,2)+'\n');
 console.log(JSON.stringify({root_commit:head,inputs:inputs.length}));

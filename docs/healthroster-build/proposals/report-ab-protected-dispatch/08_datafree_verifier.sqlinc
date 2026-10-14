@@ -6,13 +6,13 @@ do $report_ab_declarations$
 declare expected record; actual pg_catalog.pg_proc%rowtype;
 begin
  for expected in select * from (values
-  ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)','78df6aaa4529387ab595845ed20c6ba47ef1ceee3529e9762f9bcb57527fd149','void','s'),
-  ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)','0bc696e9af0bd54fe79c9c702420bd112e01be495152152359b02abe6c59ee83','jsonb','s'),
-  ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)','e8dc6749561598168e025d616a97fb2564264c73708a9adc802acf7efcb97080','jsonb','s'),
-  ('private.weekly_source_report_fin_strategy_v1(uuid)','6fca6dc250fb8a283272e5bb332151a33bb7aa280b4a830008d0a2e1f0903e50','jsonb','s'),
+  ('private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)','828084d89b42c3d542fc4539ab00e6b18f7a318025b275260dc00ba29401880b','void','s'),
+  ('private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)','125b353359a8936598602e71659eeda7b0a721c4ab1baeb063477ddca6635ce9','jsonb','s'),
+  ('private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)','7c24438d704470dc258b32a4ee7746dc70f619741682bb2efb3cc866cd6d781c','jsonb','s'),
+  ('private.weekly_source_report_fin_strategy_v1(uuid)','d3b51ab042ee542993ff42a2562a0fd2baa1567515cd89b49b1bdc9f44c6562f','jsonb','s'),
   ('private.weekly_source_report_fin_dispatch_v1(jsonb)','624a5c55dbc6134f0a0d9c1c3035439d11e4f16362d1cbee41e93d0570a3b4f7','jsonb','v'),
-  ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)','bfc13212f3327f68fdb9aecc5483a0e605e239b063202851442cbcb93b965b28','void','s'),
-  ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)','1c99e244bea0a3c51c7d40bd0c66e0db615daac8f8b22a954fbfb2708baf8794','void','s')
+  ('private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)','a98a610ae93401d2a2e31e1da5eb9ad2b78a1942f6675761918c408640840a41','void','s'),
+  ('private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)','26e82a5b951bf8f4e0a1b241f8ef5c5204caed4f670fba065c669645a15b08fe','void','s')
  ) items(signature,body_sha256,return_type,volatility) loop
   select * into actual from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure(expected.signature);
   if not found or actual.proowner<>current_user::regrole::oid or not actual.prosecdef or actual.prokind<>'f'

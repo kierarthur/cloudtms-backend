@@ -16,6 +16,12 @@ begin
     or p_certificate->>'qualification_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
       'WEEKLY_SOURCE_REPORT_FIN_AB_QUALIFICATION_V1',p_certificate-'qualification_sha256'),'hex') then
     raise exception 'WEEKLY_SOURCE_REPORT_FIN_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  -- Close array type before any SRF/cardinality use; planner order within a
+  -- compound SQL expression is not an admission guarantee.
+  if jsonb_typeof(p_certificate->'native_comparisons') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
+  if jsonb_array_length(p_certificate->'native_comparisons')<>cardinality(required_cases)*2 then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
   installation:=p_certificate->'installation'; execution:=p_certificate->'execution'; scope_value:=p_certificate->'scope';
   decision:=p_certificate->'decision'; latest:=private.weekly_source_protected_qualification_release_v1();
   if not private.weekly_source_qualification_closed_object_v1(scope_value,array['agency_id','source_group_id','rule_set_version_id',
@@ -46,11 +52,12 @@ begin
     or recorded.evidence_json#>>'{managed_release,manifest_sha256}' is distinct from execution->>'managed_manifest_sha256'
     or recorded.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}' is distinct from execution->>'installed_catalogue_jsonb_sha256'
     or jsonb_typeof(recorded.evidence_json->'weekly_source_report_fin_native_comparisons') is distinct from 'array'
-    or exists(select 1 from jsonb_array_elements(p_certificate->'native_comparisons') certificate_case
-      where not exists(select 1 from jsonb_array_elements(recorded.evidence_json->'weekly_source_report_fin_native_comparisons') retained_case
-        where retained_case=certificate_case))
     or execution->>'environment' is distinct from 'TEST' or execution->>'database' is distinct from current_database()
     or execution->>'source_commit' !~ '^[0-9a-f]{40}$' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIN_RECORDED_EXECUTION_CHANGED' using errcode='55000'; end if;
+  if exists(select 1 from jsonb_array_elements(p_certificate->'native_comparisons') certificate_case
+    where not exists(select 1 from jsonb_array_elements(recorded.evidence_json->'weekly_source_report_fin_native_comparisons') retained_case
+      where retained_case=certificate_case)) then
     raise exception 'WEEKLY_SOURCE_REPORT_FIN_RECORDED_EXECUTION_CHANGED' using errcode='55000'; end if;
   perform private.weekly_source_protected_execution_tree_assert_v2(p_certificate->'source_equivalence',
     execution->>'source_commit',p_certificate->>'receipt_input_commit');
@@ -69,9 +76,7 @@ begin
       where binding->>'role'='INSTALLATION' and binding->>'key'='weeklySourceProtectedOperational'
         and binding->>'path'=p_certificate#>>'{decision_binding,path}'
         and binding->>'blob_oid'=p_certificate#>>'{decision_binding,blob_oid}'
-        and binding->>'sha256'=p_certificate#>>'{decision_binding,sha256}')
-    or jsonb_typeof(p_certificate->'native_comparisons') is distinct from 'array'
-    or jsonb_array_length(p_certificate->'native_comparisons')<>cardinality(required_cases)*2 then
+        and binding->>'sha256'=p_certificate#>>'{decision_binding,sha256}') then
     raise exception 'WEEKLY_SOURCE_REPORT_FIN_NATIVE_COMPARISON_REQUIRED' using errcode='55000'; end if;
   for case_value in select unnest(required_cases) loop
     if (select count(*) from jsonb_array_elements(p_certificate->'native_comparisons') e

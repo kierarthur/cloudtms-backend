@@ -71,8 +71,11 @@ begin
         v_assignment.feature_receipt_json#>>'{protected_capability_qualification,qualification_sha256}');
     end if;
     if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then
-      perform private.weekly_source_report_fin_certificate_assert_v1(v_assignment.feature_receipt_json->'report_fin_qualification',
-        v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);
+      if v_assignment.feature_receipt_json->'report_fin_qualification' is distinct from
+        private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,
+          v_assignment.feature_receipt_json->'protected_capability_qualification') then
+        raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000';
+      end if;
     end if;
     return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);
   end if;
@@ -101,10 +104,10 @@ begin
   -- Server-derived Report binding, using only the actual saved immutable
   -- version/range. No browser strategy/hash field and no default A/B.
   if v_enabled and v_purpose='RULE_SET' then
-    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);
+    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,v_qualification);
   end if;
   if v_assignment.feature_enabled=v_enabled then
-    if not v_enabled or (v_qualification is null and v_report_qualification is null) or v_assignment.feature_purpose is distinct from v_purpose then
+    if not v_enabled or v_qualification is null or v_assignment.feature_purpose is distinct from v_purpose then
       raise exception 'WEEKLY_SOURCE_RULE_FEATURE_ALREADY_SET' using errcode='22023'; end if;
     if v_purpose='PROTECTED_SOURCE' then
       perform private.weekly_source_protected_source_activation_scope_v1(v_group_id,v_from,v_assignment.effective_to_week_ending);
@@ -117,8 +120,7 @@ begin
     -- Preserve the exact AGENCY restore receipt, without calling Client save.
     v_receipt:=v_assignment.feature_receipt_json||jsonb_build_object('assignment_version',v_assignment.version+1,
       'release_id',v_release_id,'actor_user_id',v_actor,'changed_at_utc',transaction_timestamp(),'reason',v_reason,
-      'request_id',v_request_id,'requalification',true,'replayed',false)
-      ||case when v_qualification is null then '{}'::jsonb else jsonb_build_object('protected_capability_qualification',v_qualification) end
+      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false)
       ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;
     update public.weekly_source_group_rule_assignments set feature_changed_by_user_id=v_actor,
       feature_changed_at_utc=transaction_timestamp(),feature_change_reason=v_reason,feature_release_id=v_release_id,

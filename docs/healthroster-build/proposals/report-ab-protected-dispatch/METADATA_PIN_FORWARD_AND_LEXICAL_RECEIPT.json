@@ -1,7 +1,7 @@
 {
   "schema_version": "REPORT_AB_SOURCE_PIN_FORWARD_AND_LEXICAL_V1",
   "prior_root_commit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
-  "current_root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "current_root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
   "inputs": [
     {
       "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
@@ -208,15 +208,23 @@
     }
   ],
   "changed_tracked_paths": [
+    "docs/healthroster-build/INSTALL1_SELECTION_14102026.md",
     "docs/healthroster-build/PROGRESS.md",
+    "docs/healthroster-build/TEST_INSTALL_PLAN.md",
     "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_FOLLOWUP_PRESERVATION.json",
+    "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_FOLLOWUP_SOURCE_CRITIC.md",
     "docs/healthroster-build/checkpoint13102026/A0_ISOLATION_SOURCE_FOLLOWUP.md",
     "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26.json",
     "docs/healthroster-build/checkpoint13102026/FROZEN_PRIVATE_SIGNATURE_UNION_AB26_GIT_PINNED.json",
     "docs/healthroster-build/checkpoint13102026/FULL_VERIFIER_SOURCE_PROTOCOL_CENSUS_V2.json",
+    "docs/healthroster-build/checkpoint13102026/INSTALL1_SOURCE_READINESS_REVIEW.md",
     "docs/healthroster-build/checkpoint13102026/NEW_VERIFIER_SOURCE_SAFETY_REVIEW_AB26.json",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2.sql",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2_FRESH.sql",
+    "docs/healthroster-build/checkpoint13102026/PREPARED_CODEC_DATATYPE_SHORT_V2_PLAN.json",
     "docs/healthroster-build/checkpoint13102026/audit_full_verifier_source_protocol_v2.mjs",
     "docs/healthroster-build/checkpoint13102026/census_frozen_private_union_ab26.mjs",
+    "docs/healthroster-build/checkpoint13102026/prepare_prepared_codec_datatype_short_v2.mjs",
     "docs/healthroster-build/checkpoint13102026/preserve_a0_isolation_followup.mjs",
     "docs/healthroster-build/checkpoint13102026/record_new_verifier_source_safety_ab26.mjs",
     "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/APPLICATION_ISOLATION_AND_LOCK_REVIEW.json",
@@ -230,7 +238,9 @@
     "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-source-successor.mjs",
     "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/freeze-source-followup.mjs",
     "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs",
-    "tests/healthroster-cn-a0-isolation-source-followup.test.mjs"
+    "scripts/healthroster-rehearsal-turn.mjs",
+    "tests/healthroster-cn-a0-isolation-source-followup.test.mjs",
+    "tests/healthroster-rehearsal-turn.test.mjs"
   ],
   "lexical": [
     {

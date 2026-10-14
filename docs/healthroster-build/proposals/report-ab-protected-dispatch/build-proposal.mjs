@@ -11,8 +11,8 @@ const native='supabase/repeatable/13102026_1700_weekly_source_invoice_window_rec
 const q='docs/healthroster-build/proposals/protected-source-qualification-operational-gate/';
 const signatures=[
  'private.weekly_source_report_fin_certificate_assert_v1(jsonb,uuid,uuid,date,date)',
- 'private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date)',
- 'private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date)',
+ 'private.weekly_source_report_fin_release_evidence_v1(uuid,uuid,date,date,jsonb)',
+ 'private.weekly_source_report_fin_feature_binding_v1(uuid,uuid,date,date,jsonb)',
  'private.weekly_source_report_fin_strategy_v1(uuid)',
  'private.weekly_source_report_fin_dispatch_v1(jsonb)',
  'private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)',
@@ -57,18 +57,16 @@ compose(native,'04_complete_fin.sqlinc',[
 const reportBind=`  -- Server-derived Report binding, using only the actual saved immutable
   -- version/range. No browser strategy/hash field and no default A/B.
   if v_enabled and v_purpose='RULE_SET' then
-    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);
+    v_report_qualification:=private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,v_qualification);
   end if;
 `;
 compose(q+'07_complete_existing_feature_setup.sqlinc','05_complete_feature_setup.sqlinc',[
  {id:'REPORT_LOCAL',old:'v_agency_invoice boolean:=false; v_qualification jsonb;',new:'v_agency_invoice boolean:=false; v_qualification jsonb; v_report_qualification jsonb;'},
  {id:'REPLAY_REPORT_CERTIFICATE',old:"    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);",
-  new:"    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then\n      perform private.weekly_source_report_fin_certificate_assert_v1(v_assignment.feature_receipt_json->'report_fin_qualification',\n        v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending);\n    end if;\n    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);"},
+  new:"    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'report_fin_qualification' then\n      if v_assignment.feature_receipt_json->'report_fin_qualification' is distinct from\n        private.weekly_source_report_fin_feature_binding_v1(v_group_id,v_version_id,v_from,v_assignment.effective_to_week_ending,\n          v_assignment.feature_receipt_json->'protected_capability_qualification') then\n        raise exception 'WEEKLY_SOURCE_REPORT_FIN_FEATURE_RECEIPT_UNQUALIFIED' using errcode='55000';\n      end if;\n    end if;\n    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);"},
  {id:'LOCKED_ACTUAL_REPORT_BINDING',old:'  if v_assignment.feature_enabled=v_enabled then\n',new:reportBind+'  if v_assignment.feature_enabled=v_enabled then\n'},
- {id:'REPORT_REQUALIFICATION_ONLY',old:'    if not v_enabled or v_qualification is null or v_assignment.feature_purpose is distinct from v_purpose then',
-  new:'    if not v_enabled or (v_qualification is null and v_report_qualification is null) or v_assignment.feature_purpose is distinct from v_purpose then'},
- {id:'PRESERVE_CAPABILITY_REPORT_REQUAL_RECEIPT',old:"      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false);",
-  new:"      'request_id',v_request_id,'requalification',true,'replayed',false)\n      ||case when v_qualification is null then '{}'::jsonb else jsonb_build_object('protected_capability_qualification',v_qualification) end\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"},
+ {id:'REPORT_REQUALIFICATION_RECEIPT',old:"      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false);",
+  new:"      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false)\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"},
  {id:'REPORT_INITIAL_RECEIPT',old:"      jsonb_build_object('protected_capability_qualification',v_qualification) end;",
   new:"      jsonb_build_object('protected_capability_qualification',v_qualification) end\n      ||case when v_report_qualification is null then '{}'::jsonb else jsonb_build_object('report_fin_qualification',v_report_qualification) end;"}]);
 const writer=q+'14_complete_managed_release.mjs';
@@ -88,7 +86,7 @@ const prefix="create or replace function private._weekly_source_acl_private_help
 for(const [input,output] of [
  ['supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc','11_complete_registry_current_union.sqlinc'],
  ['supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc','12_complete_acl_current_union.sqlinc']])
- compose(input,output,[{id:'ONLY_FIVE_REPORT_PRIVATE_HELPERS',old:prefix,new:prefix+signatures.map(sig=>"    ('"+sig+"'),\n").join('')}]);
+ compose(input,output,[{id:'ONLY_SEVEN_REPORT_PRIVATE_HELPERS',old:prefix,new:prefix+signatures.map(sig=>"    ('"+sig+"'),\n").join('')}]);
 write('PRIVATE_SIGNATURES.json',JSON.stringify({schema_version:'REPORT_AB_OWNER_ONLY_SIGNATURE_DELTA_V1',signatures,
  root_base_private:232,current_only_proposal_private:239,table_count:105,service_count:142,
  warning:'These complete current-root unions are reverse-proof inputs, not the future Q/A0/Prepared union. Root must merge literal sets with every later retained owner before installation.'},null,2)+'\n');

@@ -1,6 +1,6 @@
 {
   "schema_version": "REPORT_AB_CONTROLLING_SOURCE_INPUTS_V1",
-  "root_commit": "18ba9d5061085d359838a361b6ccae07bb1fd24a",
+  "root_commit": "c80338370ff913f5730f53048c0a22842cbe85b7",
   "runtime_base": "cea15289e0283e3383e71f0acb8b18ce184647c2",
   "status": "SOURCE_ONLY_NO_NATIVE_ACCEPTANCE",
   "inputs": [
@@ -156,5 +156,5 @@
     "All Banking worktree/source bytes"
   ],
   "native_admission": "Existing exact Source pay-query guard body/call retained; no downstream Banking definition changed or followed.",
-  "execution_equivalence": "Runtime byte equality is not whole-tree equivalence. Real qualification must compare every tracked object at actual R1/R2 using the final strict forward."
+  "execution_equivalence": "Runtime byte equality is not whole-tree equivalence. Real qualification compares every tracked object at actual installed source and separate receipt-input commit using the final strict forward."
 }
