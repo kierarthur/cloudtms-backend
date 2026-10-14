@@ -3,7 +3,7 @@
   "base_commit": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
   "plan_sha256": "b9f5b95393bf2f4c338da8110895dc7f80cb896f389aa0f27ea1c01468aef2d3",
   "source_tests": {
-    "passed": 75,
+    "passed": 80,
     "failed": 0,
     "native_SQL_executed": false,
     "database_connection": false,
@@ -48,7 +48,7 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/README.md",
-      "saved_sha256": "287c1b05cb1659e58aa1c805d32534a51f94dbca3244427fee6900e2336f0ace"
+      "saved_sha256": "6a4b2e30976063a2e561afca04689bab2aa4d56c00fa77e1d32de493f6bc90ee"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/CANDIDATE_OWNER_CENSUS.md",
@@ -56,7 +56,7 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_GROUP_ABI.md",
-      "saved_sha256": "c17a7214029355844a101ff842db6fe4e8561faee651cf1cbbdd1e9654acbb5a"
+      "saved_sha256": "d613f067f19e7d13d2f2909e2c2f82c314da5b8db5cb79424190ae662c60e153"
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-owner-packet.mjs",
@@ -80,7 +80,7 @@
     },
     {
       "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
-      "saved_sha256": "7c6b3a3aad2d6a7b734996dc2ffc94efaf156039b459ac8b1e5da5886e329722"
+      "saved_sha256": "36d5b19559b85f1c6aa34d6a6e5ea04e0565107c09679eeec28118b816b40631"
     },
     {
       "path": "supabase/verification/support/wp_u3_submission_witness_vectors.sqlinc",
@@ -156,7 +156,31 @@
     },
     {
       "path": "docs/healthroster-build/proposals/checklist-native-20261014/SOURCE_CORRECTIONS_14102026.md",
-      "saved_sha256": "c03de9f21013aee4271df4ba46d74c75d55c57bd7fad2372ba6998de90e2c0cf"
+      "saved_sha256": "1f4d3153d69e50d9a427a4796e80bc019dd947c9474cd4bd15ad2cb1e78cfc57"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/D10_ACTION_HANDOFF.md",
+      "saved_sha256": "2a6faf0eed793543bcb9597bd69ab5429499e2a40172e417d07a8fd0fb343d6c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review-action.jsinc",
+      "saved_sha256": "5cedcb55a4b1ccf1b5077fa953a36d798a74d958e63f6c7275f52f28a68a0cc5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/build-d10-review-packet.mjs",
+      "saved_sha256": "5a95cc4ff093f820ba5f1f36f9df4db3e80868bbf18c76e438c9d696f4d43639"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review.forward.json",
+      "saved_sha256": "d5240902d32de53a2e8af21d0ec47b000b4ab3dd54e71ea333f66a8744b66698"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/checklist-native-20261014/office-d10-review.reverse.json",
+      "saved_sha256": "c4478fd154c9cd9393b0434b3057077e89f8cbf8416994c593a8f955a2f6329c"
+    },
+    {
+      "path": "tests/healthroster-checklist-d10-actions.test.mjs",
+      "saved_sha256": "a7d5e0105efae68be94faaca5d3652ec0f77262823f4f682190fbf77ef04191a"
     }
   ],
   "previous_published_head": "ba09d5efd49dfee82856008d0dd45bf7ef6a51d4",
@@ -280,6 +304,26 @@
       "path": "broker/src/index.js",
       "saved_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
       "claim": "complete current Daily route predecessor; source only, not installed runtime qualification"
+    },
+    {
+      "path": "broker/src/import-review.js",
+      "saved_sha256": "a3d4ba81cc42cb3d3d432275a4f3b781b1b0ff40c2e82fa02d7c24407752a9ef",
+      "claim": "actual D10 review/operation/Source reminder provenance, not native action or read-purity qualification"
+    },
+    {
+      "path": "broker/src/import-review-follow-up.js",
+      "saved_sha256": "6ffe533b364a2b57b6bd8ac3d86924fbc8576b0bf566ee4e3fcf9389db8b40ab",
+      "claim": "actual D10 review/operation/Source reminder provenance, not native action or read-purity qualification"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "saved_sha256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b",
+      "claim": "actual D10 review/operation/Source reminder provenance, not native action or read-purity qualification"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "saved_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "claim": "actual D10 review/operation/Source reminder provenance, not native action or read-purity qualification"
     }
   ],
   "held_gates": [
@@ -290,9 +334,11 @@
     "FINAL_PPV2_QG_D10G_TARGET_COUNT_PAGE_UNION",
     "D10_SEND_AND_R254_CANDIDATE_REMINDER_DESCRIPTOR",
     "REPORT_NHSP_AGENCY_PROCESS_POPULATION_RETENTION_CURSOR_ANCHOR_ACCEPTANCE",
-    "NATIVE_API_UI_RUNTIME_PHONE_FEATURE_QUALIFICATION"
+    "NATIVE_API_UI_RUNTIME_PHONE_FEATURE_QUALIFICATION",
+    "HISTORICAL_REAL_WITNESS_PREPARATION_CALLER_REQUIRED_BEFORE_FEATURE_ON",
+    "D10_BOUND_REVIEW_NAVIGATION_OFFICE_MOUNT_AND_NATIVE_ACTOR_PREVIEW_ACCEPTANCE"
   ],
-  "predecessor_source_increment": "4084befffd78361938f81dded7f876e3c65dac64",
+  "predecessor_source_increment": "42f4ad74489158d6a39427dbcf7133a3f735f9b2",
   "db_source_check": {
     "passed": true,
     "migrations": 399,
@@ -313,7 +359,20 @@
       "P1-CHECKLIST-RETENTION1",
       "P2-CHECKLIST-DTO1"
     ],
-    "successor_disposition": "CORRECTIONS_AUTHORED_INDEPENDENT_CLOSURE_REQUESTED_THROUGH_ROOT",
-    "native_retention_fixture_execution": false
-  }
+    "successor_disposition": "P1_RETENTION_AND_P2_SCALAR_HASHES_INDEPENDENTLY_SOURCE_CLOSED_AT_42F",
+    "native_retention_fixture_execution": false,
+    "source_closed_head": "42f4ad74489158d6a39427dbcf7133a3f735f9b2",
+    "closure_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/HEALTHROSTER_BUILD_13102026/BUILD_CHECKLIST_RETENTION_DTO_SOURCE_CLOSURE_14102026.md",
+    "closure_sha256": "679d4dc82ac7f721bdc5d31f261b9235b98e368161b1b39afbd5e2eb4c36f6e7"
+  },
+  "external_d10_office_source_pins": [
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/weekly-source/workspace-actions.js",
+      "saved_sha256": "04d2614210a6d32a0c8ed42b21fab9dc384b3958e053fbec28e704f33c81f267"
+    },
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/import-review-v1.js",
+      "saved_sha256": "767051ef2f8f9a5beaf53067bfb80566e4db4992e194be4c6b9fc66320f17034"
+    }
+  ]
 }

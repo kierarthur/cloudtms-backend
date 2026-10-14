@@ -13,7 +13,7 @@ declare
   rows jsonb:='[]'::jsonb; raw jsonb; preview jsonb; native_issue jsonb;
   groups jsonb:='[]'::jsonb; targets jsonb:='[]'::jsonb; children jsonb; child jsonb;
   parent_identity jsonb; parent_key text; parent_proof text; binding text; revision text;
-  action_bindings jsonb; child_binding jsonb; latest_decision public.import_review_decisions%rowtype;
+  action_bindings jsonb; child_binding jsonb; review_action jsonb; latest_decision public.import_review_decisions%rowtype;
   state public.import_review_states%rowtype; first_seen timestamptz; group_row jsonb;
   native_status jsonb; native_summary jsonb; actual_item_id text; native_actions text[];
 begin
@@ -127,6 +127,14 @@ begin
       parent_key:='d10g_'||encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_PARENT_V1',parent_identity),'hex');
       parent_proof:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_QUERY_PARENT_PROOF_V1',
         jsonb_build_object('owner_identity',parent_identity,'actor',actor.id,'authority',authority,'children',children)),'hex');
+      -- Deliberate navigation delegates the complete existing native D10
+      -- selection/APPLY/committed-email owner. A GET never invokes that owner.
+      -- This descriptor grants no send, selection, Source outreach or Reminder.
+      review_action:=jsonb_build_object('label','View details','kind','CHECK_ONLY_D10_REVIEW','enabled',true,
+        'payload',jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_D10_REVIEW_ACTION_V1',
+          'actor_user_id',actor.id,'permission_view',view,'scope',scope,'parent_group_key',parent_key,
+          'item_id',actual_item_id,'proof_hash',parent_proof,'action_bindings',action_bindings),
+        'context',jsonb_build_object('candidate',raw->'worker','client',raw->'client'));
       group_row:=jsonb_build_object('row_key',parent_key,'group_key',parent_key,'origin','CHECK_ONLY_D10',
         'client_id',p_client_id,'candidate_id',raw->'candidate_id','candidate_sort',private.weekly_source_query_ascii_fold_v1(raw->>'worker'),
         'candidate',raw->'worker','client',raw->'client','issues',jsonb_array_length(children),
@@ -134,7 +142,7 @@ begin
         'age',case when first_seen is null then '—' when transaction_timestamp()-first_seen<interval '1 hour' then 'Less than 1 hour'
           when transaction_timestamp()-first_seen<interval '24 hours' then floor(extract(epoch from (transaction_timestamp()-first_seen))/3600)::integer||' hours'
           else floor(extract(epoch from (transaction_timestamp()-first_seen))/86400)::integer||' days' end,
-        'first_seen_at_utc',first_seen,'children',children,'actions','[]'::jsonb,
+        'first_seen_at_utc',first_seen,'children',children,'actions',jsonb_build_array(review_action),
         'outreach_eligible',false,'manager_eligible',false,'candidate_app_available',false,
         'source_outreach_eligible',false,'bulk_actions','{}'::jsonb,'proof_hash',parent_proof);
       if exists(select 1 from jsonb_array_elements(groups) g where g->>'group_key'=parent_key) then

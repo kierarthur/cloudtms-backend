@@ -1,0 +1,53 @@
+// SOURCE ONLY: one finite navigation adapter, no send/selection/status owner.
+function normaliseCheckOnlyD10ReviewAction(value, actorId) {
+  const closed = (object, keys) => object && typeof object === 'object' && !Array.isArray(object)
+    && Object.keys(object).length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(object,key));
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const hash = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  const keys = ['contract','actor_user_id','permission_view','scope','parent_group_key','item_id','proof_hash','action_bindings'];
+  if (!closed(value,keys) || value.contract !== 'WEEKLY_SOURCE_CHECK_ONLY_D10_REVIEW_ACTION_V1'
+    || !uuid(value.actor_user_id) || value.actor_user_id !== actorId || value.permission_view !== 'ADMIN'
+    || typeof value.parent_group_key !== 'string' || !/^d10g_[0-9a-f]{64}$/.test(value.parent_group_key)
+    || typeof value.item_id !== 'string' || value.item_id.length < 1 || value.item_id.length > 512 || !hash(value.proof_hash)
+    || !closed(value.scope,['source_group_id','client_id','source_cycle_id','week_ending'])
+    || !['source_group_id','client_id','source_cycle_id'].every(key => uuid(value.scope[key]))
+    || typeof value.scope.week_ending !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.scope.week_ending)
+    || !Array.isArray(value.action_bindings) || value.action_bindings.length < 1 || value.action_bindings.length > 5000) return null;
+  const seen = new Set(); let first = null;
+  for (const binding of value.action_bindings) {
+    if (!closed(binding,['owner','actor_user_id','scope','import_id','preview_generation','state_version','preview_fingerprint','action_id','action_kind','evidence_fingerprint'])
+      || binding.owner !== 'public.import_review_actions_page_v1' || binding.actor_user_id !== actorId || !uuid(binding.import_id)
+      || !closed(binding.scope,['source_group_id','client_id','source_cycle_id','week_ending'])
+      || !Object.keys(value.scope).every(key => binding.scope[key] === value.scope[key])
+      || !Number.isSafeInteger(binding.preview_generation) || binding.preview_generation < 1
+      || !Number.isSafeInteger(binding.state_version) || binding.state_version < 1
+      || !hash(binding.preview_fingerprint) || !hash(binding.action_id) || !hash(binding.evidence_fingerprint)
+      || !['EMAIL_ISSUE','EMAIL_REMINDER','ADVISORY'].includes(binding.action_kind) || seen.has(binding.action_id)) return null;
+    if (first && ['import_id','preview_generation','state_version','preview_fingerprint'].some(key => binding[key] !== first[key])) return null;
+    first = first || binding; seen.add(binding.action_id);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+async function assertCheckOnlyD10ReviewFresh(value, actorId, importId, initialHeader, loadPage, current) {
+  const action = normaliseCheckOnlyD10ReviewAction(value,actorId);
+  const stale = () => { throw new Error('This HealthRoster query changed. Return to Queries and recheck before opening it.'); };
+  if (!action || action.action_bindings[0].import_id !== importId || typeof current !== 'function' || !current()) stale();
+  const binding = action.action_bindings[0], remaining = new Map(action.action_bindings.map(item => [item.action_id,item]));
+  let header = initialHeader, cursor = null, visited = 0;
+  for (;;) {
+    if (!current() || header?.ok !== true || header?.import?.id !== importId
+      || header?.state?.last_opened_by_user_id !== actorId || header.state.preview_generation !== binding.preview_generation
+      || header.state.state_version !== binding.state_version || header.state.preview_fingerprint !== binding.preview_fingerprint
+      || ['ABANDONED','SUPERSEDED'].includes(header.state.status) || !Array.isArray(header.actions)) stale();
+    for (const native of header.actions) {
+      const expected = remaining.get(native.action_id);
+      if (expected && (native.kind !== expected.action_kind || native.evidence_fingerprint !== expected.evidence_fingerprint)) stale();
+      if (expected) remaining.delete(native.action_id);
+    }
+    visited += header.actions.length;
+    if (!remaining.size) return action;
+    const next = header.actions_next_cursor;
+    if (typeof next !== 'string' || !/^[0-9a-f]{64}$/.test(next) || next === cursor || visited >= 5000 || typeof loadPage !== 'function') stale();
+    cursor = next; header = await loadPage(cursor);
+  }
+}
