@@ -1,0 +1,42 @@
+{
+  "source_path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/main.js",
+  "source_head": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+  "saved_sha256": "d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847",
+  "edits": [
+    {
+      "name": "Bulk Authorise confirmed-save catch",
+      "before": "  } catch (err) {\n    st.saving = false;\n    const savedDailyReadiness = officeDailySavedReadiness(err);\n    if (savedDailyReadiness) {\n      retainOfficeDailySavedReadiness(st, savedDailyReadiness);\n      st.error_text = savedDailyReadiness.message;\n      await rerenderBulkAuthoriseWorkbench(st, '[TS][BULK-AUTH][SAVE][READINESS]');\n      GE();\n      return savedDailyReadiness;\n    }\n    st.error_text = String(err?.message || err || 'Failed to save Bulk Authorise changes.');",
+      "after": "  } catch (err) {\n    st.saving = false;\n    st.error_text = String(err?.message || err || 'Failed to save Bulk Authorise changes.');"
+    },
+    {
+      "name": "Bulk Authorise same-row save guard",
+      "before": "    return { ok: false, error: 'No active Bulk Authorise row is available.' };\n  }\n  const blockedSavedDaily = blockedOfficeDailySavedReadiness(st, st.active_row);\n  if (blockedSavedDaily) {\n    st.error_text = blockedSavedDaily.message;\n    await rerenderBulkAuthoriseWorkbench(st, '[TS][BULK-AUTH][SAVE][READINESS]');\n    GE();\n    return blockedSavedDaily;\n  }\n  if (st.__bulk_authorise_freshness_checking",
+      "after": "    return { ok: false, error: 'No active Bulk Authorise row is available.' };\n  }\n  if (st.__bulk_authorise_freshness_checking"
+    },
+    {
+      "name": "Bulk Process confirmed-save catch",
+      "before": "      st.__bulk_process_save_in_flight = false;\n    const savedDailyReadiness = officeDailySavedReadiness(err);\n    if (savedDailyReadiness) {\n      retainOfficeDailySavedReadiness(st, savedDailyReadiness);\n      st.error_text = savedDailyReadiness.message;\n      await rerenderBulkProcessWorkbench(st, '[TS][BULK-PROCESS][SAVE][READINESS]');\n      st.__suppress_dirty_marking = false;\n      GE();\n      return savedDailyReadiness;\n    }\n    try {\n      const preservedEvidenceRowsOnError",
+      "after": "      st.__bulk_process_save_in_flight = false;\n    try {\n      const preservedEvidenceRowsOnError"
+    },
+    {
+      "name": "Bulk Process same-row save guard",
+      "before": "  const blockedSavedDaily = blockedOfficeDailySavedReadiness(st, st.active_row);\n  if (blockedSavedDaily) {\n    st.error_text = blockedSavedDaily.message;\n    await rerenderBulkProcessWorkbench(st, '[TS][BULK-PROCESS][SAVE][READINESS]');\n    GE();\n    return blockedSavedDaily;\n  }\n\n  const editability = classifyBulkProcessEditability(st.active_ctx || {});\n  const dirtyNow = (typeof isBulkProcessEditableDirty === 'function') ? isBulkProcessEditableDirty(st) : !!st.dirty;\n",
+      "after": "  const editability = classifyBulkProcessEditability(st.active_ctx || {});\n  const dirtyNow = (typeof isBulkProcessEditableDirty === 'function') ? isBulkProcessEditableDirty(st) : !!st.dirty;\n"
+    },
+    {
+      "name": "standard confirmed-save catch",
+      "before": "      const savedDailyReadiness = officeDailySavedReadiness(err);\n      if (savedDailyReadiness) {\n        retainOfficeDailySavedReadiness(window.modalCtx, savedDailyReadiness);\n        alert(savedDailyReadiness.message);\n        GE();\n        return savedDailyReadiness;\n      }\n\n         // ✅ Evidence-required errors are already shown to the user; do not show generic failure\n",
+      "after": "         // ✅ Evidence-required errors are already shown to the user; do not show generic failure\n"
+    },
+    {
+      "name": "standard same-editor save guard",
+      "before": "  const st     = mc.timesheetState || {};\n\n  const blockedSavedDaily = blockedOfficeDailySavedReadiness(mc, rowNow);\n  if (blockedSavedDaily) {\n    alert(blockedSavedDaily.message);\n    GE();\n    return blockedSavedDaily;\n  }\n\n  const lifecycleBusyAtSaveStart",
+      "after": "  const st     = mc.timesheetState || {};\n\n  const lifecycleBusyAtSaveStart"
+    },
+    {
+      "name": "single local saved/readiness boundary",
+      "before": "// SOURCE ONLY: insert once before apiPostJson in the pinned Office main.js.\nfunction officeDailySavedReadiness(error) {\n  const value = error && error.json;\n  const keys = ['ok','saved','source_readiness','error_code','message','timesheet_id','current_timesheet_id','refresh_required','requires_affected_row_refresh'];\n  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n  const path = String(error && error.path || '');\n  const match = /^\\/api\\/timesheets\\/([0-9a-f-]{36})\\/daily-manual-upsert$/i.exec(path);\n  if (!match || !uuid.test(match[1]) || error.status !== 502 || !value || typeof value !== 'object' || Array.isArray(value)\n    || Object.keys(value).length !== keys.length || !keys.every(key => Object.prototype.hasOwnProperty.call(value,key))\n    || value.ok !== false || value.saved !== true || value.source_readiness !== false\n    || value.error_code !== 'WEEKLY_SOURCE_SUBMISSION_CYCLE_READINESS_FAILED'\n    || typeof value.message !== 'string' || typeof value.timesheet_id !== 'string' || !uuid.test(value.timesheet_id) || value.current_timesheet_id !== value.timesheet_id\n    || value.refresh_required !== true || value.requires_affected_row_refresh !== true) return null;\n  return { ...value, requested_timesheet_id: match[1].toLowerCase(), safe_for_lifecycle: false,\n    saved_but_stale: true,\n    message: 'Timesheet saved. Checklist readiness could not be prepared. Close and reopen this row before further changes; do not repeat the save.' };\n}\nfunction retainOfficeDailySavedReadiness(state, failure) {\n  if (state && typeof state === 'object') state.__daily_saved_readiness_failure = failure;\n  return failure;\n}\nfunction blockedOfficeDailySavedReadiness(state, row) {\n  const failure = state && state.__daily_saved_readiness_failure;\n  if (!failure || !row || typeof row !== 'object') return null;\n  const identities = [row.timesheet_id,row.current_timesheet_id,row.expected_timesheet_id].filter(Boolean).map(value => String(value).toLowerCase());\n  return identities.some(id => id === failure.timesheet_id || id === failure.requested_timesheet_id) ? failure : null;\n}\n\nasync function apiPostJson(path, body, options = {}) {",
+      "after": "async function apiPostJson(path, body, options = {}) {"
+    }
+  ]
+}

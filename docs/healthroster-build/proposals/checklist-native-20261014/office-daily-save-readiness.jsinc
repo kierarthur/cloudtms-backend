@@ -1,0 +1,27 @@
+// SOURCE ONLY: insert once before apiPostJson in the pinned Office main.js.
+function officeDailySavedReadiness(error) {
+  const value = error && error.json;
+  const keys = ['ok','saved','source_readiness','error_code','message','timesheet_id','current_timesheet_id','refresh_required','requires_affected_row_refresh'];
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const path = String(error && error.path || '');
+  const match = /^\/api\/timesheets\/([0-9a-f-]{36})\/daily-manual-upsert$/i.exec(path);
+  if (!match || !uuid.test(match[1]) || error.status !== 502 || !value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).length !== keys.length || !keys.every(key => Object.prototype.hasOwnProperty.call(value,key))
+    || value.ok !== false || value.saved !== true || value.source_readiness !== false
+    || value.error_code !== 'WEEKLY_SOURCE_SUBMISSION_CYCLE_READINESS_FAILED'
+    || typeof value.message !== 'string' || typeof value.timesheet_id !== 'string' || !uuid.test(value.timesheet_id) || value.current_timesheet_id !== value.timesheet_id
+    || value.refresh_required !== true || value.requires_affected_row_refresh !== true) return null;
+  return { ...value, requested_timesheet_id: match[1].toLowerCase(), safe_for_lifecycle: false,
+    saved_but_stale: true,
+    message: 'Timesheet saved. Checklist readiness could not be prepared. Close and reopen this row before further changes; do not repeat the save.' };
+}
+function retainOfficeDailySavedReadiness(state, failure) {
+  if (state && typeof state === 'object') state.__daily_saved_readiness_failure = failure;
+  return failure;
+}
+function blockedOfficeDailySavedReadiness(state, row) {
+  const failure = state && state.__daily_saved_readiness_failure;
+  if (!failure || !row || typeof row !== 'object') return null;
+  const identities = [row.timesheet_id,row.current_timesheet_id,row.expected_timesheet_id].filter(Boolean).map(value => String(value).toLowerCase());
+  return identities.some(id => id === failure.timesheet_id || id === failure.requested_timesheet_id) ? failure : null;
+}
