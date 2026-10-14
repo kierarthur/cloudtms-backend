@@ -1,5 +1,13 @@
 # HealthRoster v2 TEST build progress
 
+## Owner answers and rehearsal continuation — 14 October 2026
+
+The owner resolved both pending questions. Kept-as-paid A→B→A uses a new typed genuine re-acknowledgement linked to immutable A, with request/CAS/idempotency and full audit history; latest genuine acknowledgement is displayed and old history is never rewritten or filtered. Money source construction continues on that authority.
+
+No Google trigger, Cloudflare schedule or background job may be paused. The third Install1 rehearsal and release resume under the shared lock after reviewed source and exact committed-archive gates. The new read-only restoration proof keeps unchanged ledger/catalogue/relation fingerprints, marker absence, LEGACY:1 and fixture absence; changed business rows must be attributed to actual existing writers by source/kind/timing and cannot match fixture identities. Every original business fingerprint is retained. The two earlier held attempts remain held, not relabelled. Our clients remain closed while source gates finish; no installation is claimed yet.
+
+The at-most-two-install plan remains unchanged. Allow roughly one to three hours for a successful rehearsal/release cycle, with at most three forward repair rounds; remaining source/native/device areas still prevent a credible completion time. Genuine past open-week acceptance and NEXT-F17 waiting remain controlling. No new cleanup attempt or background-job mutation occurred.
+
 ## Current implementation checkpoint — 14 October 2026, 07:24 UTC
 
 Authoritative Install2 is pushed and fresh-remote-matched at `87b9908370d238d1af4da910b97018d19a3fd033`. Reviewed Money packet `6606b5c2617b0e8af7c07d33ac48bbb60ec6e32d` fixes four absent loop-record accesses in FIN4's NO_CHANGE rebill branch. New contained0821 installs complete owner76245457; old0541/frozen artifacts, transition/revision call and private ACL are preserved. Thirteen exact saved/staged pins, one whole reverse, six focused source vectors, three inert proposal syntax checks, two-file/four-statement atomic packaging,399 migrations/1059 repeatables source integrity,9039 tracked credential scan and raw staged whitespace pass. Actual-root independent review is requested; SQL compilation/native rebill/final verifier/catalogue/contract coupling remain held.
