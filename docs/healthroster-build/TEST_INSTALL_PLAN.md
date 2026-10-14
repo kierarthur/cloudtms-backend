@@ -1,5 +1,9 @@
 # Current HealthRoster TEST install plan
 
+## Current source checkpoint — 14 October 2026, 07:24 UTC
+
+Install2 `87b9908370d238d1af4da910b97018d19a3fd033` adds the complete private FIN4 record-field correction after74a9 broker source. Thirteen exact source pins, one complete reversal/four accesses, six focused vectors, atomic packaging,399/1059 source integrity,9039 credential scan and raw staged whitespace pass. SQL/native/final body-verifier/contract gates remain held. Kept-as-paid A→B→A re-acknowledgement has one narrow owner question; independent Agency/U3/Undo/original/rekey/credit/isolation work continues. No package becomes install-ready from these source checks. Both hosted Install1 holds and unanswered TEST quiet-window coordination remain. Maximum two normal installs and1–3hour rehearsal/release estimates plus repairs/source/native/device work are unchanged; no finish time asserted.
+
 ## Current source checkpoint — 14 October 2026, 07:00 UTC
 
 Install2 `74a9c10f7370cd3641ee95d31f6702ecadd900a7` contains the source-accepted four runtime route/orchestrator/context owners,44 exact pins,33 reversals,134 imports/syntax and54 actual-root pure vectors. Source integrity399/1058 and9021 tracked credential scan pass;792 inherited frozen-index whitespace findings are retained rather than claimed raw PASS. Agency T0 process/singular request/R-239, U3/Undo/original, kept/rekey/credited-pointer and hidden-RR are unfinished implementation; completed-source final census,173/174 verifier coupling, contract and all native gates remain required. No additional package is install-ready from these source checks. Install1 quiet-window and both hosted holds persist, with all owned clients closed. Two normal installs, same-installed qualification, past open-week fixtures and NEXT-F17 waiting remain unchanged; further source/native/device work makes a finish time uncertain.
