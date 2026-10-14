@@ -1,0 +1,14 @@
+{
+  "source_only": true,
+  "unit_pass": 12,
+  "syntax_pass": 10,
+  "complete_index_reverse_hunks": 3,
+  "frozen_input_hash_mismatches": 0,
+  "new_sql_signatures": 0,
+  "new_grants": 0,
+  "native_calls": 0,
+  "compiled_contract_sha256": null,
+  "source_predecessor_scope22_manifest": "b6726cb2f897c0abba319b148535b255f1fd3c10684acf9d3d53342045608d14",
+  "runtime_mount": "HELD_FOR_CRITIC_AND_PUBLICATION",
+  "native_api_and_UI_acceptance": "HELD"
+}

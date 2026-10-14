@@ -1,0 +1,15 @@
+async function weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user) {
+  if (user?.is_active !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  if (user.role === 'admin') return { ok: true, routing: null };
+  if (!isActivePaymentActor(user)) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  const routing = await weeklySourceAuthoriseRouting(
+    (functionName, args, options) => sbRpc(env, functionName, args, options),
+    currentTimesheetId, user.id
+  );
+  if (routing.refusal) return { ok: false, response: withCORS(env, req,
+    new Response(JSON.stringify({ error: routing.refusal.error_code,
+      error_code: routing.refusal.error_code, message: routing.refusal.message,
+      refresh_required: true }), { status: routing.refusal.status, headers: JSON_HEADERS })) };
+  if (routing.bound !== true) return { ok: false, response: withCORS(env, req, unauthorized()) };
+  return { ok: true, routing };
+}

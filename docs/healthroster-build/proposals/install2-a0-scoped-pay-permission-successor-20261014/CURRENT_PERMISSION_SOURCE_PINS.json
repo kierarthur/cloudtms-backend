@@ -1,0 +1,49 @@
+{
+  "schema": "SOURCE_ONLY_PERMISSION_PINS_V1",
+  "root_source_commit": "b5c1ea1b002b2d6b756707c020b6a170cc9fea80",
+  "root_saved_index_sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+  "source_only": true,
+  "native_observations": 0,
+  "pins": [
+    {
+      "path": "broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "unchanged_reference": true
+    },
+    {
+      "path": "broker/src/weekly-source/authorise-routing.mjs",
+      "sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9",
+      "unchanged_reference": true
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+      "selected_owner": "weeklySourceScopedLifecycleActor",
+      "selected_owner_sha256": "5a065f04f0bbba826ab4cf7d42fb871172515c0270b679c76cbceeb1a2f426bb"
+    },
+    {
+      "path": "broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced"
+    },
+    {
+      "path": "docs/healthroster-build/WP_PP_IMPLEMENTATION.md",
+      "sha256": "cfb4639ef9a462390cbc5a1d9004112b485c3e7f3db11121c35c8db35d631b89"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae"
+    },
+    {
+      "path": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "sha256": "a839de0fa33b9ec4d0047a7199c5746b1365d90d99535b73e0979b912d7a504e"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe"
+    }
+  ]
+}

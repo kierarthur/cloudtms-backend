@@ -1,0 +1,25 @@
+{
+  "schema_version": "OFFICE_CORRECTION_CONTEXT_CURRENT_RUNTIME_REVERSE_V1",
+  "input_publication": null,
+  "input_freeze": "b6726cb2f897c0abba319b148535b255f1fd3c10684acf9d3d53342045608d14",
+  "input_artifact": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/index.js",
+  "input_sha256": "41efc91deec656ee740b3c0a2b4a8765af74fcf832e05aad9c002c18554c7961",
+  "output_sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+  "hunks": [
+    {
+      "original": "import { assertTimesheetCorrectionOfficeActor, createTimesheetCorrectionLifecycleResolver, handleTimesheetCorrectionOfficeAction, matchTimesheetCorrectionOfficeRoute } from './timesheet-correction-office-routes.mjs';",
+      "replacement": "import { assertTimesheetCorrectionOfficeActor, createTimesheetCorrectionLifecycleResolver, handleTimesheetCorrectionOfficeAction, matchTimesheetCorrectionOfficeRoute } from './timesheet-correction-office-routes.mjs';\nimport { readTimesheetCorrectionOfficeContext } from './timesheet-correction-office-context.mjs';"
+    },
+    {
+      "original": "async function handleTimesheetCorrectionOfficeRoute(env, req, action, ctx) {",
+      "replacement": "async function handleTimesheetCorrectionOfficeContext(env, req, timesheetId) {\n  try {\n    const result = await readTimesheetCorrectionOfficeContext(env, req, timesheetId, {\n      requireUser,\n      assertScope: ({ timesheetId, user }) => assertTimesheetCorrectionSourceSubjects(env, req, user, [timesheetId]),\n      readContexts: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),\n      // Read-only native projections retain their real existing purpose/selector.\n      // The total WP-14c mutation wrapper remains unchanged on mutation calls.\n      readCreateProjection: ({ candidateId, timesheetId }) => sbRpc(env, 'timesheet_correction_create_projection_v1', {\n        p_candidate_id: candidateId, p_contract_week_id: null, p_target_timesheet_id: timesheetId, p_anchor_timesheet_id: null\n      }, { timeoutMs: 12000 }),\n      readRequestProjection: ({ candidateId, timesheetId }) => sbRpc(env, 'timesheet_correction_request_projection_v1', {\n        p_timesheet_id: timesheetId, p_candidate_id: candidateId\n      }, { timeoutMs: 12000 }),\n      readRequestAuthority: ({ requestId, actor }) => sbRpc(env, 'timesheet_correction_request_authority_v1', {\n        p_request_id: requestId, p_actor_user_id: actor.actor_user_id\n      }, { timeoutMs: 12000 })\n    });\n    return withCORS(env, req, new Response(JSON.stringify(result), {\n      status: 200, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }\n    }));\n  } catch (error) { return withCORS(env, req, timesheetCorrectionOfficeFailure(error)); }\n}\n\nasync function handleTimesheetCorrectionOfficeRoute(env, req, action, ctx) {"
+    },
+    {
+      "original": "const correctionOfficeAction = matchTimesheetCorrectionOfficeRoute(req.method, p);",
+      "replacement": "const correctionOfficeContext = matchPath(p, '/api/timesheets/:id/corrections/context');\nif (correctionOfficeContext && req.method === 'GET') return handleTimesheetCorrectionOfficeContext(env, req, correctionOfficeContext.id);\n\nconst correctionOfficeAction = matchTimesheetCorrectionOfficeRoute(req.method, p);"
+    }
+  ],
+  "existing_sql_signatures_changed": 0,
+  "private_context_or_finance_serialization": false,
+  "no_native_calls": true
+}
