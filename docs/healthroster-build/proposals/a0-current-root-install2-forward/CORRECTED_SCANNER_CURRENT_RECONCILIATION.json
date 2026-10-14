@@ -1,0 +1,28 @@
+{
+  "source_only": true,
+  "current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "earlier_qualified_semantic_map_symbols": 2616,
+  "corrected_finite_event_map_symbols": 2619,
+  "only_in_corrected_event_map": [
+    {
+      "signature": "pg_temp.bpay_bf_triggers(regclass,boolean)",
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "definition_sha256": "b573d00d16f8eaffcaeb4323dbd5729f0437cd97cc4390812d0d75780716da09",
+      "header": "pg_temp.bpay_bf_triggers(p_rel regclass, p_disable boolean) returns void language plpgsql"
+    },
+    {
+      "signature": "pg_temp.bpay_bf_batch(text,uuid,uuid,boolean)",
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "definition_sha256": "1bca89514a9d14f2cf3bd4b86b6dc0fa7ab639cccf937b85a69185ddd91f089f",
+      "header": "pg_temp.bpay_bf_batch(p_phase text, p_lo uuid, p_hi uuid, p_initial boolean) returns bigint language plpgsql"
+    },
+    {
+      "signature": "pg_temp.bpay_bf_next(text,uuid,integer)",
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "definition_sha256": "ce5991fb31938c057f7ea9df642dff2d852f6efad59b5d5d4d1833e8fb1b83ea",
+      "header": "pg_temp.bpay_bf_next(p_phase text, p_lo uuid, p_size integer) returns uuid language plpgsql stable"
+    }
+  ],
+  "only_in_earlier_qualified_map": [],
+  "scope": "Earlier frozen2616 map is the explicit qualified CREATE/DROP semantic map. Corrected A0 finite resolver also recognises unqualified/quoted declarations and RENAME/SET SCHEMA, conservatively preserving quoted type identity. These representations are reconciled, neither is physical type-OID/installed catalogue proof. Earlier frozen bytes remain unchanged."
+}

@@ -1,0 +1,188 @@
+{
+  "schema_version": "A0_CURRENT_ROOT_INSTALL2_SOURCE_CHECK_V1",
+  "source_only": true,
+  "status": "SOURCE_REVIEW_READY_NATIVE_ISOLATION_HIDDEN_RR_LOCK_FINANCIAL_AND_RELEASE_GATES_HELD",
+  "current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "original_source_tests": 123,
+  "current_source_tests": 12,
+  "source_tests_pass": 135,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 39,
+  "sql_source_parser": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ADDITIONAL_CURRENT_WRITER_INPUT_ONLY.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_PREDECESSOR_DEFINITIONS.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_CREATOR_INPUT_BODIES.sqlinc",
+      "statements": 25,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_FIRST_CREATOR_BODIES.sqlinc",
+      "statements": 30,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_lock_fence.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "statements": 7,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_1127_approval.complete-proposed.sqlinc",
+      "statements": 7,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_2002_a0_clock_scope.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "statements": 23,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "statements": 7,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_INPUT_BODIES.sqlinc",
+      "statements": 25,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_FIRST_CREATOR_BODIES.sqlinc",
+      "statements": 30,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "statements": 23,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "statements": 7,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "statements": 7,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc",
+      "statements": 0,
+      "meta": 8,
+      "source_parser_only": true
+    }
+  ],
+  "whole_packet_credential_scan": "PASS",
+  "full_support_pages": 8,
+  "source_helper_literal_union": 10,
+  "normalisation_fence_helpers": 4,
+  "creator_helpers": 6,
+  "new_triggers": 4,
+  "existing_public_signatures_changed": 0,
+  "new_public_or_service_signatures": 0,
+  "whole_current_owner_reverse_proofs": 4,
+  "source_symbol_reverse_restored": 2619,
+  "source_reverse_mismatches": 0,
+  "current_literal_writer_candidates": 71,
+  "current_first_insert_creator_candidates": 30,
+  "original_native25_complete_bodies_equal": true,
+  "current_trigger_name_order_checks": 28,
+  "old198_frozen_artifacts_preserved": true,
+  "no_old_complete_index_or_managed_writer_or_banking_owner_copy": true,
+  "actual_native_math_readers_and_writers_unchanged": true,
+  "qualified_runtime_isolation": null,
+  "hidden_rr_visibility_solved": false,
+  "actual_native_schedules_executed": false,
+  "independent_critic": false,
+  "postgresql_compile": false,
+  "actual_database_lab_runtime_native_business_action": false,
+  "secrets_printed": false
+}

@@ -1,0 +1,26 @@
+{
+  "sourceOnly": true,
+  "rootFile": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+  "canonicalClosureSha256": "3a32d4f53b0eb466e96e451466a90b45d4bf85c669be54d33f11fcbd04854962",
+  "closureFiles": 9,
+  "atomicPackaging": true,
+  "statements": 107,
+  "bodySha256": "abec96cdbd94e13faae9a8a685ea2a181dec5c7d6aa288739acff0070e607bb5",
+  "runtimeSyntax": 6,
+  "sourceTests": {
+    "exitCode": 0,
+    "outputSha256": "8c33003268248ff0c38b543cafac64b9b285e7806ba09b2a4aec4730d80680de",
+    "summary": [
+      "# tests 12",
+      "# suites 0",
+      "# pass 12",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 864.6277"
+    ],
+    "failures": []
+  },
+  "nativeGatesRun": false
+}

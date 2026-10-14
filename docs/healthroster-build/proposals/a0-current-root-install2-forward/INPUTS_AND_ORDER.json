@@ -1,0 +1,163 @@
+{
+  "source_only": true,
+  "exact_current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "main_include": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc",
+  "ordered_source_pages": [
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/canonical-input-assert.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 1528,
+        "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 9527,
+        "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 4526,
+        "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 12314,
+        "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 19166,
+        "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 5935,
+        "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "input": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 34402,
+        "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+      },
+      "complete_current_hunk_proof": {
+        "name": "CURRENT_COMPLETE_APPROVAL",
+        "input": {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+          "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+          "bytes": 34402,
+          "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+        },
+        "output_sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+        "output_bytes": 35853,
+        "hunks": [
+          {
+            "anchor": "perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,",
+            "replacement": "perform private.timesheet_correction_canonical_input_assert_v1(v_original,v_request.reversed_timesheet_id,"
+          },
+          {
+            "anchor": "    select to_jsonb(tf) into strict v_original from public.timesheets_financials tf\n      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;\n  end if;",
+            "replacement": "    select to_jsonb(tf) into strict v_original from public.timesheets_financials tf\n      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;\n    perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,\n      v_request.reversed_version,v_request.candidate_id,v_request.client_id);\n  end if;"
+          },
+          {
+            "anchor": "perform private.timesheet_correction_snapshot_identity_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,",
+            "replacement": "perform private.timesheet_correction_canonical_input_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,"
+          },
+          {
+            "anchor": "  v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);",
+            "replacement": "  select to_jsonb(tf) into strict v_after_fin from public.timesheets_financials tf where tf.timesheet_id=v_p and tf.is_current;\n  perform private.timesheet_correction_snapshot_identity_assert_v1(v_after_fin,v_p,v_version,\n    v_request.candidate_id,v_request.client_id);\n  v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);"
+          },
+          {
+            "anchor": "  v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');",
+            "replacement": "  if v_fin.id is null and v_original.sheet_scope::text='WEEKLY' then\n    -- Exact server-owned scope participates in the native PREPARE/CAS hash.\n    -- Missing A0 never silently changes Source/Rule/ordinary pricing origin.\n    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',\n      private.timesheet_correction_a0_clock_scope_v1(v_request.id));\n  end if;\n  v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');"
+          },
+          {
+            "anchor": "    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',\n      private.timesheet_correction_a0_clock_scope_v1(v_request.id));",
+            "replacement": "    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',\n      private.timesheet_correction_a0_clock_scope_v1(v_request.id),\n      'original_a0_native_input_witness',private.timesheet_correction_a0_native_input_witness_v1(v_request.id));"
+          },
+          {
+            "anchor": "  v_claim jsonb; v_batch_result record; v_reversal_snapshot jsonb;",
+            "replacement": "  v_claim jsonb; v_batch_result record; v_reversal_snapshot jsonb; v_a0_lock_fence jsonb;"
+          },
+          {
+            "anchor": "  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);\n  select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id;\n  perform 1 from public.invoices",
+            "replacement": "  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);\n  select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id;\n  if v_request.state='WAITING' and v_request.origin='SIGNED_TIMESHEET_CORRECTION'\n    and v_request.reversed_financial_id is null\n    and v_request.frozen_original_json#>>'{timesheet,sheet_scope}'='WEEKLY' then\n    -- Immutable request branch, never inferred from a concurrent current FIN.\n    -- Complete native gate/I-1 precedes every established business row lock.\n    v_a0_lock_fence:=private.timesheet_correction_a0_native_lock_fence_v1(v_request.id,p_actor_user_id);\n  end if;\n  perform 1 from public.invoices"
+          }
+        ],
+        "entire_reverse_equal": true,
+        "entire_reverse_sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+      }
+    },
+    {
+      "output": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "input": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 22931,
+        "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+      },
+      "complete_current_hunk_proof": {
+        "name": "CURRENT_COMPLETE_REQUEST",
+        "input": {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+          "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+          "bytes": 22931,
+          "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+        },
+        "output_sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+        "output_bytes": 23160,
+        "hunks": [
+          {
+            "anchor": "  -- Lock every existing invoice first, using the same authority as all credit writers.",
+            "replacement": "  -- New missing-A0 purpose acquires canonical native Candidate/I-1 before\n  -- the existing invoice/chain/workflow/TS order. All other arms return unchanged.\n  perform private.timesheet_correction_a0_send_family_fence_v1(v_id);\n  -- Lock every existing invoice first, using the same authority as all credit writers."
+          }
+        ],
+        "entire_reverse_equal": true,
+        "entire_reverse_sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+      }
+    }
+  ],
+  "stage": "Root0415 after original0410, before root0420 final current native owners/Money0430 and final Report/catalogue/registry/ACL.",
+  "whole_old_runtime_index_mount_allowed": false,
+  "creator_census_and_isolation_source_followup_pins": [
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_FORWARD_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 298656,
+      "sha256": "dd3c0d77e2b7a5edc6641d4de0d8220c187e0b867d8af57c2f1d4c470b4e8d42"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 354048,
+      "sha256": "f031b83e3b17c609260ae34508e4f859f8d49f91277ca49c5f43c84851fc7e50"
+    }
+  ],
+  "hidden_rr_visibility_solved": false,
+  "native_gate_schedule_not_run": true
+}

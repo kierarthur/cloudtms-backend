@@ -1,0 +1,349 @@
+{
+  "contract": "HEALTHROSTER_A0_OBSERVED_CENSUS_DEFECT_FIXTURES_V1",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql",
+      "bytes": 48535,
+      "sha256": "ad1e365ac3faa755c3d18fe356987af12fc822188bba60b435b0a150aad01067"
+    },
+    {
+      "path": "supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql",
+      "bytes": 101856,
+      "sha256": "c840d1462ff0c31bbe8b9cb56841bd6d8c0e732aeacf81e65d9d7879e610707b"
+    },
+    {
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "bytes": 9214490,
+      "sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    }
+  ],
+  "originalCommentedDeclaration": {
+    "source": "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql",
+    "line": 312,
+    "rawHeader": "create or replace function public.timesheet_qr_restore_version(\n  p_timesheet_id uuid,\n  p_expected_timesheet_id uuid,\n  p_restore_kind text,  -- 'PENDING' or 'SIGNED'\n  p_actor_user_id uuid\n)\nreturns table (\n  timesheet_id uuid,\n  restored_version int,\n  sheet_scope text,\n  submission_mode text,\n  qr_status text,\n  qr_token text,\n  restored_has_signed_pdf boolean\n)\nlanguage plpgsql\nsecurity definer\nset search_path = public\n",
+    "expectedInputTypes": "uuid,uuid,text,uuid"
+  },
+  "actualDroppedOverloads": [
+    {
+      "source": "supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql",
+      "line": 102,
+      "id": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid)",
+      "kind": "DROP"
+    },
+    {
+      "source": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 153159,
+      "id": "public.timesheet_weekly_chain_delete_apply(uuid,uuid)",
+      "kind": "DROP"
+    }
+  ],
+  "nativeOwnerPreservation": [
+    {
+      "id": "public.trg_set_tms_ref()",
+      "definitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "priorDefinitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "byteEqual": true
+    },
+    {
+      "id": "public._trg_candidates_set_bank_hash()",
+      "definitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "priorDefinitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "byteEqual": true
+    },
+    {
+      "id": "public.trg_set_rev()",
+      "definitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "priorDefinitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "byteEqual": true
+    },
+    {
+      "id": "public.set_updated_at()",
+      "definitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "priorDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_line_archived_timesheet_guard_v1()",
+      "definitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "priorDefinitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_invoice_line_owner_guard_v1()",
+      "definitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "priorDefinitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_expense_classification_ts_v1()",
+      "definitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "priorDefinitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_source_timesheet_family_gate_v1()",
+      "definitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "priorDefinitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_timesheet_work_revision_v1()",
+      "definitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "priorDefinitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_settings_authority_before_v1()",
+      "definitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "priorDefinitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_qr_pack_ready_notification_v1()",
+      "definitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "priorDefinitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_archive_row_guard_v1()",
+      "definitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "priorDefinitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_authorisation_overlap_trg_v1()",
+      "definitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "priorDefinitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "definitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "priorDefinitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_timesheet_work_key_v1()",
+      "definitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "priorDefinitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)",
+      "definitionSha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9",
+      "priorDefinitionSha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "definitionSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "priorDefinitionSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_workbench_candidate_serial_try_gate(uuid,uuid,text,jsonb,text)",
+      "definitionSha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740",
+      "priorDefinitionSha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_workbench_candidate_serial_key(uuid)",
+      "definitionSha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b",
+      "priorDefinitionSha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_timesheet_rotation_scope(uuid[])",
+      "definitionSha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "priorDefinitionSha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_source_family_try_lock_v1(text)",
+      "definitionSha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+      "priorDefinitionSha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+      "byteEqual": true
+    },
+    {
+      "id": "public.tsfin_load_context_batch(uuid[])",
+      "definitionSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "priorDefinitionSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_signed_witness_v1(uuid,boolean)",
+      "definitionSha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e",
+      "priorDefinitionSha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_origin_v1(uuid)",
+      "definitionSha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "priorDefinitionSha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "definitionSha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369",
+      "priorDefinitionSha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369",
+      "byteEqual": true
+    }
+  ],
+  "firstCreatorBodyPreservation": [
+    {
+      "id": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "definitionSha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "definitionSha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "definitionSha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "definitionSha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "definitionSha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "definitionSha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "definitionSha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "definitionSha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "definitionSha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "definitionSha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "definitionSha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "definitionSha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "definitionSha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "definitionSha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "definitionSha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "definitionSha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "definitionSha256": "4b7db1c22bb8e0d9d8c13b783f6c031f31b464ed61261ff5860f03e12cf93d69",
+      "byteEqual": true
+    },
+    {
+      "id": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "definitionSha256": "cb752f515e54734fc05330d8105eb908a5c26d0e8829c3a021b86b1710e68460",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "definitionSha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "byteEqual": true
+    },
+    {
+      "id": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "definitionSha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "byteEqual": true
+    },
+    {
+      "id": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "definitionSha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "definitionSha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "definitionSha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "definitionSha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "definitionSha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "definitionSha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "definitionSha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "byteEqual": true
+    }
+  ],
+  "critic": {
+    "copiedByteExact": true,
+    "sha256": "f2887142f109c35c0861eaed4e43a3b46429dcae5ec3eebba6a87e0812e81b9f"
+  },
+  "nativeProof": "NONE. Fixtures are exact saved declarations and offline identity/order cases; they do not run SQL or certify native acceptance."
+}

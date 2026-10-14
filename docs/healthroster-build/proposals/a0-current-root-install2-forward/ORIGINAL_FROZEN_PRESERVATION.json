@@ -1,0 +1,49 @@
+{
+  "source_only": true,
+  "root_source_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "manifests": [
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-native-normalisation/A0_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 24215,
+      "sha256": "f04bd3656846b5ba1e395095b64689fef839ada1e4dcc0102aa7f030cb16709e",
+      "listed_artifacts": 38,
+      "all_listed_git_artifacts_exact": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/LOCK_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 26566,
+      "sha256": "0c1c69391c772ec5fda1b2945094fdd14128159e6514fa02772fcdc71383ec1d",
+      "listed_artifacts": 35,
+      "all_listed_git_artifacts_exact": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 294348,
+      "sha256": "762f65ac35f11f1c33b779799854c1373eb0ccf9c624e44e6cebc70266cdb33e",
+      "listed_artifacts": 19,
+      "all_listed_git_artifacts_exact": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_FORWARD_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 298656,
+      "sha256": "dd3c0d77e2b7a5edc6641d4de0d8220c187e0b867d8af57c2f1d4c470b4e8d42",
+      "listed_artifacts": 16,
+      "all_listed_git_artifacts_exact": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 354048,
+      "sha256": "f031b83e3b17c609260ae34508e4f859f8d49f91277ca49c5f43c84851fc7e50",
+      "listed_artifacts": 11,
+      "all_listed_git_artifacts_exact": true
+    }
+  ],
+  "original_frozen_packets_modified": false,
+  "no_original_generator_run": true,
+  "original_inputs_are_historical_pins_not_current_owner_equivalence": true
+}

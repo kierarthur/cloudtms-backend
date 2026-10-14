@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "corrected_source_symbols_before": 2619,
+  "source_symbols_after": 2629,
+  "source_symbols_restored": 2619,
+  "reverse_hash_mismatches": 0,
+  "new_private_literal_union": 10,
+  "complete_current_native_predecessors": "CURRENT_NATIVE_PREDECESSOR_DEFINITIONS.sqlinc",
+  "original_corrected_scanner": {
+    "file": "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs",
+    "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+    "bytes": 14454,
+    "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+  },
+  "source_input_pins_commit": "d6ffd1fd971664f7fb2a7ecc65bad86fff328262",
+  "source_input_pins_file": "docs/healthroster-build/proposals/original-prerequisites-install1-forward/ROOT_A634_INPUT_PINS.json",
+  "scope": "Finite source routine map only; creator triggers and root final schema/registry/ACL/native schedules remain separately required. No database/schema rollback proof."
+}

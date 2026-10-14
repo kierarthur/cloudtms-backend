@@ -1,0 +1,118 @@
+{
+  "source_only": true,
+  "exact_current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "complete_changes": [
+    {
+      "signature": "public.timesheet_correction_prepare_v1(uuid,uuid)",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+        "definition_sha256": "28b5549a847795e8c9d15789ffc4a9c723d5d10e834b1d7f267dfc42fa7d85fd"
+      },
+      "proposed": {
+        "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+        "definition_sha256": "86da044d0e3a0fe64b2240e3235dfa939726b48dd56880058ce09640e64efb67"
+      }
+    },
+    {
+      "signature": "public.timesheet_correction_authorise_atomic_v1(uuid,bigint,jsonb,uuid,timestamp with time zone)",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+        "definition_sha256": "448d361aeba2ca8ed1dae4c1efa80313e0e32daaf4c95866d06847382c8d4096"
+      },
+      "proposed": {
+        "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+        "definition_sha256": "bf79eb605fda9f71811670dcfae5706d0fd83713301671ab1530c6cbe084c461"
+      }
+    },
+    {
+      "signature": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+        "definition_sha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369"
+      },
+      "proposed": {
+        "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+        "definition_sha256": "b4d90e94d55b16536f72f278bb8c6933a45f91638fa218423d0bab36735f35e7"
+      }
+    }
+  ],
+  "current_source_symbol_count": 2619,
+  "unresolved_source_events": [
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/19012026_extras.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/20072026_1152_reset_obsolete_freshness_after_safe_cleanup.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_batch_issue_candidates.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/24072026_1646_invoice_batch_generate_candidates.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/29082026_1914_contract_week_delete_boundary_reconciliation.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/29082026_1914_contract_week_delete_boundary_reconciliation.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/19012026_extras.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql"
+    }
+  ],
+  "finite_corrected_scanner_only_not_physical_type_oid_binding": true
+}

@@ -1,0 +1,1782 @@
+-- INPUT ONLY supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql / public.trg_set_tms_ref
+CREATE OR REPLACE FUNCTION public.trg_set_tms_ref()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- Always mint a fresh CCR code on create
+    NEW.tms_ref := 'CCR-' || to_char(nextval('public.candidate_tmsref_seq'), 'FM00000');
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Immutable after creation
+    IF NEW.tms_ref IS DISTINCT FROM OLD.tms_ref THEN
+      RAISE EXCEPTION 'tms_ref is immutable once assigned';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/migrations/22022026_banking_tables.sql / public._trg_candidates_set_bank_hash
+create or replace function public._trg_candidates_set_bank_hash()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.bank_details_hash := public._bank_hash(new.sort_code, new.account_number, new.account_holder);
+  return new;
+end $$;
+
+-- INPUT ONLY supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql / public.trg_set_rev
+CREATE OR REPLACE FUNCTION public.trg_set_rev()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+BEGIN
+  NEW.rev := nextval('public.global_rev_seq');
+  RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql / public.set_updated_at
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql / public.invoice_line_archived_timesheet_guard_v1
+CREATE OR REPLACE FUNCTION public.invoice_line_archived_timesheet_guard_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_current_timesheet_id uuid;
+  v_archived_at_utc timestamptz;
+BEGIN
+  -- Exact identity is authoritative whenever the invoice-line mutation supplies
+  -- a timesheet_id.  Do not replace it with the current row for the booking:
+  -- a historical exact identity can itself be Archived.
+  IF NEW.timesheet_id IS NOT NULL THEN
+    SELECT
+      t.timesheet_id,
+      t.archived_at_utc
+    INTO
+      v_current_timesheet_id,
+      v_archived_at_utc
+    FROM public.timesheets AS t
+    WHERE t.timesheet_id = NEW.timesheet_id
+    FOR KEY SHARE OF t;
+  ELSIF NULLIF(BTRIM(COALESCE(NEW.booking_id, '')), '') IS NOT NULL THEN
+    -- Booking lookup is fallback-only when the caller supplied no exact ID.
+    SELECT
+      t.timesheet_id,
+      t.archived_at_utc
+    INTO
+      v_current_timesheet_id,
+      v_archived_at_utc
+    FROM public.timesheets AS t
+    WHERE t.is_current = true
+      AND t.booking_id = NEW.booking_id
+    ORDER BY t.timesheet_id
+    LIMIT 1
+    FOR KEY SHARE OF t;
+  END IF;
+
+  IF v_current_timesheet_id IS NOT NULL
+     AND v_archived_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TIMESHEET_ARCHIVED',
+      DETAIL = jsonb_build_object(
+        'timesheet_id', v_current_timesheet_id,
+        'reason', 'archived_timesheet_cannot_be_added_to_invoice'
+      )::text;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql / private.weekly_source_invoice_line_owner_guard_v1
+create or replace function private.weekly_source_invoice_line_owner_guard_v1()
+returns trigger
+language plpgsql security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_timesheet_id uuid:=case when tg_op='DELETE' then old.timesheet_id
+    else new.timesheet_id end;
+  v_owner text:=nullif(pg_catalog.current_setting(
+    'cloudtms.weekly_source_invoice_owner',true
+  ),'');
+  v_family uuid[];
+begin
+  -- Gate 13 hostile review F4 / standing rule 3.  This guard is the last thing
+  -- standing between the two invoicing systems, so it must be keyed on the
+  -- Timesheet FAMILY, not on the physical row being written.  A lineage-bound
+  -- root that rotates keeps its lineage on the OLD physical id; the new current
+  -- version carries no lineage row of its own, so a guard keyed on
+  -- new.timesheet_id let an ordinary invoice line be written for worked time
+  -- that is already on a source self-bill - a double invoice.
+  --
+  -- The owner test is evaluated first only to avoid resolving the family on the
+  -- two owners that are allowed to write these lines anyway; the conjunction is
+  -- identical, neither side has an effect, and the refusal is unchanged.  A
+  -- final source row is never removed merely because pay authorisation is
+  -- withdrawn.  The only allocation exception is the explicit same-client move
+  -- between two unissued invoices.
+  if v_timesheet_id is not null and coalesce(v_owner,'') not in (
+    'ADMIT_SOURCE_INVOICE','MOVE_SOURCE_INVOICE'
+  ) then
+    -- One family resolution, through the one installed resolver adapter.  No
+    -- second identity mechanism and no inline re-derivation (proof/34 s10
+    -- rule 12).
+    v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_timesheet_id);
+    -- Standing rule 3: fail closed when the family identity cannot be
+    -- established.  This is an explicit cardinality test, never a limit.
+    if v_family is null or pg_catalog.cardinality(v_family)=0 then
+      raise exception 'WEEKLY_SOURCE_INVOICE_FAMILY_UNRESOLVED'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.weekly_source_row_timesheet_lineages lineage
+      where lineage.timesheet_id=any(v_family)
+    ) or exists(
+      select 1 from public.weekly_exceptional_pay_target_families family
+      where family.root_timesheet_id=any(v_family)
+        and family.ownership_state='TARGET_MANAGED'
+    ) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED'
+        using errcode='55000';
+    end if;
+  end if;
+  if tg_op='DELETE' then return old; end if;
+  return new;
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql / private.bpay_expense_classification_ts_v1
+CREATE OR REPLACE FUNCTION private.bpay_expense_classification_ts_v1()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+BEGIN
+ IF TG_WHEN='BEFORE' THEN
+  -- S-02: an ordinary classification write holds this row's own row lock, which every claim/week/lineage
+  -- writer must share-lock before deciding; only a booking change needs the (old and new) family locks.
+  IF TG_OP='UPDATE' AND OLD.booking_id IS DISTINCT FROM NEW.booking_id THEN
+   PERFORM private.bpay_source_family_try_lock_v1(OLD.booking_id);
+   PERFORM private.bpay_source_family_try_lock_v1(NEW.booking_id);
+  END IF;
+ ELSE
+  PERFORM private._candidate_expense_source_family_v1(NEW.timesheet_id);
+ END IF;
+ RETURN NEW;
+END; $function$;
+
+-- INPUT ONLY supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql / private.bpay_source_timesheet_family_gate_v1
+CREATE OR REPLACE FUNCTION private.bpay_source_timesheet_family_gate_v1()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$ BEGIN
+ -- S-02: an ordinary insert, delete or rotation (is_current/version) takes no advisory lock. Rotations and
+ -- deletes UPDATE/DELETE the family's current row, so Source events that share-lock that row serialise with
+ -- them natively; a new row is invisible to every Source event until it commits (23503 NOT_VISIBLE).
+ -- The family lock remains for a booking change (both families) and for a non-canonical booking whose
+ -- whitespace variant collides with its trimmed family.
+ IF TG_OP='UPDATE' AND OLD.booking_id IS DISTINCT FROM NEW.booking_id THEN
+  PERFORM private.bpay_source_family_try_lock_v1(OLD.booking_id);
+  PERFORM private.bpay_source_family_try_lock_v1(NEW.booking_id);
+ ELSIF TG_OP<>'INSERT' AND OLD.booking_id<>btrim(OLD.booking_id) THEN
+  PERFORM private.bpay_source_family_try_lock_v1(OLD.booking_id);
+ ELSIF TG_OP<>'DELETE' AND NEW.booking_id<>btrim(NEW.booking_id) THEN
+  PERFORM private.bpay_source_family_try_lock_v1(NEW.booking_id);
+ END IF;
+ IF TG_OP<>'DELETE' THEN RETURN NEW; END IF;
+ RETURN OLD;
+END; $function$;
+
+-- INPUT ONLY supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql / private.bpay_timesheet_work_revision_v1
+CREATE OR REPLACE FUNCTION private.bpay_timesheet_work_revision_v1()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+BEGIN
+ IF TG_OP='INSERT' THEN NEW.bpay_work_revision_v1:=0;
+ ELSE NEW.bpay_work_revision_v1:=OLD.bpay_work_revision_v1+
+   CASE WHEN NEW.booking_id IS DISTINCT FROM OLD.booking_id THEN 1 ELSE 0 END;
+ END IF;
+ RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql / private._timesheet_settings_authority_before_v1
+create or replace function private._timesheet_settings_authority_before_v1()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_contract public.contracts%rowtype;
+  v_snapshot jsonb;
+  v_client_id uuid;
+  v_relevant_date date;
+begin
+  if tg_op='UPDATE' and old.settings_authority_json<>'{}'::jsonb then
+    new.settings_authority_json:=old.settings_authority_json;
+    new.settings_authority_version:=old.settings_authority_version;
+    new.settings_authority_fingerprint:=old.settings_authority_fingerprint;
+    new.settings_authority_resolved_at:=old.settings_authority_resolved_at;
+    return new;
+  end if;
+  if new.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+    if tg_op='INSERT' then
+      new.settings_authority_json:='{}'::jsonb;
+      new.settings_authority_version:=null;
+      new.settings_authority_fingerprint:=null;
+      new.settings_authority_resolved_at:=null;
+      return new;
+    end if;
+    select tf.client_id into v_client_id
+    from public.timesheets_financials tf
+    where tf.timesheet_id=new.timesheet_id and tf.is_current=true
+      and tf.processed_at_utc is not null
+    order by tf.computed_at_utc desc nulls last,tf.updated_at desc,tf.id desc
+    limit 1;
+    if not found then
+      new.settings_authority_json:='{}'::jsonb;
+      new.settings_authority_version:=null;
+      new.settings_authority_fingerprint:=null;
+      new.settings_authority_resolved_at:=null;
+      return new;
+    end if;
+    v_relevant_date:=coalesce(
+      (new.worked_start_iso at time zone 'Europe/London')::date,
+      (new.scheduled_start_iso at time zone 'Europe/London')::date,
+      new.week_ending_date
+    );
+    v_snapshot:=private._contract_settings_effective_core_v1(
+      v_client_id,new.contract_id,v_relevant_date,'DAILY',null
+    );
+    new.settings_authority_json:=v_snapshot;
+    new.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
+    new.settings_authority_fingerprint:=v_snapshot->>'authority_fingerprint';
+    new.settings_authority_resolved_at:=(v_snapshot->>'resolved_at_utc')::timestamptz;
+    return new;
+  end if;
+  if new.contract_id is null then
+    new.settings_authority_json:='{}'::jsonb;
+    new.settings_authority_version:=null;
+    new.settings_authority_fingerprint:=null;
+    new.settings_authority_resolved_at:=null;
+    return new;
+  end if;
+  select * into v_contract from public.contracts c where c.id=new.contract_id;
+  if not found then return new; end if;
+  v_snapshot:=private._contract_settings_effective_core_v1(
+    v_contract.client_id,v_contract.id,new.week_ending_date,'WEEKLY',null
+  );
+  new.settings_authority_json:=v_snapshot;
+  new.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
+  new.settings_authority_fingerprint:=v_snapshot->>'authority_fingerprint';
+  new.settings_authority_resolved_at:=(v_snapshot->>'resolved_at_utc')::timestamptz;
+  return new;
+end
+$function$;
+
+-- INPUT ONLY supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql / private._candidate_qr_pack_ready_notification_v1
+create or replace function private._candidate_qr_pack_ready_notification_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_notification jsonb;
+begin
+  if (not private._candidate_feature_enabled_current_v1('candidate_route_confirmation')
+       and not private._candidate_office_service_context_valid_v1(null,null,'ROUTE_CONFIRM'))
+     or new.candidate_submission_route_intent is distinct from 'PAPER'
+     or new.sheet_scope is distinct from 'WEEKLY'::public.timesheet_scope_enum
+     or upper(coalesce(new.document_state::text,''))<>'READY'
+     or upper(coalesce(new.qr_status::text,'')) not in ('PENDING','SENT','READY') then
+    return new;
+  end if;
+  if new.current_document_version_id is null or not exists(
+    select 1 from public.invoice_document_versions document_version
+    where document_version.id=new.current_document_version_id
+      and document_version.entity_type='TIMESHEET'
+      and document_version.entity_id=new.timesheet_id
+      and upper(document_version.status)='READY'
+  ) then
+    return new;
+  end if;
+  if exists(
+    select 1
+    from public.candidate_submission_workflows workflow
+    where workflow.route='PAPER'
+      and workflow.state='AWAITING_PAPER_RETURN'
+      and (workflow.target_timesheet_id=new.timesheet_id
+        or workflow.anchor_timesheet_id=new.timesheet_id)
+  ) then
+    return new;
+  end if;
+  v_notification:=private._timesheet_route_resubmission_notifications_v1(
+    new.timesheet_id,new.timesheet_id,new.version,'ALLOW_QR_AGAIN',now()
+  );
+  new.candidate_submission_route_intent:=null;
+  return new;
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql / public.timesheet_archive_row_guard_v1
+CREATE OR REPLACE FUNCTION public.timesheet_archive_row_guard_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_archive_fields_changed boolean := false;
+  v_transition_action text := NULL;
+  v_capability_token uuid := NULL;
+  v_capability_consumed boolean := false;
+  v_old_without_archive jsonb;
+  v_new_without_archive jsonb;
+BEGIN
+  -- Archive metadata cannot be manufactured while inserting a new timesheet.
+  -- Every Archive starts from an existing authoritative row and must pass
+  -- through timesheet_archive_transition_v1.
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.archived_at_utc IS NOT NULL
+       OR NEW.archived_by_user_id IS NOT NULL
+       OR NEW.archived_reason_code IS NOT NULL THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_RPC_REQUIRED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', NEW.timesheet_id,
+          'action', 'ARCHIVE',
+          'reason', 'archive_metadata_on_insert_is_forbidden'
+        )::text;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.archived_at_utc IS NOT NULL THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'TIMESHEET_ARCHIVED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'reason', 'ordinary_delete_for_archived_timesheet_is_forbidden'
+        )::text;
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF NEW.archived_at_utc IS NULL THEN
+    IF NEW.archived_by_user_id IS NOT NULL OR NEW.archived_reason_code IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_METADATA_INVALID';
+    END IF;
+  ELSE
+    IF NEW.archived_by_user_id IS NULL OR NULLIF(BTRIM(NEW.archived_reason_code), '') IS NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_METADATA_INVALID';
+    END IF;
+    IF NEW.authorised_at_server IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_MUST_BE_UNAUTHORISED_BEFORE_ARCHIVE';
+    END IF;
+  END IF;
+
+  v_archive_fields_changed :=
+    NEW.archived_at_utc IS DISTINCT FROM OLD.archived_at_utc
+    OR NEW.archived_by_user_id IS DISTINCT FROM OLD.archived_by_user_id
+    OR NEW.archived_reason_code IS DISTINCT FROM OLD.archived_reason_code;
+
+  IF v_archive_fields_changed THEN
+    IF OLD.archived_at_utc IS NULL AND NEW.archived_at_utc IS NOT NULL THEN
+      v_transition_action := 'ARCHIVE';
+    ELSIF OLD.archived_at_utc IS NOT NULL AND NEW.archived_at_utc IS NULL THEN
+      v_transition_action := 'UNARCHIVE';
+    ELSE
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_INVALID',
+        DETAIL = jsonb_build_object('timesheet_id', OLD.timesheet_id)::text;
+    END IF;
+
+    v_old_without_archive := to_jsonb(OLD) - ARRAY[
+      'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'updated_at'
+    ];
+    v_new_without_archive := to_jsonb(NEW) - ARRAY[
+      'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'updated_at'
+    ];
+
+    IF v_new_without_archive IS DISTINCT FROM v_old_without_archive THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_METADATA_ONLY',
+        DETAIL = jsonb_build_object('timesheet_id', OLD.timesheet_id)::text;
+    END IF;
+
+    BEGIN
+      v_capability_token := NULLIF(
+        current_setting('cloudtms.archive_transition_capability', true),
+        ''
+      )::uuid;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        v_capability_token := NULL;
+    END;
+
+    IF v_capability_token IS NOT NULL THEN
+      DELETE FROM public.timesheet_archive_transition_capability AS capability
+      WHERE capability.capability_token = v_capability_token
+        AND capability.backend_pid = pg_backend_pid()
+        AND capability.transaction_id = txid_current()
+        AND capability.timesheet_id = OLD.timesheet_id
+        AND capability.action = v_transition_action
+      RETURNING true INTO v_capability_consumed;
+    END IF;
+
+    IF COALESCE(v_capability_consumed, false) IS DISTINCT FROM true THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'ARCHIVE_TRANSITION_RPC_REQUIRED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'action', v_transition_action
+        )::text;
+    END IF;
+  ELSIF OLD.archived_at_utc IS NOT NULL THEN
+    v_old_without_archive := to_jsonb(OLD) - ARRAY['updated_at'];
+    v_new_without_archive := to_jsonb(NEW) - ARRAY['updated_at'];
+    IF v_new_without_archive IS DISTINCT FROM v_old_without_archive THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'TIMESHEET_ARCHIVED',
+        DETAIL = jsonb_build_object(
+          'timesheet_id', OLD.timesheet_id,
+          'reason', 'archived_timesheet_content_is_read_only'
+        )::text;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql / private._timesheet_authorisation_overlap_trg_v1
+create or replace function private._timesheet_authorisation_overlap_trg_v1()
+returns trigger language plpgsql volatile security definer
+set search_path='public','private','pg_temp' as $function$
+declare
+  v_candidate_id uuid;
+  v_candidate_count integer:=0;
+  v_fin_schedule jsonb;
+  v_fin_start timestamptz;
+  v_fin_end timestamptz;
+  v_interval_count integer:=0;
+begin
+  if new.authorised_at_server is null then return new; end if;
+  if tg_op='UPDATE' and old.authorised_at_server is not distinct from new.authorised_at_server then
+    return new;
+  end if;
+
+  select f.actual_schedule_json,f.worked_start_iso,f.worked_end_iso
+  into v_fin_schedule,v_fin_start,v_fin_end
+  from public.timesheets_financials f
+  where f.timesheet_id=new.timesheet_id and f.is_current=true
+  order by f.updated_at desc nulls last,f.created_at desc nulls last,f.id desc
+  limit 1;
+
+  select count(*)::integer into v_interval_count
+  from private._timesheet_work_intervals_v1(
+    '{}'::jsonb,COALESCE(new.actual_schedule_json,v_fin_schedule),
+    COALESCE(new.worked_start_iso,v_fin_start),COALESCE(new.worked_end_iso,v_fin_end)
+  );
+  if v_interval_count=0 then return new; end if;
+
+  with candidate_ids as (
+    select w.candidate_id
+    from public.candidate_submission_workflows w
+    where w.id=new.candidate_workflow_id
+    union
+    select f.candidate_id
+    from public.timesheets_financials f
+    where f.timesheet_id=new.timesheet_id and f.is_current=true and f.candidate_id is not null
+    union
+    select c.candidate_id from public.contracts c where c.id=new.contract_id and c.candidate_id is not null
+    union
+    select c.id from public.candidates c
+    where c.key_norm is not null and c.key_norm=new.occupant_key_norm
+  )
+  select count(*)::integer,min(candidate_id::text)::uuid
+  into v_candidate_count,v_candidate_id from candidate_ids;
+
+  if v_candidate_count<>1 or v_candidate_id is null then
+    raise exception using
+      errcode='PT409',
+      message='TIMESHEET_CANDIDATE_IDENTITY_REQUIRED_FOR_OVERLAP_CHECK';
+  end if;
+
+  perform private._timesheet_cross_record_overlap_assert_v1(
+    v_candidate_id,'{}'::jsonb,COALESCE(new.actual_schedule_json,v_fin_schedule),
+    COALESCE(new.worked_start_iso,v_fin_start),COALESCE(new.worked_end_iso,v_fin_end),
+    new.candidate_workflow_id,new.timesheet_id,new.booking_id
+  );
+  return new;
+end;$function$;
+
+-- INPUT ONLY supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql / private.weekly_source_ordinary_authorisation_guard_tg_v1
+create or replace function private.weekly_source_ordinary_authorisation_guard_tg_v1()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_decision jsonb;
+  v_transition text;
+begin
+  v_transition:=case
+    when old.authorised_at_server is not null and new.authorised_at_server is null
+      then 'UNAUTHORISE'
+    when old.authorised_at_server is null and new.authorised_at_server is not null
+      then 'AUTHORISE'
+    else 'AUTHORISATION_RESTAMP'
+  end;
+
+  v_decision:=private.weekly_source_ordinary_authorisation_guard_v1(
+    new.timesheet_id,new.booking_id);
+
+  -- Absent, null and non-boolean all take the UNSAFE value, which for `refuse`
+  -- is TRUE: a decision this trigger cannot read is a decision it refuses on.
+  if private.weekly_source_guard_flag_v1(v_decision,'refuse',true) then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode='55000',
+            detail=pg_catalog.jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E29:public.timesheets.authorised_at_server',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis',v_decision->>'refusal_basis',
+              'reason',v_decision->>'reason',
+              'transition',v_transition,
+              'timesheet_id',new.timesheet_id,
+              -- proof/36 section 3 and contract G3-4 / UNA-010: the withdrawal
+              -- owner is the ONLY route by which a Weekly-Source-managed root is
+              -- unauthorised, so the refusal names it rather than leaving Office
+              -- with a bare code.
+              'required_route',case when v_transition='UNAUTHORISE'
+                then 'public.weekly_source_first_authorisation_withdraw_v1'
+                else 'public.weekly_source_first_authorise_v1' end,
+              'office_message',case when v_transition='UNAUTHORISE'
+                then 'This week is managed by Weekly Source. Withdraw the first '
+                     ||'authorisation instead; the ordinary Unauthorise cannot be '
+                     ||'used, because it would leave the published entitlement in '
+                     ||'place and pay it.'
+                else 'This week is managed by Weekly Source and its authorisation '
+                     ||'record is not in a state the ordinary Authorise may change. '
+                     ||'Office review is required.' end,
+              'guard',v_decision)::text;
+  end if;
+
+  return new;
+end;
+$function$;
+
+-- INPUT ONLY supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql / private.bpay_timesheet_work_key_v1
+CREATE FUNCTION private.bpay_timesheet_work_key_v1()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+BEGIN
+ NEW.bpay_work_key_v1:=CASE
+   WHEN ((NEW.booking_id IS NOT NULL) AND (btrim(NEW.booking_id) <> ''::text)) THEN NEW.booking_id
+   ELSE NULL::text
+ END;
+ RETURN NEW;
+END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql / private.weekly_source_candidate_serial_gate_v1
+create or replace function private.weekly_source_candidate_serial_gate_v1(
+  p_candidate_id uuid,
+  p_job_type text,
+  p_job_id uuid,
+  p_reason text
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_job_types constant text[]:=array[
+    'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',
+    'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION_WITHDRAWAL',
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+    'WORKBENCH_CANDIDATE_PENDING_ENTITLEMENT_RELEASE'
+  ];
+  v_job_type text:=nullif(pg_catalog.btrim(coalesce(p_job_type,'')),'');
+  v_gate jsonb;
+  v_decision text;
+begin
+  -- Any job type outside the four pinned Weekly Source types is refused by this
+  -- helper itself, before the installed gate is consulted, because the installed
+  -- helper would return BYPASSED for it and take no lock at all.  The refusal
+  -- carries the same code as a real BYPASSED so no caller has to learn a second
+  -- one; the reason distinguishes the two.
+  if p_candidate_id is null
+     or v_job_type is null
+     or not (v_job_type=any(v_allowed_job_types)) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,
+      'code','WEEKLY_SOURCE_SERIAL_GATE_BYPASSED',
+      'retryable',false,
+      'gate','BYPASSED',
+      'reason',case when p_candidate_id is null
+        then 'CANDIDATE_REQUIRED' else 'JOB_TYPE_NOT_PINNED' end,
+      'job_type',v_job_type,
+      'candidate_id',p_candidate_id
+    );
+  end if;
+
+  v_gate:=public._pay_workbench_candidate_serial_try_gate(
+    p_job_id:=p_job_id,
+    p_candidate_id:=p_candidate_id,
+    p_job_type:=v_job_type,
+    p_payload_json:=pg_catalog.jsonb_build_object('candidate_id',p_candidate_id::text),
+    p_reason:=coalesce(nullif(pg_catalog.btrim(coalesce(p_reason,'')),''),'WEEKLY_SOURCE_ROTATION_AUTHORITY')
+  );
+  v_decision:=coalesce(nullif(pg_catalog.btrim(coalesce(
+    v_gate->>'candidate_serial_gate_decision',''
+  )),''),'UNKNOWN');
+
+  -- A GRANTED decision is only trusted when the installed gate actually
+  -- attempted and obtained the transaction-scoped advisory lock; anything else
+  -- is the BYPASSED failure, never a silent pass.
+  if v_decision='GRANTED'
+     and coalesce((v_gate->>'advisory_lock_attempted')::boolean,false)
+     and coalesce((v_gate->>'advisory_lock_granted')::boolean,false) then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'gate','GRANTED','candidate_id',p_candidate_id,'job_type',v_job_type
+    );
+  elsif v_decision='BLOCKED' then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,
+      'code','WEEKLY_SOURCE_CANDIDATE_BUSY',
+      'retryable',true,
+      'gate','BLOCKED',
+      'candidate_id',p_candidate_id,
+      'job_type',v_job_type
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',false,
+    'code','WEEKLY_SOURCE_SERIAL_GATE_BYPASSED',
+    'retryable',false,
+    'gate',v_decision,
+    'reason','GATE_DECISION_NOT_GRANTED',
+    'candidate_id',p_candidate_id,
+    'job_type',v_job_type
+  );
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql / private.weekly_source_lock_family_rows_v1
+create or replace function private.weekly_source_lock_family_rows_v1(
+  p_requested_timesheet_ids uuid[],
+  p_candidate_id uuid default null
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_ids uuid[];
+  v_before jsonb:='{}'::jsonb;
+  v_after jsonb:='{}'::jsonb;
+  v_missing_count integer;
+  v_foreign_count integer;
+  v_split_count integer;
+  v_unresolved_count integer;
+  v_family record;
+  v_families jsonb;
+  v_failure text;
+begin
+  -- Review F6: a NULL element or a duplicate must fail closed, never be dropped
+  -- silently.  A caller that builds the array from a nullable variable would
+  -- otherwise get ok:true and believe every root it named is locked.
+  if p_requested_timesheet_ids is null
+     or pg_catalog.cardinality(p_requested_timesheet_ids)=0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','NO_REQUESTED_ROOTS'
+    );
+  end if;
+  if pg_catalog.array_position(p_requested_timesheet_ids,null::uuid) is not null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','REQUESTED_ROOT_NULL_ELEMENT'
+    );
+  end if;
+  if (select pg_catalog.count(distinct requested.timesheet_id)
+      from pg_catalog.unnest(p_requested_timesheet_ids) as requested(timesheet_id))
+     <>pg_catalog.cardinality(p_requested_timesheet_ids) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','REQUESTED_ROOT_DUPLICATE'
+    );
+  end if;
+
+  select pg_catalog.array_agg(requested.timesheet_id order by requested.ord)
+  into v_ids
+  from pg_catalog.unnest(p_requested_timesheet_ids)
+    with ordinality as requested(timesheet_id,ord);
+
+  -- Step 2 (first half): the booking identity of every requested row, read
+  -- before any lock is taken so the re-read in step 3 has something to compare.
+  select
+    coalesce(pg_catalog.jsonb_object_agg(
+      timesheet.timesheet_id::text,timesheet.booking_id
+    ),'{}'::jsonb),
+    pg_catalog.count(*) filter (
+      where timesheet.booking_id is null
+         or pg_catalog.btrim(timesheet.booking_id)=''
+    )
+  into v_before,v_missing_count
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=any(v_ids);
+
+  -- WP-08a review F1: the installed resolver returns NO row at all for a
+  -- Timesheet that exists but whose booking_id is blank or whitespace-only, so
+  -- a guard that only inspects returned rows never fires.  Every requested id is
+  -- therefore accounted for here, explicitly, before any lock is taken.
+  if v_missing_count>0
+     or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_before))
+        <>pg_catalog.array_length(v_ids,1) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_IDENTITY_MISSING'
+    );
+  end if;
+
+  -- Every requested root must belong to the Candidate the caller pinned at the
+  -- serial gate.  A root from another Candidate would be serialised under the
+  -- wrong Candidate key, so it fails closed rather than proceeding.
+  if p_candidate_id is not null then
+    select pg_catalog.count(*)
+    into v_foreign_count
+    from public.timesheets timesheet
+    left join public.contracts contract on contract.id=timesheet.contract_id
+    where timesheet.timesheet_id=any(v_ids)
+      and contract.candidate_id is distinct from p_candidate_id;
+    if v_foreign_count>0 then
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+        'reason','ROOT_CANDIDATE_MISMATCH'
+      );
+    end if;
+  end if;
+
+  -- Step 2 (second half): the exact lock set, in the exact order.
+  for v_family in
+    select distinct_family.trimmed_booking_id,distinct_family.booking_id
+    from (
+      select distinct
+        pg_catalog.btrim(timesheet.booking_id) as trimmed_booking_id,
+        timesheet.booking_id as booking_id
+      from public.timesheets timesheet
+      where timesheet.timesheet_id=any(v_ids)
+    ) distinct_family
+    order by distinct_family.trimmed_booking_id,distinct_family.booking_id
+  loop
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtext(v_family.trimmed_booking_id)
+    );
+    if v_family.booking_id<>v_family.trimmed_booking_id then
+      perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(v_family.booking_id));
+    end if;
+    perform 1
+    from public.timesheets timesheet
+    where timesheet.booking_id=v_family.booking_id
+    for update;
+  end loop;
+
+  -- Step 3: the booking identity must be unchanged since step 2.
+  select coalesce(pg_catalog.jsonb_object_agg(
+    timesheet.timesheet_id::text,timesheet.booking_id
+  ),'{}'::jsonb)
+  into v_after
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=any(v_ids);
+
+  if v_after is distinct from v_before then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_REPOINTED_DURING_LOCK'
+    );
+  end if;
+
+  -- WP-08a review F3: the confirmed rotation route serialises on the trimmed
+  -- key and the schema package keys the one-current-head index on the trimmed
+  -- family booking id, but family membership in the installed resolver is by
+  -- the exact raw value.  A sibling row whose btrim() matches but whose raw
+  -- value differs therefore splits one logical family in two.  That is
+  -- ambiguous, not resolvable, so it fails closed.  A single padded booking id
+  -- with no such sibling is unaffected (the R37 case).
+  --
+  -- HANDOVER 2 round-5 Part E, "Rotation readings": this case is a canonical
+  -- booking-reference collision and must be named as one, never described
+  -- merely as a non-unique family (WP-09b handoff N2, WP-03 handoff N20).  It
+  -- is a change of NAME only: the case keeps its own outcome and is never
+  -- merged with blank, null, unknown or all-revoked, which keep
+  -- BOOKING_IDENTITY_MISSING, ROOT_ID_REQUIRED and CANONICAL_AMBIGUOUS.
+  select pg_catalog.count(*)
+  into v_split_count
+  from (
+    select distinct requested.booking_id
+    from public.timesheets requested
+    where requested.timesheet_id=any(v_ids)
+  ) family
+  where exists(
+    select 1
+    from public.timesheets sibling
+    where pg_catalog.btrim(sibling.booking_id)=pg_catalog.btrim(family.booking_id)
+      and sibling.booking_id<>family.booking_id
+  );
+  if v_split_count>0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','BOOKING_REFERENCE_CANONICAL_COLLISION'
+    );
+  end if;
+
+  -- Step 4 (completeness, WP-08a review F1): the resolver must return at least
+  -- one row for every requested id.  Never return ok:true with fewer families
+  -- than the request implies.
+  select pg_catalog.count(*)
+  into v_unresolved_count
+  from pg_catalog.unnest(v_ids) as requested(timesheet_id)
+  where not exists(
+    select 1
+    from public._pay_timesheet_rotation_scope(v_ids) resolved
+    where resolved.requested_timesheet_id=requested.timesheet_id
+  );
+  if v_unresolved_count>0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','ROOT_NOT_RETURNED_BY_RESOLVER'
+    );
+  end if;
+
+  -- Step 4: resolve through the installed Workbench rotation resolver only.
+  with requested as (
+    select input.timesheet_id,input.ord
+    from pg_catalog.unnest(v_ids) with ordinality as input(timesheet_id,ord)
+  ),
+  scope as (
+    select * from public._pay_timesheet_rotation_scope(v_ids)
+  ),
+  per_request as (
+    select
+      requested.ord as ord,
+      requested.timesheet_id as requested_timesheet_id,
+      pg_catalog.min(resolved.booking_id) as family_booking_id,
+      pg_catalog.count(distinct resolved.booking_id) as booking_count,
+      pg_catalog.min(resolved.canonical_timesheet_id::text)::uuid as canonical_timesheet_id,
+      pg_catalog.count(distinct resolved.canonical_timesheet_id::text) as canonical_count,
+      pg_catalog.bool_or(resolved.requested_is_canonical) as requested_is_canonical,
+      pg_catalog.count(*) as member_count,
+      pg_catalog.count(*) filter (where resolved.family_is_current) as current_count,
+      pg_catalog.count(distinct resolved.family_version) as distinct_version_count,
+      pg_catalog.count(*) filter (where resolved.family_version is null) as null_version_count,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=requested.timesheet_id
+      ) as requested_member_count,
+      pg_catalog.bool_or(
+        resolved.family_timesheet_id=requested.timesheet_id
+        and resolved.family_is_current
+      ) as family_is_current,
+      pg_catalog.count(*) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_member_count,
+      pg_catalog.min(resolved.family_version) filter (
+        where resolved.family_timesheet_id=resolved.canonical_timesheet_id
+      ) as canonical_version,
+      pg_catalog.array_agg(
+        resolved.family_timesheet_id
+        order by resolved.family_version,resolved.family_timesheet_id
+      ) as member_timesheet_ids
+    from requested
+    left join scope resolved
+      on resolved.requested_timesheet_id=requested.timesheet_id
+    group by requested.ord,requested.timesheet_id
+  ),
+  checked as (
+    select
+      per_request.*,
+      case
+        when per_request.family_booking_id is null
+          or per_request.booking_count<>1
+          or per_request.member_count=0
+          or per_request.requested_member_count<>1
+          then 'FAMILY_UNRESOLVED'
+        when per_request.family_booking_id is distinct from (v_before->>per_request.requested_timesheet_id::text)
+          then 'BOOKING_REPOINTED_DURING_LOCK'
+        when per_request.canonical_timesheet_id is null
+          or per_request.canonical_count<>1
+          or per_request.canonical_member_count<>1
+          then 'CANONICAL_AMBIGUOUS'
+        when per_request.current_count<>1 then 'CURRENT_ROW_CARDINALITY'
+        when per_request.null_version_count>0
+          or per_request.distinct_version_count<>per_request.member_count
+          then 'VERSION_NOT_UNIQUE'
+        else null
+      end as failure_reason
+    from per_request
+  )
+  select
+    pg_catalog.min(checked.failure_reason),
+    coalesce(pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'requested_timesheet_id',checked.requested_timesheet_id,
+        'family_booking_id',checked.family_booking_id,
+        'canonical_timesheet_id',checked.canonical_timesheet_id,
+        'canonical_version',checked.canonical_version,
+        'requested_is_canonical',coalesce(checked.requested_is_canonical,false),
+        'family_is_current',coalesce(checked.family_is_current,false),
+        'member_timesheet_ids',pg_catalog.to_jsonb(checked.member_timesheet_ids)
+      ) order by checked.ord
+    ) filter (where checked.failure_reason is null),'[]'::jsonb)
+  into v_failure,v_families
+  from checked;
+
+  if v_failure is not null then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason',v_failure
+    );
+  end if;
+
+  -- Final completeness assertion: one family per distinct requested id, always.
+  if pg_catalog.jsonb_array_length(v_families)
+     is distinct from pg_catalog.array_length(v_ids,1) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,
+      'reason','FAMILY_RESULT_INCOMPLETE'
+    );
+  end if;
+
+  return pg_catalog.jsonb_build_object('ok',true,'families',v_families);
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql / public._pay_workbench_candidate_serial_try_gate
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_try_gate(p_job_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_payload_json jsonb DEFAULT '{}'::jsonb, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_payload jsonb := CASE WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_candidate_id uuid := public._pay_workbench_candidate_serial_candidate_id(p_candidate_id, p_payload_json);
+  v_serial_key text := public._pay_workbench_candidate_serial_key(v_candidate_id);
+  v_required boolean := false;
+  v_locked boolean := false;
+  v_state jsonb := '{}'::jsonb;
+  v_blocked boolean := false;
+  v_reason text := NULL::text;
+  v_result jsonb := '{}'::jsonb;
+BEGIN
+  v_required := public._pay_workbench_candidate_serial_is_candidate_job(p_job_type, v_candidate_id, v_payload);
+
+  IF v_candidate_id IS NULL OR v_serial_key IS NULL OR v_required IS NOT TRUE THEN
+    v_state := public._pay_workbench_candidate_serial_active_state(p_job_id, v_candidate_id, p_job_type, v_payload, NULL::timestamptz);
+    RETURN COALESCE(v_state, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+      'ok', true, 'allowed', true, 'blocked', false, 'candidate_serial_blocked', false,
+      'reason', COALESCE(v_state->>'reason', 'NO_CANDIDATE_SERIAL_SCOPE'),
+      'candidate_serial_wait_reason', COALESCE(v_state->>'candidate_serial_wait_reason', v_state->>'reason', 'NO_CANDIDATE_SERIAL_SCOPE'),
+      'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+      'candidate_serial_key', v_serial_key,
+      'candidate_serial_gate_reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+      'candidate_serial_gate_decision', 'BYPASSED',
+      'advisory_lock_attempted', false
+    ));
+  END IF;
+
+  v_locked := COALESCE(pg_try_advisory_xact_lock(hashtextextended(v_serial_key, 24062027)), false);
+  v_state := public._pay_workbench_candidate_serial_active_state(p_job_id, v_candidate_id, p_job_type, v_payload, NULL::timestamptz);
+  v_blocked := v_locked IS NOT TRUE
+    OR lower(BTRIM(COALESCE(v_state->>'blocked', v_state->>'candidate_serial_blocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_reason := CASE
+    WHEN v_locked IS NOT TRUE THEN 'CANDIDATE_SERIAL_BLOCKED_BY_ADVISORY_LOCK'
+    ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_state->>'reason', '')), ''), CASE WHEN v_blocked THEN 'CANDIDATE_SERIAL_BLOCKED' ELSE 'CANDIDATE_SERIAL_CLEAR' END)
+  END;
+
+  v_result := COALESCE(v_state, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+    'ok', true, 'allowed', NOT COALESCE(v_blocked, false), 'blocked', COALESCE(v_blocked, false),
+    'candidate_serial_blocked', COALESCE(v_blocked, false), 'reason', v_reason,
+    'candidate_serial_wait_reason', v_reason, 'candidate_id', v_candidate_id::text,
+    'candidate_serial_key', v_serial_key,
+    'candidate_serial_gate_reason', NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+    'candidate_serial_gate_decision', CASE WHEN v_blocked THEN 'BLOCKED' ELSE 'GRANTED' END,
+    'advisory_lock_attempted', true, 'advisory_lock_granted', COALESCE(v_locked, false)
+  ));
+
+  PERFORM public._pay_workbench_candidate_serial_audit(
+    CASE WHEN v_blocked THEN 'CANDIDATE_SERIAL_GATE_BLOCKED' ELSE 'CANDIDATE_SERIAL_GATE_GRANTED' END,
+    p_job_id, v_candidate_id, v_result || jsonb_build_object('job_type', p_job_type),
+    COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), v_reason), NULL::uuid
+  );
+  RETURN v_result;
+END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql / public._pay_workbench_candidate_serial_key
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_key(p_candidate_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT CASE
+    WHEN p_candidate_id IS NULL THEN NULL::text
+    ELSE 'WORKBENCH_CANDIDATE_SERIAL:candidate:' || p_candidate_id::text
+  END;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql / public._pay_timesheet_rotation_scope
+CREATE OR REPLACE FUNCTION public._pay_timesheet_rotation_scope(p_timesheet_ids uuid[])
+ RETURNS TABLE(requested_timesheet_id uuid, booking_id text, canonical_timesheet_id uuid, family_timesheet_id uuid, family_is_current boolean, family_version integer, requested_is_canonical boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+WITH input_timesheets AS (
+  SELECT DISTINCT
+    input_timesheet_values.timesheet_id_value AS requested_timesheet_id
+  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
+  WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
+),
+requested_timesheets AS (
+  SELECT
+    input_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    public.timesheets.timesheet_id AS matched_timesheet_id,
+    public.timesheets.booking_id AS matched_booking_id
+  FROM input_timesheets
+  LEFT JOIN public.timesheets
+    ON public.timesheets.timesheet_id = input_timesheets.requested_timesheet_id
+),
+requested_bookings AS (
+  SELECT DISTINCT
+    requested_timesheets.matched_booking_id AS booking_id
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+    AND requested_timesheets.matched_booking_id IS NOT NULL
+    AND BTRIM(requested_timesheets.matched_booking_id) <> ''
+),
+canonical_timesheets AS (
+  SELECT DISTINCT ON (current_timesheets.booking_id)
+    current_timesheets.booking_id AS booking_id,
+    current_timesheets.timesheet_id AS canonical_timesheet_id
+  FROM public.timesheets AS current_timesheets
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = current_timesheets.booking_id
+  WHERE current_timesheets.is_current = true
+  ORDER BY
+    current_timesheets.booking_id,
+    current_timesheets.version DESC,
+    current_timesheets.updated_at DESC,
+    current_timesheets.created_at DESC,
+    current_timesheets.timesheet_id
+),
+family_timesheets AS (
+  SELECT DISTINCT
+    family_rows.booking_id AS booking_id,
+    family_rows.timesheet_id AS family_timesheet_id,
+    family_rows.is_current AS family_is_current,
+    family_rows.version AS family_version
+  FROM public.timesheets AS family_rows
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = family_rows.booking_id
+),
+resolved_scope_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    requested_timesheets.matched_booking_id AS booking_id,
+    canonical_timesheets.canonical_timesheet_id AS canonical_timesheet_id,
+    family_timesheets.family_timesheet_id AS family_timesheet_id,
+    family_timesheets.family_is_current AS family_is_current,
+    family_timesheets.family_version AS family_version,
+    COALESCE(requested_timesheets.requested_timesheet_id = canonical_timesheets.canonical_timesheet_id, false) AS requested_is_canonical
+  FROM requested_timesheets
+  JOIN family_timesheets
+    ON family_timesheets.booking_id = requested_timesheets.matched_booking_id
+  LEFT JOIN canonical_timesheets
+    ON canonical_timesheets.booking_id = requested_timesheets.matched_booking_id
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+),
+defensive_unresolved_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    NULL::text AS booking_id,
+    requested_timesheets.requested_timesheet_id AS canonical_timesheet_id,
+    requested_timesheets.requested_timesheet_id AS family_timesheet_id,
+    NULL::boolean AS family_is_current,
+    NULL::integer AS family_version,
+    false AS requested_is_canonical
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NULL
+),
+rotation_scope_output AS (
+  SELECT
+    resolved_scope_rows.requested_timesheet_id AS requested_timesheet_id,
+    resolved_scope_rows.booking_id AS booking_id,
+    resolved_scope_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    resolved_scope_rows.family_timesheet_id AS family_timesheet_id,
+    resolved_scope_rows.family_is_current AS family_is_current,
+    resolved_scope_rows.family_version AS family_version,
+    resolved_scope_rows.requested_is_canonical AS requested_is_canonical
+  FROM resolved_scope_rows
+
+  UNION ALL
+
+  SELECT
+    defensive_unresolved_rows.requested_timesheet_id AS requested_timesheet_id,
+    defensive_unresolved_rows.booking_id AS booking_id,
+    defensive_unresolved_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    defensive_unresolved_rows.family_timesheet_id AS family_timesheet_id,
+    defensive_unresolved_rows.family_is_current AS family_is_current,
+    defensive_unresolved_rows.family_version AS family_version,
+    defensive_unresolved_rows.requested_is_canonical AS requested_is_canonical
+  FROM defensive_unresolved_rows
+)
+SELECT
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id,
+  rotation_scope_output.canonical_timesheet_id,
+  rotation_scope_output.family_timesheet_id,
+  rotation_scope_output.family_is_current,
+  rotation_scope_output.family_version,
+  rotation_scope_output.requested_is_canonical
+FROM rotation_scope_output
+ORDER BY
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id NULLS LAST,
+  rotation_scope_output.family_is_current DESC NULLS LAST,
+  rotation_scope_output.family_version DESC NULLS LAST,
+  rotation_scope_output.family_timesheet_id;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql / private.bpay_source_family_try_lock_v1
+CREATE OR REPLACE FUNCTION private.bpay_source_family_try_lock_v1(p_booking text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+BEGIN
+ IF p_booking IS NULL OR btrim(p_booking)='' THEN RETURN; END IF;
+ -- Nonblocking acquisition is essential for row-trigger callers: never wait
+ -- for a family lock while retaining a row lock wanted by that family owner.
+ IF NOT pg_try_advisory_xact_lock(hashtext(btrim(p_booking))) THEN
+  RAISE EXCEPTION 'BPAY_SOURCE_FAMILY_BUSY' USING ERRCODE='55P03';
+ END IF;
+ IF p_booking<>btrim(p_booking)
+ AND NOT pg_try_advisory_xact_lock(hashtext(p_booking)) THEN
+  RAISE EXCEPTION 'BPAY_SOURCE_FAMILY_BUSY' USING ERRCODE='55P03';
+ END IF;
+END; $function$;
+
+-- INPUT ONLY supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql / public.tsfin_load_context_batch
+create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
+returns table (
+  effective_timesheet_id uuid,
+  out_timesheet jsonb,
+  out_cur_fin jsonb,
+  out_candidate jsonb,
+  out_umbrella jsonb,
+  out_client_id uuid,
+  out_effective_flags jsonb,
+  out_policy jsonb
+)
+language sql
+stable
+security definer
+set search_path to 'public', 'extensions', 'pg_temp'
+as $$
+with input_ids as (
+  select distinct unnest(p_timesheet_ids) as input_timesheet_id
+  where p_timesheet_ids is not null
+),
+t_in as (
+  select
+    i.input_timesheet_id,
+    t0.*
+  from input_ids i
+  join public.timesheets t0
+    on t0.timesheet_id = i.input_timesheet_id
+),
+t_eff_id as (
+  select
+    t_in.input_timesheet_id,
+    coalesce(tc.timesheet_id, t_in.timesheet_id) as effective_timesheet_id
+  from t_in
+  left join public.timesheets tc
+    on tc.booking_id = t_in.booking_id
+   and tc.is_current = true
+),
+t_eff as (
+  select
+    e.input_timesheet_id,
+    e.effective_timesheet_id,
+    te.*
+  from t_eff_id e
+  join public.timesheets te
+    on te.timesheet_id = e.effective_timesheet_id
+),
+base as (
+  select
+    te.effective_timesheet_id,
+    correction_policy.envelope_json as correction_policy_envelope,
+    correction_policy.leg_json as correction_policy_leg,
+
+    -- TIME anchor date for client_settings.effective_from selection:
+    -- DAILY: worked_start_iso local date
+    -- WEEKLY: week_ending_date (fallback)
+    coalesce(
+      case
+        when te.worked_start_iso is not null
+          then (te.worked_start_iso at time zone 'Europe/London')::date
+        else null
+      end,
+      te.week_ending_date::date
+    ) as time_anchor_date,
+
+    -- FINANCE anchor date for finance windows:
+    -- authorised_at_server local date if present, else "today" local date
+    coalesce(
+      case
+        when nullif(correction_policy.leg_json #>> '{tsfin_policy,pay_policy_date}', '') is not null
+          then (correction_policy.leg_json #>> '{tsfin_policy,pay_policy_date}')::date
+        else null
+      end,
+      case
+        when te.authorised_at_server is not null
+          then (te.authorised_at_server at time zone 'Europe/London')::date
+        else null
+      end,
+      (now() at time zone 'Europe/London')::date
+    ) as finance_anchor_date,
+
+    -- ✅ Ensure new correction fields are always present in out_timesheet (even if null)
+    (to_jsonb(te)
+      || jsonb_build_object(
+        'correction_id', te.correction_id,
+        'correction_kind', te.correction_kind,
+        'adjustment_origin', te.adjustment_origin
+      )
+    ) as out_timesheet,
+
+    -- ✅ This will now include travel_/accommodation_/other_ columns automatically
+    to_jsonb(tf) as out_cur_fin,
+
+    to_jsonb(c)  as out_candidate,
+    to_jsonb(u)  as out_umbrella,
+
+    cid.client_id as out_client_id,
+    authority.settings_authority_json as settings_authority,
+
+    -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
+    jsonb_build_object(
+      'route_type',                    v.route_type,
+
+      'contract_id',                   v.contract_id,
+      'contract_week_id',              v.contract_week_id,
+      'contract_week_ending_date',     v.contract_week_ending_date,
+      'basis',                         v.basis,
+
+      'client_requires_hr',            (authority.settings_authority_json#>>'{values,requires_hr}')::boolean,
+      'client_autoprocess_hr',         (authority.settings_authority_json#>>'{values,autoprocess_hr}')::boolean,
+      'client_no_timesheet_required',  (authority.settings_authority_json#>>'{values,no_timesheet_required}')::boolean,
+      'client_is_nhsp',                (authority.settings_authority_json#>>'{values,is_nhsp}')::boolean,
+
+      'require_reference_to_pay',      (authority.settings_authority_json#>>'{values,require_reference_to_pay}')::boolean,
+      'require_reference_to_invoice',  (authority.settings_authority_json#>>'{values,require_reference_to_invoice}')::boolean,
+
+      'client_hr_validation_required', (authority.settings_authority_json#>>'{values,hr_validation_required}')::boolean,
+      'client_ts_reference_required',  (authority.settings_authority_json#>>'{values,ts_reference_required}')::boolean,
+      'client_pay_reference_required', (authority.settings_authority_json#>>'{values,require_reference_to_pay}')::boolean,
+      'client_invoice_reference_required', (authority.settings_authority_json#>>'{values,require_reference_to_invoice}')::boolean,
+
+      'pay_method',                    v.pay_method,
+      'processing_status',             v.processing_status,
+      'authorised_at_server',          v.authorised_at_server,
+
+      -- ✅ NEW: computed here (because v_timesheets_summary does not expose hr_validation_required_for_invoice)
+      'hr_validation_required_for_invoice',
+        (
+          v.timesheet_id is not null
+          and coalesce((authority.settings_authority_json#>>'{values,hr_validation_required}')::boolean, false) = true
+          and coalesce((authority.settings_authority_json#>>'{values,no_timesheet_required}')::boolean, false) = false
+          and coalesce(v.total_hours, tf.total_hours, 0::numeric) > 0::numeric
+        ),
+
+      -- ✅ NEW: pass through validation status for TSFIN recompute gating
+      'validation_status', v.validation_status
+    ) as out_effective_flags
+  from t_eff te
+
+  left join lateral (
+    select
+      public._ctms_correction_policy_envelope_read_v1(te.effective_timesheet_id) as envelope_json,
+      public._ctms_correction_policy_leg_read_v1(te.effective_timesheet_id) as leg_json
+  ) correction_policy on true
+
+  left join public.timesheets_financials tf
+    on tf.timesheet_id = te.effective_timesheet_id
+   and tf.is_current = true
+
+  left join lateral (
+    with candidate_resolution as (
+      select
+        case
+          when upper(coalesce(te.sheet_scope::text, '')) = 'DAILY'
+           and upper(coalesce(te.submission_mode::text, '')) = 'MANUAL'
+           and coalesce(te.candidate_hint_text->>'candidate_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            then (te.candidate_hint_text->>'candidate_id')::uuid
+          else null::uuid
+        end as manual_candidate_hint_id,
+        case
+          when upper(coalesce(te.sheet_scope::text, '')) = 'DAILY'
+           and upper(coalesce(te.submission_mode::text, '')) = 'MANUAL'
+            then tf.candidate_id
+          else null::uuid
+        end as manual_current_candidate_id
+    ),
+    candidate_matches as (
+      select
+        c1.id as candidate_id,
+        0 as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      cross join candidate_resolution cr
+      where cr.manual_candidate_hint_id is not null
+        and c1.id = cr.manual_candidate_hint_id
+
+      union all
+
+      select
+        c1.id as candidate_id,
+        1 as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      cross join candidate_resolution cr
+      where cr.manual_current_candidate_id is not null
+        and c1.id = cr.manual_current_candidate_id
+        and (
+          cr.manual_candidate_hint_id is null
+          or c1.id <> cr.manual_candidate_hint_id
+        )
+
+      union all
+
+      select
+        c1.id as candidate_id,
+        case
+          when c1.key_norm = te.occupant_key_norm then 2
+          else 3
+        end as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      where
+        c1.key_norm = te.occupant_key_norm
+        or (
+          te.occupant_key_norm is not null
+          and c1.nhsp_hr_name_aliases @> to_jsonb(array[te.occupant_key_norm]::text[])
+        )
+    )
+    select candidate_matches.candidate_id
+    from candidate_matches
+    order by
+      candidate_matches.match_priority,
+      candidate_matches.match_updated_at desc nulls last,
+      candidate_matches.match_created_at desc nulls last
+    limit 1
+  ) candidate_pick on true
+
+  left join public.candidates c
+    on c.id = candidate_pick.candidate_id
+
+  left join public.umbrellas u
+    on (c.umbrella_id is not null and u.id = c.umbrella_id)
+
+  left join public.v_timesheets_summary v
+    on v.timesheet_id = te.effective_timesheet_id
+
+  left join lateral (
+    select ch.client_id
+    from public.client_hospitals ch
+    where te.hospital_norm is not null
+      and ch.hospital_name_norm @> jsonb_build_array(te.hospital_norm)
+    limit 1
+  ) ch on true
+
+  -- ✅ Resolve a single client_id for this timesheet (works for WEEKLY and DAILY)
+  left join lateral (
+    select coalesce(v.client_id, tf.client_id, ch.client_id) as client_id
+  ) cid on true
+
+  left join lateral (
+    select private._contract_settings_effective_core_v1(
+      cid.client_id,
+      te.contract_id,
+      coalesce(
+        (te.worked_start_iso at time zone 'Europe/London')::date,
+        (te.scheduled_start_iso at time zone 'Europe/London')::date,
+        te.week_ending_date::date
+      ),
+      case when te.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'FINANCE' end,
+      te.effective_timesheet_id
+    ) as settings_authority_json
+  ) authority on true
+),
+ctx as (
+  select
+    b.effective_timesheet_id,
+
+    b.out_timesheet,
+    b.out_cur_fin,
+    b.out_candidate,
+    b.out_umbrella,
+    b.out_client_id,
+    b.out_effective_flags,
+
+    -- Every policy input comes from the Timesheet authority snapshot.  The
+    -- correction envelope keeps its existing explicit overrides.
+    jsonb_build_object(
+      'timezone_id', coalesce(b.settings_authority#>>'{values,timezone_id}','Europe/London'),
+      'day_start',   coalesce(b.settings_authority#>>'{values,day_start}','06:00:00'),
+      'day_end',     coalesce(b.settings_authority#>>'{values,day_end}','20:00:00'),
+      'night_start', coalesce(b.settings_authority#>>'{values,night_start}','20:00:00'),
+      'night_end',   coalesce(b.settings_authority#>>'{values,night_end}','06:00:00'),
+      'sat_start',   coalesce(b.settings_authority#>>'{values,sat_start}','00:00:00'),
+      'sat_end',     coalesce(b.settings_authority#>>'{values,sat_end}','00:00:00'),
+      'sun_start',   coalesce(b.settings_authority#>>'{values,sun_start}','00:00:00'),
+      'sun_end',     coalesce(b.settings_authority#>>'{values,sun_end}','00:00:00'),
+      'bh_start',    coalesce(b.settings_authority#>>'{values,bh_start}','00:00:00'),
+      'bh_end',      coalesce(b.settings_authority#>>'{values,bh_end}','00:00:00'),
+
+      'vat_rate_pct',
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,vat_rate_pct}','')::numeric,20::numeric),
+
+      'pay_vat_rate_pct',
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,vat_rate_pct}','')::numeric,20::numeric),
+
+      'correction_financials_policy_envelope', b.correction_policy_envelope,
+      'correction_financials_policy_envelope_fingerprint', b.correction_policy_leg ->> 'envelope_fingerprint',
+      'correction_leg_fingerprint', b.correction_policy_leg ->> 'leg_fingerprint',
+      'correction_tsfin_policy', b.correction_policy_leg -> 'tsfin_policy',
+      'correction_tsfin_policy_fingerprint', b.correction_policy_leg #>> '{tsfin_policy,tsfin_policy_fingerprint}',
+      'correction_invoice_policy', b.correction_policy_leg -> 'invoice_policy',
+      'correction_invoice_policy_fingerprint', b.correction_policy_leg #>> '{invoice_policy,invoice_policy_fingerprint}',
+      'correction_invoice_stream', b.correction_policy_leg #>> '{invoice_policy,invoice_stream}',
+      'correction_pay_policy_date', b.correction_policy_leg #>> '{tsfin_policy,pay_policy_date}',
+      'correction_invoice_policy_date', b.correction_policy_leg #>> '{invoice_policy,invoice_policy_date}',
+
+      'holiday_pay_pct',
+      coalesce(nullif(b.settings_authority#>>'{values,holiday_pay_pct}','')::numeric,12.07::numeric),
+
+      'erni_pct',
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,erni_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,erni_pct}','')::numeric,13.8::numeric),
+
+      'mileage_pay_defaults',
+      b.settings_authority#>'{values,mileage_pay_defaults}',
+
+      'mileage_charge_defaults',
+      b.settings_authority#>'{values,mileage_charge_defaults}',
+
+      'apply_holiday_to',
+      coalesce(b.settings_authority#>>'{values,apply_holiday_to}','PAYE_ONLY'),
+
+      'apply_erni_to',
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,apply_erni_to}', ''),
+        b.settings_authority#>>'{values,apply_erni_to}','PAYE_ONLY'),
+
+      'margin_includes',
+      coalesce(b.settings_authority#>'{values,margin_includes}',
+        jsonb_build_object('expenses',false,'mileage',false)),
+
+      'bh_list',
+      coalesce(b.settings_authority#>'{values,bh_list}','[]'::jsonb),
+
+      'hr_attach_to_invoice', coalesce((b.settings_authority#>>'{values,hr_attach_to_invoice}')::boolean,true),
+      'ts_attach_to_invoice', coalesce((b.settings_authority#>>'{values,ts_attach_to_invoice}')::boolean,true),
+
+      'week_ending_weekday', coalesce((b.settings_authority#>>'{values,week_ending_weekday}')::integer,0),
+      'default_submission_mode', coalesce(b.settings_authority#>>'{values,default_submission_mode}','ELECTRONIC'),
+      'settings_authority_version',b.settings_authority->>'authority_version',
+      'settings_authority_fingerprint',b.settings_authority->>'authority_fingerprint'
+    ) as out_policy
+  from base b
+)
+select
+  effective_timesheet_id,
+  out_timesheet,
+  out_cur_fin,
+  out_candidate,
+  out_umbrella,
+  out_client_id,
+  out_effective_flags,
+  out_policy
+from ctx;
+$$;
+
+-- INPUT ONLY supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc / private.timesheet_correction_signed_witness_v1
+create or replace function private.timesheet_correction_signed_witness_v1(p_timesheet_id uuid,p_lock_rows boolean default false)
+returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_ts public.timesheets%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_approval public.candidate_approval_requests%rowtype;
+  v_hours public.candidate_submission_components%rowtype;
+  v_candidate public.candidate_submission_components%rowtype;
+  v_manager public.candidate_submission_components%rowtype;
+begin
+  select t.* into v_ts from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  if v_ts.timesheet_id is null or v_ts.submission_mode::text<>'ELECTRONIC'
+    or v_ts.candidate_workflow_id is null or v_ts.candidate_workflow_generation is null then
+    raise exception 'CORRECTION_MANAGER_SIGNED_TIMESHEET_REQUIRED' using errcode='55000';
+  end if;
+  if p_lock_rows then
+    perform 1 from public.candidate_submission_workflows w where w.id=v_ts.candidate_workflow_id for update;
+    perform 1 from public.candidate_approval_requests a where a.workflow_id=v_ts.candidate_workflow_id
+      order by a.id for update;
+    perform 1 from public.candidate_submission_components c where c.workflow_id=v_ts.candidate_workflow_id
+      and c.workflow_generation=v_ts.candidate_workflow_generation order by c.id for update;
+  end if;
+  select w.* into v_workflow from public.candidate_submission_workflows w
+    where w.id=v_ts.candidate_workflow_id and w.generation=v_ts.candidate_workflow_generation
+      and w.route in('EMAIL','PHONE') and w.state='FINALISED'
+      and w.workflow_kind in('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
+      and w.manager_approved_at_utc is not null;
+  if (select count(*) from public.candidate_approval_requests a
+    where a.workflow_id=v_workflow.id and a.workflow_generation=v_workflow.generation and a.state='APPROVED')<>1
+    or (select count(*) from public.candidate_submission_components c
+      where c.workflow_id=v_workflow.id and c.workflow_generation=v_workflow.generation
+        and c.component_kind='HOURS_TIMESHEET' and c.required and c.state='IMMUTABLE')<>1 then
+    raise exception 'CORRECTION_MANAGER_SIGNATURE_WITNESS_AMBIGUOUS' using errcode='55000';
+  end if;
+  select a.* into v_approval from public.candidate_approval_requests a
+    where a.workflow_id=v_workflow.id and a.workflow_generation=v_workflow.generation
+      and a.state='APPROVED' order by a.id limit 1;
+  select c.* into v_hours from public.candidate_submission_components c
+    where c.workflow_id=v_workflow.id and c.workflow_generation=v_workflow.generation
+      and c.component_kind='HOURS_TIMESHEET' and c.required and c.state='IMMUTABLE';
+  select c.* into v_candidate from public.candidate_submission_components c
+    where c.id=v_workflow.candidate_signature_component_id and c.workflow_id=v_workflow.id
+      and c.workflow_generation=v_workflow.generation and c.document_role='CANDIDATE_SIGNATURE' and c.state='IMMUTABLE';
+  select c.* into v_manager from public.candidate_submission_components c
+    where c.id=v_workflow.manager_signature_component_id and c.workflow_id=v_workflow.id
+      and c.workflow_generation=v_workflow.generation and c.document_role='MANAGER_SIGNATURE'
+      and c.state='IMMUTABLE' and c.approval_request_id=v_approval.id;
+  if v_workflow.id is null or v_approval.id is null or v_hours.id is null or v_candidate.id is null or v_manager.id is null
+    or nullif(btrim(v_candidate.storage_key),'') is null or nullif(btrim(v_manager.storage_key),'') is null
+    or octet_length(v_candidate.source_content_sha256) is distinct from 32
+    or octet_length(v_manager.source_content_sha256) is distinct from 32
+    or v_hours.review_render_state is distinct from 'READY' or v_hours.final_signed_render_state is distinct from 'READY'
+    or nullif(btrim(v_hours.final_signed_storage_key),'') is null
+    or octet_length(v_hours.final_signed_content_sha256) is distinct from 32
+    or coalesce(v_hours.final_signed_page_count,0)<=0 or coalesce(v_hours.final_signed_byte_size,0)<=0
+    or v_hours.review_render_input_sha256 is distinct from v_hours.final_signed_render_input_sha256
+    or v_candidate.source_content_sha256 is distinct from v_workflow.candidate_signature_sha256
+    or v_manager.source_content_sha256 is distinct from v_workflow.manager_signature_sha256
+    or v_ts.r2_nurse_key is distinct from v_candidate.storage_key or v_ts.r2_auth_key is distinct from v_manager.storage_key
+    or v_ts.img_sha256_nurse is distinct from encode(v_candidate.source_content_sha256,'hex')
+    or v_ts.img_sha256_auth is distinct from encode(v_manager.source_content_sha256,'hex') then
+    raise exception 'CORRECTION_MANAGER_SIGNATURE_WITNESS_INVALID' using errcode='55000';
+  end if;
+  return jsonb_build_object('workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
+    'approval_request_id',v_approval.id,'hours_component_id',v_hours.id,
+    'candidate_component_id',v_candidate.id,'manager_component_id',v_manager.id,
+    'candidate_sha256',encode(v_candidate.source_content_sha256,'hex'),
+    'manager_sha256',encode(v_manager.source_content_sha256,'hex'),
+    'manager_approved_at_utc',v_workflow.manager_approved_at_utc,
+    'document_version_id',v_ts.current_document_version_id);
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc / private.timesheet_correction_origin_v1
+create or replace function private.timesheet_correction_origin_v1(p_timesheet_id uuid)
+returns text language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_agency boolean:=false;
+  v_signed boolean:=false;
+begin
+  if to_regprocedure('private.weekly_source_agency_invoice_check_only_v1(uuid)') is not null then
+    execute 'select private.weekly_source_agency_invoice_check_only_v1($1)' into v_agency using p_timesheet_id;
+    if v_agency is true then return 'AGENCY_INVOICE_CORRECTION'; end if;
+  end if;
+  if to_regprocedure('private.weekly_source_signed_check_only_v1(uuid)') is not null then
+    execute 'select private.weekly_source_signed_check_only_v1($1)' into v_signed using p_timesheet_id;
+    if v_signed is true then return 'SIGNED_TIMESHEET_CORRECTION'; end if;
+  end if;
+  return null;
+exception when sqlstate '55000' or sqlstate '22023' then return null;
+end;
+$function$;
+
+-- INPUT ONLY supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc / public.timesheet_correction_send_v1
+create or replace function public.timesheet_correction_send_v1(p_request jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now())
+returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_now timestamptz:=coalesce(p_now_utc,now()); v_id uuid; v_root uuid; v_ts public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype; v_req private.timesheet_correction_requests%rowtype;
+  v_existing private.timesheet_correction_requests%rowtype; v_origin text; v_chain jsonb; v_witness jsonb;
+  v_invoice uuid; v_invoice_status text; v_key text; v_hash text; v_leg jsonb; v_candidate uuid; v_client uuid; v_date date;
+begin
+  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+  if jsonb_typeof(p_request)<>'object' or not pg_input_is_valid(p_request->>'timesheet_id','uuid')
+    or not pg_input_is_valid(p_request->>'expected_version','integer')
+    or jsonb_typeof(p_request->'proposal') is distinct from 'object'
+    or jsonb_typeof(p_request#>'{proposal,schedule}') is distinct from 'array'
+    or length(btrim(coalesce(p_request->>'reason',''))) not between 1 and 1000 or nullif(btrim(p_request->>'request_key'),'') is null
+    or exists(select 1 from jsonb_object_keys(p_request) k where k not in('timesheet_id','expected_version','proposal','reason','request_key')) then
+    raise exception 'CORRECTION_SEND_SHAPE_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_object_keys(p_request->'proposal') k where k not in('schedule','changed_dates'))
+    or exists(select 1 from jsonb_array_elements(p_request#>'{proposal,schedule}') s where jsonb_typeof(s) is distinct from 'object')
+    or (p_request#>'{proposal,changed_dates}' is not null and jsonb_typeof(p_request#>'{proposal,changed_dates}') is distinct from 'array') then
+    raise exception 'CORRECTION_SEND_SHAPE_INVALID' using errcode='22023';
+  end if;
+  v_id:=(p_request->>'timesheet_id')::uuid; v_key:=p_request->>'request_key';
+  v_hash:=encode(digest(jsonb_build_object('actor',p_actor_user_id,'request',p_request)::text,'sha256'),'hex');
+  -- Serialize exact command receipt before checking it. Concurrent same-key
+  -- Send never allocates a second P0 or loses replay to the unique index.
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_SEND|'||v_key,13102026));
+  select request.* into v_existing from private.timesheet_correction_requests request where request.request_key=v_key;
+  if found then
+    if v_existing.request_fingerprint is distinct from v_hash or v_existing.created_by_user_id is distinct from p_actor_user_id then
+      raise exception 'CORRECTION_SEND_REPLAY_CONFLICT' using errcode='40001';
+    end if;
+    return jsonb_build_object('ok',true,'request_id',v_existing.id,'state',v_existing.state,
+      'replacement_timesheet_id',v_existing.replacement_timesheet_id,'state_revision',v_existing.state_revision,'replayed',true);
+  end if;
+  -- Lock every existing invoice first, using the same authority as all credit writers.
+  perform i.id from public.invoices i where i.id in(select distinct l.invoice_id from public.invoice_lines l
+    where l.timesheet_id=v_id) order by i.id for update;
+  v_chain:=public.timesheet_correction_chain_scope_v1(v_id,false,32,100);
+  if (v_chain->>'valid')::boolean is distinct from true or v_chain->>'latest_positive_timesheet_id' is distinct from v_id::text then
+    raise exception 'CORRECTION_LATEST_POSITIVE_REQUIRED' using errcode='55000';
+  end if;
+  v_root:=(v_chain->>'root_timesheet_id')::uuid;
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_CHAIN|'||v_root::text,21072026));
+  v_chain:=public.timesheet_correction_chain_scope_v1(v_id,false,32,100);
+  if (v_chain->>'valid')::boolean is distinct from true or v_chain->>'latest_positive_timesheet_id' is distinct from v_id::text then
+    raise exception 'CORRECTION_LATEST_POSITIVE_REQUIRED' using errcode='40001';
+  end if;
+  select t.* into strict v_ts from public.timesheets t where t.timesheet_id=v_id;
+  -- The workflow lock precedes Timesheet/TSFIN locks, matching native Candidate owners.
+  if v_ts.candidate_workflow_id is not null then
+    perform 1 from public.candidate_submission_workflows w where w.id=v_ts.candidate_workflow_id for update;
+  end if;
+  select t.* into strict v_ts from public.timesheets t where t.timesheet_id=v_id for update;
+  if not v_ts.is_current or v_ts.archived_at_utc is not null or v_ts.version<>(p_request->>'expected_version')::integer then
+    raise exception 'CORRECTION_ORIGINAL_CHANGED' using errcode='40001';
+  end if;
+  v_origin:=private.timesheet_correction_origin_v1(v_id);
+  if v_origin is null then raise exception 'CORRECTION_ORIGIN_NOT_ALLOWED' using errcode='55000'; end if;
+  if v_origin='SIGNED_TIMESHEET_CORRECTION' then v_witness:=private.timesheet_correction_signed_witness_v1(v_id,true); end if;
+  select tf.* into v_fin from public.timesheets_financials tf where tf.timesheet_id=v_id and tf.is_current for update;
+  select summary.candidate_id,summary.client_id into v_candidate,v_client from public.v_timesheets_summary_base summary
+    where summary.timesheet_id=v_id;
+  if v_candidate is null or v_client is null then raise exception 'CORRECTION_BUSINESS_SCOPE_UNPROVED' using errcode='55000'; end if;
+  select l.invoice_id,i.status::text into v_invoice,v_invoice_status from public.invoice_lines l
+    join public.invoices i on i.id=l.invoice_id where l.timesheet_id=v_id and i.type='INVOICE'
+      and i.status in('DRAFT','ISSUED','PAID') group by l.invoice_id,i.status;
+  if (select count(distinct l.invoice_id) from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
+    where l.timesheet_id=v_id and i.type='INVOICE' and i.status in('DRAFT','ISSUED','PAID'))>1 then
+    raise exception 'CORRECTION_ORIGINAL_SPLIT_INVOICES' using errcode='55000';
+  end if;
+  if v_origin='AGENCY_INVOICE_CORRECTION' and coalesce(v_invoice_status,'') not in('ISSUED','PAID') then
+    raise exception 'AGENCY_WHOLE_CORRECTION_REQUIRES_ISSUED_PARENT' using errcode='55000';
+  end if;
+  v_date:=case when v_ts.sheet_scope::text='DAILY' then coalesce(
+    case when pg_input_is_valid(v_ts.candidate_hint_text#>>'{daily_receipt,work_date}','date')
+      then(v_ts.candidate_hint_text#>>'{daily_receipt,work_date}')::date end,
+    (v_ts.worked_start_iso at time zone 'Europe/London')::date) else v_ts.week_ending_date end;
+  if v_date is null then raise exception 'CORRECTION_WORK_DATE_UNPROVED' using errcode='55000'; end if;
+  v_req.id:=gen_random_uuid(); v_req.correction_id:='awc:'||v_root||':'||v_req.id;
+  v_req.origin:=v_origin; v_req.state:='WAITING'; v_req.state_revision:=1; v_req.proposal_revision:=1;
+  v_req.root_timesheet_id:=v_root;
+  select t.booking_id into v_req.original_booking_id from public.timesheets t where t.timesheet_id=v_root;
+  v_req.reversed_timesheet_id:=v_id; v_req.reversed_version:=v_ts.version; v_req.reversed_financial_id:=v_fin.id;
+  v_req.candidate_id:=v_candidate; v_req.client_id:=v_client; v_req.contract_id:=v_ts.contract_id;
+  v_req.work_date:=v_date; v_req.week_ending_date:=v_ts.week_ending_date;
+  v_req.replacement_timesheet_id:=gen_random_uuid();
+  v_req.replacement_booking_id:='bk_awc_'||substr(encode(digest(v_req.id::text||'|P0','sha256'),'hex'),1,24);
+  v_req.request_key:=v_key; v_req.request_fingerprint:=v_hash; v_req.reason:=btrim(p_request->>'reason');
+  v_req.frozen_original_json:=jsonb_build_object('timesheet',to_jsonb(v_ts),
+    'financial_snapshot',case when v_fin.id is not null then to_jsonb(v_fin) end,
+    'financial_authority_hash',case when v_fin.id is not null then private.timesheet_correction_financial_authority_hash_v1(to_jsonb(v_fin)) end,
+    'planned_reversal_timesheet_id',gen_random_uuid(),
+    'planned_reversal_week_id',case when v_ts.sheet_scope::text='WEEKLY' then gen_random_uuid() end,
+    'schedule',coalesce(v_ts.actual_schedule_json,'[]'::jsonb),'manager_signed_witness',v_witness,
+    'daily_receipt',v_ts.candidate_hint_text->'daily_receipt');
+  v_req.proposal_json:=p_request->'proposal';
+  v_req.target_revision:=encode(digest(jsonb_build_object('request',v_req.id,'root',v_root,'original_booking',v_req.original_booking_id,
+    'reversed',v_id,'version',v_ts.version,'candidate',v_candidate,'client',v_client,'date',v_date,
+    'original',v_req.frozen_original_json,'proposal',v_req.proposal_json)::text,'sha256'),'hex');
+  v_req.original_invoice_id:=case when v_invoice_status in('ISSUED','PAID') then v_invoice end;
+  v_req.return_invoice_id:=case when v_invoice_status='DRAFT' then v_invoice end;
+  v_req.created_by_user_id:=p_actor_user_id; v_req.created_at_utc:=v_now; v_req.updated_at_utc:=v_now;
+  if v_ts.sheet_scope::text='WEEKLY' then
+    v_req.replacement_week_id:=private.timesheet_correction_week_allocate_v1(v_req.contract_id,v_req.week_ending_date,
+      v_ts.submission_mode,null,v_now);
+  end if;
+  -- The exact request exists before native overlap/derived triggers see P0.
+  insert into private.timesheet_correction_requests select (v_req).*;
+  v_leg:=private.timesheet_correction_leg_create_v1(v_req,'WHOLE_TIMESHEET_REPLACEMENT',
+    case when v_origin='SIGNED_TIMESHEET_CORRECTION' then '[]'::jsonb else v_req.proposal_json->'schedule' end,v_now);
+  insert into public.audit_events(ts_utc,actor_user_id,object_type,object_id_text,action,after_json,reason)
+    values(v_now,p_actor_user_id,'timesheets',v_id::text,'TIMESHEET_CORRECTION_SENT',
+      jsonb_build_object('request_id',v_req.id,'replacement_timesheet_id',v_req.replacement_timesheet_id),v_req.reason);
+  return jsonb_build_object('ok',true,'request_id',v_req.id,'state','WAITING','state_revision',1,
+    'replacement_timesheet_id',v_req.replacement_timesheet_id,'replacement_booking_id',v_req.replacement_booking_id,
+    'target_revision',v_req.target_revision,'proposal_revision',1);
+end;
+$function$;

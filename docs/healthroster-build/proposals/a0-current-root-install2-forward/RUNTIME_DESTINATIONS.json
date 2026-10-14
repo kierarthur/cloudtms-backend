@@ -1,0 +1,128 @@
+{
+  "source_only": true,
+  "files": [
+    {
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/native-correction-snapshot-producers.mjs",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 15646,
+        "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf"
+      },
+      "output": "runtime/native-correction-snapshot-producers.mjs",
+      "destination": "broker/src/native-correction-snapshot-producers.mjs"
+    },
+    {
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/native-daily-role-helpers.mjs",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 980,
+        "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06"
+      },
+      "output": "runtime/native-daily-role-helpers.mjs",
+      "destination": "broker/src/native-daily-role-helpers.mjs"
+    },
+    {
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/native-weekly-correction-dispatch.mjs",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 13634,
+        "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c"
+      },
+      "output": "runtime/native-weekly-correction-dispatch.mjs",
+      "destination": "broker/src/native-weekly-correction-dispatch.mjs"
+    },
+    {
+      "input": {
+        "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/exact-request-a0-weekly-clock-arm.mjs",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 6085,
+        "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6"
+      },
+      "output": "runtime/exact-request-a0-weekly-clock-arm.mjs",
+      "destination": "broker/src/exact-request-a0-weekly-clock-arm.mjs"
+    },
+    {
+      "input": {
+        "file": "broker/src/timesheet-correction-orchestrator.mjs",
+        "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+        "bytes": 42703,
+        "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118"
+      },
+      "output": "runtime/timesheet-correction-orchestrator.mjs",
+      "destination": "broker/src/timesheet-correction-orchestrator.mjs",
+      "current_complete_hunks": {
+        "name": "CURRENT_CN_ADAPTER",
+        "input": {
+          "file": "broker/src/timesheet-correction-orchestrator.mjs",
+          "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+          "bytes": 42703,
+          "sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118"
+        },
+        "output_sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+        "output_bytes": 43934,
+        "hunks": [
+          {
+            "anchor": " * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,",
+            "replacement": " * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,\n * buildOriginalSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,"
+          },
+          {
+            "anchor": "function snapshotIdentity(snapshot, expected, { original = false } = {}) {",
+            "replacement": "function snapshotIdentity(snapshot, expected, { original = false, canonicalInput = false } = {}) {"
+          },
+          {
+            "anchor": "      snapshot.is_stale !== false || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||",
+            "replacement": "      (snapshot.is_stale !== false && !(canonicalInput && !OWN(snapshot, 'is_stale'))) || snapshot.has_rate_issue !== false || snapshot.has_pay_channel_issue !== false ||"
+          },
+          {
+            "anchor": "      typeof r.original_authorisation_required !== 'boolean') fail('CORRECTION_RECEIPT_INVALID');",
+            "replacement": "      typeof r.original_authorisation_required !== 'boolean' ||\n      (OWN(r, 'original_materialised_in_unit') && typeof r.original_materialised_in_unit !== 'boolean')) fail('CORRECTION_RECEIPT_INVALID');"
+          },
+          {
+            "anchor": "        !sameUuid(r.original_financial_id, a.original_financial_id) || r.original_financial_authority_hash !== a.original_financial_authority_hash ||\n        r.original_authorisation_required !== prepare.original_authorisation_required) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');",
+            "replacement": "        r.original_authorisation_required !== prepare.original_authorisation_required ||\n        r.original_materialised_in_unit !== prepare.original_materialisation_required ||\n        (!prepare.original_materialisation_required && (!sameUuid(r.original_financial_id, a.original_financial_id) ||\n          r.original_financial_authority_hash !== a.original_financial_authority_hash)) ||\n        (prepare.original_materialisation_required && r.original_authorisation_required !== true)) fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');"
+          },
+          {
+            "anchor": "  } else if (value.original_current_snapshot != null || a.original_financial_id != null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');",
+            "replacement": "  } else if (value.original_current_snapshot !== null || a.original_financial_id !== null ||\n             a.original_financial_authority_hash !== null || frozen.financial_authority_hash !== null ||\n             frozen.financial_snapshot !== null || t0.authorised_at_server !== null ||\n             value.original_authorisation_required !== true) fail('CORRECTION_PREPARE_AUTHORITY_INVALID');"
+          },
+          {
+            "anchor": "    if (prepare.original_materialisation_required) {\n      // No claim that preview/calculator JSON equals the bounded writer's stored output.\n      // Root must prove and add an exact native normalization contract before enabling A0 missing-finance.\n      fail('CORRECTION_ORIGINAL_NORMALISATION_UNPROVED', 503);\n    }",
+            "replacement": "    let original;\n    if (prepare.original_materialisation_required) {\n      if (typeof deps.buildOriginalSnapshot !== 'function') fail('CORRECTION_CANONICAL_ORIGINAL_PRODUCER_UNAVAILABLE', 503);\n      original = cloneJson(await deps.buildOriginalSnapshot({ prepare, actor: a }));\n      snapshotIdentity(original, {\n        timesheetId: prepare.authority.original_timesheet_id, version: prepare.authority.original_timesheet_version,\n        candidateId: prepare.candidate_id, clientId: prepare.client_id\n      }, { canonicalInput: true });\n    }"
+          },
+          {
+            "anchor": "    });\n    const reversal = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {\n      timesheetId: authority.planned_reversal_timesheet_id, version: 1,\n      candidateId: prepare.candidate_id, clientId: prepare.client_id\n    });\n    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement, reversal_snapshot: reversal };",
+            "replacement": "    }, { canonicalInput: true });\n    const prepared = { prepare_fingerprint: prepare.prepare_fingerprint, replacement_snapshot: replacement };\n    if (prepare.original_materialisation_required) {\n      prepared.original_snapshot = original;\n      // No A0 reversal is calculated from preview input. The existing atomic\n      // SQL writes/rereads actual original and signs that stored output.\n    } else {\n      prepared.reversal_snapshot = cloneFrozenCorrectionReversal(prepare.original_current_snapshot, {\n        timesheetId: authority.planned_reversal_timesheet_id, version: 1,\n        candidateId: prepare.candidate_id, clientId: prepare.client_id\n      });\n    }"
+          }
+        ],
+        "entire_reverse_equal": true,
+        "entire_reverse_sha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118"
+      }
+    }
+  ],
+  "worker_binding": {
+    "name": "CURRENT_BROKER_MINIMAL_BINDING",
+    "input": {
+      "file": "broker/src/index.js",
+      "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+      "bytes": 8913148,
+      "sha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785"
+    },
+    "output_sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+    "output_bytes": 8915506,
+    "hunks": [
+      {
+        "anchor": "START_OF_MODULE",
+        "replacement": "import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';\nimport { buildExactRequestA0WeeklyClockSnapshot } from './exact-request-a0-weekly-clock-arm.mjs';\nimport { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';\n"
+      },
+      {
+        "anchor": "async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {",
+        "replacement": "// Complete caller-side producer binding. Root mounts it only with the existing\n// qualified Office actor/RPC/cleanup/lifecycle adapters and compatible release.\n// The function contains actual existing read transports/calculator references.\nfunction createTimesheetCorrectionNativeFinancialCallbacks(env) {\n  return createNativeCorrectionSnapshotProducers({\n    env,\n    readContext: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),\n    readWeeklyContext: timesheetIds => sbRpc(env, 'tsfin_load_weekly_context_batch', { p_timesheet_ids: timesheetIds }),\n    readShifts: timesheetIds => sbRpc(env, 'tsfin_load_nhsp_shifts_batch', { p_timesheet_ids: timesheetIds }),\n    readWeeklyValidation: async timesheetId => {\n      const { rows } = await sbFetch(env,\n        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +\n        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +\n        '&select=timesheet_id,status,reason_code,validated_at_utc,updated_at' +\n        '&order=updated_at.desc&limit=2');\n      return rows;\n    },\n    resolveRates: items => rpcTsfinResolveRatesBatch(env, { items }),\n    buildWeekly: input => buildExactRequestA0WeeklyClockSnapshot(input, {\n      buildWeeklyScheduleSegmentsSnapshot,\n      buildNhspWeeklySnapshotCached,\n      rebuildFromExistingSegmentsEvidence,\n      enrichTsfinWithHrCrosscheck\n    }),\n    deriveDaily: deriveCanonicalDailyFinancialContext,\n    buildDaily: buildCanonicalDailyFinancialSnapshot,\n    toLocalParts, subtractBreak, classifyMinutes, resolveEffectivePayChannel, anyMissingRates\n  });\n}\n\nfunction createTimesheetCorrectionNativeOrchestrator(env, dependencies) {\n  return createTimesheetCorrectionOrchestrator({\n    ...dependencies,\n    ...createTimesheetCorrectionNativeFinancialCallbacks(env)\n  });\n}\n\n// Root's guarded route mounting supplies its existing qualified Office actor,\n// RPC, request-read, cleanup and ordinary lifecycle dependencies to this factory.\n// They remain exactly the original adapter dependencies; no new route/auth is\n// mounted by this source proposal.\n\nasync function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {"
+      }
+    ],
+    "entire_reverse_equal": true,
+    "entire_reverse_sha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785"
+  },
+  "route_added": false,
+  "actual_native_readers_calculators_single_batch_writers_preserved": true,
+  "root_qualified_actor_rpc_request_read_cleanup_lifecycle_still_required": true
+}

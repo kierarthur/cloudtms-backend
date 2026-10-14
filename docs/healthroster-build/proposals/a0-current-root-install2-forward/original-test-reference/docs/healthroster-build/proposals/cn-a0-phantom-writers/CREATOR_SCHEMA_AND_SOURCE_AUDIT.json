@@ -1,0 +1,674 @@
+{
+  "contract": "HEALTHROSTER_A0_CREATOR_SCHEMA_AND_NATIVE_SOURCE_AUDIT_V1",
+  "status": "REVIEW_SOURCE_ONLY_NATIVE_HELD",
+  "inputs": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "bytes": 6333208,
+      "sha256": "cd57300a2913fe10ffbda4bfe03febf3ee859f54c53d7d92a1118205910c7334"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "bytes": 4481,
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    }
+  ],
+  "schemaChecks": [
+    {
+      "relation": "public.timesheets",
+      "columns": [
+        "timesheet_id",
+        "booking_id",
+        "contract_id",
+        "sheet_scope",
+        "submission_mode",
+        "occupant_key_norm",
+        "is_current",
+        "version"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "columns": [
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.contracts",
+      "columns": [
+        "id",
+        "candidate_id",
+        "client_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.candidates",
+      "columns": [
+        "id",
+        "key_norm",
+        "nhsp_hr_name_aliases",
+        "updated_at",
+        "created_at"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.timesheet_validations",
+      "columns": [
+        "timesheet_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "public.invoice_lines",
+      "columns": [
+        "timesheet_id",
+        "booking_id"
+      ],
+      "missing": []
+    },
+    {
+      "relation": "private.timesheet_correction_requests",
+      "columns": [
+        "id",
+        "state",
+        "state_revision",
+        "target_revision",
+        "origin",
+        "reversed_financial_id",
+        "frozen_original_json",
+        "root_timesheet_id",
+        "reversed_timesheet_id",
+        "replacement_timesheet_id",
+        "original_booking_id",
+        "replacement_booking_id",
+        "candidate_id",
+        "client_id",
+        "contract_id"
+      ],
+      "missing": []
+    }
+  ],
+  "triggerReview": [
+    {
+      "name": "public.trg_set_tms_ref",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()",
+      "sourceDefinitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "directNewAssignments": [
+        "tms_ref"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public._trg_candidates_set_bank_hash",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()",
+      "sourceDefinitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "sourceFile": "supabase/migrations/22022026_banking_tables.sql",
+      "directNewAssignments": [
+        "bank_details_hash"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public.trg_set_rev",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()",
+      "sourceDefinitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "directNewAssignments": [
+        "rev"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public.set_updated_at",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+      "sourceDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "directNewAssignments": [
+        "updated_at"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public.invoice_line_archived_timesheet_guard_v1",
+      "table": "invoice_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1 BEFORE INSERT OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION invoice_line_archived_timesheet_guard_v1()",
+      "sourceDefinitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "sourceFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.weekly_source_invoice_line_owner_guard_v1",
+      "table": "invoice_lines",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_invoice_line_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON invoice_lines FOR EACH ROW EXECUTE FUNCTION private.weekly_source_invoice_line_owner_guard_v1()",
+      "sourceDefinitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "sourceFile": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.bpay_expense_classification_ts_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()",
+      "sourceDefinitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "sourceFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.bpay_source_timesheet_family_gate_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()",
+      "sourceDefinitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "sourceFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.bpay_timesheet_work_revision_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()",
+      "sourceDefinitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "sourceFile": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "directNewAssignments": [
+        "bpay_work_revision_v1"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private._timesheet_settings_authority_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()",
+      "sourceDefinitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "sourceFile": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "directNewAssignments": [
+        "settings_authority_json",
+        "settings_authority_version",
+        "settings_authority_fingerprint",
+        "settings_authority_resolved_at"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private._candidate_qr_pack_ready_notification_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()",
+      "sourceDefinitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "sourceFile": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "directNewAssignments": [
+        "candidate_submission_route_intent"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public.timesheet_archive_row_guard_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()",
+      "sourceDefinitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "sourceFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private._timesheet_authorisation_overlap_trg_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()",
+      "sourceDefinitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "sourceFile": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "public.set_updated_at",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+      "sourceDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "sourceFile": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "directNewAssignments": [
+        "updated_at"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "sourceDefinitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "sourceFile": "supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "directNewAssignments": [],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    },
+    {
+      "name": "private.bpay_timesheet_work_key_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "A",
+      "definition": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()",
+      "sourceDefinitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "sourceFile": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "directNewAssignments": [
+        "bpay_work_key_v1"
+      ],
+      "protectedAssignments": [],
+      "conclusion": "Reviewed full saved owner; no direct protected identity assignment. Nested/dynamic effects and installed trigger order remain native gates."
+    }
+  ],
+  "acl": [
+    {
+      "relation": "public.candidates",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "candidates_job_title_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (job_title_id) REFERENCES default_job_titles(id)"
+        },
+        {
+          "name": "candidates_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (umbrella_id) REFERENCES umbrellas(id) ON DELETE SET NULL"
+        }
+      ]
+    },
+    {
+      "relation": "public.invoice_lines",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "invoice_lines_invoice_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheet_validations",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "timesheet_validations_hr_request_set_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (hr_request_set_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_last_source_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (last_source) REFERENCES hr_imports(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_override_confirmed_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (override_confirmed_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheet_validations_override_requested_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (override_requested_by) REFERENCES tms_users(id) ON DELETE SET NULL"
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheets",
+      "mutations": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "timesheets_active_document_operation_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (active_document_operation_id) REFERENCES invoice_operations(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_archived_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (archived_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_candidate_workflow_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_current_document_version_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (current_document_version_id) REFERENCES invoice_document_versions(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_manual_document_asset_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (manual_document_asset_id) REFERENCES invoice_document_assets(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_parent_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (parent_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        }
+      ]
+    }
+  ],
+  "invocationEvidence": {
+    "validationCreators": [
+      {
+        "name": "public.hr_weekly_apply_transactional",
+        "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+        "sourceDefinitionSha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61"
+      },
+      {
+        "name": "public.hr_daily_apply_transactional",
+        "file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+        "sourceDefinitionSha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c"
+      }
+    ],
+    "validationHttp": "All five actual index.js /rest/v1/timesheet_validations sites are reads; proximity method matches are only search candidates.",
+    "hrSql": "HR Weekly/Daily upserts are derived from persisted selected import-review decisions. The actual left join to Timesheets is not an existence requirement; no missing-parent guarantee claimed.",
+    "candidateNativeWriters": [
+      {
+        "name": "public.candidate_pay_method_change_apply",
+        "file": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql",
+        "sourceDefinitionSha256": "33c47c8937d942af59b60cd2d970066e536ce0e3ede8e9de01398640e74aedd2",
+        "callees": [
+          "public._audit_insert",
+          "public.candidate_pay_method_change_refresh_scope_v1"
+        ]
+      },
+      {
+        "name": "public.candidate_delete_apply",
+        "file": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql",
+        "sourceDefinitionSha256": "a62e726b6c2fa6bd84d8f7ebb717e795516df3549d81a4d4f653c64bbf57af74",
+        "callees": [
+          "public._audit_insert",
+          "public._change_bump",
+          "public._pay_workbench_candidate_serial_key",
+          "public.candidate_delete_eligibility",
+          "public.candidates_tombstones"
+        ]
+      },
+      {
+        "name": "public.candidate_google_rota_remove_v1",
+        "file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+        "sourceDefinitionSha256": "fff813076b144676bebe06d9d7659c96af9143c17d976b1e74d226ed89e58286",
+        "callees": [
+          "private._candidate_daily_json_sha256_v1",
+          "private._candidate_google_mobile_normalize_v1",
+          "private._candidate_normalize_email",
+          "private.candidate_google_rota_removal_receipts"
+        ]
+      },
+      {
+        "name": "public.candidate_google_provisioning_attach_v1",
+        "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+        "sourceDefinitionSha256": "64c1b48f28efed0771aedacb0675e0f74638e84b24b79c6206a74159fb3a8c8e",
+        "callees": [
+          "private._candidate_google_mobile_normalize_v1",
+          "private._candidate_normalize_email"
+        ]
+      }
+    ],
+    "candidateHttp": "Existing Candidate service POST/PATCH/DELETE and ordinary SQL mutations all traverse table row triggers when enabled; privileged trigger-disable/replication bypass is not certified.",
+    "gateEffects": "The unchanged native Candidate try-gate writes existing audit_events. Refusal rolls the containing transaction/subtransaction back; it is not literally read-only.",
+    "beforeParent": "New validation/raw-booking/Candidate parent intents apply only to native signed WEEKLY/no-ANY-FIN precursor records; native invoice parent intents are retained, never duplicated for ordinary records.",
+    "ordering": "Active writes: all persisted request Candidate try-gates in sorted UUID order, then one native I-1 whole existing set, then NOWAIT request/parent rows. Existing outer row locks can precede triggers; 1ms/NOWAIT is deliberate truthful contention refusal, not a global deadlock-free certificate."
+  },
+  "holds": [
+    {
+      "kind": "VALIDATION_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "New exact signed-precursor parent intent and visible-active native Candidate/I-1 admission; no Timesheet FK invented."
+    },
+    {
+      "kind": "INVOICE_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Retain native archived guard KEY SHARE including booking fallback. New visible-active guard only precedes it; absent exact family still native refusal."
+    },
+    {
+      "kind": "CANDIDATE_ALIAS_RANK",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "ALL Candidate mutations use exact key/JSON-alias matching. SEND checks normal canonical context against real Contract. No Candidate resolver fork."
+    },
+    {
+      "kind": "RAW_BOOKING_SIBLING",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Earliest BEFORE new scoped admission; null/foreign/trimmed collision under active request refused. SEND checks complete native family before allocation."
+    },
+    {
+      "kind": "NATIVE_FIN_LATE_HOOKS",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Unchanged call-only closure. Existing creator-trigger locks do not certify the complete late Banking/document/expense graph."
+    }
+  ],
+  "isolation": {
+    "savedSourceEnforcesRc": false,
+    "qualifiedRuntimeIsolation": null,
+    "newPurposeNonRcRefusals": [
+      "missing-A0 signed SEND",
+      "exact missing-A0 atomic fence",
+      "visible active missing-A0 creator"
+    ],
+    "hiddenRequestStatus": "HELD: an earlier RR snapshot can hide newly committed P0/WAITING. Parent row locking alone neither changes the row version nor refreshes transaction visibility.",
+    "ordinaryRr": "Preserved. No global transaction mode change, parent timestamp/revision bump, fake FK, new mutex/key or alternate authority."
+  },
+  "rootIntegration": "Root owns adjacent includes, registry/ACL/contract generation and installation. No standalone enumerated repeatable, root/index mount or DB action is supplied."
+}

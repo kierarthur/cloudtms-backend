@@ -1,0 +1,28 @@
+{
+  "sourceOnly": true,
+  "steps": [
+    {
+      "name": "db:check",
+      "exitCode": 0,
+      "sha256": "2e4f7b85a27e25599f8da4390bc997c6c62971e932ec4860c737cc57448d104c",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1056 repeatables."
+      ]
+    },
+    {
+      "name": "security:secrets",
+      "exitCode": 0,
+      "sha256": "a40e0e71d1889a43cebe097a5173e41ff6a7694d58b69bed758ac237e71c8e28",
+      "summary": [
+        "Tracked source credential scan: PASS (8600 files)"
+      ]
+    },
+    {
+      "name": "staged-whitespace",
+      "exitCode": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    }
+  ],
+  "noHostedCall": true
+}

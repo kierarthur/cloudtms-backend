@@ -1,0 +1,790 @@
+{
+  "sourceOnly": true,
+  "status": "MOUNTED_SOURCE_NATIVE_ISOLATION_FACTORY_ROUTE_CONTRACT_AND_ACCEPTANCE_HELD",
+  "rootInputCommit": "fe7b3dfc2946cf334ba88681ae425105f864c42f",
+  "publication": "7b57afc6e501e859e88e5988943812415162ec01",
+  "manifestSha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+  "sourceCheckSha256": "1e39217f8246a7e9577d3b30182576d88d77d086f4f631a0685483d4069643e5",
+  "rootFile": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+  "generatedAtUtc": "2026-10-14T04:19:59.721Z",
+  "newFilenameUsesCurrentUkMinute": true,
+  "originalSuggestedStage0415PreservedInFreeze": true,
+  "actualLatePositionDisplacesNo0410_0420_0430Routine": true,
+  "disjoint": [
+    {
+      "file": "14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "closureSha256": "72092595af3f3d46f8bc5b71be646243cf3782205ce40d5d72a377510307dadc",
+      "distinctDefinitions": 38,
+      "intersection": []
+    },
+    {
+      "file": "14102026_0420_healthroster_current_native_composition_v1.sql",
+      "closureSha256": "87387bd2ae8e5510ce06ac2ad21d13209eaea4b8f481743f2741049fb5c5888b",
+      "distinctDefinitions": 5,
+      "intersection": []
+    },
+    {
+      "file": "14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "closureSha256": "fefc51941ebb29609bcd71fbd22893f7ace769927571e21978443d3613853903",
+      "distinctDefinitions": 47,
+      "intersection": []
+    }
+  ],
+  "completeDefinitions": 24,
+  "privateOwnerOnlyAdditions": 10,
+  "newTriggers": 4,
+  "allStageFunctionAclReasserted": true,
+  "runtimeReplacements": [
+    {
+      "file": "broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "beforeSha256": "e51be6f1005c2a71487efe308ea01bfaba9eb3c3767b3c632ca72f7c1343e118",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/timesheet-correction-orchestrator.mjs"
+    },
+    {
+      "file": "broker/src/index.js",
+      "sha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+      "beforeSha256": "ca621191964eaf1c707b38c3cabaf69ade0a717dc4d0b3b94c183788fe293785",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_BROKER_MINIMAL_HUNKS.json"
+    }
+  ],
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ADDITIONAL_CURRENT_WRITER_INPUT_ONLY.sqlinc",
+      "sha256": "10de2a1cc46b994c6cc4df54f9db5c2883453595507385039a487be70e9e8f45",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ADDITIONAL_CURRENT_WRITER_INPUT_ONLY.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/COMPLETE_CURRENT_OWNER_REVERSE.json",
+      "sha256": "0924ad91d9a5fed7633250f3af2199f4939aa302e7b4856cb7b3c92fca66948f",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/COMPLETE_CURRENT_OWNER_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CORRECTED_SCANNER_CURRENT_RECONCILIATION.json",
+      "sha256": "ac1d829e516dcf0c75949a34c3388f8289335d2c7fc0fc2bb16a4f9231d99322",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CORRECTED_SCANNER_CURRENT_RECONCILIATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_BROKER_MINIMAL_HUNKS.json",
+      "sha256": "6f89af0f0f6843bb78a2756c9684cca2919f33f42b89f91de27c8394cd1e22cb",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_BROKER_MINIMAL_HUNKS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_FOUR_TABLE_CREATOR_CENSUS.json",
+      "sha256": "c8887ee34949ee53d6d880b151f946c89206f725b1d330a0ed5d7d68edbe5104",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_FOUR_TABLE_CREATOR_CENSUS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_DECLARATION_CHANGES.json",
+      "sha256": "930917f3c1df0eab3fb12344fa4992ea61546afcf405a525d50fd2fe237f616d",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_DECLARATION_CHANGES.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_EXTRACTION_EQUALITY.json",
+      "sha256": "9dab68a4be33c796d00aca3efc57ea128fd03062e1da839cb6c823ca5cbf9373",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_EXTRACTION_EQUALITY.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_PREDECESSOR_DEFINITIONS.sqlinc",
+      "sha256": "cefae8b80a378a82589f23622008b04bc364b8e35062a5933d280f4cd926be84",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_PREDECESSOR_DEFINITIONS.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_TRIGGER_ORDER.json",
+      "sha256": "29d96ef399727416bc58e8cc9d4d933bcdbd227ed6ef4aeccf9de1792015615a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_TRIGGER_ORDER.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_TRIGGER_SOURCE_REVERSE.json",
+      "sha256": "bc411fd3f4b92daa6ea7fcd3b56426f259ebd44925d99494871130e5bc734ffa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_NATIVE_TRIGGER_SOURCE_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_SCHEMA_AND_NATIVE_HOLDS.json",
+      "sha256": "b33b836cad41b1117fcebe442baf537fdc2f92642f6fc972f1a0ca11e932c04c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/CURRENT_SCHEMA_AND_NATIVE_HOLDS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ENTIRE_CURRENT_SOURCE_DECLARATION_REVERSE.json",
+      "sha256": "1e2ee0bb13e2edb9bc6a161288395216c1ab75c193b3fceae96aa1ae26ca6043",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ENTIRE_CURRENT_SOURCE_DECLARATION_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/INPUTS_AND_ORDER.json",
+      "sha256": "3a4bb74c5eff73da4e66d0cb714e717b330b0a1ebdc7ca77408eccc4e886d5b3",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/INPUTS_AND_ORDER.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/LITERAL_PRIVATE_ADDITION_UNION.json",
+      "sha256": "d0efc84123b8133ab01e87e547ff133bce63d4b40dc451aff655304d50ce321e",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/LITERAL_PRIVATE_ADDITION_UNION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ORIGINAL_FROZEN_PRESERVATION.json",
+      "sha256": "5c718424626e8444486ac0468bce3a8fefa26bfb33213d5d1f80570fe961fdfa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ORIGINAL_FROZEN_PRESERVATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ORIGINAL_TEST_REFERENCE_PINS.json",
+      "sha256": "1c6155b217ab8010481a8b5b6335c779b6b09c2a9a017372792527fe841a6c68",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/ORIGINAL_TEST_REFERENCE_PINS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs",
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/PINNED_A0_CURRENT_SOURCE_INDEX.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/RUNTIME_DESTINATIONS.json",
+      "sha256": "3df9fcdcd2e5282f60763115a669b21f0748b983cf744d6693ffdaeca1946137",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/RUNTIME_DESTINATIONS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/SOURCE_CHECK_RESULT.json",
+      "sha256": "1e39217f8246a7e9577d3b30182576d88d77d086f4f631a0685483d4069643e5",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/SOURCE_REVIEW_READY.md",
+      "sha256": "965c1efa4f05bae42356b98e45a4c8490b7944e9ac46b061ac479ba0f0910c00",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/SOURCE_REVIEW_READY.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/TEST_SOURCE_RESULTS.json",
+      "sha256": "4d1b56f8ff569751fc7451d6cf25b7391e7d3ace92f9734fb771df72a87385b3",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/TEST_SOURCE_RESULTS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/current-root-source.test.mjs",
+      "sha256": "cf900b149058e1e9c3d6e6c8ed1c1a20b6143a070efc951b31184b7fbac58a58",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/current-root-source.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/freeze-a0-current-root.mjs",
+      "sha256": "b659c28d8336da291dec7b72b33e77e877860c4ab0e22329374cfa277b564b33",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/freeze-a0-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/generate-a0-current-root.mjs",
+      "sha256": "cf242044d6bfa06109b88d548da1e762cd4dba70288e59c410c5e005834d5f4c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/generate-a0-current-root.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/A0_CREATOR_SOURCE_CRITIC.md",
+      "sha256": "f2887142f109c35c0861eaed4e43a3b46429dcae5ec3eebba6a87e0812e81b9f",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/A0_CREATOR_SOURCE_CRITIC.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_FORWARD_SOURCE_MANIFEST.json",
+      "sha256": "dd3c0d77e2b7a5edc6641d4de0d8220c187e0b867d8af57c2f1d4c470b4e8d42",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_FORWARD_SOURCE_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_RECONCILIATION.json",
+      "sha256": "abc67a5821b2c50715ac542e35858046f2e162f1a9b14f6624aa12d2cffa6f96",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CENSUS_RECONCILIATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CREATOR_SCHEMA_AND_SOURCE_AUDIT.json",
+      "sha256": "88054a8fc1dbaa61fc32098fa4b973504cb588f3db0c729bbd0c91216b73c2e7",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/CREATOR_SCHEMA_AND_SOURCE_AUDIT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/FIRST_CREATOR_CENSUS.json",
+      "sha256": "3a8a575b2b24087542673f4ab05ec23bfd2675af324f054d0672da021c6bfdf0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/FIRST_CREATOR_CENSUS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_CREATOR_INPUT_BODIES.sqlinc",
+      "sha256": "77d58af59c959e5d8d49fb589fa79a86c993e3914616bb8d67cadeea4ca128fc",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_CREATOR_INPUT_BODIES.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_FIRST_CREATOR_BODIES.sqlinc",
+      "sha256": "67e585a45dc6874ebe62ef08187f762a7e1056e6da87489dfa497afc399b8e9c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/NATIVE_FIRST_CREATOR_BODIES.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/OBSERVED_REGRESSION_FIXTURES.json",
+      "sha256": "7603fea0a85ebb3f37768f3f278df49d3586a584f15ef2f0d5d88bba206f5724",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/OBSERVED_REGRESSION_FIXTURES.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/README.md",
+      "sha256": "ecad79dbf563f41d9d3237e3154ee0ef4309f759fad60188d59d18398b429af2",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/README.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/ROOT_SOURCE_PIN_FORWARD.json",
+      "sha256": "d12ec08e8f16d72c5d5fbff737ff7b755cb1ede4d3edb5bde3d775eec1e2789c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/ROOT_SOURCE_PIN_FORWARD.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/SOURCE_CHECKS.json",
+      "sha256": "47a664063fb96ae22addf911b13bf0cb2822ecb06e18f8b3a440fedd3a6568f6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/SOURCE_CHECKS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/build-creator-audit.mjs",
+      "sha256": "f246644f9779c4fd89a4020c0a82c56cea4edcf99ab06866f0e6803dc0141cb2",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/build-creator-audit.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/build-review-fixtures.mjs",
+      "sha256": "cd3dba9f8b2e4fe2cd30a9d836aec0685556255c665dac2f93b0b6a371d5675b",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/build-review-fixtures.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/census-first-creators.mjs",
+      "sha256": "11143cfe4f9ea396553e6a688a299db941b0cb76487af311eef97052c0f8779b",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/census-first-creators.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/freeze-forward-packet.mjs",
+      "sha256": "08e18ef0cbb2cbefae8273b2deda00fe82e36717a6d33a3d1b9dc22b00b0a1b3",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/freeze-forward-packet.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/sql-function-source-index.mjs",
+      "sha256": "2e1b5039b8fa5672f61a2baee03bd7da322ff7efc90baa9c1d02ad39ddc9f0aa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-creator-census-forward/sql-function-source-index.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/APPLICATION_ISOLATION_AND_LOCK_REVIEW.json",
+      "sha256": "bcad52cb420ebd2ce4a1f771a50c36b85f87c6bf6fec339eb4634324958e72e2",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/APPLICATION_ISOLATION_AND_LOCK_REVIEW.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json",
+      "sha256": "f031b83e3b17c609260ae34508e4f859f8d49f91277ca49c5f43c84851fc7e50",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/ISOLATION_SOURCE_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SCANNER_SUCCESSOR_PROOF.json",
+      "sha256": "15cb1e1af4811a07600c318936fb256a353f95b5ee7a8ebeb05b6b784bc665c0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SCANNER_SUCCESSOR_PROOF.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CALLEE_LOCK_GRAPH.json",
+      "sha256": "4f8f31ad67450c1bb2126236753b6f53b1059b6c919f28c39e0bde2f17799a9d",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CALLEE_LOCK_GRAPH.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CHECKS.json",
+      "sha256": "d35e8a78794572b1ee773f2a579bf730b1af48587ddcdae3fa113495ad26daf0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_CHECKS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_REVIEW_AND_NATIVE_RECIPES.md",
+      "sha256": "3683e5f3f20f27f95a8faa5c07fcd7e0c97add44d77a05a0f7db9b2001038795",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/SOURCE_REVIEW_AND_NATIVE_RECIPES.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/UNMOUNTED_PROPOSAL_CALL_LOCK_GRAPH.json",
+      "sha256": "9c672db7ffd890c12c3d9565705003c29e1932833d3d73fed8e59eb12bdd599d",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/UNMOUNTED_PROPOSAL_CALL_LOCK_GRAPH.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-caller-review.mjs",
+      "sha256": "28ba6d60bcdef9121adcc5121b8630bde17da0478e742a2750eb9626b50a97d6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-caller-review.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-source-successor.mjs",
+      "sha256": "66ecfcfacd86a7cf7c0baeb0c8c3d1b28c005e171151e1aefb2e94ff3994d823",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/build-source-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/freeze-source-followup.mjs",
+      "sha256": "039ffcfbab61b147bb621c3ed7aec92167c5115f78ce067ccece119cf40411c7",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/freeze-source-followup.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs",
+      "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_lock_fence.sqlinc",
+      "sha256": "455768aaa41bf9d949a1c4f52830938a86c1ba231f45a95c72f772fc89b58f8f",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_lock_fence.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_approval.complete-proposed.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/exact-request-a0-weekly-clock-arm.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-correction-snapshot-producers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-daily-role-helpers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-lock-fence/native-weekly-correction-dispatch.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_1127_approval.complete-proposed.sqlinc",
+      "sha256": "e38e0df8046c04919f074117faad17d8dcfc06fcbc268f5947809ed692449cf0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_1127_approval.complete-proposed.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_2002_a0_clock_scope.sqlinc",
+      "sha256": "638f2dd037694c4cedf5a8aba015ab943260d4c9d174c305a2901589980eb300",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/13102026_2002_a0_clock_scope.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/NATIVE_EXTRACTION_SOURCE_GUARD.json",
+      "sha256": "ba6b778879fd9b9d9f72ed6bdb95ba87437b65524be2541dba9aa375bbd59e28",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/NATIVE_EXTRACTION_SOURCE_GUARD.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/daily-canonical-authority.native-input.js",
+      "sha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/daily-canonical-authority.native-input.js"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/exact-request-a0-weekly-clock-arm.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-correction-snapshot-producers.mjs",
+      "sha256": "b1b7fb3e31b4745efe559e1a65eee0c1a499a07c4ae2474acf2edc67536cb585",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-correction-snapshot-producers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-daily-role-helpers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/native-weekly-correction-dispatch.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-native-normalisation/timesheet-correction-orchestrator.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SCHEMA_AND_SOURCE_AUDIT.json",
+      "sha256": "6ba738d1d1aeb05d10f760bc7d6b3f130100592d9803520ab9aac50b2617bedb",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SCHEMA_AND_SOURCE_AUDIT.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SOURCE_MANIFEST.json",
+      "sha256": "762f65ac35f11f1c33b779799854c1373eb0ccf9c624e44e6cebc70266cdb33e",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SOURCE_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/FIRST_CREATOR_CENSUS.json",
+      "sha256": "e76c197f62c2e86e2a1b10fc1e50d4705d823fa0e9c9f452914de671fe9b8e0b",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/FIRST_CREATOR_CENSUS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_INPUT_BODIES.sqlinc",
+      "sha256": "77d58af59c959e5d8d49fb589fa79a86c993e3914616bb8d67cadeea4ca128fc",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_INPUT_BODIES.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_JOURNEYS.json",
+      "sha256": "8a6161b26e9f0d8db10b51cc7ba3e54f00d1fd3bcebf03256be08b4bddcfe571",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_JOURNEYS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_FIRST_CREATOR_BODIES.sqlinc",
+      "sha256": "67e585a45dc6874ebe62ef08187f762a7e1056e6da87489dfa497afc399b8e9c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_FIRST_CREATOR_BODIES.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/README.md",
+      "sha256": "07cd015a6124f0ec0aa0177992c8a083559e3aabb841bf3ea7c6a3d45cc612bd",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/README.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/REQUEST_ROOT.diff",
+      "sha256": "719e5cff4a07204c13711beb940835fd085f61d8dacab20d9c6e2beca32c3bdb",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/REQUEST_ROOT.diff"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/ROOT_INTEGRATION_RECIPE.md",
+      "sha256": "af5c1c77d93010f85fbf3db5fc39049ec3777ff93fd3ff52e31abd938d51c72a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/ROOT_INTEGRATION_RECIPE.md"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/SOURCE_CHECKS.json",
+      "sha256": "2b6bd4b5732dd7eb4933190d301e9ec3104465faf588eb506413cef9a1680373",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/SOURCE_CHECKS.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/SUCCESSOR_GUARD.json",
+      "sha256": "21dbc9fcafef7dac45878e827100fbd3ba210412b29901f44801b38d7c9331c8",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/SUCCESSOR_GUARD.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-audit.mjs",
+      "sha256": "308d0911f2b3815b7b47054c8c00c59b9ec1499d303214d5cee123ff69c2ddd0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-audit.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-successors.mjs",
+      "sha256": "8235ba5255e7f4d5b7cf9f1fc6753e4f23046fe17e833dceeeeec4385e5b6d42",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-successors.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/census-first-creators.mjs",
+      "sha256": "9a3b75dc724e5dee65e1eb2555a9945087acc1b1174dca63eb5efaf3218a2e1a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/census-first-creators.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/freeze-creator-packet.mjs",
+      "sha256": "0dea704ada297ba9ca94011acd7ad454c6e9b3f9797eb952b5c78eccad5e16ab",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/docs/healthroster-build/proposals/cn-a0-phantom-writers/freeze-creator-packet.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-callbacks.test.mjs",
+      "sha256": "ba22ebf63a5977e6f23019695fad3c55bf317174def8a84010dfc69b7f23a6d5",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-callbacks.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-clock-scope.test.mjs",
+      "sha256": "5fa09790b096e749825a68184cea29aece391252c87133184ff6c9c892cba1b0",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-clock-scope.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-creator-census-forward.test.mjs",
+      "sha256": "0a67f65af08e290c50848c5b58d359d780095c1904b07f5d7d79522dabed9e33",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-creator-census-forward.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-isolation-source-followup.test.mjs",
+      "sha256": "0c260b6ed6a8c3de9986a6b9d718066cc0731bc6da51d8fbea42452347a870ee",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-isolation-source-followup.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-lock-fence.test.mjs",
+      "sha256": "7ea1a44e09689ec201de32ca4871d62a085fb0eb0fb1f04b93524127d919fa82",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-lock-fence.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-phantom-writers.test.mjs",
+      "sha256": "0fba84f5707fd3ed55819c59db0c2574169e2be7f3f19e5173397d6edc307d05",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-phantom-writers.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-producers.test.mjs",
+      "sha256": "98e12299bcdd60a01c63db5bcd030c500e6ce07791b9d9223bb5ef7c9488e121",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/original-test-reference/tests/healthroster-cn-a0-producers.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/exact-request-a0-weekly-clock-arm.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-correction-snapshot-producers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-daily-role-helpers.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-weekly-correction-dispatch.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/timesheet-correction-orchestrator.mjs"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc"
+    },
+    {
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc",
+      "sha256": "249fc03bb5b3e15ff99164244d5686fddb932e5c580cd7bbcb5f9425d9ac050f",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json",
+      "sha256": "d6ef131d253c7e513c371168f0fe278fddb702e3f8de5d8b73509997d79a407e",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/07_complete_current_approval.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/08_complete_current_request.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+      "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "supabase/support/healthroster_a0_current_root_install2_forward/A0_CURRENT_ROOT_SOURCE_FORWARD.sqlinc"
+    },
+    {
+      "file": "broker/src/native-correction-snapshot-producers.mjs",
+      "sha256": "003ab080354c1216eda4412473616bf23ce119e7ee043cde5abb239a2719dddf",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-correction-snapshot-producers.mjs"
+    },
+    {
+      "file": "broker/src/native-daily-role-helpers.mjs",
+      "sha256": "fe39b89d7a94e3f1c98a930178a8fb417b2c366863f0ec223d6327a769ea1a06",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-daily-role-helpers.mjs"
+    },
+    {
+      "file": "broker/src/native-weekly-correction-dispatch.mjs",
+      "sha256": "bfd5ac9b96e99afdf42f23b6881d989933b17d62fd75d70d7e8fd61a16c99f1c",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/native-weekly-correction-dispatch.mjs"
+    },
+    {
+      "file": "broker/src/exact-request-a0-weekly-clock-arm.mjs",
+      "sha256": "b3cb97f9ec7ffc5bb4f15d8cca41da7ce41828f2b64bff9ac1ad9a749f9ac3e6",
+      "sourceCommit": "7b57afc6e501e859e88e5988943812415162ec01",
+      "sourceFile": "docs/healthroster-build/proposals/a0-current-root-install2-forward/runtime/exact-request-a0-weekly-clock-arm.mjs"
+    }
+  ],
+  "hiddenOuterRepeatableReadGapSolved": false,
+  "nativeSchedulesRun": false,
+  "noDatabaseOrNativeProducerInvocation": true
+}

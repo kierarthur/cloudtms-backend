@@ -1,0 +1,116 @@
+-- Distinct exact-request A0 engineering proposal. No public API or store.
+-- Read-only pricing admission; this is not deployment/client readiness.
+create or replace function private.timesheet_correction_a0_clock_scope_v1(p_request_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_request private.timesheet_correction_requests%rowtype;
+  v_ts public.timesheets%rowtype; v_contract public.contracts%rowtype;
+  v_settings jsonb; v_members jsonb; v_member jsonb; v_scope jsonb;
+begin
+  select r.* into v_request from private.timesheet_correction_requests r where r.id=p_request_id;
+  if not found or v_request.state<>'WAITING' or v_request.origin<>'SIGNED_TIMESHEET_CORRECTION'
+    or v_request.reversed_financial_id is not null or v_request.original_invoice_id is not null
+    or v_request.return_invoice_id is not null then
+    raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000';
+  end if;
+  select t.* into v_ts from public.timesheets t where t.timesheet_id=v_request.reversed_timesheet_id;
+  if not found or v_ts.version<>v_request.reversed_version or not v_ts.is_current
+    or v_ts.sheet_scope::text<>'WEEKLY' or v_ts.archived_at_utc is not null
+    or v_ts.authorised_at_server is not null or v_ts.revoked_at is not null
+    or v_ts.contract_id is distinct from v_request.contract_id
+    or v_ts.week_ending_date is distinct from v_request.week_ending_date
+    or v_ts.booking_id is distinct from v_request.frozen_original_json#>>'{timesheet,booking_id}'
+    or private.timesheet_correction_timesheet_authority_hash_v1(to_jsonb(v_ts))
+      is distinct from private.timesheet_correction_timesheet_authority_hash_v1(v_request.frozen_original_json->'timesheet')
+    or v_request.frozen_original_json->'financial_snapshot' is distinct from 'null'::jsonb
+    or v_request.frozen_original_json->'financial_authority_hash' is distinct from 'null'::jsonb
+    or jsonb_typeof(v_request.frozen_original_json->'manager_signed_witness') is distinct from 'object'
+    or exists(select 1 from public.timesheets_financials f where f.timesheet_id=v_ts.timesheet_id)
+    or exists(select 1 from public.nhsp_shifts s where s.timesheet_id=v_ts.timesheet_id and s.cancelled_at_utc is null)
+    or exists(select 1 from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=v_ts.timesheet_id)
+    -- The unchanged weekly clock calculator preserves expense/mileage from
+    -- curFin. With no curFin an extant native claim must not become fabricated
+    -- zero. A separate native claim materialisation journey is required.
+    or exists(select 1 from public.candidate_expense_components e
+      where e.removed_at_utc is null and (e.owning_timesheet_id=v_ts.timesheet_id
+        or (e.owning_timesheet_id=v_request.replacement_timesheet_id
+          and not exists(select 1 from public.timesheets_financials pf
+            where pf.timesheet_id=v_request.replacement_timesheet_id and pf.is_current))))
+    then raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  select c.* into v_contract from public.contracts c where c.id=v_ts.contract_id;
+  if not found or v_contract.candidate_id is distinct from v_request.candidate_id
+    or v_contract.client_id is distinct from v_request.client_id
+    or v_contract.start_date is null or v_contract.end_date is null
+    or jsonb_typeof(v_ts.actual_schedule_json) is distinct from 'array'
+    then raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  if jsonb_array_length(v_ts.actual_schedule_json)=0 then
+    raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  -- Validate dates separately before casting. Native clock/break owners retain
+  -- complete range/overnight/time bucket calculation and their own refusals.
+  if exists(select 1 from jsonb_array_elements(v_ts.actual_schedule_json) s(value)
+    where jsonb_typeof(s.value) is distinct from 'object'
+      or pg_input_is_valid(s.value->>'date','date') is distinct from true
+      or (s.value->>'date' ~ '^\d{4}-\d{2}-\d{2}$') is distinct from true) then
+    raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  if exists(select 1 from jsonb_array_elements(v_ts.actual_schedule_json) s(value)
+    where (s.value->>'date')::date not between v_ts.week_ending_date-6 and v_ts.week_ending_date
+      or (s.value->>'date')::date not between v_contract.start_date and v_contract.end_date) then
+    raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  v_settings:=private._timesheet_settings_authority_frozen_v1(v_ts.timesheet_id);
+  if v_settings->>'client_id' is distinct from v_request.client_id::text
+    or v_settings->>'contract_id' is distinct from v_request.contract_id::text
+    or v_settings#>'{applicability,configuration_valid}' is distinct from 'true'::jsonb
+    or v_settings#>'{applicability,import_authoritative}' is distinct from 'false'::jsonb
+    or private.weekly_source_signed_check_only_v1(v_ts.timesheet_id) is distinct from true
+    then raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  -- Require actual controlled NULL-rule SIGNED_CHECK_ONLY activation. NULL
+  -- effective rules alone cannot prove a legacy/native clock price scope.
+  select jsonb_agg(jsonb_build_object(
+      'source_group_id',g.id,'source_group_version',g.version::text,
+      'membership_id',gc.id,'membership_valid_from',gc.valid_from,'membership_valid_to',gc.valid_to,
+      'assignment_id',a.id,'assignment_version',a.version::text,
+      'activation_release_id',a.feature_release_id,'activation_request_id',a.feature_request_id,
+      'activation_request_sha256',a.feature_request_sha256,
+      'activation_receipt_sha256',encode(extensions.digest(convert_to(a.feature_receipt_json::text,'UTF8'),'sha256'),'hex'))
+      order by g.id,gc.id,a.id) into v_members
+    from public.weekly_source_groups g
+    join public.weekly_source_group_clients gc on gc.source_group_id=g.id and gc.client_id=v_request.client_id
+    join public.weekly_source_group_rule_assignments a on a.source_group_id=g.id
+    join private.cloudtms_database_releases rel on rel.release_id=a.feature_release_id
+    where g.active and g.source_family='ROSTER'
+      and v_ts.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+      and a.feature_enabled and a.feature_purpose='SIGNED_CHECK_ONLY' and a.rule_set_version_id is null
+      and v_ts.week_ending_date between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)
+      and a.feature_changed_at_utc is not null and a.feature_request_sha256 ~ '^[0-9a-f]{64}$'
+      and a.feature_receipt_json->>'contract'='WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1'
+      and a.feature_receipt_json->>'assignment_id'=a.id::text
+      and a.feature_receipt_json->>'feature_purpose'='SIGNED_CHECK_ONLY'
+      and a.feature_receipt_json->'feature_enabled'='true'::jsonb
+      and a.feature_receipt_json->>'release_id'=a.feature_release_id
+      and rel.status='VERIFIED' and rel.completed_at_utc is not null
+      and rel.installed_contract_sha256=rel.repository_contract_sha256;
+  if v_members is null or jsonb_array_length(v_members)<>1
+    or exists(select 1 from public.weekly_source_group_clients gc
+      join public.weekly_source_group_rule_assignments a on a.source_group_id=gc.source_group_id
+      where gc.client_id=v_request.client_id and a.feature_purpose='RULE_SET'
+        and (a.feature_enabled or a.feature_release_id is not null or a.feature_changed_at_utc is not null)
+        and v_ts.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+        and v_ts.week_ending_date between a.effective_from_week_ending and coalesce(a.effective_to_week_ending,'infinity'::date)) then
+    raise exception 'CORRECTION_A0_NATIVE_CLOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  v_member:=v_members->0;
+  v_scope:=jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_CLOCK_SCOPE_V1',
+    'request_id',v_request.id,'original_timesheet_id',v_ts.timesheet_id,'original_version',v_ts.version,
+    'original_booking_id',v_ts.booking_id,'candidate_id',v_request.candidate_id,'client_id',v_request.client_id,
+    'contract_id',v_contract.id,'week_ending_date',v_ts.week_ending_date,
+    'pricing_origin','SIGNED_CHECK_ONLY_CONTRACT_RATES','rule_set_version_id',null,
+    'settings_authority_fingerprint',v_settings->>'authority_fingerprint',
+    'timesheet_authority_hash',private.timesheet_correction_timesheet_authority_hash_v1(to_jsonb(v_ts)),
+    -- Exact native read input, never labelled as an invented historical rate.
+    'contract_input',to_jsonb(v_contract),'controlled_scope',v_member);
+  return v_scope||jsonb_build_object('scope_sha256',encode(extensions.digest(convert_to(v_scope::text,'UTF8'),'sha256'),'hex'));
+end;
+$function$;
+alter function private.timesheet_correction_a0_clock_scope_v1(uuid) owner to postgres;
+revoke all on function private.timesheet_correction_a0_clock_scope_v1(uuid) from public,anon,authenticated,service_role;

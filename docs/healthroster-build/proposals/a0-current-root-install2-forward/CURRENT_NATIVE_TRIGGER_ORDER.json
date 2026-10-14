@@ -1,0 +1,712 @@
+{
+  "source_only": true,
+  "current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "current_native_triggers": [
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "set_tms_ref",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_candidates_set_bank_hash",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_candidates_set_rev",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_candidates_set_updated_at",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_candidates_tombstone_ad",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_candidates_tombstone_ad AFTER DELETE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_candidates_tombstone();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_invoice_candidate_revision_v2_candidates_d",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_d AFTER DELETE ON candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_invoice_candidate_revision_v2_candidates_i",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_i AFTER INSERT ON candidates REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_invoice_candidate_revision_v2_candidates_u",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_u AFTER UPDATE ON candidates REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_tsfin_candidates_wakeup_aiu",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_tsfin_candidates_wakeup_aiu AFTER INSERT OR UPDATE OF key_norm, nhsp_hr_name_aliases, pay_method, umbrella_id, active ON candidates FOR EACH ROW EXECUTE FUNCTION trg_tsfin_candidates_wakeup();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_candidate_revision_v2_invoice_lines_d",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_d AFTER DELETE ON invoice_lines REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_candidate_revision_v2_invoice_lines_i",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_i AFTER INSERT ON invoice_lines REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_candidate_revision_v2_invoice_lines_u",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_u AFTER UPDATE ON invoice_lines REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_invoice_candidate_revision_v2_timesheets_d",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_d AFTER DELETE ON timesheets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_invoice_candidate_revision_v2_timesheets_i",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_i AFTER INSERT ON timesheets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_invoice_candidate_revision_v2_timesheets_u",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_u AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json');",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_timesheets_updated_at",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_timesheets_updated_at BEFORE UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION set_updated_at();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_tsfin_ai",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_tsfin_ai AFTER INSERT ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_insert();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_tsfin_au",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_tsfin_au AFTER UPDATE OF is_current, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_update();",
+      "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_cc_candidates",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_cc_candidates\nafter insert or update or delete on public.candidates\nfor each row execute function public._trg_change_bump('candidates');",
+      "file": "supabase/migrations/19022026_multiuserfreshness.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_cc_timesheets",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_cc_timesheets\nafter insert or update or delete on public.timesheets\nfor each row execute function public._trg_change_bump('timesheets');",
+      "file": "supabase/migrations/19022026_multiuserfreshness.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_cc_invoice_lines",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_cc_invoice_lines\nafter insert or update or delete on public.invoice_lines\nfor each row execute function public._trg_change_bump('invoices');",
+      "file": "supabase/migrations/19022026_multiuserfreshness.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_pay_workbench_mark_candidate_dirty__timesheets",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_pay_workbench_mark_candidate_dirty__timesheets\nafter insert or update or delete\non public.timesheets\nfor each row\nexecute function public.pay_workbench_mark_candidate_dirty();",
+      "file": "supabase/migrations/12042026_1438_trigger_attachments_banking.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_timesheet_archive_row_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1\nBEFORE INSERT OR UPDATE OR DELETE ON public.timesheets\nFOR EACH ROW\nEXECUTE FUNCTION public.timesheet_archive_row_guard_v1();",
+      "file": "supabase/migrations/12072026_1408_drop_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_line_archived_timesheet_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_invoice_line_archived_timesheet_guard_v1\nBEFORE INSERT OR UPDATE ON public.invoice_lines\nFOR EACH ROW\nEXECUTE FUNCTION public.invoice_line_archived_timesheet_guard_v1();",
+      "file": "supabase/migrations/12072026_1408_drop_triggers.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "trg_pay_workbench_mark_candidate_dirty__candidates",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_candidate_dirty__candidates\nAFTER INSERT OR UPDATE ON public.candidates\nFOR EACH ROW\nEXECUTE FUNCTION public.pay_workbench_mark_candidate_dirty();",
+      "file": "supabase/migrations/18072026_1400_candidate_delete_workbench_safety.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_lines_document_invalidate_i",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_invoice_lines_document_invalidate_i\nafter insert on public.invoice_lines\nreferencing new table as new_rows\nfor each statement execute function public.trg_invoice_document_invalidate();",
+      "file": "supabase/migrations/23072026_2208_invoice_document_trigger_cutover.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_lines_document_invalidate_u",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_invoice_lines_document_invalidate_u\nafter update on public.invoice_lines\nreferencing old table as old_rows new table as new_rows\nfor each statement execute function public.trg_invoice_document_invalidate();",
+      "file": "supabase/migrations/23072026_2208_invoice_document_trigger_cutover.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "trg_invoice_lines_document_invalidate_d",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_invoice_lines_document_invalidate_d\nafter delete on public.invoice_lines\nreferencing old table as old_rows\nfor each statement execute function public.trg_invoice_document_invalidate();",
+      "file": "supabase/migrations/23072026_2208_invoice_document_trigger_cutover.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_timesheets_document_invalidate_u",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_timesheets_document_invalidate_u\nafter update on public.timesheets\nreferencing old table as old_rows new table as new_rows\nfor each statement execute function public.trg_timesheet_document_invalidate();",
+      "file": "supabase/migrations/23072026_2208_invoice_document_trigger_cutover.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "zz_bpay_timesheet_work_key_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1();",
+      "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_timesheets_invalidate_prevalidation_on_change",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change\nAFTER UPDATE OF\n  worked_start_iso,\n  worked_end_iso,\n  break_start_iso,\n  break_end_iso,\n  break_minutes,\n  reference_number,\n  day_references_json,\n  actual_schedule_json,\n  additional_units_week,\n  additional_units_per_day\nON public.timesheets\nFOR EACH ROW\nWHEN (\n  COALESCE(NEW.is_current,false) = true\n  AND COALESCE(OLD.is_current,false) = true\n)\nEXECUTE FUNCTION public.timesheets_invalidate_prevalidation_on_change();",
+      "file": "supabase/repeatable/28012026_invoice_queuing.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheet_validations",
+      "name": "trg_tsfin_timesheet_validations_wakeup",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_tsfin_timesheet_validations_wakeup\nafter insert or update\non public.timesheet_validations\nfor each row\nexecute function public.trg_tsfin_timesheet_validations_wakeup();",
+      "file": "supabase/repeatable/04022026_nhsp_hr_code.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_ts_summary_pay_cache_timesheets_au",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_timesheets_au\nAFTER UPDATE ON public.timesheets\nREFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows\nFOR EACH STATEMENT\nEXECUTE FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger();",
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger timesheets_candidate_qr_pack_ready_notification_trg\nbefore update of document_state,current_document_version_id on public.timesheets\nfor each row execute function private._candidate_qr_pack_ready_notification_v1();",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "trg_timesheet_authorisation_overlap_biu",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger trg_timesheet_authorisation_overlap_biu\nbefore insert or update of authorised_at_server on public.timesheets\nfor each row execute function private._timesheet_authorisation_overlap_trg_v1();",
+      "file": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "timesheets_expense_anchor_follow_current_trg",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger timesheets_expense_anchor_follow_current_trg\nafter insert or update of is_current,archived_at_utc on public.timesheets\nfor each row\nwhen (new.is_current=true and new.archived_at_utc is null)\nexecute function private._timesheet_expense_anchor_follow_current_v1();",
+      "file": "supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "timesheet_settings_authority_before_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger timesheet_settings_authority_before_v1\nbefore insert or update of contract_id,week_ending_date,sheet_scope,\n  settings_authority_json,settings_authority_version,\n  settings_authority_fingerprint,settings_authority_resolved_at\non public.timesheets\nfor each row execute function private._timesheet_settings_authority_before_v1();",
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "candidate_expense_timesheet_component_sync",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger candidate_expense_timesheet_component_sync\nafter insert or update of status,authorised_at_server,is_current,archived_at_utc,\n  booking_id,contract_id,week_ending_date\non public.timesheets\nfor each row execute function private._candidate_expense_timesheet_sync_trigger_v1();",
+      "file": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "candidate_expense_candidate_identity_summary_refresh",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger candidate_expense_candidate_identity_summary_refresh\nafter update of display_name,first_name,last_name,tms_ref on public.candidates\nfor each row execute function private._candidate_expense_identity_summary_trigger_v1();",
+      "file": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "name": "weekly_source_invoice_line_owner_guard",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger weekly_source_invoice_line_owner_guard\nbefore insert or update or delete on public.invoice_lines\nfor each row execute function private.weekly_source_invoice_line_owner_guard_v1();",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "weekly_source_managed_root_authorisation_guard_bu",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger weekly_source_managed_root_authorisation_guard_bu\n  before update on public.timesheets\n  for each row\n  when (old.authorised_at_server is distinct from new.authorised_at_server)\n  execute function private.weekly_source_ordinary_authorisation_guard_tg_v1();",
+      "file": "supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "bpay_clock_timesheet_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER bpay_clock_timesheet_v1 AFTER INSERT OR UPDATE OF booking_id, authorised_at_server, revoked_at ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1();",
+      "file": "supabase/repeatable/26092026_0204_banking_pay_stage2_triggers_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "bpay_expense_classification_ts_after_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_after_v1 AFTER INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1();",
+      "file": "supabase/repeatable/26092026_0204_banking_pay_stage2_triggers_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "bpay_expense_classification_ts_before_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1();",
+      "file": "supabase/repeatable/26092026_0204_banking_pay_stage2_triggers_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "bpay_source_timesheet_family_gate_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1();",
+      "file": "supabase/repeatable/26092026_0204_banking_pay_stage2_triggers_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "bpay_timesheet_work_revision_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON public.timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1();",
+      "file": "supabase/repeatable/26092026_0204_banking_pay_stage2_triggers_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "name": "bpay_next_workbench_candidate_name_trigger",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create trigger bpay_next_workbench_candidate_name_trigger after update of display_name,first_name,last_name,tms_ref,\n  pay_method,umbrella_id,bank_details_hash,account_holder,sort_code,account_number on public.candidates\n  for each row execute function private.bpay_next_workbench_candidate_name_trigger_v1();",
+      "file": "supabase/repeatable/10102026_1429_banking_pay_next_workbench_current_continuation_v1.sql"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "zz_timesheet_correction_whole_state_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create constraint trigger zz_timesheet_correction_whole_state_guard_v1 after insert or update on public.timesheets\ndeferrable initially deferred for each row\nexecute function private.timesheet_correction_whole_state_guard_v1();",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc"
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "name": "zz_timesheet_correction_applied_timesheet_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "definition": "create constraint trigger zz_timesheet_correction_applied_timesheet_guard_v1 after insert or update or delete on public.timesheets\n  deferrable initially deferred for each row execute function private.timesheet_correction_financial_guard_v1();",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc"
+    }
+  ],
+  "proposed_trigger_count": 4,
+  "order_checks": [
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheets_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "routineName": "private._candidate_qr_pack_ready_notification_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "weekly_source_managed_root_authorisation_guard_bu",
+      "routineName": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "SOURCE_DEFAULT_UNVERIFIED",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    }
+  ],
+  "all_stated_before_after_source_orders_pass": true,
+  "physical_enabled_state_not_observed": true,
+  "ordinary_native_triggers_not_removed": true
+}
