@@ -1,0 +1,11 @@
+{
+  "source_only": true,
+  "original_suites": 7,
+  "original_tests_pass": 123,
+  "current_source_tests_pass": 12,
+  "total_source_tests_pass": 135,
+  "failures": 0,
+  "skipped": 0,
+  "original_tests_are_unmodified_frozen_source_callbacks_scanner_checks": true,
+  "native_economic_or_concurrency_proof": false
+}

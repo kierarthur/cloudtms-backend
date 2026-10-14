@@ -1,0 +1,9 @@
+-- Current-root A0 source composition only; native isolation/contention/economics gates held.
+\ir 01_canonical_input_assert.sqlinc
+\ir 02_complete_clock_scope.sqlinc
+\ir 03_native_input_witness.sqlinc
+\ir 04_complete_native_lock_fence.sqlinc
+\ir 05_native_creator_intents_and_triggers.sqlinc
+\ir 06_send_family_fence.sqlinc
+\ir 07_complete_current_approval.sqlinc
+\ir 08_complete_current_request.sqlinc

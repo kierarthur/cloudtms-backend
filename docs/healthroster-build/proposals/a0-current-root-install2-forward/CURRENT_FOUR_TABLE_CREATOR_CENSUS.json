@@ -1,0 +1,3888 @@
+{
+  "source_only": true,
+  "current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "corrected_scanner": {
+    "file": "docs/healthroster-build/proposals/cn-a0-isolation-source-followup/sql-function-source-index.mjs",
+    "commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+    "bytes": 14454,
+    "sha256": "d256d6b6390ca1f02bc195f5c0600a9662b2996f5512a292a76d1e48b84e10e6"
+  },
+  "source_order_pin": {
+    "commit": "d6ffd1fd971664f7fb2a7ecc65bad86fff328262",
+    "file": "docs/healthroster-build/proposals/original-prerequisites-install1-forward/ROOT_A634_INPUT_PINS.json"
+  },
+  "finite_final_source_symbols": 2619,
+  "controlling_literal_writer_candidates": [
+    {
+      "signature": "public.candidate_delete_apply(uuid,uuid,text)",
+      "file": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql",
+      "definition_sha256": "a62e726b6c2fa6bd84d8f7ebb717e795516df3549d81a4d4f653c64bbf57af74",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "candidates",
+          "body_offset": 3436
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_pay_method_change_apply(uuid,text,jsonb,uuid,text)",
+      "file": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql",
+      "definition_sha256": "33c47c8937d942af59b60cd2d970066e536ce0e3ede8e9de01398640e74aedd2",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "candidates",
+          "body_offset": 34081
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamp with time zone)",
+      "file": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "definition_sha256": "827548d010c38f84a89efdc15cf4f5364c136e0c98c877f5b3f7b3f9805e165d",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 9245
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.contract_week_manual_unprocess_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "file": "supabase/repeatable/21072026_1235_35_contract_week_manual_unprocess_atomic.sql",
+      "definition_sha256": "a7401cd4b95d2d4452f25dd423c70bca033a32f534fe67882d646e4f3263cdb2",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "timesheet_validations",
+          "body_offset": 34862
+        },
+        {
+          "operation": "DELETE",
+          "table": "timesheets",
+          "body_offset": 35177
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "definition_sha256": "0d37f0a50664072788f012e54ef202fbbeb0139310922fbe3fbdc1c74d83b063",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 43122
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 48190
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 50093
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 52677
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 76177
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+      "definition_sha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheet_validations",
+          "body_offset": 9982
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 12312
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 14348
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheet_validations",
+          "body_offset": 15478
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheet_validations"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "definition_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 75754
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 82653
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheet_validations",
+          "body_offset": 114273
+        }
+      ],
+      "writer_tables": [
+        "timesheets",
+        "timesheet_validations"
+      ],
+      "first_creator_tables": [
+        "timesheets",
+        "timesheet_validations"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql",
+      "definition_sha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26561
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 30254
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 33880
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql",
+      "definition_sha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 42980
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 50293
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51579
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 63251
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 67683
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 69693
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "definition_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51317
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 55965
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 59301
+        },
+        {
+          "operation": "UPDATE",
+          "table": "invoice_lines",
+          "body_offset": 65488
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 76248
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 80477
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 80818
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 95548
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 95906
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 98897
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 101534
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 103823
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 113569
+        }
+      ],
+      "writer_tables": [
+        "timesheets",
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "file": "supabase/repeatable/12012026_invoice_batch_generate_and_issue_rpcs_zero_charge_invoices.sql",
+      "definition_sha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 8345
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+      "definition_sha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 8918
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql",
+      "definition_sha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 28054
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 33203
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 39150
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 43519
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 50455
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 54424
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 58321
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 62583
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 162915
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 168791
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 173477
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 177992
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 184170
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 187676
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 191110
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 195139
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 199074
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_operation_control_batch(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql",
+      "definition_sha256": "2d8bbc344a5cc8c4a089a7d1f01a173b8546689cb8c991b69b168dd644a558f7",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 41031
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_remove_nhsp_shifts(uuid,uuid[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_58_invoice_remove_nhsp_shifts.sql",
+      "definition_sha256": "0f1e98a885d7197b5d58cd35e9b14fa64acef4f32e2d868bc713507b0e0edc14",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 3337
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_work_complete_batch(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+      "definition_sha256": "05e621a3f3e36ea37a3c8ab3f822a3a89d1c42a9ccaafc2eb8ce8e16e56c7c03",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 71706
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 72129
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 78371
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 82927
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 92055
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 102985
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 103332
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.manual_timesheet_queue_attach_process_atomic(uuid,uuid,uuid,text,text,uuid,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_manual_timesheet_queue_attach_process_atomic.sql",
+      "definition_sha256": "fe79bcb8052c5cce4be19b618fa899809b72b5bf4c60734d6e78a511f266e5bf",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 11441
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 12774
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 17688
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 18078
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql",
+      "definition_sha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 57726
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 60966
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 65360
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql",
+      "definition_sha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 66881
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 73493
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql",
+      "definition_sha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 40437
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 54871
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 56157
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 62665
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 65096
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 66961
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_save_recalculate_atomic_v1(uuid,integer,jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+      "definition_sha256": "8c9b88d176c6af030637781132fb3c2a02e8b0eaf89e9cb2d998ea411b60554c",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 9289
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamp with time zone)",
+      "file": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "definition_sha256": "c29d1115d243d98e07e8ea273e501d3c8bfad31158559c15eee9c7f877135d06",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 15730
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+      "definition_sha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 4243
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 4463
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_document_advance_batch_v6_downstream(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+      "definition_sha256": "df93415a80a26a2ca3c234ae2a48b1c59ce28a7c25e69e3a7299b275c3f1b369",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 116122
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 65911
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 77451,
+          "sha256": "bfc8acecc869eb5eb45cb56c69d5075d440f98c3e1e0a95bb825b27ff1a2839c"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "definition_sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 77614
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 96188,
+          "sha256": "0ef26550696919bb951b8212ed80fce87dde3cda6f54499e106aacafbb79d8ea"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_operation_start_batch_legacy_20260726(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "88dea130f904165a01d1744e21effb7bf07eba722893a895da734e96d84684cc",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 50640
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_reconcile_advance_batch(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_reconcile_advance_batch.sql",
+      "definition_sha256": "1865497026c4bdf5514d2afe300ef9c0b10ae547c97e6486e0b5eda8d7a6c7c8",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 8019
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19975
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 21786
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 24004
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._timesheet_qr_restore_legacy_v1(uuid,uuid,text,uuid)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "6634b3ec8fedd82285a8dcb16294826e0a7b4bf0d2a12aa8d23191caf9469848",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 2742
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 2939
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "definition_sha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19496
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 20794
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 41639
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 42010
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19879
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 22482
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26174
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26358
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_archive_transition_v1(uuid,text,text,uuid,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "definition_sha256": "74730cf697b728299ab8625f6ad70b6624256ab30aa9f183aa0fd97ff5626a63",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 13690
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 17094
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+      "definition_sha256": "3dcce038c9b76e071be9ce22bd7521eeb8af33489641cbc395a1475d893a83f6",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 17617
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "definition_sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26473
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "definition_sha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 5607
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 6108
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+      "definition_sha256": "b74983ea85cac83e9b0dd523ad9611cccaa8b8fd6b24276f01115f43bb623df7",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 20938
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 33633
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_route_version_confirmed_v1(uuid,uuid,text,text,text,uuid,text,text,text,boolean,timestamp with time zone)",
+      "file": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
+      "definition_sha256": "534783421910f02048a5976f02e9be822e8e90789b4218e377f7906560821dcd",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 16666
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_standard_delete_apply_v1(uuid,uuid,uuid,text)",
+      "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "definition_sha256": "f841a5b4d5956b1b6b5250c9a4d88eeabda519706cf6c823c4c2e8eb0cb54760",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "timesheet_validations",
+          "body_offset": 25103
+        },
+        {
+          "operation": "DELETE",
+          "table": "timesheets",
+          "body_offset": 25809
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_unauthorise_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "file": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "definition_sha256": "67983c70f46bfd6732a08e5b1ce114cfe85744e84af2b5829817c20638a475a7",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 14754
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_unauthorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql",
+      "definition_sha256": "01daa92c68d3dc158794076fd958a4960521233138c4067eff33db84856ee59e",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19062
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid,uuid[],uuid[],uuid[],uuid[],text)",
+      "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "definition_sha256": "b57e5118e2861d0f6a36dc528274ba91ec227bd757ee07045678afad562e294d",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "timesheet_validations",
+          "body_offset": 18521
+        },
+        {
+          "operation": "DELETE",
+          "table": "timesheets",
+          "body_offset": 19725
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheets_invalidate_prevalidation_on_change()",
+      "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "definition_sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheet_validations",
+          "body_offset": 4404
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.trg_timesheet_document_invalidate()",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+      "definition_sha256": "8d10dac60a2ff17bf790aa8c14073706eba1485303a2bea5ab4f6aeb9d263bad",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 17674
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.tspdf_work_success_bulk(uuid[])",
+      "file": "supabase/repeatable/07012026_ts_pdfs_outbox_and_pdf_context_batch.sql",
+      "definition_sha256": "e690f8c85a1a302abb8748d700cb4f5bf4e88700bd04dcc95dc44f7dd4507af5",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 393
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql",
+      "definition_sha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51601
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 54785
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql",
+      "definition_sha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 22471
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 26945
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "definition_sha256": "791a96838952db0e19a6a46aaf25d9f7a579d9a5f314bfe842e8464168d8b70d",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 53553
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_google_provisioning_attach_v1(jsonb,uuid,text,text,text,text,text,integer,text,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+      "definition_sha256": "64c1b48f28efed0771aedacb0675e0f74638e84b24b79c6206a74159fb3a8c8e",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "candidates",
+          "body_offset": 5499
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+      "definition_sha256": "ac37282cdd9e3184c2a3c7cac57ccd927b4a05bbc4c7cc443af1921d0568783e",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 7098
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+      "definition_sha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 5444
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 5710
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_google_rota_remove_v1(jsonb,jsonb,text,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+      "definition_sha256": "fff813076b144676bebe06d9d7659c96af9143c17d976b1e74d226ed89e58286",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "candidates",
+          "body_offset": 7941
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+      "definition_sha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 2989
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_factual_receipt_v1(uuid,integer,text,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql",
+      "definition_sha256": "ad62d367679783a9a8909bdd9335010b211a7d55a155109c8fef59a666772d6e",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 6081
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "definition_sha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 7044
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 7310
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_daily_abandoned_receipt_delete_apply_v1(uuid,uuid,uuid,text)",
+      "file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+      "definition_sha256": "a96f5e2361c2662bf5f82ed642dc8ea5a8e1f5cd0791ede029640f15adb5d37a",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 4706
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+      "definition_sha256": "00dc5e790b3324d4dcfcb459106950505e4698d94c2d0e29d84cc21f1b9e410a",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 4817
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_legacy_paper_orphan_prepare_v1(text,uuid,integer,timestamp with time zone)",
+      "file": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "definition_sha256": "be225b645f6cab1daa2e7f27b6f7e1c24be0b176e52a315d141594cc1846b148",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 11750
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._daily_timesheet_settings_authority_after_fin_v1()",
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "definition_sha256": "0960fd2e8fa5fa990a0fcd5c646510a8afcfb403f411c390d84f9e7f7d12eb98",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 767
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone,text)",
+      "file": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+      "definition_sha256": "0c6c3acb91dc32c13b85ef7fafdd3e5d0f62a8d8fbd91767973b08ff8229421a",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 12942
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamp with time zone)",
+      "file": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "definition_sha256": "1b48ef8ca6b156e55ae039df9e8b5e7ec5c62bedeacafe5d8b0cccba2d8a07eb",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 7304
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "definition_sha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 32204
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "definition_sha256": "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "invoice_lines",
+          "body_offset": 20126
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "definition_sha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 32985
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "definition_sha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 13623
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 31714
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "definition_sha256": "d4b13c8ff109290882f34a0cffa9cf8fa2bfd1abbb20ef2446ac51f0acf9ef64",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 20832
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 22520
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.timesheet_weekly_chain_delete_apply_base_v1(uuid,uuid,uuid[],uuid[],uuid[],text)",
+      "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "definition_sha256": "b11080d9728fee481abbb6aa979855f53533702129319676df063aa0d8a432d0",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "timesheet_validations",
+          "body_offset": 15619
+        },
+        {
+          "operation": "DELETE",
+          "table": "timesheets",
+          "body_offset": 16582
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.bpay_next_pay_method_change_apply_v1(uuid,uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql",
+      "definition_sha256": "ad9ede057df4018dde85e564859060a7a1219ec8b2e60ea5a22efbca97a8e4db",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "candidates",
+          "body_offset": 5671
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "definition_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 4156
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "definition_sha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 6250
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 1899
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 4363
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    }
+  ],
+  "first_insert_creator_candidates": [
+    {
+      "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "definition_sha256": "0d37f0a50664072788f012e54ef202fbbeb0139310922fbe3fbdc1c74d83b063",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 43122
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 48190
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 50093
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 52677
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 76177
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+      "definition_sha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheet_validations",
+          "body_offset": 9982
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 12312
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 14348
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheet_validations",
+          "body_offset": 15478
+        }
+      ],
+      "writer_tables": [
+        "timesheet_validations",
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheet_validations"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "definition_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 75754
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 82653
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheet_validations",
+          "body_offset": 114273
+        }
+      ],
+      "writer_tables": [
+        "timesheets",
+        "timesheet_validations"
+      ],
+      "first_creator_tables": [
+        "timesheets",
+        "timesheet_validations"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql",
+      "definition_sha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26561
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 30254
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 33880
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql",
+      "definition_sha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 42980
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 50293
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51579
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 63251
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 67683
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 69693
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "definition_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51317
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 55965
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 59301
+        },
+        {
+          "operation": "UPDATE",
+          "table": "invoice_lines",
+          "body_offset": 65488
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 76248
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 80477
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 80818
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 95548
+        },
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 95906
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 98897
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 101534
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 103823
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 113569
+        }
+      ],
+      "writer_tables": [
+        "timesheets",
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "file": "supabase/repeatable/12012026_invoice_batch_generate_and_issue_rpcs_zero_charge_invoices.sql",
+      "definition_sha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 8345
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+      "definition_sha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 8918
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql",
+      "definition_sha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 28054
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 33203
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 39150
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 43519
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 50455
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 54424
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 58321
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 62583
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 162915
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 168791
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 173477
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 177992
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 184170
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 187676
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 191110
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 195139
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 199074
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql",
+      "definition_sha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 57726
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 60966
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 65360
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql",
+      "definition_sha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 66881
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 73493
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "file": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql",
+      "definition_sha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 40437
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 54871
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 56157
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 62665
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 65096
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 66961
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "file": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+      "definition_sha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 4243
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 4463
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 65911
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 77451,
+          "sha256": "bfc8acecc869eb5eb45cb56c69d5075d440f98c3e1e0a95bb825b27ff1a2839c"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "definition_sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 77614
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 96188,
+          "sha256": "0ef26550696919bb951b8212ed80fce87dde3cda6f54499e106aacafbb79d8ea"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "definition_sha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19496
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 20794
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 41639
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 42010
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 19879
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 22482
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26174
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 26358
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "definition_sha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 5607
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 6108
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql",
+      "definition_sha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 51601
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 54785
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "file": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql",
+      "definition_sha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 22471
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 26945
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+      "definition_sha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 5444
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 5710
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+      "definition_sha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 2989
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "definition_sha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 7044
+        },
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 7310
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "definition_sha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 32204
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "definition_sha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 13623
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 31714
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "definition_sha256": "d4b13c8ff109290882f34a0cffa9cf8fa2bfd1abbb20ef2446ac51f0acf9ef64",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 20832
+        },
+        {
+          "operation": "UPDATE",
+          "table": "timesheets",
+          "body_offset": 22520
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "definition_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "timesheets",
+          "body_offset": 4156
+        }
+      ],
+      "writer_tables": [
+        "timesheets"
+      ],
+      "first_creator_tables": [
+        "timesheets"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "definition_sha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 6250
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "writes": [
+        {
+          "operation": "DELETE",
+          "table": "invoice_lines",
+          "body_offset": 1899
+        },
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 4363
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    }
+  ],
+  "possible_dynamic_writers": [
+    {
+      "signature": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "definition_sha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 65911
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 77451,
+          "sha256": "bfc8acecc869eb5eb45cb56c69d5075d440f98c3e1e0a95bb825b27ff1a2839c"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    },
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "definition_sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "writes": [
+        {
+          "operation": "INSERT",
+          "table": "invoice_lines",
+          "body_offset": 77614
+        }
+      ],
+      "writer_tables": [
+        "invoice_lines"
+      ],
+      "first_creator_tables": [
+        "invoice_lines"
+      ],
+      "dynamic_execute": true,
+      "possible_dynamic_writer_literals": [
+        {
+          "body_offset": 96188,
+          "sha256": "0ef26550696919bb951b8212ed80fce87dde3cda6f54499e106aacafbb79d8ea"
+        }
+      ],
+      "proven_native_invoked_edges": []
+    }
+  ],
+  "original25_native_owner_reconciliation": [
+    {
+      "original_signature": "public.trg_set_tms_ref()",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "original_definition_sha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+        "definition_sha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public._trg_candidates_set_bank_hash()",
+      "original_file": "supabase/migrations/22022026_banking_tables.sql",
+      "original_definition_sha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "current": {
+        "file": "supabase/migrations/22022026_banking_tables.sql",
+        "definition_sha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.trg_set_rev()",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "original_definition_sha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+        "definition_sha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.set_updated_at()",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "original_definition_sha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+        "definition_sha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.invoice_line_archived_timesheet_guard_v1()",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_definition_sha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.weekly_source_invoice_line_owner_guard_v1()",
+      "original_file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "original_definition_sha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "current": {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+        "definition_sha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.bpay_expense_classification_ts_v1()",
+      "original_file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "original_definition_sha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "current": {
+        "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "definition_sha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.bpay_source_timesheet_family_gate_v1()",
+      "original_file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "original_definition_sha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "current": {
+        "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "definition_sha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.bpay_timesheet_work_revision_v1()",
+      "original_file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+      "original_definition_sha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "current": {
+        "file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+        "definition_sha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private._timesheet_settings_authority_before_v1()",
+      "original_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "original_definition_sha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "current": {
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "definition_sha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private._candidate_qr_pack_ready_notification_v1()",
+      "original_file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "original_definition_sha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "current": {
+        "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+        "definition_sha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.timesheet_archive_row_guard_v1()",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_definition_sha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private._timesheet_authorisation_overlap_trg_v1()",
+      "original_file": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql",
+      "original_definition_sha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "current": {
+        "file": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql",
+        "definition_sha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "original_file": "supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "original_definition_sha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "current": {
+        "file": "supabase/repeatable/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+        "definition_sha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.bpay_timesheet_work_key_v1()",
+      "original_file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+      "original_definition_sha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "current": {
+        "file": "supabase/migrations/26092026_0200_banking_pay_stage2_work_reference_schema.sql",
+        "definition_sha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)",
+      "original_file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "original_definition_sha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9",
+      "current": {
+        "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+        "definition_sha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "original_file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "original_definition_sha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "current": {
+        "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+        "definition_sha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public._pay_workbench_candidate_serial_try_gate(uuid,uuid,text,jsonb,text)",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_definition_sha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public._pay_workbench_candidate_serial_key(uuid)",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_definition_sha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public._pay_timesheet_rotation_scope(uuid[])",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.bpay_source_family_try_lock_v1(text)",
+      "original_file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "original_definition_sha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+      "current": {
+        "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "definition_sha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.tsfin_load_context_batch(uuid[])",
+      "original_file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+      "original_definition_sha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+        "definition_sha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.timesheet_correction_signed_witness_v1(uuid,boolean)",
+      "original_file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "original_definition_sha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+        "definition_sha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "private.timesheet_correction_origin_v1(uuid)",
+      "original_file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "original_definition_sha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+        "definition_sha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "original_signature": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "original_definition_sha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+        "definition_sha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369"
+      },
+      "entire_definition_equal": true
+    }
+  ],
+  "original70_writer_reconciliation": [
+    {
+      "signature": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "original_sha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+        "definition_sha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._invoice_operation_start_batch_legacy_20260726(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "original_sha256": "88dea130f904165a01d1744e21effb7bf07eba722893a895da734e96d84684cc",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+        "definition_sha256": "88dea130f904165a01d1744e21effb7bf07eba722893a895da734e96d84684cc"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._timesheet_qr_restore_legacy_v1(uuid,uuid,text,uuid)",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "original_sha256": "6634b3ec8fedd82285a8dcb16294826e0a7b4bf0d2a12aa8d23191caf9469848",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+        "definition_sha256": "6634b3ec8fedd82285a8dcb16294826e0a7b4bf0d2a12aa8d23191caf9469848"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "original_file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+      "original_sha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b",
+      "current": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+        "definition_sha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheets_invalidate_prevalidation_on_change()",
+      "original_file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "original_sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7",
+      "current": {
+        "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "definition_sha256": "bfd51c9fe2c6b00bf7057a9b6d457ddd3b1b521312e2aad050f07717d8b27dd7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.tspdf_work_success_bulk(uuid[])",
+      "original_file": "supabase/repeatable/07012026_ts_pdfs_outbox_and_pdf_context_batch.sql",
+      "original_sha256": "e690f8c85a1a302abb8748d700cb4f5bf4e88700bd04dcc95dc44f7dd4507af5",
+      "current": {
+        "file": "supabase/repeatable/07012026_ts_pdfs_outbox_and_pdf_context_batch.sql",
+        "definition_sha256": "e690f8c85a1a302abb8748d700cb4f5bf4e88700bd04dcc95dc44f7dd4507af5"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "original_file": "supabase/repeatable/12012026_invoice_batch_generate_and_issue_rpcs_zero_charge_invoices.sql",
+      "original_sha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee",
+      "current": {
+        "file": "supabase/repeatable/12012026_invoice_batch_generate_and_issue_rpcs_zero_charge_invoices.sql",
+        "definition_sha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_pay_method_change_apply(uuid,text,jsonb,uuid,text)",
+      "original_file": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql",
+      "original_sha256": "33c47c8937d942af59b60cd2d970066e536ce0e3ede8e9de01398640e74aedd2",
+      "current": {
+        "file": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql",
+        "definition_sha256": "33c47c8937d942af59b60cd2d970066e536ce0e3ede8e9de01398640e74aedd2"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_archive_transition_v1(uuid,text,text,uuid,uuid,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "original_sha256": "74730cf697b728299ab8625f6ad70b6624256ab30aa9f183aa0fd97ff5626a63",
+      "current": {
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "definition_sha256": "74730cf697b728299ab8625f6ad70b6624256ab30aa9f183aa0fd97ff5626a63"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "original_file": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql",
+      "original_sha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql",
+        "definition_sha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql",
+      "original_sha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql",
+        "definition_sha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "original_file": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql",
+      "original_sha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql",
+        "definition_sha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_unauthorise_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "original_file": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "original_sha256": "67983c70f46bfd6732a08e5b1ce114cfe85744e84af2b5829817c20638a475a7",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+        "definition_sha256": "67983c70f46bfd6732a08e5b1ce114cfe85744e84af2b5829817c20638a475a7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_unauthorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql",
+      "original_sha256": "01daa92c68d3dc158794076fd958a4960521233138c4067eff33db84856ee59e",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql",
+        "definition_sha256": "01daa92c68d3dc158794076fd958a4960521233138c4067eff33db84856ee59e"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.contract_week_manual_unprocess_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "original_file": "supabase/repeatable/21072026_1235_35_contract_week_manual_unprocess_atomic.sql",
+      "original_sha256": "a7401cd4b95d2d4452f25dd423c70bca033a32f534fe67882d646e4f3263cdb2",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_35_contract_week_manual_unprocess_atomic.sql",
+        "definition_sha256": "a7401cd4b95d2d4452f25dd423c70bca033a32f534fe67882d646e4f3263cdb2"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "original_file": "supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql",
+      "original_sha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql",
+        "definition_sha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_remove_nhsp_shifts(uuid,uuid[],uuid)",
+      "original_file": "supabase/repeatable/21072026_1235_58_invoice_remove_nhsp_shifts.sql",
+      "original_sha256": "0f1e98a885d7197b5d58cd35e9b14fa64acef4f32e2d868bc713507b0e0edc14",
+      "current": {
+        "file": "supabase/repeatable/21072026_1235_58_invoice_remove_nhsp_shifts.sql",
+        "definition_sha256": "0f1e98a885d7197b5d58cd35e9b14fa64acef4f32e2d868bc713507b0e0edc14"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "original_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+        "definition_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql",
+      "original_sha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql",
+        "definition_sha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+      "original_sha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql",
+        "definition_sha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql",
+      "original_sha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql",
+        "definition_sha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql",
+      "original_sha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql",
+        "definition_sha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "original_file": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql",
+      "original_sha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+      "current": {
+        "file": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql",
+        "definition_sha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.manual_timesheet_queue_attach_process_atomic(uuid,uuid,uuid,text,text,uuid,jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_manual_timesheet_queue_attach_process_atomic.sql",
+      "original_sha256": "fe79bcb8052c5cce4be19b618fa899809b72b5bf4c60734d6e78a511f266e5bf",
+      "current": {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_manual_timesheet_queue_attach_process_atomic.sql",
+        "definition_sha256": "fe79bcb8052c5cce4be19b618fa899809b72b5bf4c60734d6e78a511f266e5bf"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._invoice_reconcile_advance_batch(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_reconcile_advance_batch.sql",
+      "original_sha256": "1865497026c4bdf5514d2afe300ef9c0b10ae547c97e6486e0b5eda8d7a6c7c8",
+      "current": {
+        "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_reconcile_advance_batch.sql",
+        "definition_sha256": "1865497026c4bdf5514d2afe300ef9c0b10ae547c97e6486e0b5eda8d7a6c7c8"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_operation_control_batch(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql",
+      "original_sha256": "2d8bbc344a5cc8c4a089a7d1f01a173b8546689cb8c991b69b168dd644a558f7",
+      "current": {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql",
+        "definition_sha256": "2d8bbc344a5cc8c4a089a7d1f01a173b8546689cb8c991b69b168dd644a558f7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_work_complete_batch(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+      "original_sha256": "05e621a3f3e36ea37a3c8ab3f822a3a89d1c42a9ccaafc2eb8ce8e16e56c7c03",
+      "current": {
+        "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+        "definition_sha256": "05e621a3f3e36ea37a3c8ab3f822a3a89d1c42a9ccaafc2eb8ce8e16e56c7c03"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.trg_timesheet_document_invalidate()",
+      "original_file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+      "original_sha256": "8d10dac60a2ff17bf790aa8c14073706eba1485303a2bea5ab4f6aeb9d263bad",
+      "current": {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+        "definition_sha256": "8d10dac60a2ff17bf790aa8c14073706eba1485303a2bea5ab4f6aeb9d263bad"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_delete_apply(uuid,uuid,text)",
+      "original_file": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql",
+      "original_sha256": "a62e726b6c2fa6bd84d8f7ebb717e795516df3549d81a4d4f653c64bbf57af74",
+      "current": {
+        "file": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql",
+        "definition_sha256": "a62e726b6c2fa6bd84d8f7ebb717e795516df3549d81a4d4f653c64bbf57af74"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_daily_save_recalculate_atomic_v1(uuid,integer,jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+      "original_sha256": "8c9b88d176c6af030637781132fb3c2a02e8b0eaf89e9cb2d998ea411b60554c",
+      "current": {
+        "file": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
+        "definition_sha256": "8c9b88d176c6af030637781132fb3c2a02e8b0eaf89e9cb2d998ea411b60554c"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "original_file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "original_sha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+      "current": {
+        "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+        "definition_sha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_route_version_confirmed_v1(uuid,uuid,text,text,text,uuid,text,text,text,boolean,timestamp with time zone)",
+      "original_file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "original_sha256": "d6bf28cb73e744b852fdca9921a80bf89417c9d9a4fffccc77c8f74d6ddf4972",
+      "current": {
+        "file": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
+        "definition_sha256": "534783421910f02048a5976f02e9be822e8e90789b4218e377f7906560821dcd"
+      },
+      "entire_definition_equal": false
+    },
+    {
+      "signature": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+      "original_sha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+      "current": {
+        "file": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+        "definition_sha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+      "original_sha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+      "current": {
+        "file": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+        "definition_sha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+      "original_sha256": "ac37282cdd9e3184c2a3c7cac57ccd927b4a05bbc4c7cc443af1921d0568783e",
+      "current": {
+        "file": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "definition_sha256": "ac37282cdd9e3184c2a3c7cac57ccd927b4a05bbc4c7cc443af1921d0568783e"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_google_rota_remove_v1(jsonb,jsonb,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+      "original_sha256": "fff813076b144676bebe06d9d7659c96af9143c17d976b1e74d226ed89e58286",
+      "current": {
+        "file": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql",
+        "definition_sha256": "fff813076b144676bebe06d9d7659c96af9143c17d976b1e74d226ed89e58286"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_google_provisioning_attach_v1(jsonb,uuid,text,text,text,text,text,integer,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+      "original_sha256": "64c1b48f28efed0771aedacb0675e0f74638e84b24b79c6206a74159fb3a8c8e",
+      "current": {
+        "file": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql",
+        "definition_sha256": "64c1b48f28efed0771aedacb0675e0f74638e84b24b79c6206a74159fb3a8c8e"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "original_file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+      "original_sha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+      "current": {
+        "file": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql",
+        "definition_sha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_daily_factual_receipt_v1(uuid,integer,text,jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql",
+      "original_sha256": "ad62d367679783a9a8909bdd9335010b211a7d55a155109c8fef59a666772d6e",
+      "current": {
+        "file": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql",
+        "definition_sha256": "ad62d367679783a9a8909bdd9335010b211a7d55a155109c8fef59a666772d6e"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "original_sha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+      "current": {
+        "file": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+        "definition_sha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_daily_abandoned_receipt_delete_apply_v1(uuid,uuid,uuid,text)",
+      "original_file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+      "original_sha256": "a96f5e2361c2662bf5f82ed642dc8ea5a8e1f5cd0791ede029640f15adb5d37a",
+      "current": {
+        "file": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql",
+        "definition_sha256": "a96f5e2361c2662bf5f82ed642dc8ea5a8e1f5cd0791ede029640f15adb5d37a"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+      "original_sha256": "00dc5e790b3324d4dcfcb459106950505e4698d94c2d0e29d84cc21f1b9e410a",
+      "current": {
+        "file": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql",
+        "definition_sha256": "00dc5e790b3324d4dcfcb459106950505e4698d94c2d0e29d84cc21f1b9e410a"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_legacy_paper_orphan_prepare_v1(text,uuid,integer,timestamp with time zone)",
+      "original_file": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "original_sha256": "be225b645f6cab1daa2e7f27b6f7e1c24be0b176e52a315d141594cc1846b148",
+      "current": {
+        "file": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+        "definition_sha256": "be225b645f6cab1daa2e7f27b6f7e1c24be0b176e52a315d141594cc1846b148"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+      "original_sha256": "3dcce038c9b76e071be9ce22bd7521eeb8af33489641cbc395a1475d893a83f6",
+      "current": {
+        "file": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+        "definition_sha256": "3dcce038c9b76e071be9ce22bd7521eeb8af33489641cbc395a1475d893a83f6"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "original_sha256": "827548d010c38f84a89efdc15cf4f5364c136e0c98c877f5b3f7b3f9805e165d",
+      "current": {
+        "file": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+        "definition_sha256": "827548d010c38f84a89efdc15cf4f5364c136e0c98c877f5b3f7b3f9805e165d"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "original_file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "original_sha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+      "current": {
+        "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+        "definition_sha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._daily_timesheet_settings_authority_after_fin_v1()",
+      "original_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "original_sha256": "0960fd2e8fa5fa990a0fcd5c646510a8afcfb403f411c390d84f9e7f7d12eb98",
+      "current": {
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "definition_sha256": "0960fd2e8fa5fa990a0fcd5c646510a8afcfb403f411c390d84f9e7f7d12eb98"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "original_sha256": "c29d1115d243d98e07e8ea273e501d3c8bfad31158559c15eee9c7f877135d06",
+      "current": {
+        "file": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "definition_sha256": "c29d1115d243d98e07e8ea273e501d3c8bfad31158559c15eee9c7f877135d06"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone,text)",
+      "original_file": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+      "original_sha256": "0c6c3acb91dc32c13b85ef7fafdd3e5d0f62a8d8fbd91767973b08ff8229421a",
+      "current": {
+        "file": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
+        "definition_sha256": "0c6c3acb91dc32c13b85ef7fafdd3e5d0f62a8d8fbd91767973b08ff8229421a"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+      "original_sha256": "b74983ea85cac83e9b0dd523ad9611cccaa8b8fd6b24276f01115f43bb623df7",
+      "current": {
+        "file": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+        "definition_sha256": "b74983ea85cac83e9b0dd523ad9611cccaa8b8fd6b24276f01115f43bb623df7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamp with time zone)",
+      "original_file": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "original_sha256": "1b48ef8ca6b156e55ae039df9e8b5e7ec5c62bedeacafe5d8b0cccba2d8a07eb",
+      "current": {
+        "file": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+        "definition_sha256": "1b48ef8ca6b156e55ae039df9e8b5e7ec5c62bedeacafe5d8b0cccba2d8a07eb"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "original_sha256": "4b7db1c22bb8e0d9d8c13b783f6c031f31b464ed61261ff5860f03e12cf93d69",
+      "current": {
+        "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "definition_sha256": "d4b13c8ff109290882f34a0cffa9cf8fa2bfd1abbb20ef2446ac51f0acf9ef64"
+      },
+      "entire_definition_equal": false
+    },
+    {
+      "signature": "public.timesheet_standard_delete_apply_v1(uuid,uuid,uuid,text)",
+      "original_file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "original_sha256": "f841a5b4d5956b1b6b5250c9a4d88eeabda519706cf6c823c4c2e8eb0cb54760",
+      "current": {
+        "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_sha256": "f841a5b4d5956b1b6b5250c9a4d88eeabda519706cf6c823c4c2e8eb0cb54760"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid,uuid[],uuid[],uuid[],uuid[],text)",
+      "original_file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "original_sha256": "b57e5118e2861d0f6a36dc528274ba91ec227bd757ee07045678afad562e294d",
+      "current": {
+        "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_sha256": "b57e5118e2861d0f6a36dc528274ba91ec227bd757ee07045678afad562e294d"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private.timesheet_weekly_chain_delete_apply_base_v1(uuid,uuid,uuid[],uuid[],uuid[],text)",
+      "original_file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "original_sha256": "b11080d9728fee481abbb6aa979855f53533702129319676df063aa0d8a432d0",
+      "current": {
+        "file": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+        "definition_sha256": "b11080d9728fee481abbb6aa979855f53533702129319676df063aa0d8a432d0"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "original_file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "original_sha256": "cb752f515e54734fc05330d8105eb908a5c26d0e8829c3a021b86b1710e68460",
+      "current": {
+        "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "definition_sha256": "0d37f0a50664072788f012e54ef202fbbeb0139310922fbe3fbdc1c74d83b063"
+      },
+      "entire_definition_equal": false
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "original_file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "original_sha256": "ac2a629861064047d8f104f4f4aa26f5af6793cf459f2b8891d19939c5649bb0",
+      "current": {
+        "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "definition_sha256": "c0e2dc81206fd5fdaf9db34b350b6cebe03f0e860e862ea6eba7b115ca86ceb3"
+      },
+      "entire_definition_equal": false
+    },
+    {
+      "signature": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "original_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "current": {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+        "definition_sha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "original_sha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "current": {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+        "definition_sha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "original_sha256": "791a96838952db0e19a6a46aaf25d9f7a579d9a5f314bfe842e8464168d8b70d",
+      "current": {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+        "definition_sha256": "791a96838952db0e19a6a46aaf25d9f7a579d9a5f314bfe842e8464168d8b70d"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "original_sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "current": {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+        "definition_sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "original_file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+      "original_sha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4",
+      "current": {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+        "definition_sha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "original_file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "original_sha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "current": {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+        "definition_sha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "original_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "original_sha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+      "current": {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+        "definition_sha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+      "original_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "original_sha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+      "current": {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definition_sha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private._invoice_document_advance_batch_v6_downstream(jsonb,timestamp with time zone)",
+      "original_file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+      "original_sha256": "df93415a80a26a2ca3c234ae2a48b1c59ce28a7c25e69e3a7299b275c3f1b369",
+      "current": {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+        "definition_sha256": "df93415a80a26a2ca3c234ae2a48b1c59ce28a7c25e69e3a7299b275c3f1b369"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "original_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "current": {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+        "definition_sha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "original_file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "original_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "current": {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+        "definition_sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+      "original_file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "original_sha256": "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb",
+      "current": {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+        "definition_sha256": "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb"
+      },
+      "entire_definition_equal": true
+    },
+    {
+      "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "original_file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "original_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "current": {
+        "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+        "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119"
+      },
+      "entire_definition_equal": true
+    }
+  ],
+  "additional_current_writers": [
+    {
+      "signature": "public.bpay_next_pay_method_change_apply_v1(uuid,uuid,jsonb)",
+      "file": "supabase/repeatable/12102026_2116_banking_pay_next_pay_method_resolution_needs_v1.sql",
+      "definition_sha256": "ad9ede057df4018dde85e564859060a7a1219ec8b2e60ea5a22efbca97a8e4db",
+      "writes": [
+        {
+          "operation": "UPDATE",
+          "table": "candidates",
+          "body_offset": 5671
+        }
+      ],
+      "writer_tables": [
+        "candidates"
+      ],
+      "first_creator_tables": [],
+      "dynamic_execute": false,
+      "possible_dynamic_writer_literals": [],
+      "proven_native_invoked_edges": []
+    }
+  ],
+  "limitations": [
+    "Literal mutation tokens are finite source candidates, not AST-bound complete invocation or effect proof.",
+    "Dynamic execute/overload binding/conditional DDL/trigger enabled state and actual isolation/hidden-RR entry remain held.",
+    "Current source replaces historical creator counts; original source123 tests do not qualify these new native schedules."
+  ],
+  "native_holds": [
+    "VALIDATION_FIRST_INSERT",
+    "INVOICE_FIRST_INSERT",
+    "CANDIDATE_ALIAS_RANK",
+    "RAW_BOOKING_SIBLING",
+    "NATIVE_FIN_LATE_HOOKS"
+  ],
+  "qualified_runtime_isolation": null,
+  "hidden_rr_visibility_solved": false
+}

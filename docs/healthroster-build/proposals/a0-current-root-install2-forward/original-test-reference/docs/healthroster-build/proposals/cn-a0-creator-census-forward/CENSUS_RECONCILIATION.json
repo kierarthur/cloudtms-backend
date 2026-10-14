@@ -1,0 +1,1198 @@
+{
+  "contract": "HEALTHROSTER_A0_CENSUS_FORWARD_RECONCILIATION_V1",
+  "status": "SOURCE_EVIDENCE_FIXED_NATIVE_HELD",
+  "rootInputGitHead": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "previous": {
+    "controllingWriters": 73,
+    "firstCreators": 30,
+    "historicalWriterOccurrences": 233
+  },
+  "corrected": {
+    "controllingWriters": 70,
+    "firstCreators": 30,
+    "historicalWriterOccurrences": 233,
+    "liveTopLevelFunctionIdentities": 2270,
+    "lifecycleEvents": 226,
+    "actualMapRemovals": 67
+  },
+  "removedStaleWriterEntries": [
+    {
+      "id": "public.timesheet_qr_restore_version(uuid,uuid,text,'pending' or 'signed' p_actor_user_id uuid)",
+      "source": "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql"
+    },
+    {
+      "id": "public.timesheet_weekly_chain_delete_apply(uuid,uuid)",
+      "source": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql"
+    },
+    {
+      "id": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid)",
+      "source": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql"
+    }
+  ],
+  "cataloguePresent": [
+    {
+      "id": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "source": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql"
+    },
+    {
+      "id": "private._invoice_operation_start_batch_legacy_20260726(jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql"
+    },
+    {
+      "id": "private._timesheet_qr_restore_legacy_v1(uuid,uuid,text,uuid)",
+      "source": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql"
+    },
+    {
+      "id": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "source": "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql"
+    },
+    {
+      "id": "public.timesheets_invalidate_prevalidation_on_change()",
+      "source": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql"
+    },
+    {
+      "id": "public.tspdf_work_success_bulk(uuid[])",
+      "source": "supabase/repeatable/07012026_ts_pdfs_outbox_and_pdf_context_batch.sql"
+    },
+    {
+      "id": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "source": "supabase/repeatable/12012026_invoice_batch_generate_and_issue_rpcs_zero_charge_invoices.sql"
+    },
+    {
+      "id": "public.candidate_pay_method_change_apply(uuid,text,jsonb,uuid,text)",
+      "source": "supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql"
+    },
+    {
+      "id": "public.timesheet_archive_transition_v1(uuid,text,text,uuid,uuid,text,timestamp with time zone)",
+      "source": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "source": "supabase/repeatable/21072026_1235_24_hr_weekly_phase3_apply_adjustment_truth_3arg.sql"
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1235_25_hr_weekly_phase3_apply_adjustment_truth_4arg.sql"
+    },
+    {
+      "id": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "source": "supabase/repeatable/21072026_1235_26_nhsp_weekly_phase3_apply_adjustment_truth.sql"
+    },
+    {
+      "id": "public.timesheet_unauthorise_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "source": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql"
+    },
+    {
+      "id": "public.timesheet_unauthorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/21072026_1235_33_timesheet_unauthorise_bulk_atomic.sql"
+    },
+    {
+      "id": "public.contract_week_manual_unprocess_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "source": "supabase/repeatable/21072026_1235_35_contract_week_manual_unprocess_atomic.sql"
+    },
+    {
+      "id": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "source": "supabase/repeatable/21072026_1235_56_invoice_generate_from_outbox_batch.sql"
+    },
+    {
+      "id": "public.invoice_remove_nhsp_shifts(uuid,uuid[],uuid)",
+      "source": "supabase/repeatable/21072026_1235_58_invoice_remove_nhsp_shifts.sql"
+    },
+    {
+      "id": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql"
+    },
+    {
+      "id": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1820_07_nhsp_weekly_apply_transactional.sql"
+    },
+    {
+      "id": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1820_08_hr_daily_apply_transactional.sql"
+    },
+    {
+      "id": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1820_09_weekly_import_apply_cancellations.sql"
+    },
+    {
+      "id": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/21072026_1820_10_nhsp_weekly_apply_cancellations.sql"
+    },
+    {
+      "id": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "source": "supabase/repeatable/21072026_1820_11_weekly_import_create_cancellation_corrections.sql"
+    },
+    {
+      "id": "public.manual_timesheet_queue_attach_process_atomic(uuid,uuid,uuid,text,text,uuid,jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_manual_timesheet_queue_attach_process_atomic.sql"
+    },
+    {
+      "id": "private._invoice_reconcile_advance_batch(jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_reconcile_advance_batch.sql"
+    },
+    {
+      "id": "public.invoice_operation_control_batch(jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_control_batch.sql"
+    },
+    {
+      "id": "public.invoice_work_complete_batch(jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql"
+    },
+    {
+      "id": "public.trg_timesheet_document_invalidate()",
+      "source": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql"
+    },
+    {
+      "id": "public.candidate_delete_apply(uuid,uuid,text)",
+      "source": "supabase/repeatable/04082026_1219_candidate_delete_apply.sql"
+    },
+    {
+      "id": "private._candidate_daily_save_recalculate_atomic_v1(uuid,integer,jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql"
+    },
+    {
+      "id": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "source": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql"
+    },
+    {
+      "id": "public.timesheet_route_version_confirmed_v1(uuid,uuid,text,text,text,uuid,text,text,text,boolean,timestamp with time zone)",
+      "source": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql"
+    },
+    {
+      "id": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "source": "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql"
+    },
+    {
+      "id": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql"
+    },
+    {
+      "id": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamp with time zone)",
+      "source": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql"
+    },
+    {
+      "id": "public.candidate_google_rota_remove_v1(jsonb,jsonb,text,timestamp with time zone)",
+      "source": "supabase/repeatable/28082026_1617_candidate_google_rota_removal_v1.sql"
+    },
+    {
+      "id": "public.candidate_google_provisioning_attach_v1(jsonb,uuid,text,text,text,text,text,integer,text,timestamp with time zone)",
+      "source": "supabase/repeatable/28082026_1628_candidate_google_rota_reenrolment_v1.sql"
+    },
+    {
+      "id": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "source": "supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql"
+    },
+    {
+      "id": "private._candidate_daily_factual_receipt_v1(uuid,integer,text,jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/28082026_1923_candidate_daily_factual_receipt_v1.sql"
+    },
+    {
+      "id": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "source": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql"
+    },
+    {
+      "id": "public.timesheet_daily_abandoned_receipt_delete_apply_v1(uuid,uuid,uuid,text)",
+      "source": "supabase/repeatable/29082026_1847_timesheet_daily_abandoned_receipt_delete_v1.sql"
+    },
+    {
+      "id": "public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "source": "supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql"
+    },
+    {
+      "id": "private._candidate_legacy_paper_orphan_prepare_v1(text,uuid,integer,timestamp with time zone)",
+      "source": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql"
+    },
+    {
+      "id": "public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql"
+    },
+    {
+      "id": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamp with time zone)",
+      "source": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql"
+    },
+    {
+      "id": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "source": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql"
+    },
+    {
+      "id": "private._daily_timesheet_settings_authority_after_fin_v1()",
+      "source": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql"
+    },
+    {
+      "id": "private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamp with time zone)",
+      "source": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql"
+    },
+    {
+      "id": "public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone,text)",
+      "source": "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql"
+    },
+    {
+      "id": "public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamp with time zone)",
+      "source": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql"
+    },
+    {
+      "id": "public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamp with time zone)",
+      "source": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql"
+    },
+    {
+      "id": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+    },
+    {
+      "id": "public.timesheet_standard_delete_apply_v1(uuid,uuid,uuid,text)",
+      "source": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql"
+    },
+    {
+      "id": "public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid,uuid[],uuid[],uuid[],uuid[],text)",
+      "source": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql"
+    },
+    {
+      "id": "private.timesheet_weekly_chain_delete_apply_base_v1(uuid,uuid,uuid[],uuid[],uuid[],text)",
+      "source": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql"
+    },
+    {
+      "id": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "source": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql"
+    },
+    {
+      "id": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "source": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql"
+    },
+    {
+      "id": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamp with time zone)",
+      "source": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc"
+    },
+    {
+      "id": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc"
+    },
+    {
+      "id": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "source": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc"
+    },
+    {
+      "id": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "source": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "source": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+      "source": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "id": "private._invoice_document_advance_batch_v6_downstream(jsonb,timestamp with time zone)",
+      "source": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc"
+    },
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "source": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+      "source": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc"
+    },
+    {
+      "id": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "source": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc"
+    }
+  ],
+  "catalogueMissingPendingSource": [
+    {
+      "id": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "line": 40,
+      "sourceDefinitionSha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "status": "SOURCE_FINAL_OWNER_ABSENT_FROM_SAVED_CATALOGUE",
+      "catalogue": null
+    },
+    {
+      "id": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "line": 1,
+      "sourceDefinitionSha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "status": "SOURCE_FINAL_OWNER_ABSENT_FROM_SAVED_CATALOGUE",
+      "catalogue": null
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "line": 115,
+      "sourceDefinitionSha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "status": "SOURCE_FINAL_OWNER_ABSENT_FROM_SAVED_CATALOGUE",
+      "catalogue": null
+    }
+  ],
+  "unresolvedSourceExecution": [
+    {
+      "file": "supabase/migrations/26092026_0210_banking_pay_stage2_backfill.sql",
+      "line": 45,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\if :{?bpay_backfill_batch}"
+    },
+    {
+      "file": "supabase/migrations/26092026_0210_banking_pay_stage2_backfill.sql",
+      "line": 46,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\else"
+    },
+    {
+      "file": "supabase/migrations/26092026_0210_banking_pay_stage2_backfill.sql",
+      "line": 48,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\endif"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/19012026_extras.sql",
+      "line": 1,
+      "statementSha256": "eeb3192bb592f7ae69793f50a9cf5f7e36605c691298c05eb91a5c377ef04109"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/20072026_1152_reset_obsolete_freshness_after_safe_cleanup.sql",
+      "line": 1,
+      "statementSha256": "940b5012413348ba6a3e5c42277f9ba23b6802cbe18acb489e71fb9d11bc8534"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql",
+      "line": 1,
+      "statementSha256": "f948cc498036d14d455a8782ac6143c8d587f388ea643c98232c5ecbfb8c6a0a"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_batch_issue_candidates.sql",
+      "line": 1,
+      "statementSha256": "0646aae8ba563ce01e607ad85099f7a77f4418e09edd90af9486a3a65b840fb4"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/24072026_1646_invoice_batch_generate_candidates.sql",
+      "line": 1,
+      "statementSha256": "407ac50572f1d2a1171526d7d53a2c1647c8c401b8dfd482daa4b44191a63825"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 14,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\if :invoice_presentation_active_work"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 20,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\else"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 1867,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\endif"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql",
+      "line": 15,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\if :invoice_presentation_active_work"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql",
+      "line": 21,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\else"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql",
+      "line": 28,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\endif"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 14,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\if :invoice_presentation_active_work"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 20,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\else"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "line": 1867,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\endif"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "line": 1,
+      "statementSha256": "475503f1394abdb2bcfc5f5ae1b61e171505430d37fde14669c1defccf1f0415"
+    },
+    {
+      "offset": 129976,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "line": 2793,
+      "statementSha256": "cf4008c56ed9acda646c68cd22d50156221ce8f07414fdd36333b7390b31377d"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/29082026_1914_contract_week_delete_boundary_reconciliation.sql",
+      "line": 1,
+      "statementSha256": "3b7347222ac5d19711ce1460ab5247d05dd5a939a6bbc35880e463f78e429d32"
+    },
+    {
+      "offset": 5620,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/29082026_1914_contract_week_delete_boundary_reconciliation.sql",
+      "line": 160,
+      "statementSha256": "66dae468592ea71ef59da8f40b90369c6fd5256ba8d795b7ece54468cb008d73"
+    },
+    {
+      "offset": 0,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/19012026_extras.sql",
+      "line": 1,
+      "statementSha256": "eeb3192bb592f7ae69793f50a9cf5f7e36605c691298c05eb91a5c377ef04109"
+    },
+    {
+      "offset": 261145,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "line": 5123,
+      "statementSha256": "d6f2dfd5d28274443cf7e5e164685df663abbbdcaaf7451efd94eeb2d8dbba2e"
+    },
+    {
+      "offset": 70246,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "line": 1573,
+      "statementSha256": "3c479ec7b7836a841fa45cd76fe42767fec1b836d86e8d08bc94794716396957"
+    },
+    {
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "line": 21,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\if :{?bpay_backfill_batch}"
+    },
+    {
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "line": 22,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\else"
+    },
+    {
+      "file": "supabase/repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql",
+      "line": 24,
+      "kind": "PSQL_CONDITIONAL_SOURCE_EXECUTION_NOT_INFERRED",
+      "text": "\\endif"
+    },
+    {
+      "offset": 55847,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+      "line": 695,
+      "statementSha256": "59501f6addeee66c5a57eb070ccdbb670a0bb3c421d1022af4e0fb21c0a454c7"
+    },
+    {
+      "offset": 31256,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "line": 433,
+      "statementSha256": "dd0d2e9697e7ab04dfc2bd0915151a1099240e93653e761b878855e816105682"
+    },
+    {
+      "offset": 45549,
+      "kind": "DYNAMIC_OR_CONDITIONAL_FUNCTION_DDL_IN_DO",
+      "file": "supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql",
+      "line": 559,
+      "statementSha256": "54541acb3cd2e9c116d1cafad3a46bba498b80be026821d9e327b48e3845c37d"
+    }
+  ],
+  "conditionalScope": "Explicit top-level function events are applied. DO/dynamic/psql conditions are recorded, not executed or promoted to physical installed truth.",
+  "identityNoStaleClaim": "No observed comment-bearing identity or explicitly removed two-arg writer remains in the final map; all67 pre-existing controlling signatures reconcile to saved catalogue. This is not an installed/native body/admission claim.",
+  "nativeBodies": [
+    {
+      "id": "public.trg_set_tms_ref()",
+      "definitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "priorDefinitionSha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "byteEqual": true
+    },
+    {
+      "id": "public._trg_candidates_set_bank_hash()",
+      "definitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "priorDefinitionSha256": "b28e24be58bf654d2fdcfd17bcec49575457fff3ddce01ee443eb982c281ec29",
+      "byteEqual": true
+    },
+    {
+      "id": "public.trg_set_rev()",
+      "definitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "priorDefinitionSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+      "byteEqual": true
+    },
+    {
+      "id": "public.set_updated_at()",
+      "definitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "priorDefinitionSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_line_archived_timesheet_guard_v1()",
+      "definitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "priorDefinitionSha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_invoice_line_owner_guard_v1()",
+      "definitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "priorDefinitionSha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_expense_classification_ts_v1()",
+      "definitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "priorDefinitionSha256": "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_source_timesheet_family_gate_v1()",
+      "definitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "priorDefinitionSha256": "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_timesheet_work_revision_v1()",
+      "definitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "priorDefinitionSha256": "e7627723916fe6d888bfb7e853485d3704a607c0becb0124842e1d7d69d5df1c",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_settings_authority_before_v1()",
+      "definitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "priorDefinitionSha256": "7eb0e5c420c839c699dae0116a93845cb7eac365d35d58dab05b2b708e2ce2ee",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_qr_pack_ready_notification_v1()",
+      "definitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "priorDefinitionSha256": "91de2ff0042a3f38c7fb82cc4caeab9165d3173f2c1f110722ac9d6123629b5d",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_archive_row_guard_v1()",
+      "definitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "priorDefinitionSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_authorisation_overlap_trg_v1()",
+      "definitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "priorDefinitionSha256": "aa25690604da412fa0ae64e6d3a34039c9c80ce749ef5cf4fa4eb67ac8558723",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_ordinary_authorisation_guard_tg_v1()",
+      "definitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "priorDefinitionSha256": "7e15a89cca07342a2805d4b9cc63a28256bed3e8d9b39a5745c58c90993b38bf",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_timesheet_work_key_v1()",
+      "definitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "priorDefinitionSha256": "ae41fff9d6cd030b469e6e2df82cc3260b0a9092c94dbe03af13df094d8f70e1",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)",
+      "definitionSha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9",
+      "priorDefinitionSha256": "5fd447c35524b8b9f140902509644486bc33b43e89ff107e2dddbda360905ca9",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "definitionSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "priorDefinitionSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_workbench_candidate_serial_try_gate(uuid,uuid,text,jsonb,text)",
+      "definitionSha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740",
+      "priorDefinitionSha256": "c84b09fbfbe1337cb729fafd891e86c173ae2562ad07bfe37fe33601cba14740",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_workbench_candidate_serial_key(uuid)",
+      "definitionSha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b",
+      "priorDefinitionSha256": "c6a371a0da40d92462a4314815aeeaf035adb9db6602489d6e21ce2e1f2ebd8b",
+      "byteEqual": true
+    },
+    {
+      "id": "public._pay_timesheet_rotation_scope(uuid[])",
+      "definitionSha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "priorDefinitionSha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+      "byteEqual": true
+    },
+    {
+      "id": "private.bpay_source_family_try_lock_v1(text)",
+      "definitionSha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+      "priorDefinitionSha256": "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+      "byteEqual": true
+    },
+    {
+      "id": "public.tsfin_load_context_batch(uuid[])",
+      "definitionSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "priorDefinitionSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_signed_witness_v1(uuid,boolean)",
+      "definitionSha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e",
+      "priorDefinitionSha256": "d2241a6556007c6afb8f2204a68f05aaa06044edfaf837a26c0967a6bffed18e",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_origin_v1(uuid)",
+      "definitionSha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "priorDefinitionSha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_correction_send_v1(jsonb,uuid,timestamp with time zone)",
+      "definitionSha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369",
+      "priorDefinitionSha256": "0c3a53264735e421b1dba9765b22b466115a94218a21eeb72a3c364786f85369",
+      "byteEqual": true
+    }
+  ],
+  "firstCreatorBodies": [
+    {
+      "id": "private._invoice_generation_advance_batch_legacy_20260726(jsonb,timestamp with time zone)",
+      "definitionSha256": "683753fd3f4cfc21f056bfdb1fa7605949908afd6e972f0d05e73fdc3bf62a5f",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_route_version_legacy_v1(uuid,uuid,text,uuid,boolean)",
+      "definitionSha256": "5e724e6681511f949dfa9a5b5e165c17f19c52c1927c987879435878fea9039b",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_closeout_zero_charge_timesheets(uuid[],uuid)",
+      "definitionSha256": "214e1e05d1dad3d4058b47b51e0f4673f1af7a3fd794c73f5da32a6b833412ee",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "definitionSha256": "04455fc7ecfff78f05aaadf08a54df282d27db5fc9f70df61a90c6587a7351a3",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)",
+      "definitionSha256": "8d962f20af07a13b3695323da661e32a89cac278006e46a2c27e7859245deda3",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)",
+      "definitionSha256": "8c6c636ea15b2bb1d54e9f8b55e840af0753d6bed6608a405f0ecd1a3c6d4450",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_generate_from_outbox_batch(uuid[],uuid)",
+      "definitionSha256": "3fcb171b809454cc9466b7b15f9cdc68994f8984794a650ad36256381ad4148c",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "b3dedcb18a4258252c8254bafd1fe94ec11ab4f40665e6489e15ea937be01023",
+      "byteEqual": true
+    },
+    {
+      "id": "public.hr_daily_apply_transactional(uuid,jsonb,uuid)",
+      "definitionSha256": "e55839abf4f897e75adefeb49a852509aade25a2b5134feb91e3e333e6bb961c",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_import_apply_cancellations(uuid,jsonb,uuid)",
+      "definitionSha256": "43282a38c34f9266c83e5c92def40ab11151a88938c91f92269089047efa8889",
+      "byteEqual": true
+    },
+    {
+      "id": "public.nhsp_weekly_apply_cancellations(uuid,jsonb,uuid)",
+      "definitionSha256": "1109a26f7192b5a642efa318a27a73438b7729fce236015c12180dbe4acf602f",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_import_create_cancellation_corrections(uuid,uuid,uuid)",
+      "definitionSha256": "d04db084029ca0e5232157eb973bef4e84d7286be42f977fb7a8a243a7c5cd20",
+      "byteEqual": true
+    },
+    {
+      "id": "private._timesheet_route_version_core_v1(uuid,uuid,text,uuid,boolean)",
+      "definitionSha256": "603282b549b76cf9e2e90f295f6d9b8f6f5db3b2e6b8df81dbd2e63ea9343b98",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_submission_reset_v1(uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "definitionSha256": "6d8acd9d3635ac34502dd4127af8ab0ba2925946f24a2c90337ffeccc8035001",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
+      "definitionSha256": "1f8f173ac791305d53197991cfe29191a898046cbfffc00ce596ea2a6643f699",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_first_receipt_v1(text,uuid,jsonb,uuid,boolean,timestamp with time zone)",
+      "definitionSha256": "c21feb8624b1630adf9c10fe2a12aeb5d772a8248fbba72e611900eaef633aad",
+      "byteEqual": true
+    },
+    {
+      "id": "private._candidate_daily_receipt_reset_v1(text,uuid,uuid,uuid,text,uuid,text,timestamp with time zone)",
+      "definitionSha256": "99db2928b6ae34a63c9aa017c344ce37b1accd0176772964a02ed8ea7b91ed79",
+      "byteEqual": true
+    },
+    {
+      "id": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
+      "definitionSha256": "d35787f7d435d8145e1578f803a390b178c5d03b32dc2a309c52853464729911",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "definitionSha256": "4b7db1c22bb8e0d9d8c13b783f6c031f31b464ed61261ff5860f03e12cf93d69",
+      "byteEqual": true
+    },
+    {
+      "id": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
+      "definitionSha256": "cb752f515e54734fc05330d8105eb908a5c26d0e8829c3a021b86b1710e68460",
+      "byteEqual": true
+    },
+    {
+      "id": "private.timesheet_correction_leg_create_v1(private.timesheet_correction_requests,text,jsonb,timestamp with time zone)",
+      "definitionSha256": "a2b2c14423311f2e62287c75b815b679f513a78e69fe169fc554315b812bfb76",
+      "byteEqual": true
+    },
+    {
+      "id": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "definitionSha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7",
+      "byteEqual": true
+    },
+    {
+      "id": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "definitionSha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_create_credit_note_and_unlock(uuid,uuid)",
+      "definitionSha256": "385200423b2ddcb0d45feb549cece49cf6512ab497f5cb25f41537e51103ebd4",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "definitionSha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "definitionSha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+      "byteEqual": true
+    },
+    {
+      "id": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "definitionSha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "byteEqual": true
+    },
+    {
+      "id": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "definitionSha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+      "byteEqual": true
+    },
+    {
+      "id": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "definitionSha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "byteEqual": true
+    }
+  ],
+  "triggerOrderChecks": [
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_expense_classification_ts_before_v1",
+      "routineName": "private.bpay_expense_classification_ts_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_source_timesheet_family_gate_v1",
+      "routineName": "private.bpay_source_timesheet_family_gate_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "bpay_timesheet_work_revision_v1",
+      "routineName": "private.bpay_timesheet_work_revision_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheet_settings_authority_before_v1",
+      "routineName": "private._timesheet_settings_authority_before_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "timesheets_candidate_qr_pack_ready_notification_trg",
+      "routineName": "private._candidate_qr_pack_ready_notification_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_archive_row_guard_v1",
+      "routineName": "public.timesheet_archive_row_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheet_authorisation_overlap_biu",
+      "routineName": "private._timesheet_authorisation_overlap_trg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "trg_timesheets_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "weekly_source_managed_root_authorisation_guard_bu",
+      "routineName": "private.weekly_source_ordinary_authorisation_guard_tg_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "A",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "timesheets",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+      "existingTriggerName": "zz_bpay_timesheet_work_key_v1",
+      "routineName": "private.bpay_timesheet_work_key_v1",
+      "enabled": "A",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "trg_invoice_line_archived_timesheet_guard_v1",
+      "routineName": "public.invoice_line_archived_timesheet_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "insert",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "invoice_lines",
+      "event": "update",
+      "proposedTriggerName": "aaa_healthroster_a0_reference_before_v1",
+      "existingTriggerName": "weekly_source_invoice_line_owner_guard",
+      "routineName": "private.weekly_source_invoice_line_owner_guard_v1",
+      "enabled": "O",
+      "direction": "BEFORE_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "set_tms_ref",
+      "routineName": "public.trg_set_tms_ref",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_bank_hash",
+      "routineName": "public._trg_candidates_set_bank_hash",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "insert",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_rev",
+      "routineName": "public.trg_set_rev",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    },
+    {
+      "schema": "public",
+      "table": "candidates",
+      "event": "update",
+      "proposedTriggerName": "zzzz_healthroster_a0_candidate_before_v1",
+      "existingTriggerName": "trg_candidates_set_updated_at",
+      "routineName": "public.set_updated_at",
+      "enabled": "O",
+      "direction": "AFTER_EXISTING",
+      "pass": true
+    }
+  ],
+  "triggerCounterexample": {
+    "triggerName": "000_preexisting_family_gate",
+    "routineName": "private.bpay_source_timesheet_family_gate_v1",
+    "failedChecks": [
+      {
+        "schema": "public",
+        "table": "timesheets",
+        "event": "insert",
+        "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+        "existingTriggerName": "000_preexisting_family_gate",
+        "routineName": "private.bpay_source_timesheet_family_gate_v1",
+        "enabled": "O",
+        "direction": "BEFORE_EXISTING",
+        "pass": false
+      },
+      {
+        "schema": "public",
+        "table": "timesheets",
+        "event": "update",
+        "proposedTriggerName": "aaa_healthroster_a0_booking_before_v1",
+        "existingTriggerName": "000_preexisting_family_gate",
+        "routineName": "private.bpay_source_timesheet_family_gate_v1",
+        "enabled": "O",
+        "direction": "BEFORE_EXISTING",
+        "pass": false
+      }
+    ],
+    "sourceOrDatabaseRenamed": false
+  },
+  "holds": [
+    {
+      "kind": "VALIDATION_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "INVOICE_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "CANDIDATE_ALIAS_RANK",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "RAW_BOOKING_SIBLING",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "NATIVE_FIN_LATE_HOOKS",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    }
+  ],
+  "isolation": {
+    "savedSourceEnforcesRc": false,
+    "qualifiedRuntimeIsolation": null,
+    "hiddenRequestStatus": "HELD: earlier RR can hide later P0/WAITING; row intent is not a row-version change or visibility refresh.",
+    "ordinaryRrPreserved": true
+  }
+}

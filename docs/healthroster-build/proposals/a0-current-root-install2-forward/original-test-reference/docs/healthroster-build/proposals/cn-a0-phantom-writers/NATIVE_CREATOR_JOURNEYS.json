@@ -1,0 +1,67 @@
+{
+  "contract": "HEALTHROSTER_A0_CREATOR_TWO_SESSION_JOURNEYS_V1",
+  "status": "NOT_RUN_ALL_NATIVE_HOLDS_RETAINED",
+  "owner": "Root only under SEND7 shared resource/database turn lock with retained backend PID",
+  "fixture": "Owner-provided actual native signed weekly Original, Contract/Candidate/Client, immutable manager pair/document, no ANY Original financial/import/lineage evidence, exact qualified NULL-rule signed-check-only scope, normal native calculator/writer. No invented history/rates/READY or financial line payload.",
+  "prerequisites": [
+    "Exact installed source/contract/trigger order and closed private ACL after complete root union",
+    "Actual first-use financial/document/NEXT/phone gates; Banking first-install record still absent",
+    "Root proves physical DB name, shared lock ownership and fresh rollback restoration",
+    "Instrument actual PostgREST/native transaction isolation without credentials or personal rows",
+    "Record exact same native request, family/booking/signature/actor and full input witness before/after"
+  ],
+  "cases": [
+    {
+      "id": "VALIDATION_PRECEDES_SEND",
+      "sessionA": "Begin RC; use actual HR Weekly/Daily persisted-review creator for first validation referring to the qualified signed Original. Leave transaction open after the new parent intent.",
+      "sessionB": "Invoke public.timesheet_correction_send_v1(p_request,p_actor_user_id,p_now_utc) with native valid input.",
+      "expected": "Candidate try-gate may grant, but complete native I-1 must promptly refuse 55P03 against A's parent intent. No request, P0, week, financial or notification survives B rollback. After A rollback use fresh B and full native original/P0 producer/CAS proof."
+    },
+    {
+      "id": "INVOICE_PRECEDES_SEND",
+      "sessionA": "Use unchanged ordinary native invoice creator for first exact-ID line; repeat with native booking-only fallback, retaining archived guard KEY SHARE. No arbitrary money payload.",
+      "sessionB": "Invoke exact signed missing-A0 SEND.",
+      "expected": "B I-1 promptly refuses or existing native financial/invoice scope refuses. Native archived/historical identity policy unchanged. No duplicate new ordinary invoice locks; no A0 admitted after an unseen invoice."
+    },
+    {
+      "id": "ACTIVE_FIRST_CHILD_DURING_APPLICATION",
+      "sessionA": "Use actual new-purpose atomic approval through post-re-PREPARE native lock fence; stop after Candidate gates and whole I-1 are held.",
+      "sessionB": "RC first validation, first invoice exact-ID and booking-only line, and raw booking sibling/Contract mutation for the actual active request in separate subcases.",
+      "expected": "B refuses at canonical try-gate/1ms I-1/NOWAIT before its row becomes visible. A completes only through actual normalisation/reread/R0 sign-copy/P0 approved writer. Compare complete witness and every component, not totals or timestamps alone."
+    },
+    {
+      "id": "RAW_FOREIGN_OR_NULL_BEFORE_SEND",
+      "sessionA": "RC actual native/service admitted creator inserts exact raw-booking sibling with NULL or foreign Contract before request allocation; retain parent intent, then commit in separate subcase.",
+      "sessionB": "SEND while A holds, then retry after A commit with fresh snapshot.",
+      "expected": "While A holds: prompt native I-1 refusal. After commit: CORRECTION_A0_FAMILY_IDENTITY_UNPROVED for this purpose, never fabricate a Contract/Candidate or finance origin. Trimmed/raw collision keeps native canonical-collision refusal."
+    },
+    {
+      "id": "CANDIDATE_ALIAS_INSERT_DELETE_AND_RANK_ONLY",
+      "sessionA": "On a foreign Candidate row sharing actual occupant alias, use ordinary INSERT/DELETE/alias change and unrelated UPDATE that advances updated_at; qualified Original exists before SEND. Repeat during held A0.",
+      "sessionB": "SEND or atomic missing-A0 application using the exact actual Contract Candidate.",
+      "expected": "Pre-request mutation holds actual parent intent. In-flight A0 must refuse contention; committed prior foreign winner causes exact normal tsfin_load_context_batch identity refusal. Active mutation obtains canonical persisted Candidate gate/I-1 or promptly refuses; no resolver override. Preserve native delete's existing gate/eligibility and after hooks."
+    },
+    {
+      "id": "GROWTH_CAS_AND_REENTRANT_P0_ALLOCATION",
+      "steps": "Same-unit SEND inserts private request before physical P0. New trigger must reenter native gates/whole existing family without requiring an absent P0; root/original always required. Concurrent scope/request revision/family growth between discovery and locks must refuse 40001, not acquire a later enlarged set.",
+      "expected": "Request-key replay, one P0, adjustment-week CAS and native gate audit rollback/cleanup unchanged. Verify lock_timeout and all native operation/GUC cleanup on success and failure."
+    },
+    {
+      "id": "VISIBLE_NON_RC_NEW_PURPOSE",
+      "steps": "Explicit RR and SERIALIZABLE invocation of qualifying new SEND/atomic, plus writer with visible active missing-A0 request.",
+      "expected": "CORRECTION_A0_TRANSACTION_SNAPSHOT_UNPROVED 55000 before new-purpose mutation. Unsigned/Daily/existing-finance/agency and ordinary Bank paths preserve native behaviour; no global RR refusal."
+    },
+    {
+      "id": "HIDDEN_NEW_P0_RR",
+      "sessionA": "Begin RR and establish snapshot before SEND; know a later P0 UUID only out of band. Do not assume FOR UPDATE/KEY SHARE refreshes the snapshot.",
+      "sessionB": "Create exact valid request/P0 using RC and commit; first do not change Original/Candidate row versions. Repeat full A0 materialisation/application before A's attempted child/sibling write.",
+      "expected": "HELD, not asserted PASS. Prove actual admitted caller RC/visibility or a separately reviewed real native serialization fence. A visible-request predicate cannot detect B's hidden request. Ordinary dangling reference legality cannot be globally revoked to manufacture proof."
+    },
+    {
+      "id": "ORDINARY_AND_HISTORICAL_NEGATIVES",
+      "steps": "Use actual unsigned weekly, empty draft, Daily, existing-finance, ordinary/NHSP/Source invoice, lawful historical dangling validation/null reference and unrelated Candidate records. Exercise previous callbacks and native Bank/expense/doc hooks.",
+      "expected": "No new precursor admission or changed financial dispatch. Native archived/refusal/Source owner rules, signature errors, payment/settlement boundaries and role ACL remain. No emails, provider/network or queue drain."
+    }
+  ],
+  "acceptance": "Source checks do not close any of the five native holds. Exposure requires root complete union, actual two-session scheduling, physical rollback/restoration and real native document/financial/NEXT/phone/security proof."
+}

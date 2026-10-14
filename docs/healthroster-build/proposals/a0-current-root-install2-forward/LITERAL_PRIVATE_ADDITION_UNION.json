@@ -1,0 +1,63 @@
+{
+  "source_only": true,
+  "exact_current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "preceding_normalisation_fence_four": [
+    {
+      "signature": "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/01_canonical_input_assert.sqlinc",
+      "definition_sha256": "b070daf83e30b09dc5b530a621808556cf47a646690aa5e16f1e5b071f5bbcb3"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_clock_scope_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/02_complete_clock_scope.sqlinc",
+      "definition_sha256": "bee469c4378f6833c225cb5b33abc92f09defa3030011e1a3fbdd3635e978ce9"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_input_witness_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/03_native_input_witness.sqlinc",
+      "definition_sha256": "b031aa825c79a163b7e4f278fcbd273fc2958b0e06a387c92dda6125d249d4dd"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/04_complete_native_lock_fence.sqlinc",
+      "definition_sha256": "d9979f3a2ee5bad9586311658ed96d8a916148243dfdf0396160338469e1ec79"
+    }
+  ],
+  "creator_six": [
+    {
+      "signature": "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "5dcec85bf84b29dff1e964c9d6d2bb111a1880bc88a396a9a2b962f2c8c9f0fe"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_reference_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "f2d7da1041ce597b297db122d97ae80119191da3c9aacfe46fcf84c16520df6e"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_booking_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "abf554cb4aa709e028058b06cfe00514acbdf9bd2da54ca11fa03d68c8c0f23b"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_candidate_before_v1()",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/05_native_creator_intents_and_triggers.sqlinc",
+      "definition_sha256": "56cf26fb2d5ec4a2fa746ba452c4ac494581327f46cdbc8749ca4161002c8be1"
+    },
+    {
+      "signature": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "file": "supabase/support/healthroster_a0_current_root_install2_forward/06_send_family_fence.sqlinc",
+      "definition_sha256": "390774562934db2f6d57194bdf44ecdca16c7b29251b06b78fc56ba183823960"
+    }
+  ],
+  "literal_union_count": 10,
+  "all_absent_from_current_executable_source": true,
+  "new_service_or_public_signature_count": 0,
+  "root_final_current_registry_union_required": true,
+  "source_only_not_installed_acl_or_catalogue_claim": true
+}

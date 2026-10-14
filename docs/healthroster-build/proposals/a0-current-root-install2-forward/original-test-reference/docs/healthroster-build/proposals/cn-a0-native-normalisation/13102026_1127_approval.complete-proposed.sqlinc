@@ -1,0 +1,464 @@
+-- The Worker supplies output from the existing bounded canonical producer.
+-- This file validates authority and delegates; it contains no rate calculator.
+-- Exact sign-copy only. For missing A0 this runs inside the approval unit,
+-- after the unchanged canonical writer has produced the real stored original.
+create or replace function private.timesheet_correction_component_negate_v1(p_value jsonb,p_path text[] default array[]::text[])
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare result jsonb; item record; key_name text; signed_value boolean;
+begin
+  if cardinality(p_path)>32 then raise exception 'CORRECTION_REVERSAL_COMPONENT_DEPTH_INVALID' using errcode='55000'; end if;
+  if jsonb_typeof(p_value)='object' then
+    result:='{}'::jsonb;
+    for item in select key,value from jsonb_each(p_value) loop
+      if item.key not in('invoice_locked_invoice_id','invoice_locked_at_utc','pay_locked','pay_locked_at_utc','is_reversal') then
+        result:=result||jsonb_build_object(item.key,private.timesheet_correction_component_negate_v1(item.value,p_path||item.key));
+      end if;
+    end loop;
+    if p_value?'is_reversal' then result:=result||jsonb_build_object('is_reversal',true); end if;
+    return result;
+  elsif jsonb_typeof(p_value)='array' then
+    select coalesce(jsonb_agg(private.timesheet_correction_component_negate_v1(value,p_path||ordinality::text) order by ordinality),'[]'::jsonb)
+      into result from jsonb_array_elements(p_value) with ordinality;
+    return result;
+  end if;
+  key_name:=p_path[cardinality(p_path)];
+  signed_value:=key_name in('hours_day','hours_night','hours_sat','hours_sun','hours_bh','hours_total','total_hours',
+    'pay_amount','charge_amount','pay_ex_vat','charge_ex_vat','margin_ex_vat','total_pay_ex_vat','total_charge_ex_vat',
+    'unit_count','units','total_units','units_total','pay_cost_ex_vat_including_erni','vat_amount','total_inc_vat')
+    or (cardinality(p_path)>1 and p_path[cardinality(p_path)-1]='days')
+    or (cardinality(p_path)>1 and p_path[cardinality(p_path)-1]='base_hours' and key_name in('day','night','sat','sun','bh'));
+  if signed_value and jsonb_typeof(p_value)<>'null' then
+    if not pg_input_is_valid(p_value#>>'{}','numeric') then raise exception 'CORRECTION_REVERSAL_COMPONENT_NUMERIC_INVALID' using errcode='55000'; end if;
+    return case when jsonb_typeof(p_value)='string' then to_jsonb((-(p_value#>>'{}')::numeric)::text)
+      else to_jsonb(-(p_value#>>'{}')::numeric) end;
+  end if;
+  return p_value;
+end;
+$function$;
+
+create or replace function private.timesheet_correction_native_original_reversal_v1(p_original jsonb,p_reversal_id uuid)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$
+declare result jsonb; key_name text;
+begin
+  if jsonb_typeof(p_original) is distinct from 'object' or p_reversal_id is null
+    or jsonb_typeof(p_original->'invoice_breakdown_json') is distinct from 'object' then
+    raise exception 'CORRECTION_NATIVE_ORIGINAL_REVERSAL_CONTEXT_INVALID' using errcode='55000';
+  end if;
+  result:=p_original-array['id','created_at','updated_at','computed_at_utc','processed_at_utc','processed_by_user_id',
+    'payment_reference','remittance_last_sent_at_utc','remittance_send_count','unlocked_by_credit_note_id'];
+  foreach key_name in array array['hours_day','hours_night','hours_sat','hours_sun','hours_bh','total_hours',
+    'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
+    'expenses_pay_ex_vat','expenses_charge_ex_vat','travel_pay_ex_vat','travel_charge_ex_vat',
+    'accommodation_pay_ex_vat','accommodation_charge_ex_vat','other_pay_ex_vat','other_charge_ex_vat',
+    'mileage_units','mileage_pay_ex_vat','mileage_charge_ex_vat','additional_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat'] loop
+    if result?key_name and jsonb_typeof(result->key_name)<>'null' then
+      if not pg_input_is_valid(result->>key_name,'numeric') then raise exception 'CORRECTION_NATIVE_ORIGINAL_AMOUNT_INVALID' using errcode='55000',detail=key_name; end if;
+      result:=jsonb_set(result,array[key_name],case when jsonb_typeof(result->key_name)='string'
+        then to_jsonb((-(result->>key_name)::numeric)::text) else to_jsonb(-(result->>key_name)::numeric) end,true);
+    end if;
+  end loop;
+  result:=result||jsonb_build_object('timesheet_id',p_reversal_id,'timesheet_version',1,'processing_status','PENDING_AUTH',
+    'authorised_at_utc',null,'authorised_by_user_id',null,'paid_at_utc',null,'paid_by_user_id',null,
+    'locked_by_invoice_id',null,'locked_at_utc',null,'pay_on_hold',false,'pay_on_hold_reason',null,'pay_on_hold_since_utc',null,
+    'is_current',true,'is_stale',false,'stale_reason',null,
+    'invoice_breakdown_json',private.timesheet_correction_component_negate_v1(p_original->'invoice_breakdown_json'),
+    'additional_units_json',private.timesheet_correction_component_negate_v1(p_original->'additional_units_json',array['additional_units_json']));
+  return result;
+end;
+$function$;
+
+create or replace function private.timesheet_correction_snapshot_identity_assert_v1(
+  p_snapshot jsonb,p_timesheet_id uuid,p_version integer,p_candidate uuid,p_client uuid
+) returns void language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+begin
+  if jsonb_typeof(p_snapshot) is distinct from 'object'
+    or p_snapshot->>'timesheet_id' is distinct from p_timesheet_id::text
+    or p_snapshot->>'timesheet_version' is distinct from p_version::text
+    or p_snapshot->>'candidate_id' is distinct from p_candidate::text
+    or p_snapshot->>'client_id' is distinct from p_client::text
+    or coalesce((p_snapshot->>'is_stale')::boolean,true)
+    or coalesce((p_snapshot->>'has_rate_issue')::boolean,true)
+    or coalesce((p_snapshot->>'has_pay_channel_issue')::boolean,true)
+    or nullif(btrim(p_snapshot->>'pay_method'),'') is null
+    or jsonb_typeof(p_snapshot->'invoice_breakdown_json') is distinct from 'object'
+    or nullif(p_snapshot->>'authorised_at_utc','') is not null
+    or nullif(p_snapshot->>'paid_at_utc','') is not null
+    or nullif(p_snapshot->>'locked_by_invoice_id','') is not null then
+    raise exception 'CORRECTION_CANONICAL_SNAPSHOT_INVALID' using errcode='55000';
+  end if;
+end;
+$function$;
+
+-- Compare monetary/hour facts, historic policy/rate identity and every exact
+-- component. The caller, rather than SQL, creates the canonical reversal.
+create or replace function private.timesheet_correction_reversal_component_assert_v1(
+  p_original jsonb,p_reversal jsonb,p_path text[] default array[]::text[]
+) returns void language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_original jsonb; v_reversal jsonb; v_row record; v_key text; v_signed boolean;
+begin
+  if cardinality(p_path)>32 or jsonb_typeof(p_original) is distinct from jsonb_typeof(p_reversal) then
+    raise exception 'CORRECTION_REVERSAL_COMPONENT_SHAPE_MISMATCH' using errcode='55000';
+  end if;
+  if jsonb_typeof(p_original)='object' then
+    v_original:=p_original-array['invoice_locked_invoice_id','invoice_locked_at_utc','pay_locked','pay_locked_at_utc','is_reversal'];
+    v_reversal:=p_reversal-array['invoice_locked_invoice_id','invoice_locked_at_utc','pay_locked','pay_locked_at_utc','is_reversal'];
+    if (select array_agg(k order by k) from jsonb_object_keys(v_original) k)
+      is distinct from (select array_agg(k order by k) from jsonb_object_keys(v_reversal) k)
+      or (p_reversal?'is_reversal' and p_reversal->>'is_reversal' is distinct from 'true') then
+      raise exception 'CORRECTION_REVERSAL_COMPONENT_SET_MISMATCH' using errcode='55000';
+    end if;
+    for v_row in select key,value from jsonb_each(v_original) loop
+      perform private.timesheet_correction_reversal_component_assert_v1(v_row.value,v_reversal->v_row.key,p_path||v_row.key);
+    end loop;
+  elsif jsonb_typeof(p_original)='array' then
+    if jsonb_array_length(p_original)<>jsonb_array_length(p_reversal) then
+      raise exception 'CORRECTION_REVERSAL_COMPONENT_SET_MISMATCH' using errcode='55000';
+    end if;
+    for v_row in select o.value original,r.value reversal,o.n from jsonb_array_elements(p_original) with ordinality o(value,n)
+      join jsonb_array_elements(p_reversal) with ordinality r(value,n) using(n) loop
+      perform private.timesheet_correction_reversal_component_assert_v1(v_row.original,v_row.reversal,p_path||v_row.n::text);
+    end loop;
+  else
+    v_key:=p_path[cardinality(p_path)];
+    v_signed:=v_key in('hours_day','hours_night','hours_sat','hours_sun','hours_bh','hours_total','total_hours',
+      'pay_amount','charge_amount','pay_ex_vat','charge_ex_vat','margin_ex_vat','total_pay_ex_vat','total_charge_ex_vat',
+      'unit_count','units','total_units','units_total',
+      'pay_cost_ex_vat_including_erni','vat_amount','total_inc_vat')
+      or (cardinality(p_path)>1 and p_path[cardinality(p_path)-1]='days')
+      or (cardinality(p_path)>1 and p_path[cardinality(p_path)-1]='base_hours'
+        and v_key in('day','night','sat','sun','bh'));
+    if v_signed and jsonb_typeof(p_original)<>'null' then
+      if not pg_input_is_valid(p_original#>>'{}','numeric') or not pg_input_is_valid(p_reversal#>>'{}','numeric')
+        or (p_reversal#>>'{}')::numeric is distinct from -(p_original#>>'{}')::numeric then
+        raise exception 'CORRECTION_REVERSAL_COMPONENT_PENCE_MISMATCH' using errcode='55000',detail=array_to_string(p_path,'.');
+      end if;
+    elsif p_original is distinct from p_reversal then
+      raise exception 'CORRECTION_REVERSAL_COMPONENT_IDENTITY_MISMATCH' using errcode='55000',detail=array_to_string(p_path,'.');
+    end if;
+  end if;
+end;
+$function$;
+
+create or replace function private.timesheet_correction_reversal_assert_v1(p_original jsonb,p_reversal jsonb)
+returns void language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_key text; v_original jsonb; v_reversed jsonb; v_row record;
+  v_signed_fields text[]:=array['hours_day','hours_night','hours_sat','hours_sun','hours_bh','total_hours',
+    'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
+    'expenses_pay_ex_vat','expenses_charge_ex_vat','travel_pay_ex_vat','travel_charge_ex_vat',
+    'accommodation_pay_ex_vat','accommodation_charge_ex_vat','other_pay_ex_vat','other_charge_ex_vat',
+    'mileage_units','mileage_pay_ex_vat','mileage_charge_ex_vat','additional_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat'];
+  v_component_fields text[]:=array['hours_day','hours_night','hours_sat','hours_sun','hours_bh','hours_total',
+    'total_hours','pay_amount','charge_amount','pay_ex_vat','charge_ex_vat','margin_ex_vat',
+    'pay_cost_ex_vat_including_erni','vat_amount','total_inc_vat'];
+  v_lock_fields text[]:=array['invoice_locked_invoice_id','invoice_locked_at_utc','pay_locked','pay_locked_at_utc'];
+begin
+  if jsonb_typeof(p_original) is distinct from 'object' or jsonb_typeof(p_reversal) is distinct from 'object'
+    or p_original->'policy_snapshot_json' is distinct from p_reversal->'policy_snapshot_json'
+    or p_original->'rate_source_refs_json' is distinct from p_reversal->'rate_source_refs_json'
+    or p_original->'pay_method' is distinct from p_reversal->'pay_method'
+    or p_original->'pay_vat_rate_pct_snapshot' is distinct from p_reversal->'pay_vat_rate_pct_snapshot'
+    or p_original->'pay_wtr_rate_pct_snapshot' is distinct from p_reversal->'pay_wtr_rate_pct_snapshot' then
+    raise exception 'CORRECTION_REVERSAL_HISTORIC_AUTHORITY_MISMATCH' using errcode='55000';
+  end if;
+  foreach v_key in array array['pay_day','pay_night','pay_sat','pay_sun','pay_bh','charge_day','charge_night','charge_sat','charge_sun','charge_bh',
+    'mileage_pay_rate','mileage_charge_rate','basis','role','band','occupant_key_norm'] loop
+    if p_original->v_key is distinct from p_reversal->v_key then
+      raise exception 'CORRECTION_REVERSAL_HISTORIC_AUTHORITY_MISMATCH' using errcode='55000',detail=v_key;
+    end if;
+  end loop;
+  perform private.timesheet_correction_reversal_component_assert_v1(p_original->'invoice_breakdown_json',p_reversal->'invoice_breakdown_json');
+  perform private.timesheet_correction_reversal_component_assert_v1(p_original->'additional_units_json',p_reversal->'additional_units_json',array['additional_units_json']);
+  foreach v_key in array v_signed_fields loop
+    if coalesce((p_reversal->>v_key)::numeric,0) is distinct from -coalesce((p_original->>v_key)::numeric,0) then
+      raise exception 'CORRECTION_REVERSAL_ORIGINAL_PENCE_MISMATCH' using errcode='55000',detail=v_key;
+    end if;
+  end loop;
+  if p_original#>>'{invoice_breakdown_json,mode}' is distinct from p_reversal#>>'{invoice_breakdown_json,mode}' then
+    raise exception 'CORRECTION_REVERSAL_COMPONENT_MODE_MISMATCH' using errcode='55000';
+  end if;
+  if p_original#>>'{invoice_breakdown_json,mode}'='SEGMENTS' then
+    if jsonb_typeof(p_original#>'{invoice_breakdown_json,segments}') is distinct from 'array'
+      or jsonb_typeof(p_reversal#>'{invoice_breakdown_json,segments}') is distinct from 'array'
+      or jsonb_array_length(p_original#>'{invoice_breakdown_json,segments}')
+        <>jsonb_array_length(p_reversal#>'{invoice_breakdown_json,segments}') then
+      raise exception 'CORRECTION_REVERSAL_COMPONENT_SET_MISMATCH' using errcode='55000';
+    end if;
+    for v_row in select o.value original,s.value reversed from
+      jsonb_array_elements(p_original#>'{invoice_breakdown_json,segments}') with ordinality o(value,n)
+      join jsonb_array_elements(p_reversal#>'{invoice_breakdown_json,segments}') with ordinality s(value,n) using(n)
+    loop
+      v_original:=v_row.original; v_reversed:=v_row.reversed;
+      if (v_original-v_component_fields-v_lock_fields-'is_reversal') is distinct from (v_reversed-v_component_fields-v_lock_fields-'is_reversal')
+        or (nullif(p_reversal->>'authorised_at_utc','') is null
+          and exists(select 1 from unnest(v_lock_fields) k where nullif(v_reversed->>k,'') is not null
+            and not (k='pay_locked' and v_reversed->>k='false'))) then
+        raise exception 'CORRECTION_REVERSAL_COMPONENT_IDENTITY_MISMATCH' using errcode='55000';
+      end if;
+      foreach v_key in array v_component_fields loop
+        if (v_original?v_key) is distinct from (v_reversed?v_key)
+          or (v_original?v_key and (v_reversed->>v_key)::numeric is distinct from -(v_original->>v_key)::numeric) then
+          raise exception 'CORRECTION_REVERSAL_COMPONENT_PENCE_MISMATCH' using errcode='55000',detail=v_key;
+        end if;
+      end loop;
+    end loop;
+  else
+    foreach v_key in array array['pay_ex_vat','charge_ex_vat','margin_ex_vat'] loop
+      if coalesce((p_reversal#>>array['invoice_breakdown_json','base_hours',v_key])::numeric,0)
+        is distinct from -coalesce((p_original#>>array['invoice_breakdown_json','base_hours',v_key])::numeric,0) then
+        raise exception 'CORRECTION_REVERSAL_BASE_PENCE_MISMATCH' using errcode='55000',detail=v_key;
+      end if;
+    end loop;
+  end if;
+end;
+$function$;
+
+create or replace function public.timesheet_correction_prepare_v1(p_request_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_request private.timesheet_correction_requests%rowtype; v_original public.timesheets%rowtype;
+  v_p0 public.timesheets%rowtype; v_fin public.timesheets_financials%rowtype; v_pfin public.timesheets_financials%rowtype;
+  v_witness jsonb; v_context jsonb; v_hash text;
+begin
+  if private.timesheet_correction_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';
+  end if;
+  select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id;
+  if v_request.state<>'WAITING' then return v_request.terminal_receipt_json||jsonb_build_object('replayed',true); end if;
+  select t.* into strict v_original from public.timesheets t where t.timesheet_id=v_request.reversed_timesheet_id;
+  select t.* into strict v_p0 from public.timesheets t where t.timesheet_id=v_request.replacement_timesheet_id;
+  select tf.* into v_fin from public.timesheets_financials tf where tf.timesheet_id=v_original.timesheet_id and tf.is_current;
+  select tf.* into v_pfin from public.timesheets_financials tf where tf.timesheet_id=v_p0.timesheet_id and tf.is_current;
+  if private.timesheet_correction_origin_v1(v_original.timesheet_id) is distinct from v_request.origin
+    or v_original.version<>v_request.reversed_version or not v_original.is_current or v_original.archived_at_utc is not null
+    or v_original.booking_id is distinct from v_request.frozen_original_json#>>'{timesheet,booking_id}'
+    or private.timesheet_correction_timesheet_authority_hash_v1(to_jsonb(v_original))
+      is distinct from private.timesheet_correction_timesheet_authority_hash_v1(v_request.frozen_original_json->'timesheet')
+    or v_fin.id is distinct from v_request.reversed_financial_id
+    or (v_fin.id is not null and private.timesheet_correction_financial_authority_hash_v1(to_jsonb(v_fin))
+      is distinct from v_request.frozen_original_json->>'financial_authority_hash')
+    or v_p0.correction_id is distinct from v_request.correction_id
+    or v_p0.correction_kind is distinct from 'WHOLE_TIMESHEET_REPLACEMENT'
+    or v_p0.booking_id is distinct from v_request.replacement_booking_id
+    or v_p0.parent_timesheet_id is distinct from v_request.root_timesheet_id
+    or not v_p0.is_current or v_p0.archived_at_utc is not null or v_p0.authorised_at_server is not null
+    or v_pfin.authorised_at_utc is not null or v_pfin.paid_at_utc is not null or v_pfin.locked_by_invoice_id is not null
+    or exists(select 1 from public.invoice_lines l where l.timesheet_id=v_p0.timesheet_id) then
+    raise exception 'CORRECTION_PREPARE_AUTHORITY_CHANGED' using errcode='40001';
+  end if;
+  if v_request.original_invoice_id is not null and not exists(select 1 from public.invoices i
+    where i.id=v_request.original_invoice_id and i.type='INVOICE' and i.status in('ISSUED','PAID')
+      and exists(select 1 from public.invoice_lines l where l.invoice_id=i.id and l.timesheet_id=v_original.timesheet_id)) then
+    raise exception 'CORRECTION_ORIGINAL_INVOICE_CHANGED' using errcode='40001';
+  end if;
+  if v_request.origin='SIGNED_TIMESHEET_CORRECTION' then
+    if (private.timesheet_correction_signed_witness_v1(v_original.timesheet_id,false)-'document_version_id')
+      is distinct from (v_request.frozen_original_json->'manager_signed_witness'-'document_version_id') then
+      raise exception 'CORRECTION_ORIGINAL_SIGNATURE_CHANGED' using errcode='40001';
+    end if;
+    v_witness:=private.timesheet_correction_signed_witness_v1(v_p0.timesheet_id,false);
+  end if;
+  v_context:=jsonb_build_object('request_id',v_request.id,'state_revision',v_request.state_revision,
+    'target_revision',v_request.target_revision,'proposal_revision',1,
+    'root_timesheet_id',v_request.root_timesheet_id,'origin',v_request.origin,
+    'original_timesheet_id',v_original.timesheet_id,'original_timesheet_version',v_original.version,
+    'original_financial_id',v_fin.id,'original_financial_authority_hash',v_request.frozen_original_json->>'financial_authority_hash',
+    'replacement_timesheet_id',v_p0.timesheet_id,'replacement_version',v_p0.version,
+    'replacement_financial_id',v_pfin.id,'replacement_financial_authority_hash',
+      case when v_pfin.id is not null then private.timesheet_correction_financial_authority_hash_v1(to_jsonb(v_pfin)) end,
+    'replacement_schedule',v_p0.actual_schedule_json,'replacement_signed_witness',v_witness,
+    'planned_reversal_timesheet_id',v_request.frozen_original_json->>'planned_reversal_timesheet_id',
+    'planned_reversal_week_id',v_request.frozen_original_json->>'planned_reversal_week_id',
+    'original_invoice_id',v_request.original_invoice_id,'return_invoice_id',v_request.return_invoice_id);
+  if v_fin.id is null and v_original.sheet_scope::text='WEEKLY' then
+    -- Exact server-owned scope participates in the native PREPARE/CAS hash.
+    -- Missing A0 never silently changes Source/Rule/ordinary pricing origin.
+    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',
+      private.timesheet_correction_a0_clock_scope_v1(v_request.id));
+  end if;
+  v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');
+  -- Internal service DTO only. Original frozen snapshot and exact P0 context
+  -- go to existing producer/preloader; Candidate detail never exposes these.
+  return jsonb_build_object('ok',true,'contract_version','TIMESHEET_CORRECTION_PREPARE_V1',
+    'prepare_fingerprint',v_hash,'authority',v_context,'candidate_id',v_request.candidate_id,'client_id',v_request.client_id,
+    'frozen_original',v_request.frozen_original_json,'replacement_timesheet',to_jsonb(v_p0),
+    'original_current_snapshot',case when v_fin.id is not null then to_jsonb(v_fin) end,
+    'replacement_current_snapshot',case when v_pfin.id is not null then to_jsonb(v_pfin) end,
+    'original_materialisation_required',v_fin.id is null,'original_authorisation_required',v_original.authorised_at_server is null);
+end;
+$function$;
+
+create or replace function public.timesheet_correction_authorise_atomic_v1(
+  p_request_id uuid,p_expected_state_revision bigint,p_prepared jsonb,p_actor_user_id uuid,p_now_utc timestamptz default now()
+) returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_request private.timesheet_correction_requests%rowtype; v_prepare jsonb; v_original jsonb; v_leg jsonb;
+  v_r uuid; v_p uuid; v_items jsonb; v_result jsonb; v_write jsonb; v_receipt jsonb; v_now timestamptz:=coalesce(p_now_utc,now());
+  v_original_before jsonb; v_original_fin_before jsonb; v_after_fin jsonb; v_t0_authorise boolean; v_version integer;
+  v_claim jsonb; v_batch_result record; v_reversal_snapshot jsonb;
+begin
+  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+  select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id;
+  perform 1 from public.invoices i where i.id in(v_request.original_invoice_id,v_request.return_invoice_id) order by i.id for update;
+  perform pg_advisory_xact_lock(hashtextextended('CORRECTION_CHAIN|'||v_request.root_timesheet_id::text,21072026));
+  select request.* into strict v_request from private.timesheet_correction_requests request where request.id=p_request_id for update;
+  if v_request.state<>'WAITING' then return v_request.terminal_receipt_json||jsonb_build_object('replayed',true); end if;
+  if v_request.state_revision is distinct from p_expected_state_revision then
+    raise exception 'CORRECTION_REQUEST_CAS_STALE' using errcode='40001';
+  end if;
+  perform 1 from public.candidate_submission_workflows w where w.id in(select t.candidate_workflow_id from public.timesheets t
+    where t.timesheet_id in(v_request.reversed_timesheet_id,v_request.replacement_timesheet_id)) order by w.id for update;
+  perform 1 from public.contract_weeks w where w.id=v_request.replacement_week_id order by w.id for update;
+  perform 1 from public.timesheets t where t.timesheet_id in(v_request.reversed_timesheet_id,v_request.replacement_timesheet_id)
+    order by t.timesheet_id for update;
+  perform 1 from public.timesheets_financials tf where tf.timesheet_id in(v_request.reversed_timesheet_id,v_request.replacement_timesheet_id)
+    order by tf.timesheet_id,tf.id for update;
+  v_prepare:=public.timesheet_correction_prepare_v1(p_request_id,p_actor_user_id);
+  if jsonb_typeof(p_prepared) is distinct from 'object'
+    or p_prepared->>'prepare_fingerprint' is distinct from v_prepare->>'prepare_fingerprint' then
+    raise exception 'CORRECTION_PREPARED_RESULT_STALE' using errcode='40001';
+  end if;
+  select to_jsonb(t) into v_original_before from public.timesheets t where t.timesheet_id=v_request.reversed_timesheet_id;
+  v_original_fin_before:=v_prepare->'original_current_snapshot';
+  v_t0_authorise:=(v_prepare->>'original_authorisation_required')::boolean;
+  v_original:=case when jsonb_typeof(v_original_fin_before)='object' then v_original_fin_before else p_prepared->'original_snapshot' end;
+  if v_request.return_invoice_id is not null then
+    if v_t0_authorise then raise exception 'CORRECTION_D1_UNAUTHORISED_PARENT_INVALID' using errcode='55000'; end if;
+    perform private.timesheet_correction_draft_round_trip_v1(v_request.id,'REMOVE',p_actor_user_id);
+  end if;
+  if (v_prepare->>'original_materialisation_required')::boolean then
+    if not v_t0_authorise then raise exception 'CORRECTION_AUTHORISED_ORIGINAL_FINANCE_MISSING' using errcode='55000'; end if;
+    perform private.timesheet_correction_canonical_input_assert_v1(v_original,v_request.reversed_timesheet_id,
+      v_request.reversed_version,v_request.candidate_id,v_request.client_id);
+    v_write:=public.tsfin_write_current_snapshot_single_bounded(v_request.reversed_timesheet_id,v_request.reversed_version,
+      v_original,p_actor_user_id,v_now);
+    if coalesce((v_write->>'ok')::boolean,false) is not true then
+      raise exception 'CORRECTION_ORIGINAL_WRITE_FAILED' using errcode='55000',detail=v_write::text;
+    end if;
+    -- Native normalisation is authoritative for a newly materialised A0.
+    -- Sign-copy may now use the actual stored output inside this same unit;
+    -- no separate materialisation transaction or guessed normalisation exists.
+    select to_jsonb(tf) into strict v_original from public.timesheets_financials tf
+      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;
+    perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,
+      v_request.reversed_version,v_request.candidate_id,v_request.client_id);
+  end if;
+  v_p:=v_request.replacement_timesheet_id;
+  select t.version into v_version from public.timesheets t where t.timesheet_id=v_p;
+  perform private.timesheet_correction_canonical_input_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,
+    v_request.candidate_id,v_request.client_id);
+  v_write:=public.tsfin_write_current_snapshot_single_bounded(v_p,v_version,
+    (p_prepared->'replacement_snapshot')||jsonb_build_object('processing_status','PENDING_AUTH'),p_actor_user_id,v_now);
+  if coalesce((v_write->>'ok')::boolean,false) is not true then
+    raise exception 'CORRECTION_REPLACEMENT_WRITE_FAILED' using errcode='55000',detail=v_write::text;
+  end if;
+  select to_jsonb(tf) into strict v_after_fin from public.timesheets_financials tf where tf.timesheet_id=v_p and tf.is_current;
+  perform private.timesheet_correction_snapshot_identity_assert_v1(v_after_fin,v_p,v_version,
+    v_request.candidate_id,v_request.client_id);
+  v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);
+  v_r:=(v_leg->>'timesheet_id')::uuid;
+  v_reversal_snapshot:=case when (v_prepare->>'original_materialisation_required')::boolean
+      and (p_prepared->'reversal_snapshot' is null or p_prepared->'reversal_snapshot'='null'::jsonb)
+    then private.timesheet_correction_native_original_reversal_v1(v_original,v_r)
+    else p_prepared->'reversal_snapshot' end;
+  perform private.timesheet_correction_snapshot_identity_assert_v1(v_reversal_snapshot,v_r,1,
+    v_request.candidate_id,v_request.client_id);
+  perform private.timesheet_correction_reversal_assert_v1(v_original,v_reversal_snapshot);
+  -- Use the existing real queue/targeted lease and canonical batch writer.
+  -- The single writer intentionally clamps mileage units and is unsuitable
+  -- for the frozen negative reversal. No fake outbox id or writer bypass.
+  perform public.enqueue_ts_financials(v_r,'MANUAL'::public.ts_fin_reason_enum);
+  select coalesce(jsonb_agg(to_jsonb(claimed) order by claimed.id),'[]'::jsonb) into v_claim
+    from public.tsfin_dequeue_specific(array[v_r],1) claimed;
+  if jsonb_array_length(v_claim)<>1 or v_claim#>>'{0,timesheet_id}' is distinct from v_r::text
+    or v_claim#>>'{0,reason}' is distinct from 'MANUAL'
+    or not exists(select 1 from public.ts_financials_outbox o where o.id=(v_claim#>>'{0,id}')::uuid
+      and o.timesheet_id=v_r and o.reason='MANUAL' and o.attempt_count>0 and o.next_attempt_at>now()) then
+    raise exception 'CORRECTION_REVERSAL_CANONICAL_CLAIM_UNPROVED' using errcode='55000';
+  end if;
+  select * into strict v_batch_result from public.tsfin_write_snapshots_and_complete(jsonb_build_array(jsonb_build_object(
+    'outbox_id',v_claim#>>'{0,id}','timesheet_id',v_r,'snapshot',
+    v_reversal_snapshot||jsonb_build_object('processing_status','PENDING_AUTH'))));
+  if v_batch_result.ok_count is distinct from 1 or v_batch_result.fail_count is distinct from 0
+    or v_batch_result.errors is distinct from '[]'::jsonb
+    or exists(select 1 from public.ts_financials_outbox o where o.id=(v_claim#>>'{0,id}')::uuid) then
+    raise exception 'CORRECTION_REVERSAL_WRITE_FAILED' using errcode='55000',detail=to_jsonb(v_batch_result)::text;
+  end if;
+  select to_jsonb(tf) into strict v_after_fin from public.timesheets_financials tf where tf.timesheet_id=v_r and tf.is_current;
+  -- The bounded writer normalises totals. Check its actual output against the
+  -- frozen source again so any pence/component drift aborts the entire unit.
+  perform private.timesheet_correction_reversal_assert_v1(v_original,v_after_fin);
+  v_receipt:=jsonb_build_object('ok',true,'state','APPLIED','request_id',v_request.id,'correction_id',v_request.correction_id,
+    'reversed_timesheet_id',v_request.reversed_timesheet_id,'reversal_timesheet_id',v_r,'replacement_timesheet_id',v_p,
+    'state_revision',v_request.state_revision+1,'prepare_fingerprint',v_prepare->>'prepare_fingerprint',
+    'original_authorisation_required',v_t0_authorise,
+    'original_materialised_in_unit',(v_prepare->>'original_materialisation_required')::boolean,
+    'original_timesheet_authority_hash',private.timesheet_correction_timesheet_authority_hash_v1(v_original_before),
+    'reversal_timesheet_authority_hash',private.timesheet_correction_timesheet_authority_hash_v1((select to_jsonb(t)
+      from public.timesheets t where t.timesheet_id=v_r)),
+    'replacement_timesheet_authority_hash',private.timesheet_correction_timesheet_authority_hash_v1((select to_jsonb(t)
+      from public.timesheets t where t.timesheet_id=v_p)),
+    'original_financial_id',(select tf.id from public.timesheets_financials tf where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current),
+    'original_financial_authority_hash',private.timesheet_correction_financial_authority_hash_v1((select to_jsonb(tf) from public.timesheets_financials tf
+      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current)),
+    'reversal_financial_id',(select tf.id from public.timesheets_financials tf where tf.timesheet_id=v_r and tf.is_current),
+    'reversal_financial_authority_hash',private.timesheet_correction_financial_authority_hash_v1(v_after_fin),
+    'replacement_financial_id',(select tf.id from public.timesheets_financials tf where tf.timesheet_id=v_p and tf.is_current),
+    'replacement_financial_authority_hash',private.timesheet_correction_financial_authority_hash_v1((select to_jsonb(tf) from public.timesheets_financials tf
+      where tf.timesheet_id=v_p and tf.is_current)),
+    'ordinary_notification_timesheet_ids',jsonb_build_array(v_p));
+  update private.timesheet_correction_requests request set state='APPLIED',state_revision=state_revision+1,
+    reversal_timesheet_id=v_r,reversal_booking_id=v_leg->>'booking_id',reversal_week_id=(v_leg->>'contract_week_id')::uuid,
+    workflow_id=(v_prepare#>>'{authority,replacement_signed_witness,workflow_id}')::uuid,
+    workflow_generation=(v_prepare#>>'{authority,replacement_signed_witness,workflow_generation}')::integer,
+    terminal_receipt_json=v_receipt,applied_at_utc=v_now,updated_at_utc=v_now where request.id=v_request.id;
+  select jsonb_agg(jsonb_build_object('timesheet_id',t.timesheet_id,'expected_timesheet_id',t.timesheet_id,
+    'expected_version',t.version,'lifecycle_group_id','correction:'||v_request.correction_id,
+    'lifecycle_group_size',case when v_t0_authorise then 3 else 2 end) order by t.timesheet_id) into v_items
+  from public.timesheets t where t.timesheet_id in(v_r,v_p) or (v_t0_authorise and t.timesheet_id=v_request.reversed_timesheet_id);
+  -- This generic owner is pinned/call-only. Returned partial failures must
+  -- raise, just like exceptions, to roll back rows, workflows and receipts.
+  v_result:=public.timesheet_authorise_bulk_atomic(v_items,p_actor_user_id,v_now);
+  if coalesce((v_result->>'all_success')::boolean,false) is not true
+    or (v_result->>'success_count')::integer is distinct from (case when v_t0_authorise then 3 else 2 end)
+    or exists(select 1 from jsonb_array_elements(coalesce(v_result->'results','[]'::jsonb)) r
+      where coalesce((r->>'success')::boolean,false) is not true)
+    or (select count(*) from public.timesheets t join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current
+      where t.timesheet_id in(v_r,v_p) and t.authorised_at_server is not null and tf.authorised_at_utc is not null)<>2 then
+    raise exception 'CORRECTION_COMPLETE_UNIT_AUTHORISATION_FAILED' using errcode='55000',detail=v_result::text;
+  end if;
+  if not v_t0_authorise and ((select to_jsonb(t) from public.timesheets t where t.timesheet_id=v_request.reversed_timesheet_id)
+      is distinct from v_original_before or (select to_jsonb(tf) from public.timesheets_financials tf
+        where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current) is distinct from v_original_fin_before)
+      and v_request.return_invoice_id is null then
+    raise exception 'CORRECTION_ISSUED_ORIGINAL_MUTATED' using errcode='55000';
+  end if;
+  if v_request.return_invoice_id is not null then
+    if private.timesheet_correction_timesheet_authority_hash_v1((select to_jsonb(t) from public.timesheets t
+      where t.timesheet_id=v_request.reversed_timesheet_id))
+      is distinct from private.timesheet_correction_timesheet_authority_hash_v1(v_original_before)
+      or private.timesheet_correction_financial_authority_hash_v1((select to_jsonb(tf) from public.timesheets_financials tf
+      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current))
+      is distinct from v_request.frozen_original_json->>'financial_authority_hash' then
+      raise exception 'CORRECTION_D1_ORIGINAL_ECONOMICS_CHANGED' using errcode='55000';
+    end if;
+    v_write:=private.timesheet_correction_draft_round_trip_v1(v_request.id,'RETURN',p_actor_user_id);
+    return v_receipt||jsonb_build_object('authorisation',v_result,'draft_return',v_write);
+  end if;
+  return v_receipt||jsonb_build_object('authorisation',v_result);
+end;
+$function$;
