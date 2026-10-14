@@ -1,0 +1,17 @@
+{
+  "sourceOnly": true,
+  "nativeExecuted": false,
+  "credentialPatterns": 0,
+  "files": [
+    {
+      "file": "BODY_AMENDMENT_CENSUS.json",
+      "bytes": 437183,
+      "sha256": "cf7a493577f8d9f3a73a47a9095033659303b5446fef46d4bf3d1604262a53ca"
+    },
+    {
+      "file": "scan-effective-body-amendment-coverage-20261014.mjs.txt",
+      "bytes": 5038,
+      "sha256": "2136e8b0cffa62250453569b814f7b3111549361099818c60399c90a5b8ad0a8"
+    }
+  ]
+}
