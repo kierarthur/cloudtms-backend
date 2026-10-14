@@ -1,0 +1,39 @@
+import fs from 'node:fs';
+import {mapExecutableSqlSource} from '../scripts/cloudtms-db-release-lib.mjs';
+import {digest,scanManagedSql,literal} from '../scripts/cloudtms-managed-release-sql.mjs';
+process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
+const file='supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_calendar.sqlinc';
+const source=fs.readFileSync(file,'utf8'),body=mapExecutableSqlSource(source,file);
+const clients=Array.from({length:7},(_,i)=>'e3140000-0000-4000-8000-'+String(i+1).padStart(12,'0'));
+const settings=Array.from({length:7},(_,i)=>'e3141000-0000-4000-8000-'+String(i+1).padStart(12,'0'));
+const ids='array['+clients.map(literal).join(',')+']::uuid[]',settingIds='array['+settings.map(literal).join(',')+']::uuid[]';
+const guard=`do $calendar_scope_guard$ begin if current_database()<>'cloudtms_test_clone' or not exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST') or not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1) or exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then raise exception 'CHECKLIST_CALENDAR_TEST_SCOPE_REFUSED'; end if; if to_regprocedure('private.weekly_source_checklist_client_calendar_v1(uuid,date)') is not null or exists(select 1 from public.clients where id=any(${ids})) or exists(select 1 from public.client_settings where id=any(${settingIds}) or client_id=any(${ids})) then raise exception 'CHECKLIST_CALENDAR_FIXTURE_NOT_VACANT'; end if; end $calendar_scope_guard$;`;
+const before="select encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_functiondef('private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)'::regprocedure),'UTF8')),'hex') native_settings_before_sha256;";
+const insertClients='insert into public.clients(id,name) values '+clients.map((id,i)=>'('+literal(id)+','+literal('Checklist calendar fixture '+i)+')').join(',')+';';
+const insertSettings='insert into public.client_settings(id,client_id,effective_from,week_ending_weekday) values '+clients.map((id,i)=>'('+literal(settings[i])+','+literal(id)+",date '2026-01-01',"+i+')').join(',')+';';
+const cases=`do $calendar_native_cases$ declare fixture record; today date; expected date; actual jsonb; passed integer:=0; first_hash text; second_hash text; begin
+ for fixture in select id,week_ending_weekday from public.client_settings where id=any(${settingIds}) order by week_ending_weekday loop
+  foreach today in array array[date '2026-10-14',date '2026-10-15',date '2026-10-18',date '2026-10-19',date '2026-10-26'] loop
+   select max(day::date) into expected from generate_series(today-interval '7 days',today-interval '1 day',interval '1 day') day where extract(dow from day)::integer=fixture.week_ending_weekday;
+   actual:=private.weekly_source_checklist_client_calendar_v1((select client_id from public.client_settings where id=fixture.id),today);
+   if (actual->>'latest_ended_week')::date is distinct from expected or (actual->>'week_ending_weekday')::integer is distinct from fixture.week_ending_weekday or (actual->>'latest_ended_week')::date>=today then raise exception 'CHECKLIST_CALENDAR_NATIVE_CASE_FAILED'; end if; passed:=passed+1;
+  end loop;
+ end loop;
+ first_hash:=private.weekly_source_checklist_client_calendar_v1(${literal(clients[0])}::uuid,date '2026-10-14')->>'authority_fingerprint';
+ second_hash:=private.weekly_source_checklist_client_calendar_v1(${literal(clients[0])}::uuid,date '2026-10-14')->>'authority_fingerprint';
+ if first_hash is distinct from second_hash then raise exception 'CHECKLIST_CALENDAR_FALSE_READ_REVISION'; end if;
+ update public.client_settings set week_ending_weekday=1 where id=${literal(settings[0])}::uuid;
+ actual:=private.weekly_source_checklist_client_calendar_v1(${literal(clients[0])}::uuid,date '2026-10-14');
+ if actual->>'authority_fingerprint'=first_hash or actual->>'latest_ended_week'<>'2026-10-12' then raise exception 'CHECKLIST_CALENDAR_SETTINGS_CHANGE_NOT_BOUND'; end if;
+ begin perform private.weekly_source_checklist_client_calendar_v1(null,date '2026-10-14'); raise exception 'CHECKLIST_CALENDAR_NULL_SCOPE_ACCEPTED'; exception when invalid_parameter_value then if sqlerrm<>'WEEKLY_SOURCE_CHECKLIST_CLIENT_WEEK_AUTHORITY_UNAVAILABLE' then raise; end if; end;
+ begin perform private.weekly_source_checklist_client_calendar_v1(${literal(clients[1])}::uuid,null); raise exception 'CHECKLIST_CALENDAR_NULL_DATE_ACCEPTED'; exception when invalid_parameter_value then if sqlerrm<>'WEEKLY_SOURCE_CHECKLIST_CLIENT_WEEK_AUTHORITY_UNAVAILABLE' then raise; end if; end;
+ if has_function_privilege('service_role','private.weekly_source_checklist_client_calendar_v1(uuid,date)','EXECUTE') or has_function_privilege('authenticated','private.weekly_source_checklist_client_calendar_v1(uuid,date)','EXECUTE') or has_function_privilege('anon','private.weekly_source_checklist_client_calendar_v1(uuid,date)','EXECUTE') then raise exception 'CHECKLIST_CALENDAR_PRIVATE_ACL_FAILED'; end if;
+ if passed<>35 then raise exception 'CHECKLIST_CALENDAR_NATIVE_CASES_INCOMPLETE'; end if;
+ end $calendar_native_cases$;
+ select jsonb_build_object('calendar_cases',35,'native_settings_owner_reused',true,'read_revision_stable',true,'actual_settings_change_bound',true,'private_acl_checked',true) case_result;`;
+const sql=["set local pg_show_plans.is_enabled=off;","set local jit=off;","set local work_mem='4MB';",guard,before,body,insertClients,insertSettings,cases].join('\n');
+const verificationSql=`select current_database()='cloudtms_test_clone' exact_test, to_regprocedure('private.weekly_source_checklist_client_calendar_v1(uuid,date)') is null temporary_helper_absent, not exists(select 1 from public.clients where id=any(${ids})) fixture_clients_absent, not exists(select 1 from public.client_settings where id=any(${settingIds}) or client_id=any(${ids})) fixture_settings_absent, encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_functiondef('private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)'::regprocedure),'UTF8')),'hex') native_settings_after_sha256;`;
+const packet={status:'BOUNDED_CALENDAR_NATIVE_TEST_INPUT_NOT_EXECUTED',file,sourceSqlHash:digest(source),sqlSha256:digest(sql),statements:scanManagedSql(sql).statements.length,fixtureClientIds:clients,fixtureSettingIds:settings,sql,verificationSql};
+if(Buffer.byteLength(sql)>2000000||packet.statements>250)throw Error('CALENDAR_LAB_ENVELOPE_REFUSED');
+fs.writeFileSync('.codex-tmp/checklist-calendar-lab-input.json',JSON.stringify(packet,null,2)+'\n');
+console.log(JSON.stringify({sourceSqlHash:packet.sourceSqlHash,sqlSha256:packet.sqlSha256,statements:packet.statements,bytes:Buffer.byteLength(sql),clients:7,settings:7}));

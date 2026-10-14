@@ -1,0 +1,121 @@
+// Bounded diagnostic only; importing opens no connection. No release entry.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {withSharedRehearsalTurn,agencyChildEnvironment} from '../scripts/healthroster-rehearsal-turn.mjs';
+import {mappedVerifier} from '../scripts/healthroster-install1-full-rehearsal.mjs';
+import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits} from '../scripts/healthroster-full-rehearsal-protocol.mjs';
+import {digest,scanManagedSql,literal} from '../scripts/cloudtms-managed-release-sql.mjs';
+import {effectCensus} from '../scripts/healthroster-install1-verifier-census.mjs';
+import {inventory,mapExecutableSqlSource} from '../scripts/cloudtms-db-release-lib.mjs';
+import {compileManagedUnit} from '../scripts/cloudtms-managed-release.mjs';
+import {transactionIdentitySql} from '../scripts/healthroster-live-test-restoration.mjs';
+const allow={workbench:'supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',released:'supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql'};
+const progressPath='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-backend-13102026/docs/healthroster-build/PROGRESS.md';
+const psql='C:/Program Files/PostgreSQL/18/bin/psql.exe';
+const requireThat=(v,c)=>{if(!v)throw Error(c);};
+export function prepare(which,protocol=false,candidate=false,prefix=false){
+ const file=allow[which]; requireThat(file,'BOUNDED_VERIFIER_SCOPE_REFUSED');
+ const review=JSON.parse(fs.readFileSync('docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json','utf8')).verifiers.find(x=>x.file===file);
+ const mapped=mappedVerifier(file);
+ requireThat(review?.decision==='INCLUDE'&&mapped.original.sourceSqlHash===review.sourceSqlHash&&digest(mapped.sql)===review.executableSqlHash,'BOUNDED_REVIEW_SOURCE_DRIFT');
+ const unit=neutraliseReviewedVerifierEnvelope({kind:'verifier',file,sql:mapped.sql,sqlHash:digest(mapped.sql)},{sourceSqlHash:digest(mapped.sql),removedCommands:review.removedCommands,readOnlyBodyReviewed:review.readOnlyBodyReviewed});
+ requireThat(Buffer.byteLength(unit.sql)<200000&&scanManagedSql(unit.sql).statements.length<100,'BOUNDED_VERIFIER_SIZE_REFUSED');
+ const ids=[...new Set([...unit.sql.matchAll(/'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})'/gi)].map(x=>x[1]))].sort();
+ const relations=effectCensus(unit.sql).writes.filter(x=>/^public\./.test(x));
+ requireThat(ids.length>0&&relations.length>0,'BOUNDED_FIXTURE_INVENTORY_REQUIRED');
+ const idArray='array['+ids.map(literal).join(',')+']::uuid[]';
+ const contract=JSON.parse(fs.readFileSync('supabase/release/current-contract.json','utf8'));
+ const pairs=relations.flatMap(r=>{
+  const [schema,name]=r.split('.'),relation=contract.relations.find(x=>x.schema===schema&&x.name===name);
+  requireThat(relation,'BOUNDED_FIXTURE_RELATION_NOT_IN_CONTRACT');
+  const columns=relation.columns.filter(x=>x.type==='uuid').map(x=>x.name);
+  requireThat(columns.every(x=>/^[a-z_][a-z0-9_]*$/.test(x)),'BOUNDED_FIXTURE_COLUMN_REFUSED');
+  return columns.length?[literal(r),'(select count(*) from '+r+' where '+columns.map(x=>x+'=any('+idArray+')').join(' or ')+')']:[];
+ });
+ requireThat(pairs.length>0,'BOUNDED_FIXTURE_CENSUS_EMPTY');
+ const census="select 'HR_BOUNDED_CENSUS:'||jsonb_build_object("+pairs.join(',')+")::text;";
+ const sourceUnits=[];
+ if(candidate){
+  requireThat(protocol,'BOUNDED_CANDIDATE_PROTOCOL_REQUIRED');
+  process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
+  const current=inventory();
+  for(const file of ['supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql','supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql']){
+   const item=current.repeatables.find(x=>x.path===file);requireThat(item,'BOUNDED_CANDIDATE_SOURCE_MISSING');
+   const compiled=compileManagedUnit(item,'repeatable',{root:process.cwd(),mapSource:mapExecutableSqlSource});
+   requireThat(!compiled.exception&&!compiled.ownerRlsEnvelope&&!compiled.immutableGuardDependency,'BOUNDED_CANDIDATE_ENVELOPE_REFUSED');
+   sourceUnits.push({file,kind:'repeatable',sql:compiled.body,sqlHash:digest(compiled.body),sourceSqlHash:item.sha256});
+  }
+ }
+ if(prefix){
+  requireThat(candidate&&protocol&&which==='released','BOUNDED_PREFIX_SCOPE_REFUSED');
+  const reviewed=JSON.parse(fs.readFileSync('docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json','utf8'));
+  const files=[
+   'supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql',
+   'tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql',
+   'supabase/verification/10102026_1700_candidate_notification_management_v1.sql',
+   'supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql',
+   'supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql',
+   'supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql'
+  ];
+  requireThat(JSON.stringify(reviewed.verifiers.filter(x=>x.decision==='INCLUDE').slice(0,7).map(x=>x.file))===JSON.stringify([...files,file]),'BOUNDED_PREFIX_ORDER_DRIFT');
+  for(const priorFile of files){
+   const row=reviewed.verifiers.find(x=>x.file===priorFile),prior=mappedVerifier(priorFile);
+   requireThat(row.decision==='INCLUDE'&&prior.original.sourceSqlHash===row.sourceSqlHash&&digest(prior.sql)===row.executableSqlHash,'BOUNDED_PREFIX_SOURCE_DRIFT');
+   const prepared=neutraliseReviewedVerifierEnvelope({file:priorFile,kind:'verifier',sql:prior.sql,sqlHash:digest(prior.sql)},{sourceSqlHash:digest(prior.sql),removedCommands:row.removedCommands,readOnlyBodyReviewed:row.readOnlyBodyReviewed});
+   sourceUnits.push(prepared);
+  }
+ }
+ const executable=protocol?renderFullRehearsalUnits([...sourceUnits,unit],{outerIsolation:'REPEATABLE READ',observeLiveBusiness:true}).sql:unit.sql;
+ // This is the approved native fallback, not the Arthur lab envelope. The
+ // fixed nine-unit prefix may need more than250 protocol/control statements.
+ // It retains the2MB and120s process bounds and cannot select further units.
+ requireThat(Buffer.byteLength(executable)<2000000&&scanManagedSql(executable).statements.length<500,'BOUNDED_CANDIDATE_SIZE_REFUSED');
+ return {file,sourceSqlHash:review.sourceSqlHash,bodyHash:digest(unit.sql),sql:executable,census,fixtureIdCount:ids.length,fixtureRelationCount:relations.length,protocol,candidate,prefix,sourceUnits:sourceUnits.map(({sql,...row})=>row)};
+}
+export function closedErrors(stderr){return stderr.split(/\r?\n/).filter(x=>/(?:ERROR|FATAL|error|fatal):/.test(x)).map(x=>({sqlstate:x.match(/(?:ERROR|FATAL):\s*([0-9A-Z]{5})\b/)?.[1]??null,line:Number(x.match(/<stdin>:(\d+):/)?.[1]??0),error:/(?:error|fatal):/.test(x)?'PSQL_CLIENT_ERROR':'DATABASE_DIAGNOSTIC_WITHHELD'}));}
+function census(stdout){const values=stdout.split(/\r?\n/).filter(x=>x.startsWith('HR_BOUNDED_CENSUS:')).map(x=>JSON.parse(x.slice(18)));requireThat(values.length===1,'BOUNDED_CENSUS_ENVELOPE_REFUSED');return values[0];}
+export async function run(which,protocol=false,candidate=false,prefix=false,fullPreamble=false){
+ requireThat(!fullPreamble||prefix,'BOUNDED_FULL_PREAMBLE_SCOPE_REFUSED');
+ const input=prepare(which,protocol,candidate,prefix),out='.codex-tmp/'+which+(fullPreamble?'-full-preamble':'')+(prefix?'-prefix':'')+(candidate?'-candidate':'')+(protocol?'-protocol':'')+'-native-rr-diagnostic.json';
+ const marker=fullPreamble?'hr_install1_'+crypto.randomBytes(16).toString('hex'):null;
+ let result;
+ try {result=await withSharedRehearsalTurn({task:'HealthRoster bounded '+which+' exact native REPEATABLE READ verifier',progressPath,work:async turn=>{
+  const env=agencyChildEnvironment('healthroster_bounded_native');
+  const child=sql=>turn.runOwnedChild({file:psql,args:['-X','-q','-A','-t','-v','ON_ERROR_STOP=off','-v','VERBOSITY=sqlstate','-f','-'],input:sql,options:{env:{...env,PGOPTIONS:env.PGOPTIONS+' -c statement_timeout=30s -c work_mem=4MB -c client_min_messages=notice'},stdio:['pipe','pipe','pipe'],timeout:120000,killSignal:'SIGTERM'},cancelOnLoss:true});
+  const before=await child('begin read only; set local lock_timeout=\'1s\'; select current_database(),pg_postmaster_start_time();\n'+input.census+'\nrollback;\n');
+  requireThat(before.code===0&&closedErrors(before.stderr).length===0,'BOUNDED_BEFORE_FAILED');
+  requireThat(before.stdout.includes('cloudtms_test_clone|'),'BOUNDED_EXACT_TEST_REQUIRED');
+  const beforeStart=before.stdout.split(/\r?\n/).find(x=>x.startsWith('cloudtms_test_clone|')).split('|')[1];
+  const preamble=fullPreamble?['\\set ON_ERROR_STOP off','\\set ON_ERROR_ROLLBACK on','\\set VERBOSITY verbose','\\set SHOW_CONTEXT never','\\pset pager off','begin isolation level repeatable read;','set local jit=off;','set local pg_show_plans.is_enabled=off;','set local statement_timeout=0;',`create table private.${marker}(marker boolean not null);`,`revoke all on table private.${marker} from PUBLIC,anon,authenticated,service_role;`,`insert into private.${marker} values(true);`,transactionIdentitySql()].join('\n')+'\n':(protocol?'\\set ON_ERROR_ROLLBACK on\n':'')+'begin isolation level repeatable read;\nset local lock_timeout=\'1s\'; set local statement_timeout=\'30s\'; set local work_mem=\'4MB\'; set local jit=off; set local pg_show_plans.is_enabled=off;\n';
+  const executable=preamble+'select \'HR_BOUNDED_ID:\'||json_build_object(\'database\',current_database(),\'xid\',pg_current_xact_id()::text,\'pid\',pg_backend_pid())::text;\n'+input.sql+'\nrollback;\nselect \'HR_BOUNDED_ROLLBACK_REACHED\';\n';
+  let actual,identity,executionFailure,after;
+  try {
+   actual=await child(executable); const identities=actual.stdout.split(/\r?\n/).filter(x=>x.startsWith('HR_BOUNDED_ID:'));
+   requireThat(identities.length===1,'BOUNDED_IDENTITY_REFUSED');identity=JSON.parse(identities[0].slice(14));
+   requireThat(identity.database==='cloudtms_test_clone'&&/^\d+$/.test(identity.xid)&&Number.isSafeInteger(identity.pid),'BOUNDED_NATIVE_IDENTITY_REFUSED');
+  }catch(error){executionFailure=/^[A-Z][A-Z0-9_]+$/.test(error.message)?error.message:'BOUNDED_EXECUTION_INCOMPLETE';identity=null;
+  }finally {
+   try {after=await child('begin read only; set local lock_timeout=\'1s\'; select \'HR_BOUNDED_FRESH:\'||json_build_object(\'database\',current_database(),\'parentAborted\','+(identity?'pg_xact_status('+literal(identity.xid)+'::xid8)=\'aborted\'':'false')+',\'ownPidAbsent\','+(identity?'not exists(select 1 from pg_stat_activity where pid='+identity.pid+')':'false')+',\'legacyOne\',exists(select 1 from private.bpay_next_module_control where id=1 and active_owner=\'LEGACY\' and owner_epoch=1),\'markerAbsent\','+(marker?"to_regclass("+literal('private.'+marker)+") is null":'true')+',\'postmasterStart\',pg_postmaster_start_time())::text;\n'+input.census+'\nrollback;\n');
+   }catch {fs.writeFileSync(out,JSON.stringify({status:'NATIVE_SHORT_INCOMPLETE_RESTORATION_UNVERIFIED',file:input.file,executionFailure:executionFailure??'BOUNDED_EXECUTION_UNKNOWN',freshFailure:'BOUNDED_FRESH_CONNECTION_FAILED',turn:turn.identity})+'\n');throw Error('BOUNDED_FRESH_CONNECTION_FAILED');}
+  }
+  requireThat(after.code===0&&closedErrors(after.stderr).length===0,'BOUNDED_FRESH_FAILED');
+  const freshLine=after.stdout.split(/\r?\n/).filter(x=>x.startsWith('HR_BOUNDED_FRESH:'));requireThat(freshLine.length===1,'BOUNDED_FRESH_ENVELOPE_REFUSED');const fresh=JSON.parse(freshLine[0].slice(17));
+  requireThat(Date.parse(beforeStart)===Date.parse(fresh.postmasterStart),'BOUNDED_DATABASE_RESTARTED_STOP_REHEARSALS');
+  const beforeCounts=census(before.stdout),afterCounts=census(after.stdout),restored=JSON.stringify(beforeCounts)===JSON.stringify(afterCounts),errors=closedErrors(actual?.stderr??'');
+  const rollbackReached=actual?.stdout.split(/\r?\n/).includes('HR_BOUNDED_ROLLBACK_REACHED')??false;
+  const rollbackProved=fresh.database==='cloudtms_test_clone'&&fresh.parentAborted&&fresh.ownPidAbsent&&fresh.legacyOne&&fresh.markerAbsent&&restored&&rollbackReached;
+  const receipt={status:!executionFailure&&actual.code===0&&errors.length===0&&rollbackProved?'NATIVE_SHORT_VERIFIER_PASS':'NATIVE_SHORT_VERIFIER_FAILED',file:input.file,sourceSqlHash:input.sourceSqlHash,bodyHash:input.bodyHash,executedSqlHash:digest(executable),isolation:'REPEATABLE READ',completeBodyRetained:true,fullOuterPreamble:fullPreamble,marker,fullProtocolSingleUnit:protocol&&!prefix,candidatePrelude:input.candidate,precedingSixVerifiers:input.prefix,sourceUnits:input.sourceUnits,fixtureIdCount:input.fixtureIdCount,fixtureRelationCount:input.fixtureRelationCount,errors,executionFailure,exitCode:actual?.code??null,rollbackReached,rollbackProved,fresh,fixtureCountsRestored:restored,fixtureVacancyClaimed:false,beforeCounts,afterCounts,turn:turn.identity};
+  fs.writeFileSync(out,JSON.stringify(receipt,null,2)+'\n');return receipt;
+ }});}catch(error){
+  const failure=/^[A-Z][A-Z0-9_]+$/.test(error.message)?error.message:'BOUNDED_DIAGNOSTIC_INCOMPLETE';
+  fs.writeFileSync(out,JSON.stringify({status:'NATIVE_SHORT_INCOMPLETE_HOLD',file:input.file,sourceSqlHash:input.sourceSqlHash,bodyHash:input.bodyHash,failure})+'\n');console.log(JSON.stringify({status:'NATIVE_SHORT_INCOMPLETE_HOLD',failure}));throw error;
+ }
+ fs.writeFileSync(out,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));return result;
+}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ requireThat(process.argv[2]==='--run-bounded-owner-diagnostic','EXPLICIT_BOUNDED_ENTRY_REQUIRED');
+ requireThat(process.argv[4]===undefined||['--single-unit-protocol','--candidate-single-unit-protocol','--candidate-prefix-protocol','--candidate-prefix-full-preamble'].includes(process.argv[4]),'BOUNDED_PROTOCOL_FLAG_REFUSED');
+ await run(process.argv[3],process.argv[4]!==undefined,process.argv[4]!==undefined&&process.argv[4]!=='--single-unit-protocol',['--candidate-prefix-protocol','--candidate-prefix-full-preamble'].includes(process.argv[4]),process.argv[4]==='--candidate-prefix-full-preamble');
+}

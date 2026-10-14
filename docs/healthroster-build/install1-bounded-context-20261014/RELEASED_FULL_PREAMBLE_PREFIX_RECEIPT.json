@@ -1,0 +1,264 @@
+{
+  "status": "NATIVE_SHORT_VERIFIER_PASS",
+  "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+  "sourceSqlHash": "32be63e380a6eaae91e2f28d925d43d11aea090ce82416ab8f112cf7a7c4f17b",
+  "bodyHash": "85ad88fade6f8c53e28749735fd3f033637528b6323f3cb941842d11611e211c",
+  "executedSqlHash": "2164c10a3c50892ab8af965630c3cdb54ecb8d34111161e648788af4cbf631ca",
+  "isolation": "REPEATABLE READ",
+  "completeBodyRetained": true,
+  "fullOuterPreamble": true,
+  "marker": "hr_install1_44ff94cccb1b592367322022997e57cc",
+  "fullProtocolSingleUnit": false,
+  "candidatePrelude": true,
+  "precedingSixVerifiers": true,
+  "sourceUnits": [
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "kind": "repeatable",
+      "sqlHash": "5016f5af8a8f7a90dcd385f535f3c30c21d7f5297cd28af3e68c8582a8aedcc7",
+      "sourceSqlHash": "b65c827ae713a7162e10d8ae00394cef5d8d055626e31cc25e163d334aaf7569"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "kind": "repeatable",
+      "sqlHash": "9f23551b57ddd4c8e51e4156bd9c26bc90a1055a29cf1643af57a5ab3361e61b",
+      "sourceSqlHash": "327a0e4169fd5c9cc66f1bad209ee796ddf07dcc6c07d995cd3a1590e3667c44"
+    },
+    {
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "kind": "verifier",
+      "sqlHash": "3ca72ce2938ecd64857250e01c672d6938b054ad5af9bc90f8f257eff428ece1",
+      "sourceSqlHash": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 151,
+          "end": 172,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN",
+          "start": 173,
+          "end": 179,
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 8948,
+          "end": 8957,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    },
+    {
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "kind": "verifier",
+      "sqlHash": "6ed9aaa8db0f9d482ea80f9e9351c440522fadf3e7a06ee377bc881aadf55173",
+      "sourceSqlHash": "05e9676d1b3f86f9085ec9355906c37f60aa8965a70acb3590de14fb0650c6c1",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 0,
+          "end": 21,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN",
+          "start": 22,
+          "end": 28,
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 8433,
+          "end": 8442,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    },
+    {
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "82eba11679030467a0478e78a2c4182e96594befe0eb1693517bab3cb6eca848",
+      "sourceSqlHash": "54efab0b929e2e8da38a161908e3a9ceba88fada326f5296a33f11c703903232",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 0,
+          "end": 21,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN",
+          "start": 95,
+          "end": 101,
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 15662,
+          "end": 15671,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    },
+    {
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "52f99c52cc9a7c55226385145774edbf556b53ef224cd350c862c854d764da87",
+      "sourceSqlHash": "1df601877c770cdaae660e514e148a5a6bc77f2f03658f48c8747f59b676e485",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 0,
+          "end": 21,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN",
+          "start": 358,
+          "end": 364,
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 18461,
+          "end": 18470,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    },
+    {
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "115227752e4bb61053f1810034b86ab96e34c4b7a90b78c7a4e499b3016ef46e",
+      "sourceSqlHash": "892fc4ad6be3f99b7c7b40761d7a93514a6312ee582a8b4f2b380c8cde7d9f7a",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 0,
+          "end": 21,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN",
+          "start": 22,
+          "end": 28,
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 1174,
+          "end": 1183,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    },
+    {
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "053d876abf7952e3632bbe633283d3d3e0399f7ce7537a62361f9d1aa502c3a1",
+      "sourceSqlHash": "713f92686a28e7ef3134a6a4cd62ce8717f9bffc8b131578481d3fb863fefc3a",
+      "envelope": [
+        {
+          "command": "\\set ON_ERROR_STOP on",
+          "start": 80,
+          "end": 101,
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "command": "BEGIN ISOLATION LEVEL REPEATABLE READ",
+          "start": 102,
+          "end": 140,
+          "sha256": "11ebff2bc388dc6229964df396c38edadb59c9234670d070bb040e3fd07655ea"
+        },
+        {
+          "command": "ROLLBACK",
+          "start": 17537,
+          "end": 17546,
+          "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+        }
+      ],
+      "readOnlyBodyReviewed": false
+    }
+  ],
+  "fixtureIdCount": 47,
+  "fixtureRelationCount": 21,
+  "errors": [],
+  "exitCode": 0,
+  "rollbackReached": true,
+  "rollbackProved": true,
+  "fresh": {
+    "database": "cloudtms_test_clone",
+    "parentAborted": true,
+    "ownPidAbsent": true,
+    "legacyOne": true,
+    "markerAbsent": true,
+    "postmasterStart": "2026-10-14T09:07:33.240096+00:00"
+  },
+  "fixtureCountsRestored": true,
+  "fixtureVacancyClaimed": false,
+  "beforeCounts": {
+    "public.clients": 0,
+    "public.contracts": 0,
+    "public.tms_users": 0,
+    "public.candidates": 0,
+    "public.timesheets": 0,
+    "public.contract_weeks": 0,
+    "public.client_settings": 0,
+    "public.settings_defaults": 0,
+    "public.weekly_work_events": 4,
+    "public.weekly_source_cycles": 0,
+    "public.weekly_source_groups": 0,
+    "public.weekly_source_uploads": 4,
+    "public.candidate_app_accounts": 0,
+    "public.weekly_source_upload_rows": 0,
+    "public.weekly_source_charge_checks": 0,
+    "public.weekly_source_group_clients": 0,
+    "public.weekly_source_report_scopes": 0,
+    "public.weekly_source_client_policies": 0,
+    "public.weekly_source_row_resolutions": 0,
+    "public.candidate_app_global_membership_links": 0,
+    "public.weekly_source_projection_publications": 0
+  },
+  "afterCounts": {
+    "public.clients": 0,
+    "public.contracts": 0,
+    "public.tms_users": 0,
+    "public.candidates": 0,
+    "public.timesheets": 0,
+    "public.contract_weeks": 0,
+    "public.client_settings": 0,
+    "public.settings_defaults": 0,
+    "public.weekly_work_events": 4,
+    "public.weekly_source_cycles": 0,
+    "public.weekly_source_groups": 0,
+    "public.weekly_source_uploads": 4,
+    "public.candidate_app_accounts": 0,
+    "public.weekly_source_upload_rows": 0,
+    "public.weekly_source_charge_checks": 0,
+    "public.weekly_source_group_clients": 0,
+    "public.weekly_source_report_scopes": 0,
+    "public.weekly_source_client_policies": 0,
+    "public.weekly_source_row_resolutions": 0,
+    "public.candidate_app_global_membership_links": 0,
+    "public.weekly_source_projection_publications": 0
+  },
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 15342,
+    "turnId": "hr_turn_0c641524db17adddb798736eaf804d8e",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T13:45:15.543Z",
+    "task": "HealthRoster bounded released exact native REPEATABLE READ verifier"
+  }
+}

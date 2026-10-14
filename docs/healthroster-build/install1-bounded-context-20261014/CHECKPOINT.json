@@ -1,0 +1,50 @@
+{
+  "status": "SOURCE_AND_BOUNDED_CONTEXT_BACKUP_NOT_FULL_PASS",
+  "files": [
+    {
+      "name": "RELEASED_PREFIX_RECEIPT.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\released-prefix-candidate-protocol-native-rr-diagnostic.json",
+      "bytes": 9311,
+      "sha256": "90a72f656cd57d923039a83a2fd0144965759a6ca980ab7e28a2a47f46ec7aaf"
+    },
+    {
+      "name": "RELEASED_FULL_PREAMBLE_PREFIX_RECEIPT.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\released-full-preamble-prefix-candidate-protocol-native-rr-diagnostic.json",
+      "bytes": 9426,
+      "sha256": "9bcf85c105c27a0e001a23a0418e7a7c7aba42d141c0109c4f9a4e155008fabc"
+    },
+    {
+      "name": "EXACT_PREFIX_SOURCE_COMPARISON.json",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\full-prefix-source-comparison.json",
+      "bytes": 2749,
+      "sha256": "8dbf8b631fdbe1452c3651896c9f0ce7b65e00fdff8c5f8080d65f44bc4e5f92"
+    },
+    {
+      "name": "hr-full-prefix-compare.mjs.txt",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\hr-full-prefix-compare.mjs",
+      "bytes": 2060,
+      "sha256": "75164c6dfd8b268b233250cd3d9c6b638faac7110a6e8a06c9f5f6d8ebea8d56"
+    },
+    {
+      "name": "hr-short-native.mjs.txt",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install1-14102026\\.codex-tmp\\hr-short-native.mjs",
+      "bytes": 14138,
+      "sha256": "0295213be33c04de88df3ca6050ab0cfda3633e6c79370801e5dd341b2914681"
+    },
+    {
+      "name": "INSTALL1_SOURCE_CRITIC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_INSTALL1_RECEIPT_FIX_CRITIC_14102026.md",
+      "bytes": 49263,
+      "sha256": "09dec95984d486a98f819edca368bfadc0bb97a085aa05d4441fe7f6b65ba92f"
+    },
+    {
+      "name": "MONEY_A0_SOURCE_CRITIC.md",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_BUILD_13102026\\BUILD_MONEY_OFF_SOURCE_CRITIC_14102026.md",
+      "bytes": 166505,
+      "sha256": "51703a6bde417a644e8d222d39c3c00711328f59e69e1e0ee842c39e728491b3"
+    }
+  ],
+  "fullRehearsal": "HELD",
+  "installed": false,
+  "ownerQuestionPending": false
+}

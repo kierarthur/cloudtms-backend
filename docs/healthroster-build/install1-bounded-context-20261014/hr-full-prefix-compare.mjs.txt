@@ -1,0 +1,19 @@
+// Pure source comparison. No fresh evidence is fabricated and no DB is opened.
+import fs from 'node:fs';
+import {compileFullRehearsal} from '../scripts/healthroster-install1-full-rehearsal.mjs';
+import {renderFullRehearsalUnits} from '../scripts/healthroster-full-rehearsal-protocol.mjs';
+import {digest} from '../scripts/cloudtms-managed-release-sql.mjs';
+import {prepare} from './hr-short-native.mjs';
+process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
+const old=JSON.parse(fs.readFileSync('C:/tmp/healthroster-install1-native-20261014T120607Z-i22NU1/000539_RECEIPT.json','utf8'));
+const review=JSON.parse(fs.readFileSync('docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json','utf8'));
+let capture,expectedRefusal;
+try {compileFullRehearsal({candidatePin:old.candidatePin,currentRemoteTestPin:old.predecessor,installed:old.before.installed,review,marker:old.marker,expectedContractHash:old.contract,observeLiveBusiness:true,render:(units,options)=>{capture={units,options};return renderFullRehearsalUnits(units,options);}});
+}catch(error){if(error.message!=='REHEARSAL_EXPECTED_CONTRACT_DIGEST_FRESH_PROBE_REQUIRED')throw error;expectedRefusal=error.message;}
+if(!capture||!expectedRefusal)throw Error('SOURCE_CAPTURE_NOT_PROVED');
+const exact=renderFullRehearsalUnits(capture.units.slice(0,9),capture.options),short=prepare('released',true,true,true);
+const proof={status:'PURE_SOURCE_PREFIX_COMPARISON',nativeExecuted:false,freshEvidenceFabricated:false,expectedMissingFreshEvidenceRefusal:expectedRefusal,fullPrefixSha256:digest(exact.sql),shortPrefixSha256:digest(short.sql),bytesEqual:exact.sql===short.sql,options:capture.options,units:capture.units.slice(0,9).map(x=>({file:x.file,kind:x.kind,sqlHash:x.sqlHash,clientVariables:x.clientVariables??[]}))};
+fs.writeFileSync('.codex-tmp/full-prefix-source-comparison.json',JSON.stringify(proof,null,2)+'\n');
+fs.writeFileSync('.codex-tmp/full-prefix-source.sql',exact.sql);
+fs.writeFileSync('.codex-tmp/short-prefix-source.sql',short.sql);
+console.log(JSON.stringify(proof));

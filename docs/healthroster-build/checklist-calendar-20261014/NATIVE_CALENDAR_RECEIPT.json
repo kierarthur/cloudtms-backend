@@ -1,0 +1,157 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "HealthRoster native Client calendar and latest ended-week proof",
+  "sqlSha256": "287593689e9fea9f2c9a676fbdfd83022cdf5250404bf7404d687b1d3ba95804",
+  "statementCount": 12,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "native_settings_before_sha256"
+      ],
+      "rows": [
+        {
+          "native_settings_before_sha256": "1b5f00278813f219d8b01eb6457e9b27bf34b39d16ddc988d672728572f71a23"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "INSERT",
+      "rowCount": 7,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "INSERT",
+      "rowCount": 7,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "case_result"
+      ],
+      "rows": [
+        {
+          "case_result": {
+            "calendar_cases": 35,
+            "private_acl_checked": true,
+            "read_revision_stable": true,
+            "actual_settings_change_bound": true,
+            "native_settings_owner_reused": true
+          }
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "exact_test",
+          "temporary_helper_absent",
+          "fixture_clients_absent",
+          "fixture_settings_absent",
+          "native_settings_after_sha256"
+        ],
+        "rows": [
+          {
+            "exact_test": true,
+            "temporary_helper_absent": true,
+            "fixture_clients_absent": true,
+            "fixture_settings_absent": true,
+            "native_settings_after_sha256": "1b5f00278813f219d8b01eb6457e9b27bf34b39d16ddc988d672728572f71a23"
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ]
+}

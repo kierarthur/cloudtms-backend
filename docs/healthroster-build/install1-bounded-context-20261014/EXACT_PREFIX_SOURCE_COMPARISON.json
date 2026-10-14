@@ -1,0 +1,69 @@
+{
+  "status": "PURE_SOURCE_PREFIX_COMPARISON",
+  "nativeExecuted": false,
+  "freshEvidenceFabricated": false,
+  "expectedMissingFreshEvidenceRefusal": "REHEARSAL_EXPECTED_CONTRACT_DIGEST_FRESH_PROBE_REQUIRED",
+  "fullPrefixSha256": "7a3d2572e8525b850b81335d3d47ee0418f55380a5494a828e4c76bbf6392f41",
+  "shortPrefixSha256": "7a3d2572e8525b850b81335d3d47ee0418f55380a5494a828e4c76bbf6392f41",
+  "bytesEqual": true,
+  "options": {
+    "outerIsolation": "REPEATABLE READ",
+    "observeLiveBusiness": true
+  },
+  "units": [
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "kind": "repeatable",
+      "sqlHash": "5016f5af8a8f7a90dcd385f535f3c30c21d7f5297cd28af3e68c8582a8aedcc7",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "kind": "repeatable",
+      "sqlHash": "9f23551b57ddd4c8e51e4156bd9c26bc90a1055a29cf1643af57a5ab3361e61b",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "kind": "verifier",
+      "sqlHash": "3ca72ce2938ecd64857250e01c672d6938b054ad5af9bc90f8f257eff428ece1",
+      "clientVariables": []
+    },
+    {
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "kind": "verifier",
+      "sqlHash": "6ed9aaa8db0f9d482ea80f9e9351c440522fadf3e7a06ee377bc881aadf55173",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "82eba11679030467a0478e78a2c4182e96594befe0eb1693517bab3cb6eca848",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "52f99c52cc9a7c55226385145774edbf556b53ef224cd350c862c854d764da87",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "115227752e4bb61053f1810034b86ab96e34c4b7a90b78c7a4e499b3016ef46e",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "053d876abf7952e3632bbe633283d3d3e0399f7ce7537a62361f9d1aa502c3a1",
+      "clientVariables": []
+    },
+    {
+      "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "kind": "verifier",
+      "sqlHash": "85ad88fade6f8c53e28749735fd3f033637528b6323f3cb941842d11611e211c",
+      "clientVariables": []
+    }
+  ]
+}
