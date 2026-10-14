@@ -154,6 +154,7 @@ test('root psql adapter sends synthetic credentials only through environment and
  let called=0;
  const turn={identity,runOwnedChild:async args=>{
   called++;assert.ok(!args.args.some(x=>x.includes('synthetic-password')));assert.equal(args.options.env.PGPASSWORD,'synthetic-password');
+  assert.deepEqual(args.args,['-X','-q','-A','-t','-f','-']);
   assert.ok(!Object.hasOwn(args.options,'timeout'));assert.equal(args.cancelOnLoss,true);
   return {code:0,stdout:'HR_FILE_BEGIN 0\nprivate fixture payload\nHR_FILE_END 0\nHR_EXPLICIT_ROLLBACK_COMPLETED\n',
    stderr:'psql:<stdin>:2: ERROR: 23505: confidential duplicate\nDETAIL: confidential detail\nCONTEXT: confidential query\n'};
@@ -168,11 +169,21 @@ test('root psql adapter sends synthetic credentials only through environment and
 
 test('root psql adapter refuses missing unit end markers and unmapped database diagnostics',async()=>{
  const sql='\\echo HR_FILE_BEGIN 0\nselect 1;\n\\echo HR_FILE_END 0\nrollback;\n\\echo HR_EXPLICIT_ROLLBACK_COMPLETED\n';
- const turn={identity,runOwnedChild:async()=>({code:0,stdout:'HR_FILE_BEGIN 0\nHR_EXPLICIT_ROLLBACK_COMPLETED\n',stderr:'ERROR: a server error with sensitive data\n'})};
+ const turn={identity,runOwnedChild:async()=>({code:0,stdout:'HR_FILE_BEGIN 0\nHR_EXPLICIT_ROLLBACK_COMPLETED\n',stderr:'ERROR: 23505: a server error with sensitive data\n'})};
  const result=await executePsqlWithinOwnedTurn({turn,psqlPath:'C:/Program Files/PostgreSQL/18/bin/psql.exe',
   env:{PGDATABASE:'cloudtms_test_clone',PGHOST:'synthetic-host',PGUSER:'synthetic-user',PGPASSWORD:'synthetic-password'},sql,sqlHash:digest(sql),marker,expectedContractHash:hash,diagnosticCodesHash:digest('[]'),lineMap:[]});
  assert.equal(result.errorCollectionComplete,false);assert.equal(result.unexpectedDiagnostic,'UNMAPPED_DATABASE_ERROR');
+ assert.deepEqual(result.unmappedDiagnostics,[{sqlstate:'23505',error:'DATABASE_DIAGNOSTIC_LOCATION_UNPROVED'}]);
  assert.ok(!JSON.stringify(result).includes('sensitive'));
+});
+
+test('psql client errors are mapped and held even when all unit and rollback markers are present',async()=>{
+ const sql='\\echo HR_FILE_BEGIN 0\n\\invalid_native_probe\n\\echo HR_FILE_END 0\nrollback;\n\\echo HR_EXPLICIT_ROLLBACK_COMPLETED\n';
+ const turn={identity,runOwnedChild:async()=>({code:0,stdout:'HR_FILE_BEGIN 0\nHR_FILE_END 0\nHR_EXPLICIT_ROLLBACK_COMPLETED\n',stderr:'psql:<stdin>:2: error: raw private command diagnostic\n'})};
+ const result=await executePsqlWithinOwnedTurn({turn,psqlPath:'C:/Program Files/PostgreSQL/18/bin/psql.exe',env:{PGDATABASE:'cloudtms_test_clone',PGHOST:'synthetic-host',PGUSER:'synthetic-user',PGPASSWORD:'synthetic-password'},sql,sqlHash:digest(sql),marker,expectedContractHash:hash,diagnosticCodesHash:digest('[]'),lineMap:[{startLine:2,endLine:2,file:'HARNESS_CLIENT_PROBE',kind:'control',statement:1,object:'PSQL_META'}]});
+ assert.equal(result.errorCollectionComplete,true);assert.equal(result.explicitRollback,true);
+ assert.deepEqual(result.errors,[{file:'HARNESS_CLIENT_PROBE',kind:'control',statement:1,object:'PSQL_META',line:2,sqlstate:null,error:'PSQL_CLIENT_ERROR'}]);
+ assert.ok(!JSON.stringify(result).includes('raw private'));
 });
 
 const markerRelation=()=>({acl:['DELETE','INSERT','MAINTAIN','REFERENCES','SELECT','TRIGGER','TRUNCATE','UPDATE']

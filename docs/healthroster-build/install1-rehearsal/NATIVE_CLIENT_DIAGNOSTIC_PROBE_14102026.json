@@ -1,0 +1,68 @@
+{
+  "status": "READ_ONLY_DIAGNOSTIC_PASS_NOT_REHEARSAL",
+  "startedAt": "2026-10-14T02:13:39.565Z",
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 492327,
+    "turnId": "hr_turn_6a7b2d2a1a6e0d5b688942511b6cb2ca",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T02:13:41.559Z",
+    "task": "Short readonly psql line-diagnostic and changed-table metadata probe"
+  },
+  "diagnostic": {
+    "sameSession": true,
+    "explicitRollback": true,
+    "exitCode": 0,
+    "errorCollectionComplete": true,
+    "errors": [
+      {
+        "file": "HARNESS_READONLY_DIAGNOSTIC_PROBE",
+        "kind": "control",
+        "statement": 1,
+        "object": "SELECT_DIVISION_BY_ZERO",
+        "line": 7,
+        "sqlstate": "22012",
+        "error": "DATABASE_DIAGNOSTIC_WITHHELD"
+      },
+      {
+        "file": "HARNESS_READONLY_DIAGNOSTIC_PROBE",
+        "kind": "control",
+        "statement": 2,
+        "object": "PSQL_INVALID_COMMAND",
+        "line": 8,
+        "sqlstate": null,
+        "error": "PSQL_CLIENT_ERROR"
+      }
+    ],
+    "unexpectedDiagnostic": null,
+    "unmappedDiagnostics": [],
+    "sqlHash": "fe2e89f51783ef66a7c1985fe3cfe65706a284ad7d2083a67f1b67f785c60a58",
+    "unitMarkers": 1,
+    "installedContract": null,
+    "contractFailure": "REHEARSAL_CONTRACT_ENVELOPE_INCOMPLETE"
+  },
+  "metadata": {
+    "outbox": {
+      "count": 20,
+      "latest_retry": "2026-10-14T02:15:24.244925+00:00",
+      "max_attempts": 7205,
+      "min_attempts": 923,
+      "earliest_retry": "2026-10-14T02:15:24.244925+00:00"
+    },
+    "batches": [
+      {
+        "count": 47,
+        "actor_class": "SIGNED_SYSTEM",
+        "last_created": "2026-10-14T02:13:20.46971+00:00",
+        "first_created": "2026-10-14T01:27:20.055379+00:00",
+        "operation_class": "PROJECTION_CLAIM"
+      }
+    ],
+    "physicalDatabase": "cloudtms_test_clone"
+  },
+  "finishedAt": "2026-10-14T02:13:43.100Z"
+}

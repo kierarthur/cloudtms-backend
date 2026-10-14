@@ -382,15 +382,19 @@ export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,
  requireThat(digest(sql)===sqlHash&&Array.isArray(lineMap),'REHEARSAL_PSQL_SOURCE_REFUSED');
  requireThat(digest(JSON.stringify(diagnosticCodes))===diagnosticCodesHash&&diagnosticCodes.every(code=>/^[A-Z][A-Z0-9_]{5,}$/.test(code)),
   'REHEARSAL_DIAGNOSTIC_CODES_REFUSED');
- const result=await turn.runOwnedChild({file:psqlPath,args:['-X','-q','-A','-t'],input:sql,
+ // -f - retains stdin transport but asks psql to emit source line numbers.
+ // Plain piped interactive input omits them and cannot qualify the line map.
+ const result=await turn.runOwnedChild({file:psqlPath,args:['-X','-q','-A','-t','-f','-'],input:sql,
   options:{env:{...env,PGAPPNAME:'healthroster_install1_full',PGOPTIONS:(env.PGOPTIONS??'')+' -c jit=off -c pg_show_plans.is_enabled=off -c statement_timeout=0'},
    stdio:['pipe','pipe','pipe']},cancelOnLoss:true});
  const errors=[];
- let unexpectedError=false;
+ let unexpectedError=false;const unmappedDiagnostics=[];
  for(const line of result.stderr.split(/\r?\n/)){
   const closed=closedRehearsalDiagnostic(line,lineMap,new Set(diagnosticCodes));
   if(closed)errors.push(closed);
-  else if(/(?:ERROR|FATAL):/.test(line))unexpectedError=true;
+  else if(/(?:ERROR|FATAL|error|fatal):/.test(line)){unexpectedError=true;
+   unmappedDiagnostics.push({sqlstate:line.match(/(?:ERROR|FATAL):\s+([0-9A-Z]{5}):/)?.[1]??null,error:'DATABASE_DIAGNOSTIC_LOCATION_UNPROVED'});
+  }
  }
  const starts=result.stdout.split(/\r?\n/).filter(x=>/^HR_FILE_BEGIN \d+$/.test(x)),ends=result.stdout.split(/\r?\n/).filter(x=>/^HR_FILE_END \d+$/.test(x));
  const expected=[...sql.matchAll(/^\\echo HR_FILE_BEGIN (\d+)$/gm)].map(x=>Number(x[1]));
@@ -405,7 +409,7 @@ export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,
  }catch(error){contractFailure=/^REHEARSAL_[A-Z_]+$/.test(error.message)?error.message:'REHEARSAL_CONTRACT_JSON_REFUSED';}
  return {sameSession:true,explicitRollback:result.stdout.split(/\r?\n/).includes('HR_EXPLICIT_ROLLBACK_COMPLETED'),
   exitCode:result.code,errorCollectionComplete:complete,errors,
-  unexpectedDiagnostic:unexpectedError?'UNMAPPED_DATABASE_ERROR':null,sqlHash,unitMarkers:expected.length,installedContract,contractFailure};
+  unexpectedDiagnostic:unexpectedError?'UNMAPPED_DATABASE_ERROR':null,unmappedDiagnostics,sqlHash,unitMarkers:expected.length,installedContract,contractFailure};
 }
 export const identityProbeSql=marker=>{
  requireThat(/^hr_install1_[a-f0-9]{32}$/.test(marker??''),'REHEARSAL_MARKER_REFUSED');
