@@ -1,0 +1,59 @@
+{
+  "status": "FULL_RETRY_HELD_NO_INSTALL_NO_SECOND_RESTART",
+  "recordedAt": "2026-10-14T12:48:15.130Z",
+  "candidate": "8ddd9c3b9fe100298c724fa5090f51550118493a",
+  "pins": [
+    {
+      "file": "FULL_RETRY_HELD.json",
+      "sha256": "e4cc7b60650d4300ca084072588ad4cb48ed7914fd9bf1b3f1c50add603d4522",
+      "bytes": 525630
+    },
+    {
+      "file": "SHARED_TURN.md",
+      "sha256": "12f6c55509ed66dbc6b444e79b39dd248fd4a828b3803a3e42e29e5055c497a5",
+      "bytes": 489
+    },
+    {
+      "file": "EXACT_SOURCE_ERROR_MAPPING.json",
+      "sha256": "4ca021298a7a057ec2378639d812e2c044c373763810d2c54af2a2302d2ab4c6",
+      "bytes": 3596
+    },
+    {
+      "file": "OWN_CLOSE_READBACK.json",
+      "sha256": "3989f2b107fe4c24e8b24c57ab35da7474323894cdf6307f12f38099965fa330",
+      "bytes": 619
+    },
+    {
+      "file": "CURRENT_CONSTRAINT_AND_PROFILE_READBACK.json",
+      "sha256": "d8022c574fa856610477baf5350434a219ad238f3c066a8edd3230962a9208f3",
+      "bytes": 1110
+    },
+    {
+      "file": "TEMP_CONSTRAINT_INITIAL_SYNTAX_REFUSAL.json",
+      "sha256": "a1d3e23f0b65fe67f390fa801250ef0f7b2f23a4c441671d702773b78cc662cb",
+      "bytes": 1931
+    },
+    {
+      "file": "TEMP_CONSTRAINT_MODE_PASS.json",
+      "sha256": "17a420ff0834195c3ef6e615f9bbe65a14c6280a1cbd667ee7201784480843b5",
+      "bytes": 2783
+    }
+  ],
+  "fullRetryConsumed": true,
+  "anotherFullRetryDispatched": false,
+  "install1": false,
+  "restartCause": "UNPROVEN",
+  "sourceErrors": 3,
+  "wholeRollbackAndContract": true,
+  "ownerRestorationAttributionQualified": true,
+  "additionalActivityGateRefused": 1,
+  "activityIdentity": "NOT_RECORDED_UNPROVEN",
+  "ownTurnReleased": true,
+  "nativePostmasterUnchanged": "2026-10-14T09:07:33.240096Z",
+  "memoryMaximumBytes": 3091324928,
+  "resourceGuardFailed": false,
+  "normalJobsPaused": false,
+  "hyperdriveRefreshed": false,
+  "newRetainedTemporaryFolder": "C:/tmp/healthroster-install1-native-20261014T120607Z-i22NU1",
+  "cleanupAttempted": false
+}

@@ -1,0 +1,21 @@
+{
+  "recordedAt": "2026-10-14T12:36:22.738Z",
+  "status": "OWN_TURN_CLOSED_NO_SECOND_RESTART_NATIVE_FULL_HELD",
+  "physicalDatabase": "cloudtms_test_clone",
+  "postmaster": "2026-10-14T09:07:33.240096+00:00",
+  "ownTurnPidAbsent": true,
+  "ownLockAbsent": true,
+  "ownFullRehearsals": 0,
+  "applying": 0,
+  "module": "LEGACY:1",
+  "profile": {
+    "effective_cache_size": "3932168kB",
+    "maintenance_work_mem": "262144kB",
+    "max_connections": "97",
+    "shared_buffers": "1310728kB",
+    "temp_buffers": "10248kB",
+    "work_mem": "5120kB"
+  },
+  "fullRetryConsumed": true,
+  "anotherFullRetryDispatched": false
+}

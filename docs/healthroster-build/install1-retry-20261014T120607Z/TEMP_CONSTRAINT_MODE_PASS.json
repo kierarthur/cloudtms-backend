@@ -1,0 +1,109 @@
+{
+  "status": "TEMPORARY_SAVEPOINT_CONSTRAINT_MODE_RESTORATION_PASS_NOT_FULL_REHEARSAL",
+  "result": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "HealthRoster corrected temporary constraint-mode savepoint diagnosis",
+    "sqlSha256": "f9d7a9589b5d1b2c17a30b1c57e0f9ecbeed8aaa57febc2ca762148495d53265",
+    "statementCount": 7,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SAVEPOINT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "ROLLBACK",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "INSERT",
+        "rowCount": 1,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "exact_test",
+          "deferred_mode_restored"
+        ],
+        "rows": [
+          {
+            "exact_test": true,
+            "deferred_mode_restored": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "exact_test",
+            "parent_absent",
+            "child_absent"
+          ],
+          "rows": [
+            {
+              "exact_test": true,
+              "parent_absent": true,
+              "child_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  },
+  "sharedTurnPid": 12210,
+  "sharedTurnReleased": true,
+  "fullRetryDispatched": false
+}

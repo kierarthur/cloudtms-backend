@@ -1,0 +1,108 @@
+{
+  "status": "EXACT_EXECUTED_SOURCE_LINE_DIAGNOSTIC",
+  "recordedAt": "2026-10-14T12:34:03.976Z",
+  "candidate": "8ddd9c3b9fe100298c724fa5090f51550118493a",
+  "sqlHash": "53fe3996114601796619017d1d1d07a744285e21a7249f07178ed7fe4ccc8a5c",
+  "errors": [
+    {
+      "error": {
+        "file": "HARNESS_CONTROL",
+        "kind": "control",
+        "statement": null,
+        "object": null,
+        "line": 7941,
+        "sqlstate": "55000",
+        "error": "WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID"
+      },
+      "exactMapped": null,
+      "adjacentMaps": [
+        {
+          "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+          "kind": "verifier",
+          "phase": "mandatory_upgrade_verifier",
+          "statement": 60,
+          "object": "do",
+          "startLine": 7856,
+          "endLine": 7940,
+          "statementHash": "3346650439a04e60a60d3b852b1e1ae9fa67fead4c9fb61cedffcff4e5d24892"
+        },
+        {
+          "file": "HARNESS_FIXTURE_CENSUS",
+          "kind": "control",
+          "phase": "fixture_observation",
+          "statement": 1,
+          "object": "OWN_VISIBLE_EXCEPTION_IDENTITIES",
+          "startLine": 7944,
+          "endLine": 7944,
+          "statementHash": "fa3e6dbbdf8d20346a8fdacad18dc6b953edff9e9d5018d67e0d066cc1af951a"
+        },
+        {
+          "file": "HARNESS_FIXTURE_CENSUS",
+          "kind": "control",
+          "phase": "fixture_observation",
+          "statement": 2,
+          "object": "OWN_VISIBLE_EXCEPTION_IDENTITIES",
+          "startLine": 7944,
+          "endLine": 7944,
+          "statementHash": "8772189179b442218def5bd4a2e6e39cd8bf9ce6a13263a8a17d51287e231964"
+        }
+      ],
+      "lineShape": "end $released_review$;",
+      "lineSha256": "06728a307c8152d8aab54b4f71272ac25d36e61be72d572a2be2a0591c25f4ba"
+    },
+    {
+      "error": {
+        "file": "HARNESS_CONTROL",
+        "kind": "control",
+        "statement": null,
+        "object": null,
+        "line": 64463,
+        "sqlstate": "55000",
+        "error": "WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH"
+      },
+      "exactMapped": null,
+      "adjacentMaps": [
+        {
+          "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+          "kind": "verifier",
+          "phase": "mandatory_upgrade_verifier",
+          "statement": 19,
+          "object": "do",
+          "startLine": 64337,
+          "endLine": 64462,
+          "statementHash": "cb6e5c95e6ef55c2598d8354eeec790754eee50108cefa5e0134c175daa824ba"
+        }
+      ],
+      "lineShape": "$verify_one_head$;",
+      "lineSha256": "2d326a1a037d634364bff8db47978ab8241d68109accfd1eeea0a60fd7c4114b"
+    },
+    {
+      "error": {
+        "file": "HARNESS_CONTROL",
+        "kind": "control",
+        "statement": null,
+        "object": null,
+        "line": 64571,
+        "sqlstate": "P0001",
+        "error": "ASSERTION_FAILED"
+      },
+      "exactMapped": null,
+      "adjacentMaps": [
+        {
+          "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+          "kind": "verifier",
+          "phase": "mandatory_upgrade_verifier",
+          "statement": 20,
+          "object": "do",
+          "startLine": 64468,
+          "endLine": 64570,
+          "statementHash": "cbf010283dddeacab52420cc23ec844c2df7f74595f011fb9347b9dfd0ae4d44"
+        }
+      ],
+      "lineShape": "$verify_fingerprint$;",
+      "lineSha256": "08024e2ff3b19f84cbcbb945460f9d466039a9a1e6767b089189da528c9ce0dc"
+    }
+  ],
+  "freshReadOnlyDigest": true,
+  "nativeRetryDispatched": false
+}

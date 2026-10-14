@@ -1,0 +1,66 @@
+{
+  "status": "OWN_TEMP_CONSTRAINT_PROBE_SYNTAX_REFUSED_NOT_NATIVE_MODE_RESULT",
+  "result": {
+    "accepted": false,
+    "database": "cloudtms_test_clone",
+    "label": "HealthRoster bounded savepoint constraint-mode restoration diagnosis",
+    "sqlSha256": "17bc1561a4cfd38d945118436fc870b94824cbacb75833bb0d0b71f727850c74",
+    "statementCount": 7,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "error": {
+          "message": "syntax error at or near \"deferrable\"",
+          "code": "42601",
+          "position": "148",
+          "routine": "scanner_yyerror"
+        }
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "exact_test",
+            "parent_absent",
+            "child_absent"
+          ],
+          "rows": [
+            {
+              "exact_test": true,
+              "parent_absent": true,
+              "child_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ],
+    "fatalError": {
+      "message": "syntax error at or near \"deferrable\"",
+      "code": "42601",
+      "position": "148",
+      "routine": "scanner_yyerror"
+    }
+  },
+  "fullRetryDispatched": false
+}

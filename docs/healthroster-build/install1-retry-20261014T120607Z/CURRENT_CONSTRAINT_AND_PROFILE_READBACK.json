@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-10-14T12:42:53.648Z",
+  "database": "cloudtms_test_clone",
+  "constraints": [
+    {
+      "name": "weekly_source_entitlement_head_component_inventory_assert",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "name": "weekly_source_entitlement_head_inventory_assert",
+      "deferrable": true,
+      "initiallyDeferred": true
+    },
+    {
+      "name": "weekly_source_entitlement_head_receipt_assert",
+      "deferrable": true,
+      "initiallyDeferred": true
+    }
+  ],
+  "profile": [
+    {
+      "name": "effective_cache_size",
+      "setting": "393216",
+      "unit": "8kB"
+    },
+    {
+      "name": "maintenance_work_mem",
+      "setting": "262144",
+      "unit": "kB"
+    },
+    {
+      "name": "max_connections",
+      "setting": "97",
+      "unit": null
+    },
+    {
+      "name": "shared_buffers",
+      "setting": "131072",
+      "unit": "8kB"
+    },
+    {
+      "name": "temp_buffers",
+      "setting": "1024",
+      "unit": "8kB"
+    },
+    {
+      "name": "work_mem",
+      "setting": "5120",
+      "unit": "kB"
+    }
+  ],
+  "mutations": false
+}
