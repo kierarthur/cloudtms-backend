@@ -1,0 +1,147 @@
+{
+  "source_only": true,
+  "actual_install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "frozen_money_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "runtime_sidecars": [
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-protected-operational-evidence.mjs",
+      "definition_sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "destination": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-protected-prerequisite-evidence.mjs",
+      "definition_sha256": "d8ed6e75f14472931b15ce56c6dc8f4ceb609a1440a72605bb3499d993984adb",
+      "destination": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-protected-activation-probe-evidence.mjs",
+      "definition_sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "destination": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-protected-probe-native-evidence.mjs",
+      "definition_sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "destination": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-protected-partial-native-evidence.mjs",
+      "definition_sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "destination": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-activation-window-binding.mjs",
+      "definition_sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "destination": "scripts/weekly-source-activation-window-binding.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-off-rule-setup-evidence.mjs",
+      "definition_sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61",
+      "destination": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/weekly-source-post-verified-evidence-controller.mjs",
+      "definition_sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b",
+      "destination": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-native-proxy.mjs",
+      "definition_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "destination": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    },
+    {
+      "input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/off-rule-transport-rpc.mjs",
+      "definition_sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1",
+      "destination": "broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "actual_install1_destination": null,
+      "prior_broad_destination": null,
+      "complete_frozen_import_reverse": true
+    }
+  ],
+  "external_required_original_scripts": [
+    "weekly-source-protected-release-qualification.mjs",
+    "weekly-source-protected-execution-tree.mjs",
+    "weekly-source-protected-test-setup-evidence.mjs"
+  ],
+  "current_shared_caller_pins": [
+    {
+      "file": "broker/src/index.js",
+      "actual": "5d6912b6e502af72b586d6205dd6f99fdc1347c73e4bdeae98dc36b6c73ba5d8",
+      "prior": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86"
+    },
+    {
+      "file": "scripts/cloudtms-db-release.mjs",
+      "actual": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "prior": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "actual": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "prior": "a9a08f85b2f8f8fc83db7db05431b50193e9cbc67a8e400981ea6f9f6262349a"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "actual": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "prior": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "actual": "f718c9b0bce53460e68fd5175b58d99177935ae052a1a31b46909d14ae1c4beb",
+      "prior": null
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "actual": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610",
+      "prior": "43bbdc840ba7eccb90fb91a2b4574e40f4f4b8a7efddb4e674691c846c88cf42"
+    },
+    {
+      "file": "scripts/healthroster-receipt-journal.mjs",
+      "actual": "644035d62b09e97e5c8a219e93be4728a394b8a4d287d32a2f7c3c37a5edeb29",
+      "prior": null
+    }
+  ],
+  "actual_release_cli_edits_proposed": 0,
+  "actual_managed_writer_turn_control_edits_proposed": 0,
+  "recorder_request_fields": 9,
+  "recorder_response_fields": 13,
+  "raw_command_audit_fields": "ADMITTED full command hash includes native_parent_scope; prepare only includes native_prepare_request. COMPLETED prepare only includes native_prepare_result with full native_result_sha256. Raw collectors retain these actual fields.",
+  "report_private_signatures": [
+    "private.weekly_source_report_fin_native_comparisons_assert_v1(jsonb,jsonb,text)",
+    "private.weekly_source_report_fin_qualifications_assert_v1(jsonb,jsonb,text)"
+  ],
+  "report_slots": [
+    "weekly_source_report_fin_native_comparisons",
+    "weekly_source_report_fin_qualifications"
+  ],
+  "report_native_input_key_count": 3,
+  "bundle_paths_count": 3,
+  "optional_report_fin_native_artifacts_preserved": true,
+  "root_fully_joined_source_inventory_and_actual_native_receipts_required": true,
+  "no_database_or_runtime_acceptance": true
+}

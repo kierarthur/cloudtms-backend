@@ -1,0 +1,45 @@
+create trigger bpay_next_approved_segment_guard before insert or update or delete on private.bpay_next_approved_segment
+  for each row execute function private.bpay_next_segment_child_guard_v1();
+
+create trigger bpay_next_approved_segment_truncate_guard before truncate on private.bpay_next_approved_segment
+  for each statement execute function private.bpay_next_segment_child_guard_v1();
+
+create constraint trigger bpay_next_component_resolution_event_audit_guard after insert
+ on private.bpay_next_component_resolution_event deferrable initially deferred
+ for each row execute function private.bpay_next_component_resolution_event_audit_guard_v1();
+
+create trigger bpay_next_component_resolution_event_guard before insert or update or delete
+ on private.bpay_next_component_resolution_event for each row execute function private.bpay_next_component_resolution_event_guard_v1();
+
+create trigger bpay_next_component_resolution_event_no_truncate before truncate
+ on private.bpay_next_component_resolution_event for each statement execute function private.bpay_next_component_resolution_event_guard_v1();
+
+create trigger bpay_next_local_detail_seam_guard before insert or update or delete
+  on private.bpay_next_local_detail_seam for each row execute function private.bpay_next_local_detail_seam_guard_v1();
+
+create trigger bpay_next_local_detail_seam_truncate_guard before truncate
+  on private.bpay_next_local_detail_seam for each statement execute function private.bpay_next_local_detail_seam_guard_v1();
+
+create trigger bpay_next_revision_worker_basis_guard before insert or update or delete on private.bpay_next_revision_worker_basis
+  for each row execute function private.bpay_next_segment_child_guard_v1();
+
+create trigger bpay_next_revision_worker_basis_truncate_guard before truncate on private.bpay_next_revision_worker_basis
+  for each statement execute function private.bpay_next_segment_child_guard_v1();
+
+create trigger bpay_next_segment_revision_seal before update on private.bpay_next_work_revision
+  for each row execute function private.bpay_next_segment_revision_seal_v1();
+
+create constraint trigger bpay_next_case_list_native_changed after insert or update or delete on private.bpay_next_workbench_candidate_metadata
+deferrable initially deferred for each row execute function private.bpay_next_case_list_native_changed_v1();
+
+create trigger weekly_source_manual_review_command_immutable
+  before update or delete on private.weekly_source_manual_review_commands
+  for each row execute function private.weekly_source_manual_review_command_immutable_v1();
+
+create trigger weekly_source_manual_review_command_no_truncate
+  before truncate on private.weekly_source_manual_review_commands
+  for each statement execute function private.weekly_source_manual_review_command_immutable_v1();
+
+create trigger trg_invoice_document_versions_immutability
+before update or delete on public.invoice_document_versions
+for each row execute function public.trg_invoice_document_immutability_guard();

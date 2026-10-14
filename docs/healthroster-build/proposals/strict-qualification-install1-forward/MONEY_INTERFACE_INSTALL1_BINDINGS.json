@@ -1,0 +1,580 @@
+{
+  "source_only": true,
+  "install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "money_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "complete_interfaces": 47,
+  "installed_existing": 0,
+  "absent_before_broad": 47,
+  "interfaceProof": [
+    {
+      "signature": "private.weekly_source_rule_qualification_authorization_v1(uuid,uuid,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_AUTHORITY.sqlinc",
+      "final_definition_sha256": "779bd0e39e9f66056a8f1d5e17428f18dcafbbb6378df1603b9bb91f34427288",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "779bd0e39e9f66056a8f1d5e17428f18dcafbbb6378df1603b9bb91f34427288",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_scope_assert_v1(jsonb,uuid,boolean)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_AUTHORITY.sqlinc",
+      "final_definition_sha256": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "c962ff3f8bc0712a2de78a951fc3b3f11d108620ff1c12941c4ff391d7118b6a",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_context_v1(uuid,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_AUTHORITY.sqlinc",
+      "final_definition_sha256": "7d30c476cdfc85af54b4d4fa05106200003b9e1cd9876aa90ad92e54528fe224",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "7d30c476cdfc85af54b4d4fa05106200003b9e1cd9876aa90ad92e54528fe224",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_assignment_scope_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "final_definition_sha256": "accc6ca74d79a68598e22ebb6c677f45d0dc942b07d5dd64e6e2ea9f453d0ede",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "accc6ca74d79a68598e22ebb6c677f45d0dc942b07d5dd64e6e2ea9f453d0ede",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_assignment_assert_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "final_definition_sha256": "ee99f2b3f609e927f895e29c742043815ce73b1df9a2b1f997c5defc7f2e4ebf",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "ee99f2b3f609e927f895e29c742043815ce73b1df9a2b1f997c5defc7f2e4ebf",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "final_definition_sha256": "ba6ebf8d2e93087655d557d01867661b0746575e1a339b2d3c4ce1e08c359eb6",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "ba6ebf8d2e93087655d557d01867661b0746575e1a339b2d3c4ce1e08c359eb6",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_historical_fixture_setup_assert_v1(jsonb,boolean)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "final_definition_sha256": "983823324d841e058c3ff7eb6739fd743e3b652bc12801dc43ddc2fffdb53072",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "983823324d841e058c3ff7eb6739fd743e3b652bc12801dc43ddc2fffdb53072",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/13_complete_nullable_physical_qualification_scope.sqlinc",
+      "final_definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_release_v1()",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/13_complete_nullable_physical_qualification_scope.sqlinc",
+      "final_definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/13_complete_nullable_physical_qualification_scope.sqlinc",
+      "final_definition_sha256": "7920d79b0c7873a80806945358437db5a1d5b1933435cc98b9d4feaada1878ce",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "7920d79b0c7873a80806945358437db5a1d5b1933435cc98b9d4feaada1878ce",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/13_complete_nullable_physical_qualification_scope.sqlinc",
+      "final_definition_sha256": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/13_complete_nullable_physical_qualification_scope.sqlinc",
+      "final_definition_sha256": "932d5c6e22f43aa37c6e97c11bbbac9c3678e1c21eb7612d66ab718531a9fd77",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "932d5c6e22f43aa37c6e97c11bbbac9c3678e1c21eb7612d66ab718531a9fd77",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "final_definition_sha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_COMMAND.sqlinc",
+      "final_definition_sha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_COMMAND.sqlinc",
+      "final_definition_sha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_status_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_STATUS.sqlinc",
+      "final_definition_sha256": "b2b8972e139c6efa825e40d9a79bcf91612a2c9a5105b33a1b209e4e3408bdfa",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "b2b8972e139c6efa825e40d9a79bcf91612a2c9a5105b33a1b209e4e3408bdfa",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "final_definition_sha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_operational_effective_rule_set_v1(uuid,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/01_operational_rule_projection.sqlinc",
+      "final_definition_sha256": "e9c7ef9f1971c313a1c69c7dd1a4d6f252c71a0662c9fce6551944b9086eee12",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "e9c7ef9f1971c313a1c69c7dd1a4d6f252c71a0662c9fce6551944b9086eee12",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/02_effective_rule_owner.sqlinc",
+      "final_definition_sha256": "df9834db5f8f7e3e94a4decd24e678610569e6848c05d13855ca4e2c77ceca82",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "name": "private.weekly_source_effective_rule_set_v1",
+        "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+        "semantic_signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+        "definition_sha256": "cf355c712342c0ade1ace4b48410ebc68887eb91c022c80ef8e18a0e36ba2baa",
+        "calls": [],
+        "writes": []
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "df9834db5f8f7e3e94a4decd24e678610569e6848c05d13855ca4e2c77ceca82",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/03_cas_operational_projection.sqlinc",
+      "final_definition_sha256": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "bd83ccd7668ecc00910890dcaf209dbdfb8d7c2aced6f433c61c9ac70b5ab02f",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/03_cas_operational_projection.sqlinc",
+      "final_definition_sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_final_rule_version_guard_v1()",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/04_final_revision_rule_guard.sqlinc",
+      "final_definition_sha256": "5445511b6e0b6f09fc22990c55da0891a1bf38eeebbbc6255c6764b6c50cb063",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "name": "private.weekly_source_final_rule_version_guard_v1",
+        "signature": "private.weekly_source_final_rule_version_guard_v1()",
+        "semantic_signature": "private.weekly_source_final_rule_version_guard_v1()",
+        "definition_sha256": "7a01cbb37f66fd94ae96b01a8efff7e00279500267d8f2b0a0d6cbeea0a74306",
+        "calls": [],
+        "writes": []
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "5445511b6e0b6f09fc22990c55da0891a1bf38eeebbbc6255c6764b6c50cb063",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/05_coverage_floor_owner.sqlinc",
+      "final_definition_sha256": "54ba319659d0720d2d88c863ce750bdc594decfb1021d800bb00b45a537bd14b",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+        "name": "private.weekly_source_rule_coverage_floor_v1",
+        "signature": "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+        "semantic_signature": "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+        "definition_sha256": "2b82f2199c44918cf710cbd7df6acdbee7b820ae55b5b2a82b22e1d2645426df",
+        "calls": [
+          "private.weekly_source_effective_rule_set_v1"
+        ],
+        "writes": []
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "54ba319659d0720d2d88c863ce750bdc594decfb1021d800bb00b45a537bd14b",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/07_automatic_capability_admission.sqlinc",
+      "final_definition_sha256": "c42d144aa23af3c5146ba972123b8023c015147ee560dfcbef7a853294e26580",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+        "name": "private.weekly_source_automatic_reconcile_capability_assert_v1",
+        "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+        "semantic_signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+        "definition_sha256": "c2b3d0f9e02c32eb47e0137ea93a3c75eba838d701d5f40de21c8614c524b5d0",
+        "calls": [
+          "private.weekly_source_automatic_reconcile_producer_ready_v1"
+        ],
+        "writes": []
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "c42d144aa23af3c5146ba972123b8023c015147ee560dfcbef7a853294e26580",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/08_cas_admission_owner.sqlinc",
+      "final_definition_sha256": "4a1ee268851a08b18d73256904ff78e698adc5457b1519021100f867e4e3c790",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+        "name": "private.weekly_source_bulk_source_cas_assert_v1",
+        "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+        "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+        "definition_sha256": "717c488bae965a73bacacb04d34431e821d5043dae664378521c6b5ea2e4c60d",
+        "calls": [
+          "private.weekly_exceptional_json_keys_exact_v1",
+          "private.weekly_source_bulk_producer_ready_v1",
+          "private.weekly_source_bulk_source_cas_v1"
+        ],
+        "writes": []
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "4a1ee268851a08b18d73256904ff78e698adc5457b1519021100f867e4e3c790",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/10_complete_bulk_test_scope.sqlinc",
+      "final_definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/10_complete_bulk_test_scope.sqlinc",
+      "final_definition_sha256": "673c05e40175c0e5c28af5af57737fec1f85d9a8c188a908e2f810caa98200dd",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "673c05e40175c0e5c28af5af57737fec1f85d9a8c188a908e2f810caa98200dd",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/10_complete_bulk_test_scope.sqlinc",
+      "final_definition_sha256": "743efbd0c71c35cbc6e2fcefe159e408296cde2d88b3e622c8cce24de54701d6",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "743efbd0c71c35cbc6e2fcefe159e408296cde2d88b3e622c8cce24de54701d6",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_activation_window_binding_assert_v1(jsonb,jsonb,jsonb,uuid,date,date)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_WINDOW_BINDING.sqlinc",
+      "final_definition_sha256": "6c3f907f878562b1c2c3cfe30f8917609a95fc296654c9f08e2d8a4fc1391e84",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "6c3f907f878562b1c2c3cfe30f8917609a95fc296654c9f08e2d8a4fc1391e84",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "final_definition_sha256": "11889dd4707bfdcbb9b87b63bdd6f0f50f404249c18b1f95ee0f317a595bc488",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "11889dd4707bfdcbb9b87b63bdd6f0f50f404249c18b1f95ee0f317a595bc488",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "final_definition_sha256": "203128859623831c6f4184076a4107abf69e988c80bcffc3cbdddf4cfe8da457",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "203128859623831c6f4184076a4107abf69e988c80bcffc3cbdddf4cfe8da457",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_activation_probe_authorization_assert_v1(jsonb,uuid,date,date,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+      "final_definition_sha256": "34c544d34708514ac1e7e9d1bb653c3ec9cf44449267a7ee1960aeaa59bfd809",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "34c544d34708514ac1e7e9d1bb653c3ec9cf44449267a7ee1960aeaa59bfd809",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_activation_probe_begin_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_SCOPE.sqlinc",
+      "final_definition_sha256": "0cb011c8ab5b1231f1de7e9ef73b02f0f526cbc9a20053e240e6f5de1848df61",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "0cb011c8ab5b1231f1de7e9ef73b02f0f526cbc9a20053e240e6f5de1848df61",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_activation_probe_assert_v1(uuid,uuid,uuid,date,date,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_SCOPE.sqlinc",
+      "final_definition_sha256": "baba781340d7d423df80e5f3370c49a57b7e49d1413d878eae2d85efa2ba523d",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "baba781340d7d423df80e5f3370c49a57b7e49d1413d878eae2d85efa2ba523d",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_activation_probe_execute_v1(uuid,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/ACTIVATION_PROBE_SCOPE.sqlinc",
+      "final_definition_sha256": "e450c3e2d1f658cf39a08c5c1f680089c78d8b7d277fafc93947d51e55186fb5",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "e450c3e2d1f658cf39a08c5c1f680089c78d8b7d277fafc93947d51e55186fb5",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "final_definition_sha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "final_definition_sha256": "973c3eb053c9ce1b946343c282ae6143adfbebe07dfcfb08665b4437a62d9262",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "973c3eb053c9ce1b946343c282ae6143adfbebe07dfcfb08665b4437a62d9262",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(jsonb,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "final_definition_sha256": "7248fdcb2e426028008a525219bf5f439e6c6da6ed2f639491e91cd346c9eb70",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "7248fdcb2e426028008a525219bf5f439e6c6da6ed2f639491e91cd346c9eb70",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_post_verified_partial_artifact_assert_v1(jsonb,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+      "final_definition_sha256": "f29526c42ec24123316345f4b240d108d50e63755c9f5a8bd592e292c6ab49ab",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "f29526c42ec24123316345f4b240d108d50e63755c9f5a8bd592e292c6ab49ab",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_report_fixture_bind_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/REPORT_FIXTURE_REFERENCE.sqlinc",
+      "final_definition_sha256": "da74cfb571f176248a4de43e0de348eacbf4731a4129536f1e633ab930652305",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "da74cfb571f176248a4de43e0de348eacbf4731a4129536f1e633ab930652305",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_rule_report_fixture_finalise_v1(jsonb,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/REPORT_FIXTURE_REFERENCE.sqlinc",
+      "final_definition_sha256": "3af78354356bc1d70ef940947312ccf8f32d8c5d1eb6257bb10db4bf6e17cec3",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "3af78354356bc1d70ef940947312ccf8f32d8c5d1eb6257bb10db4bf6e17cec3",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "final_definition_sha256": "ec0b759af0569ea1b2125e025380620a5c2feab6d77f71e08ace8304c3f84d24",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "ec0b759af0569ea1b2125e025380620a5c2feab6d77f71e08ace8304c3f84d24",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_post_verified_artifact_assert_v1(text,jsonb,jsonb,text)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "final_definition_sha256": "5bdd7034983de7853bb76bb8eaba9da39a1eb031d564bd7ad673caf3beac5c07",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "5bdd7034983de7853bb76bb8eaba9da39a1eb031d564bd7ad673caf3beac5c07",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_post_verified_evidence_record_v1(uuid,jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "final_definition_sha256": "6c27dcfce842bfbf1351c257c25da6ff1698f5a8c1ce50a40fa05d1e3780cdf4",
+      "installed_predecessor": null,
+      "broad_predecessor": null,
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "6c27dcfce842bfbf1351c257c25da6ff1698f5a8c1ce50a40fa05d1e3780cdf4",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/12_complete_report_nullable_rounding_owner.sqlinc",
+      "final_definition_sha256": "d2e2fddc47289e0ce6e089c2940200b07bf6a624fc7d0ffcfc92bc94a4a0edda",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "name": "private.weekly_source_vat_rounding_movement_insert_v1",
+        "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+        "semantic_signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+        "definition_sha256": "ca37181dfd96a64539a060d2dc02705074424bb666384b7881629fd7102856c0",
+        "calls": [
+          "private.weekly_source_billing_movement_hash_v1",
+          "private.weekly_source_frozen_rule_values_v1",
+          "private.weekly_source_invoice_movement_window_id_v1",
+          "private.weekly_source_invoice_only_vector_v1",
+          "private.weekly_source_invoice_vat_target_pence_v1",
+          "private.weekly_source_sha256_jsonb_v1"
+        ],
+        "writes": [
+          "public.weekly_source_billing_movements"
+        ]
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "d2e2fddc47289e0ce6e089c2940200b07bf6a624fc7d0ffcfc92bc94a4a0edda",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "public.weekly_source_group_rule_assign_atomic_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/11_complete_historical_fixture_native_assignment.sqlinc",
+      "final_definition_sha256": "a5480ee1ac00ee4330f456a2e43eada8398a6d4ea5ecb85770030b31495fb136",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "name": "public.weekly_source_group_rule_assign_atomic_v1",
+        "signature": "public.weekly_source_group_rule_assign_atomic_v1(jsonb)",
+        "semantic_signature": "public.weekly_source_group_rule_assign_atomic_v1(jsonb)",
+        "definition_sha256": "42a1447b778732db1db6eec75d9700eb7e154563cc8966d802b519bef8e2f69c",
+        "calls": [
+          "private._weekly_source_rule_group_context_v1",
+          "private._weekly_source_settings_assert_request_v1",
+          "private._weekly_source_settings_deployment_v1",
+          "private._weekly_source_settings_require_admin_v1"
+        ],
+        "writes": [
+          "public.weekly_source_group_rule_assignments",
+          "public.weekly_source_groups"
+        ]
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "a5480ee1ac00ee4330f456a2e43eada8398a6d4ea5ecb85770030b31495fb136",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    },
+    {
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "final_input_file": "docs/healthroster-build/proposals/strict-qualification-native-interfaces/09_complete_controlled_setup_transport.sqlinc",
+      "final_definition_sha256": "9605ec6b56a641b1f5492c10ab98ca7c1cf707ef3d19f4d5805a7e86af3cc91d",
+      "installed_predecessor": null,
+      "broad_predecessor": {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "name": "public.weekly_source_group_rule_feature_set_atomic_v1",
+        "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+        "semantic_signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+        "definition_sha256": "b62d58ca49d2ee9ea9a4e5eef92727029cbb0846fbb885245428e0a0113f5792",
+        "calls": [
+          "private._weekly_source_rule_group_context_v1",
+          "private._weekly_source_settings_assert_request_v1",
+          "private._weekly_source_settings_deployment_v1",
+          "private._weekly_source_settings_require_admin_v1"
+        ],
+        "writes": [
+          "public.weekly_source_group_rule_assignments"
+        ]
+      },
+      "transition": "ADD_AFTER_EXACT_REQUIRED_BROAD_PROPOSAL_PREREQUISITES",
+      "prior_frozen_declaration_hash": "9605ec6b56a641b1f5492c10ab98ca7c1cf707ef3d19f4d5805a7e86af3cc91d",
+      "prior_frozen_declaration_hash_matches_canonical": true
+    }
+  ],
+  "actual_bank_or_wp_native_bodies_replaced": [],
+  "old_union_is_prepared_source_not_installed_registry": true,
+  "actual_catalogue_union_and_final_acl_must_be_measured_after_complete_composition": true,
+  "no_database_or_runtime_acceptance": true
+}
