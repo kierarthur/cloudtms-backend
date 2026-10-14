@@ -1,0 +1,43 @@
+{
+  "finding": "P1-ALIAS-FIXTURE1",
+  "sourceOnly": true,
+  "before": {
+    "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\root-rekey-alias-native-first-use-20261014\\02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql",
+    "sha256": "7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046"
+  },
+  "after": {
+    "file": "03_NATIVE_HELPER_FIXTURE_DATED_MEMBERSHIP_FORWARD.sql",
+    "sha256": "2ecc5c7d2837e4bfd404056504fbe470638eb654a3e13b3dd71844f725d2432a"
+  },
+  "hunks": [
+    {
+      "name": "Respect existing one-client dated-group GiST exclusion",
+      "before": "insert into public.weekly_source_group_clients(source_group_id,client_id,valid_from,created_by_user_id)\nselect id,'f7120000-0000-4000-8000-000000000002','2026-01-01','f7120000-0000-4000-8000-000000000001'\nfrom public.weekly_source_groups where id in('f7120000-0000-4000-8000-000000000005','f7120000-0000-4000-8000-000000000007');",
+      "after": "insert into public.weekly_source_group_clients(source_group_id,client_id,valid_from,valid_to,created_by_user_id)\nvalues('f7120000-0000-4000-8000-000000000005','f7120000-0000-4000-8000-000000000002','2026-01-01','2026-09-15','f7120000-0000-4000-8000-000000000001'),\n ('f7120000-0000-4000-8000-000000000007','f7120000-0000-4000-8000-000000000002','2026-09-16',null,'f7120000-0000-4000-8000-000000000001');"
+    },
+    {
+      "name": "Temporary seed gets genuine fixture work date with unchanged ordinary default",
+      "before": "create function pg_temp.hr_alias_seed_row(p_row uuid,p_upload uuid,p_ordinal integer,p_key text,p_event uuid,p_resolution uuid,p_link uuid)",
+      "after": "create function pg_temp.hr_alias_seed_row(p_row uuid,p_upload uuid,p_ordinal integer,p_key text,p_event uuid,p_resolution uuid,p_link uuid,p_work_date date default '2026-09-15')"
+    },
+    {
+      "name": "Seeded clocks follow the supplied fixture work date",
+      "before": " values(p_row,p_upload,p_ordinal,p_key,'Synthetic alias candidate','Synthetic alias verifier','2026-09-15',\n   '2026-09-15 09:00','2026-09-15 17:00',30,450,'SOURCE_WORKED','Synthetic fixture',decode(repeat('74',32),'hex'));",
+      "after": " values(p_row,p_upload,p_ordinal,p_key,'Synthetic alias candidate','Synthetic alias verifier',p_work_date,\n   p_work_date+'09:00'::time,p_work_date+'17:00'::time,30,450,'SOURCE_WORKED','Synthetic fixture',decode(repeat('74',32),'hex'));"
+    },
+    {
+      "name": "Wrong-group source row is on the actual next membership date",
+      "before": "select pg_temp.hr_alias_seed_row('f7120000-0000-4000-8000-000000000026','f7120000-0000-4000-8000-000000000012',1,'B',null,null,null);",
+      "after": "select pg_temp.hr_alias_seed_row('f7120000-0000-4000-8000-000000000026','f7120000-0000-4000-8000-000000000012',1,'B',null,null,null,'2026-09-17');"
+    },
+    {
+      "name": "Wrong-group test proves real eligibility before the absence assertion",
+      "before": " perform pg_temp.hr_alias_assert(private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000026',own_candidate,own_client) is null,'HR_ALIAS_WRONG_GROUP');",
+      "after": " perform pg_temp.hr_alias_assert(private.weekly_source_upload_client_eligible_v1('f7120000-0000-4000-8000-000000000012',own_client,'2026-09-17'),'HR_ALIAS_OTHER_GROUP_DATED_ELIGIBILITY_REQUIRED');\n perform pg_temp.hr_alias_assert(private.weekly_source_known_source_key_v1('f7120000-0000-4000-8000-000000000026',own_candidate,own_client) is null,'HR_ALIAS_WRONG_GROUP');"
+    }
+  ],
+  "uniqueWholeReverseHunks": 5,
+  "wholeReverseVerified": true,
+  "nativeConstraintChanged": false,
+  "fixtureExecuted": false
+}

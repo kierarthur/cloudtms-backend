@@ -1,0 +1,27 @@
+{
+  "sourceOnly": true,
+  "independentClosurePending": true,
+  "nativeFixtureExecuted": false,
+  "files": [
+    {
+      "file": "PREPARATION_SOURCE_CHECK.json",
+      "bytes": 1398,
+      "sha256": "465fc5edc72187f83e487bcde611edc6971d81f65828b7159200df832db00f26"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2170,
+      "sha256": "57503dadb8aeff6170694b379d26cd7c7f0b60ec95a4abec3c7827fa64c20d8b"
+    },
+    {
+      "file": "prepare-lab-input-held-02.mjs.txt",
+      "bytes": 6040,
+      "sha256": "9192a441b1403e7c3f5f83b5c869bfb55e44fffe897de3d1e786832bc1254363"
+    },
+    {
+      "file": "prepare-lab-input.mjs",
+      "bytes": 6044,
+      "sha256": "7c47f4d115f95e4f3c8d8df14fcd08b5b8341fad39330f396a167fb64b596585"
+    }
+  ]
+}

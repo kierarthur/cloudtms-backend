@@ -1,0 +1,32 @@
+{
+  "sourceOnly": true,
+  "independentClosurePending": true,
+  "nativeFixtureExecuted": false,
+  "files": [
+    {
+      "file": "03_NATIVE_HELPER_FIXTURE_DATED_MEMBERSHIP_FORWARD.sql",
+      "bytes": 17795,
+      "sha256": "2ecc5c7d2837e4bfd404056504fbe470638eb654a3e13b3dd71844f725d2432a"
+    },
+    {
+      "file": "MEMBERSHIP_FORWARD_REVERSE.json",
+      "bytes": 3725,
+      "sha256": "413301a87eb20baf01da067ed088218e851ed59dc777b9789424450178722dc5"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1919,
+      "sha256": "a3ea7109206e1c561540a7fbd8852524cd3a75f16ee3edaf297faf8bd4584cdb"
+    },
+    {
+      "file": "build-membership-forward.mjs",
+      "bytes": 4541,
+      "sha256": "c30b39e895eb67b70903024740c7e8351103c6fb9123d724cdb00d92432435d0"
+    },
+    {
+      "file": "membership-source.test.mjs",
+      "bytes": 3802,
+      "sha256": "49f0a82f9efdb175a20916d4843b82c45a5e67afde9987de582ab309f8d97895"
+    }
+  ]
+}

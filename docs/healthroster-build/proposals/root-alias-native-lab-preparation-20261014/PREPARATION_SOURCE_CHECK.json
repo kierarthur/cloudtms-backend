@@ -1,0 +1,38 @@
+{
+  "status": "PREPARED_NOT_EXECUTED_NOT_REVIEW_APPROVAL",
+  "marker": "hr_alias_lab_00000000000000000000000000000000",
+  "fixtureRawSha256": "2ecc5c7d2837e4bfd404056504fbe470638eb654a3e13b3dd71844f725d2432a",
+  "helperRawSha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+  "helperMappedSha256": "f62a50002fe61a032fabcba0243d42b3a7ed91c69a5b579310e0ecb278437c39",
+  "sqlSha256": "60ebf5575523b8ae4d824db395ed86611ba08ef4b9ecf1ac2858d9a1d2f2ed83",
+  "verificationSha256": "d663c6a7c1b5fc80a6bcb289186fee677adcf8686c16f32112657a7933b4dadd",
+  "bytes": 23184,
+  "statements": 52,
+  "envelope": [
+    {
+      "command": "\\set ON_ERROR_STOP on",
+      "start": 537,
+      "end": 558,
+      "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+    },
+    {
+      "command": "BEGIN",
+      "start": 559,
+      "end": 565,
+      "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+    },
+    {
+      "command": "ROLLBACK",
+      "start": 17785,
+      "end": 17794,
+      "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+    }
+  ],
+  "onlyProviderOwnerMapping": true,
+  "fixtureAssertionsUnchanged": true,
+  "freshFixtureRelations": 12,
+  "requiresSharedTurn": true,
+  "requiresFreshCoreRestorationFingerprints": true,
+  "requiresIndependentFixtureAndEnvelopeReview": true,
+  "nativeExecuted": false
+}

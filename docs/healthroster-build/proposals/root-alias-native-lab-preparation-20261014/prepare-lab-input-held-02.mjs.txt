@@ -1,0 +1,53 @@
+// Pure preparation only. Importing opens no connection and invokes no MCP.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {neutraliseReviewedVerifierEnvelope} from '../../../../scripts/healthroster-full-rehearsal-protocol.mjs';
+import {scanManagedSql,digest} from '../../../../scripts/cloudtms-managed-release-sql.mjs';
+import {mapLogicalPostgresOwnerSql} from '../../../../scripts/cloudtms-db-release-lib.mjs';
+const dir=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(dir,'../../../..');
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+export function prepareAliasLab({marker}){
+ assert.match(marker,/^hr_alias_lab_[a-f0-9]{32}$/);
+ const fixturePath=path.join(dir,'../root-rekey-alias-native-first-use-20261014/02_NATIVE_HELPER_FIXTURE_OWNER_CONFLICT_FORWARD.sql');
+ const fixture=fs.readFileSync(fixturePath,'utf8');assert.equal(sha(fixture),'7454f9fc1ac622048b5d15bdd3532aabde10f12fe3e3624bbbf934eb7023c046');
+ const money=path.join(path.dirname(root),'healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/rekey-source-alias-all-owner-successor-20261014');
+ const manifestBytes=fs.readFileSync(path.join(money,'FROZEN_ARTIFACT_MANIFEST.json'));assert.equal(sha(manifestBytes),'400b1b49fe5534b79baccbea9a9e3b7017458b40c84afeb66ebafedced92ff5c');
+ const artifact=JSON.parse(manifestBytes).artifacts.find(r=>r.sha256==='3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d');assert.ok(artifact);
+ const helper=fs.readFileSync(path.join(money,artifact.file),'utf8');assert.equal(sha(helper),artifact.sha256);
+ const unit={kind:'verifier',file:fixturePath,sql:fixture,sqlHash:digest(fixture)};
+ const neutral=neutraliseReviewedVerifierEnvelope(unit,{sourceSqlHash:unit.sqlHash,removedCommands:['\\set ON_ERROR_STOP on','BEGIN','ROLLBACK']});
+ const previous=process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;let mapped;
+ try{process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';mapped=mapLogicalPostgresOwnerSql(helper,{mapAclGrantees:false});}
+ finally{if(previous===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=previous;}
+ assert.equal(helper.split('owner to postgres').length,2);assert.equal(mapped.replace('OWNER TO CURRENT_USER','owner to postgres'),helper);
+ const preamble=`set local jit=off;set local pg_show_plans.is_enabled=off;set local work_mem='4MB';
+do $hr_alias_scope$ begin
+ if current_database()<>'cloudtms_test_clone' or not exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST')
+ or not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1)
+ or exists(select 1 from private.cloudtms_database_releases where status='APPLYING')
+ or to_regprocedure('private.weekly_source_known_source_key_v1(uuid,uuid,uuid)') is not null
+ or to_regclass('private.${marker}') is not null then raise exception 'HR_ALIAS_LAB_EXACT_TARGET_OR_VACANCY_REFUSED' using errcode='55000';end if;
+end $hr_alias_scope$;
+create table private.${marker}(marker boolean not null);
+revoke all on table private.${marker} from public,anon,authenticated,service_role;
+insert into private.${marker} values(true);`;
+ const sql=preamble+'\n'+mapped+'\n'+neutral.sql+`\nselect jsonb_build_object('status','ALIAS_FIXTURE_ALL_ASSERTIONS_REACHED','database',current_database(),'marker','${marker}','fixtureSha256','${sha(fixture)}');`;
+ const parsed=scanManagedSql(sql);assert.equal(parsed.meta.length,0);
+ assert.ok(!parsed.statements.some(r=>['BEGIN','COMMIT','ROLLBACK','PREPARE','ABORT','END'].includes(r.tokens[0])));
+ assert.ok(Buffer.byteLength(sql)<2_000_000&&parsed.statements.length<=250);
+ const catalogue=JSON.parse(fs.readFileSync(path.join(dir,'../root-rekey-alias-trigger-review-20261014/INSTALLED_FIXTURE_CATALOG_PRECHECK.json')));
+ const tables=[...new Set(catalogue.columns.map(r=>r.table))];assert.equal(tables.length,12);
+ const counts=tables.map(table=>{assert.match(table,/^public\.[a-z_0-9]+$/);const columns=catalogue.columns.filter(c=>c.table===table&&c.type==='uuid').map(c=>c.column);assert.ok(columns.length&&columns.every(c=>/^[a-z_0-9]+$/.test(c)));
+  return "select '"+table+"' relation,count(*) fixture_matches from "+table+' where '+columns.map(c=>c+"=any(array(select ('f7120000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid from generate_series(1,90) i))").join(' or ');});
+ const verification_sql=`select jsonb_build_object('database',current_database(),'testIdentity',exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST'),
+ 'legacyOne',exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1),
+ 'markerAbsent',to_regclass('private.${marker}') is null,'helperAbsent',to_regprocedure('private.weekly_source_known_source_key_v1(uuid,uuid,uuid)') is null,
+ 'allFixtureIdentifiersAbsent',(select bool_and(fixture_matches=0) from (${counts.join(' union all ')}) fixture),
+ 'fixtureCounts',(select jsonb_agg(to_jsonb(fixture) order by relation) from (${counts.join(' union all ')}) fixture),
+ 'postmasterStart',pg_postmaster_start_time());`;
+ return{sql,verification_sql,continue_on_error:false,label:'HealthRoster corrected native alias helper first use',lock_timeout_ms:1000,statement_timeout_ms:30000,max_rows_per_statement:5,
+  preparation:{status:'PREPARED_NOT_EXECUTED_NOT_REVIEW_APPROVAL',marker,fixtureRawSha256:sha(fixture),helperRawSha256:sha(helper),helperMappedSha256:sha(mapped),sqlSha256:sha(sql),verificationSha256:sha(verification_sql),bytes:Buffer.byteLength(sql),statements:parsed.statements.length,envelope:neutral.envelope,onlyProviderOwnerMapping:true,fixtureAssertionsUnchanged:true,freshFixtureRelations:tables.length,requiresSharedTurn:true,requiresFreshCoreRestorationFingerprints:true,requiresIndependentFixtureAndEnvelopeReview:true,nativeExecuted:false}};
+}

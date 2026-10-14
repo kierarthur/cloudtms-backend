@@ -1,0 +1,9 @@
+# P1-ALIAS-FIXTURE1 dated-membership correction
+
+Selected source-only successor: `03_NATIVE_HELPER_FIXTURE_DATED_MEMBERSHIP_FORWARD.sql`, SHA-256 `2ecc5c7d2837e4bfd404056504fbe470638eb654a3e13b3dd71844f725d2432a`. Independent closure remains pending; no fixture SQL has run.
+
+The original selected02 remains unchanged and HELD. Critic report `BUILD_REKEY_ALIAS_NATIVE_FIXTURE_SOURCE_CRITIC_14102026.md`, SHA-256 `d15350051e4fc9bf894fd3c1113e53365d0b16d31e716f5481ca9242b49e5c11`, identified overlapping group5/group7 memberships for client2. The actual installed GiST exclusion is keyed by client and inclusive date range, without a group dimension; that statement would fail 23P01 before any alias assertion. The earlier column/default/index-validity checks are retained as partial evidence, not value-conflict or execution approval.
+
+The new fixture keeps client2 in group5 through 15 September inclusive and group7 from 16 September. Its other-group row is dated 17 September, with matching 09:00–17:00 clocks supplied through the temporary seed's optional work-date argument. A new assertion proves that row's genuine dated client eligibility before the wrong-group alias absence check. Original group5 A/B/C rows remain 15 September; foreign client40 remains in group5 only. Thus the other-group test cannot pass merely because the client is ineligible.
+
+Five unique full reverse hunks recover every byte of held02. Five source checks pass, covering actual exclusion identity/disjoint fixture ranges, clock/date/eligibility ordering, retained foreign-owner and ambiguity assertions, full transaction envelope/finite UUID scope, and all21 INSERT column/default sets. All source constraints and triggers remain unchanged and enabled. This does not prove native SQL compilation or execution. The actual callback, rollback restoration and all larger pipeline, actor, concurrency and financial gates remain required.
