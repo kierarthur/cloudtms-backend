@@ -1,0 +1,43 @@
+{
+  "status": "REVIEWED_HARNESS_SOURCE_INTEGRATED_NATIVE_NOT_RUN",
+  "harnessPin": "3c1f020681d25358ce8b4b742d09fb16060a9ae9",
+  "sqlRuntimePin": "2de1dff6abf256602a37424c64a964006a7a5262",
+  "files": [
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/CANDIDATE_SOURCE_BINDING_14102026.json",
+      "committedSha256": "82ddc1acf37b83097f7a2d31ad02d3f7dc83729343a2ed8b3c3a26e05e40a37c"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/HARNESS_SOURCE_REVIEW_14102026.md",
+      "committedSha256": "498288aa837f9745dd2e859044a958cfbacffcc0f072e5cd84919f64deeb02c2"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/VERIFIER_CALLEE_CENSUS.json",
+      "committedSha256": "120b9bccd406884227ce3fdf13e5f279fddd465fda5a572e486ff0bbd797c6f6"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json",
+      "committedSha256": "5a5f4d0fe89c9b4ac9007af2e916174e1d96d786e3103cceaf08c00497bd1c50"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "committedSha256": "9ba9ba1a5ab47e9bc6aba6f46d766cbe2c0b32ba438020daa7a5b677c757d2e3"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "committedSha256": "5254a3c200c11d0efd89e0c116a78c3bff33e8f65b1be1b8fd5ae7f8ebadda17"
+    },
+    {
+      "file": "scripts/healthroster-install1-rehearsal-review.mjs",
+      "committedSha256": "f47e0bb5ee189b13215489c5598edaf3277c135d4d3a88a934a1bc19aa2ce59c"
+    },
+    {
+      "file": "scripts/healthroster-install1-verifier-census.mjs",
+      "committedSha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "committedSha256": "3b11f8cfc63568765fbc07d933c01a6206f6dbcf0687bc451568b5e46824acc6"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "status": "SOURCE_REVIEW_ONLY_NOT_NATIVE_AUTHORITY",
+  "sealedSqlRuntimeCommit": "2de1dff6abf256602a37424c64a964006a7a5262",
+  "predecessor": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "sealedCandidateContractHash": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+  "reviewedSourceFiles": 700,
+  "candidateDifferences": [],
+  "counts": {
+    "migrations": 389,
+    "repeatables": 1019,
+    "verifiers": 158
+  },
+  "included": 142,
+  "excluded": 16,
+  "calleeDictionaryEntries": 1563,
+  "censusSha256": "120b9bccd406884227ce3fdf13e5f279fddd465fda5a572e486ff0bbd797c6f6",
+  "reviewSha256": "5a5f4d0fe89c9b4ac9007af2e916174e1d96d786e3103cceaf08c00497bd1c50",
+  "sourceModel": {
+    "installedLedger": "SYNTHETIC_NOT_OBSERVED",
+    "contract": "harness branch still has predecessor contract; root must use sealed candidate contract",
+    "contractHash": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+    "contractDigest": "SYNTHETIC_NOT_PROBED",
+    "units": 145,
+    "mappedStatements": 2271,
+    "bytes": 3646982,
+    "pending": {
+      "migrations": 0,
+      "repeatables": 2,
+      "readerPair": 0
+    },
+    "diagnosticCodes": 5197,
+    "diagnosticCodesHash": "ab36dbcaed3582d755cc0bf67f3774578d38e2c3ce92f6fafb723742db3182d7",
+    "outerIsolation": "REPEATABLE READ",
+    "nativeFull": "NOT_RUN"
+  },
+  "hostedExecutorOwner": "root",
+  "hostedCalls": false,
+  "secretReads": false,
+  "docker": false
+}

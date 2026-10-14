@@ -83,20 +83,30 @@ export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
       if (/^\\set\s+ON_ERROR_(?:STOP|ROLLBACK)\b/i.test(meta.text)) {
         throw Error('REHEARSAL_ERROR_CONTROL_OVERRIDE_REFUSED');
       }
+      if (/^\\(?:set|unset)\s+(?:AUTOCOMMIT|ECHO|ECHO_HIDDEN|VERBOSITY|SHOW_CONTEXT|FETCH_COUNT|SINGLELINE|SINGLESTEP|HISTFILE)\b/i.test(meta.text)) {
+        throw Error('REHEARSAL_CLIENT_CONTROL_OVERRIDE_REFUSED');
+      }
     }
     const parts = [`\\echo HR_FILE_BEGIN ${index}`, 'reset role;', 'reset session authorization;',
       'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;'];
     // psql variables are client state: SQL savepoint rollback cannot clear them.
     // Keep each verifier's own internal set/if behavior, with no predecessor leak.
-    if (verifier) parts.push('\\unset weekly_source_verification_outer_transaction', `savepoint hr_verifier_${index};`);
+    const clientVariables = [...new Set(['weekly_source_verification_outer_transaction',
+      ...(unit.clientVariables ?? []), ...parsed.meta.flatMap(row => {
+        const assigned=row.text.match(/^\\(?:set|unset)\s+([A-Za-z_][A-Za-z0-9_]*)\b/i);
+        const referenced=[...row.text.matchAll(/:\{\?([A-Za-z_][A-Za-z0-9_]*)\}|:(?:'|")?([A-Za-z_][A-Za-z0-9_]*)/g)].map(x=>x[1]??x[2]);
+        return [...assigned?[assigned[1]]:[],...referenced];
+      })])].filter(name=>!['ON_ERROR_STOP','ON_ERROR_ROLLBACK'].includes(name)).sort();
+    if (clientVariables.some(name=>!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw Error('REHEARSAL_CLIENT_VARIABLE_REFUSED');
+    if (verifier) parts.push(...clientVariables.map(name=>'\\unset '+name), `savepoint hr_verifier_${index};`);
     parts.push(unit.sql);
     if (verifier) parts.push(`rollback to savepoint hr_verifier_${index};`, `release savepoint hr_verifier_${index};`,
-      '\\unset weekly_source_verification_outer_transaction');
+      ...clientVariables.map(name=>'\\unset '+name));
     parts.push(`\\echo HR_FILE_END ${index}`);
     rendered.push(parts.join('\n'));
     census.push({index, file:unit.file, kind:unit.kind, sqlHash:unit.sqlHash, statements:parsed.statements.length,
       clientVariableIsolation:verifier, sourceSqlHash:unit.sourceSqlHash??unit.sqlHash,
-      reviewedEnvelope:unit.envelope??[]});
+      reviewedEnvelope:unit.envelope??[],clientVariables:verifier?clientVariables:[]});
   }
   const sql = rendered.join('\n')+'\n';
   return {sql, sha256:digest(sql), bytes:Buffer.byteLength(sql), units:census,
@@ -110,7 +120,7 @@ export function closedRehearsalDiagnostic(line, lineMap, allowedCodes = new Set(
   if (!match) return null;
   const number = Number(match[1]);
   const location = lineMap.find(x => number >= x.startLine && number <= x.endLine);
-  const code = match[4].match(/^([A-Z][A-Z0-9_]{5,})(?:\s|$)/)?.[1] ?? null;
+  const code = match[4].match(/^([A-Z][A-Z0-9_]{5,})(?:\s|:|$)/)?.[1] ?? null;
   return {file:location?.file ?? 'HARNESS_CONTROL', kind:location?.kind ?? 'control',
     statement:location?.statement ?? null, object:location?.object ?? null,
     line:number, sqlstate:match[3], error:code && allowedCodes.has(code) ? code : 'DATABASE_DIAGNOSTIC_WITHHELD'};

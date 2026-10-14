@@ -1,0 +1,1659 @@
+{
+  "status": "EXACT_BASELINE_FAILURE_SET_REPRODUCED_NOT_FULL_SUITE_PASS",
+  "candidate": "2de1dff6abf256602a37424c64a964006a7a5262",
+  "baseline": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "candidateWholeJavaScriptSuite": {
+    "status": "SOURCE_SUITE_HAS_FAILURES",
+    "pass": 1752,
+    "fail": 135,
+    "cancelled": 1,
+    "skipped": 0,
+    "failures": [
+      {
+        "file": "tests/banking-pay-cross-route-refresh-coalescing.test.js",
+        "name": "durable continuation uses the existing bounded queue wake and cron remains fallback",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/banking-pay-workbench-stage2-worker.test.js",
+        "name": "shared wake entry publishes only NEXT enrollment and retains exact legacy schema parsing",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one enrollment persists CLAIM and next ENROLL before acknowledgement; no inline financial work",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "empty expiry enrollment progress wakes the next command without inventing a job",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "no available command ends the enrollment chain; a completed job never gets another CLAIM",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "uncertain durable publication cannot acknowledge enrollment or expiry",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "expiry receives only exact run identity, persists enrollment then acknowledges",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "a definite Office-won race is safe ACK but a damaged or unexpected state is not",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "unknown expiry response never claims completion or sends a second intake",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "financial CLAIM delegates once and durably retains the actual lease before ACK",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one recovery tick visits five independent fixed lanes, sending only bounded IDs",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one failing lane cannot starve the other recovery lanes and sends are all awaited",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "reissue cancellation accepts only whole transfer identity and coherent blocked receipts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CANCEL_REQUEST calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CASH_REISSUE calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "REISSUE_CANCEL calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CSV_RETURN calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "frozen case PAYE resaves bind exact prior revision; payout-only has no invented payroll net",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "receipt timestamps retain exact offset/microseconds and UTF-8 evidence identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "cancelled/blocked intake and created reissue replays retain closed progress",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "request bytes are bounded before parsing, including dishonest/missing content-length",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "responses are closed typed receipts, not arbitrary JSON/number/candidate trees",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "deadline aborts a pending response stream without automatic re-dispatch",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "case NET CLAIM and each bounded page retain exact authority/cursor; REVIEW terminates locally",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM PAYE_NET_ENTRY persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE PAYE_NET_ENTRY acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM TRANSFER_BUILD persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE TRANSFER_BUILD acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CSV_SETTLEMENT persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CSV_SETTLEMENT acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CSV_RETURN persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CSV_RETURN acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CASH_REISSUE persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CASH_REISSUE acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM SIMPLE_CANCEL persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE SIMPLE_CANCEL acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM REISSUE_CANCEL persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE REISSUE_CANCEL acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM INTERNAL_SETTLEMENT persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE INTERNAL_SETTLEMENT acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CASE_CREATE persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CASE_CREATE acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished TRANSFER_BUILD page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished CSV_SETTLEMENT page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished SIMPLE_CANCEL page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished INTERNAL_SETTLEMENT page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE durable token publication precedes ack; lost STEP retries original token then terminal replay acks",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE lost CLAIM publication and busy/predecessor/retry classifications never adopt an active nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE rejects builder/approval fields and routes permanent lease failure through token-free recording",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "a reclaimed CLAIM checkpoint is preserved as bigint text, not restarted from null",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "ack remains absent while durable publication is pending",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testTimeoutFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "definite DONE CLAIM is terminal: ack rather than indefinitely retry or adopt an old nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "busy, predecessor and contention retry classifications defer the same CLAIM without token adoption",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "lost CLAIM result and malformed claim receipt retry the unchanged CLAIM, never a recovered/adopted STEP",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "lost STEP response retries EXACT nonce/epoch/cursor/limit; owner replay publishes its current checkpoint once",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "failed continuation send after CLAIM retries CLAIM, while failed send after STEP retries its original page",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "publication succeeded but receipt was lost: duplicate CLAIM/STEP deliveries rely only on owner authority",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "no client timestamp or local expiry inference: even a past successful CLAIM receipt retains its exact authority",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "permanent missing/kind/scope/lease errors require an explicit durable failure disposition before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "missing fixed RPC, durable publisher or failure recorder refuses financial work and retries original",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "unfinished unchanged/backward/null cursor never creates a same-page continuation loop",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE replay retains owner authority after cleared lease/epoch and does not create another checkpoint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "implementation is one bounded adapter call, no batch drain, client clock, arbitrary SQL or browser route",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "POSITION CLAIM persists phase plus exact Unicode component cursor, not an assumed bigint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE CLAIM persists the exact one next-phase input, preserving selection/UUID/component identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "POSITION one page or phase transition replaces only the owner-returned checkpoint; final replay acks",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE finite phase journey carries exact state, resets tuples only on owner transitions, and never drains inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "same PREPARE pair page retains its original limit rather than reset to a whole Candidate drain",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE READY/REVIEW and POSITION final replay acknowledge only the authoritative terminal owner result",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "new kinds unknown transport/send outcome preserves the EXACT original phase and cursor tuple for retry",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "new kind CLAIM unknown/busy/predecessor retries remain CLAIM, never manufacture a phase or active nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "a retained unsupported-owner response keeps its definite failure handoff; no fake next READY",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "case finance pages continue once at a strictly later checkpoint, retain limit, and finish Candidate REVIEW",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "an unchanged new-kind phase/cursor cannot create an indefinite same-state continuation loop",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "actual HTML renders original gross100/payrollnet75/recovery10/cash65 separately with frozen detail and all available options",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "hostile labels, unit codes, references and case explanations remain escaped text, never active HTML",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "later current Timesheet/settings and latest NET mutation cannot change original issued output",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "split OWN70 and ONEOFF40 print frozen instruction cash separately from accepted projection110",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "top-up prints selected10 distinctly from full approval160 and8 approved hours without manufacturing paid hours",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "Source overnight and unknown rate retain exact local clocks without inferred timezone or blended rate",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "expense-only fixed component retains payment/evidence and honest absent shifts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "explicit zero WORK retains genuine quantity/detail; no fabricated external zero instruction",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "authoritative financial values must remain decimal text and unsigned category amounts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "300 actual rendered constituents use bounded pages/chunks and all rate options only once per work",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "long escaped labels split into capped byte chunks without changing decoded output",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "one frozen shift page uses the validated Office actor and exact SQL arguments",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "ordinary day shift detail retains exact money, exclusions and bucket hours without unused rates",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "breaks retain duration-only evidence and cannot omit the frozen shift identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "available rate options are read once per run_work with the complete text tuple cursor",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "Source used-rate detail keeps unknown rates null and exact signed decimal hours",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "empty pages end traversal without totals, scans or automatic next-page calls",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "a byte-limited short page retains the explicit continuation cursor",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "local overnight clocks remain local without fabricated UTC dates",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "PostgreSQL microsecond timestamp detail is preserved without JS millisecond rounding",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-rpc.test.js",
+        "name": "frozen route binds verified actor and exact closed wrapper without buffering",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PF06 observes one completed bounded read with visited rows and preserves unknown counts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PF06 exact Pay Query contention is labeled without changing errors or observer failure disposition",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "case NET uses one bounded page and exposes a projection only at completion",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP TRANSFER_BUILD performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP CSV_SETTLEMENT performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP SIMPLE_CANCEL performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP INTERNAL_SETTLEMENT performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "opaque lease epoch/cursors/counts retain all bigint digits, including reclamation checkpoint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "closed typed response rejects arbitrary result trees, precision loss and wrong scope",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "stale cursor replay reports retained checkpoint with zero work, never starts a second page",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "group cancellation precheck remains REQUESTED with exact cursor and no released money",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "POSITION CLAIM and each STEP preserve exact text component/phase with no invented replay flag",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "component cursor bound is 256 Unicode characters, not bytes/code units or a fabricated key grammar",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PREPARE STEP dispatch input is one closed phase-specific shape, including pin selection bigint text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PREPARE phase completion is not job DONE; counts remain nullable when exact owner did not report them",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "a retained unsupported-owner response is a definite refusal, never fake READY or repeated execution",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "case finance pages keep exact bigint text and Candidate issues carry no invented Work identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation-expiry-rpc.test.js",
+        "name": "due exact page and item shapes cannot carry financial data or inaccurate cursors",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "CREATE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORK_PAGE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "SEAL_ENQUEUE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "exact successful enqueue replay still carries wake; other receipts never do",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORK ALL and SUBSET are explicit revision-bound tuples, not default missing-metadata behavior",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "case-only zero-WORK seal and explicit excluded case selection remain permitted",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "wrong scope/count, JS numeric bigint, free result fields and invalid review phases close mutation outcome",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "component keyset page retains exact money and immutable original IDs with explicit continuation",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "selected zero, signed approved liabilities, nullable missing position and zero clock child facts are not erased",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORKERS uses one closed typed page, honest nulls and exact text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "RATES uses one closed typed page, honest nulls and exact text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "PS14 reservation authority is mutually exclusive and refuses invented cash or lifecycle",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "STATUS preserves accepted projection while explicitly pending, one original transfer cursor and no bank fields",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "saved selection schema/owners preserve nullable ALL evidence, exact FK, typed bounded page conservation and no financial fallback",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "ENROLL performs exactly one raw metadata call; partial enrollment may keep prior sequence zero",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "empty expiry lane advancement remains true even with no job or worker",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "all thirteen actual job kinds are typed explicitly, including CASE_WRITE_OFF and retired PREPARE metadata",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "parsed callers compose with the fixed raw transport but do not send or execute returned jobs",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "response reader waits for EOF, decodes chunks and releases its stream lock",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "declared oversize cancels unread response; exact 32KiB fits and dishonest smaller header cannot evade bound",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "fresh explicit calls use only fresh owner results, never cached missing/progress/unknown receipts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "module exposes exactly four metadata RPCs and no browser actor/private clock/lease/queue bindings",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      }
+    ]
+  },
+  "baselineAffectedTwelveFiles": {
+    "status": "SOURCE_SUITE_HAS_FAILURES",
+    "pass": 216,
+    "fail": 135,
+    "cancelled": 1,
+    "skipped": 0,
+    "failures": [
+      {
+        "file": "tests/banking-pay-cross-route-refresh-coalescing.test.js",
+        "name": "durable continuation uses the existing bounded queue wake and cron remains fallback",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/banking-pay-workbench-stage2-worker.test.js",
+        "name": "shared wake entry publishes only NEXT enrollment and retains exact legacy schema parsing",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one enrollment persists CLAIM and next ENROLL before acknowledgement; no inline financial work",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "empty expiry enrollment progress wakes the next command without inventing a job",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "no available command ends the enrollment chain; a completed job never gets another CLAIM",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "uncertain durable publication cannot acknowledge enrollment or expiry",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "expiry receives only exact run identity, persists enrollment then acknowledges",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "a definite Office-won race is safe ACK but a damaged or unexpected state is not",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "unknown expiry response never claims completion or sends a second intake",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "financial CLAIM delegates once and durably retains the actual lease before ACK",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one recovery tick visits five independent fixed lanes, sending only bounded IDs",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-background.test.js",
+        "name": "one failing lane cannot starve the other recovery lanes and sends are all awaited",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "reissue cancellation accepts only whole transfer identity and coherent blocked receipts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CANCEL_REQUEST calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CASH_REISSUE calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "REISSUE_CANCEL calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "CSV_RETURN calls one closed raw dependency with verified actor and typed args",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "frozen case PAYE resaves bind exact prior revision; payout-only has no invented payroll net",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "receipt timestamps retain exact offset/microseconds and UTF-8 evidence identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "cancelled/blocked intake and created reissue replays retain closed progress",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "request bytes are bounded before parsing, including dishonest/missing content-length",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "responses are closed typed receipts, not arbitrary JSON/number/candidate trees",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-command.test.js",
+        "name": "deadline aborts a pending response stream without automatic re-dispatch",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "case NET CLAIM and each bounded page retain exact authority/cursor; REVIEW terminates locally",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM PAYE_NET_ENTRY persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE PAYE_NET_ENTRY acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM TRANSFER_BUILD persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE TRANSFER_BUILD acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CSV_SETTLEMENT persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CSV_SETTLEMENT acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CSV_RETURN persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CSV_RETURN acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CASH_REISSUE persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CASH_REISSUE acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM SIMPLE_CANCEL persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE SIMPLE_CANCEL acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM REISSUE_CANCEL persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE REISSUE_CANCEL acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM INTERNAL_SETTLEMENT persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE INTERNAL_SETTLEMENT acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CLAIM CASE_CREATE persists the exact new server token before ack; never executes STEP inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE CASE_CREATE acknowledges exactly once without another send/claim/step",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished TRANSFER_BUILD page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished CSV_SETTLEMENT page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished SIMPLE_CANCEL page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "one unfinished INTERNAL_SETTLEMENT page publishes next cursor with original nonce/epoch/limit before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE durable token publication precedes ack; lost STEP retries original token then terminal replay acks",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE lost CLAIM publication and busy/predecessor/retry classifications never adopt an active nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "CASE_CREATE rejects builder/approval fields and routes permanent lease failure through token-free recording",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "a reclaimed CLAIM checkpoint is preserved as bigint text, not restarted from null",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "ack remains absent while durable publication is pending",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testTimeoutFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "definite DONE CLAIM is terminal: ack rather than indefinitely retry or adopt an old nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "busy, predecessor and contention retry classifications defer the same CLAIM without token adoption",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "lost CLAIM result and malformed claim receipt retry the unchanged CLAIM, never a recovered/adopted STEP",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "lost STEP response retries EXACT nonce/epoch/cursor/limit; owner replay publishes its current checkpoint once",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "failed continuation send after CLAIM retries CLAIM, while failed send after STEP retries its original page",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "publication succeeded but receipt was lost: duplicate CLAIM/STEP deliveries rely only on owner authority",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "no client timestamp or local expiry inference: even a past successful CLAIM receipt retains its exact authority",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "permanent missing/kind/scope/lease errors require an explicit durable failure disposition before ack",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "missing fixed RPC, durable publisher or failure recorder refuses financial work and retries original",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "unfinished unchanged/backward/null cursor never creates a same-page continuation loop",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "DONE replay retains owner authority after cleared lease/epoch and does not create another checkpoint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "implementation is one bounded adapter call, no batch drain, client clock, arbitrary SQL or browser route",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "POSITION CLAIM persists phase plus exact Unicode component cursor, not an assumed bigint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE CLAIM persists the exact one next-phase input, preserving selection/UUID/component identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "POSITION one page or phase transition replaces only the owner-returned checkpoint; final replay acks",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE finite phase journey carries exact state, resets tuples only on owner transitions, and never drains inline",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "same PREPARE pair page retains its original limit rather than reset to a whole Candidate drain",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "PREPARE READY/REVIEW and POSITION final replay acknowledge only the authoritative terminal owner result",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "new kinds unknown transport/send outcome preserves the EXACT original phase and cursor tuple for retry",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "new kind CLAIM unknown/busy/predecessor retries remain CLAIM, never manufacture a phase or active nonce",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "a retained unsupported-owner response keeps its definite failure handoff; no fake next READY",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "case finance pages continue once at a strictly later checkpoint, retain limit, and finish Candidate REVIEW",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-financial-queue.test.js",
+        "name": "an unchanged new-kind phase/cursor cannot create an indefinite same-state continuation loop",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "actual HTML renders original gross100/payrollnet75/recovery10/cash65 separately with frozen detail and all available options",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "hostile labels, unit codes, references and case explanations remain escaped text, never active HTML",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "later current Timesheet/settings and latest NET mutation cannot change original issued output",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "split OWN70 and ONEOFF40 print frozen instruction cash separately from accepted projection110",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "top-up prints selected10 distinctly from full approval160 and8 approved hours without manufacturing paid hours",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "Source overnight and unknown rate retain exact local clocks without inferred timezone or blended rate",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "expense-only fixed component retains payment/evidence and honest absent shifts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "explicit zero WORK retains genuine quantity/detail; no fabricated external zero instruction",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "authoritative financial values must remain decimal text and unsigned category amounts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "300 actual rendered constituents use bounded pages/chunks and all rate options only once per work",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-advice.test.js",
+        "name": "long escaped labels split into capped byte chunks without changing decoded output",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "one frozen shift page uses the validated Office actor and exact SQL arguments",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "ordinary day shift detail retains exact money, exclusions and bucket hours without unused rates",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "breaks retain duration-only evidence and cannot omit the frozen shift identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "available rate options are read once per run_work with the complete text tuple cursor",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "Source used-rate detail keeps unknown rates null and exact signed decimal hours",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "empty pages end traversal without totals, scans or automatic next-page calls",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "a byte-limited short page retains the explicit continuation cursor",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "local overnight clocks remain local without fabricated UTC dates",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-read.test.js",
+        "name": "PostgreSQL microsecond timestamp detail is preserved without JS millisecond rounding",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-frozen-rpc.test.js",
+        "name": "frozen route binds verified actor and exact closed wrapper without buffering",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PF06 observes one completed bounded read with visited rows and preserves unknown counts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PF06 exact Pay Query contention is labeled without changing errors or observer failure disposition",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "case NET uses one bounded page and exposes a projection only at completion",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP TRANSFER_BUILD performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP CSV_SETTLEMENT performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP SIMPLE_CANCEL performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "STEP INTERNAL_SETTLEMENT performs exactly one closed raw call",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "opaque lease epoch/cursors/counts retain all bigint digits, including reclamation checkpoint",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "closed typed response rejects arbitrary result trees, precision loss and wrong scope",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "stale cursor replay reports retained checkpoint with zero work, never starts a second page",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "group cancellation precheck remains REQUESTED with exact cursor and no released money",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "POSITION CLAIM and each STEP preserve exact text component/phase with no invented replay flag",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "component cursor bound is 256 Unicode characters, not bytes/code units or a fabricated key grammar",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PREPARE STEP dispatch input is one closed phase-specific shape, including pin selection bigint text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "PREPARE phase completion is not job DONE; counts remain nullable when exact owner did not report them",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "a retained unsupported-owner response is a definite refusal, never fake READY or repeated execution",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-job-step.test.js",
+        "name": "case finance pages keep exact bigint text and Candidate issues carry no invented Work identity",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation-expiry-rpc.test.js",
+        "name": "due exact page and item shapes cannot carry financial data or inaccurate cursors",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "CREATE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORK_PAGE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "SEAL_ENQUEUE authenticates before one closed actor-bound call and preserves exact receipt",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "exact successful enqueue replay still carries wake; other receipts never do",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORK ALL and SUBSET are explicit revision-bound tuples, not default missing-metadata behavior",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "case-only zero-WORK seal and explicit excluded case selection remain permitted",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "wrong scope/count, JS numeric bigint, free result fields and invalid review phases close mutation outcome",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "component keyset page retains exact money and immutable original IDs with explicit continuation",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "selected zero, signed approved liabilities, nullable missing position and zero clock child facts are not erased",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "WORKERS uses one closed typed page, honest nulls and exact text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "RATES uses one closed typed page, honest nulls and exact text",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "PS14 reservation authority is mutually exclusive and refuses invented cash or lifecycle",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "STATUS preserves accepted projection while explicitly pending, one original transfer cursor and no bank fields",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-preparation.test.js",
+        "name": "saved selection schema/owners preserve nullable ALL evidence, exact FK, typed bounded page conservation and no financial fallback",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "ENROLL performs exactly one raw metadata call; partial enrollment may keep prior sequence zero",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "empty expiry lane advancement remains true even with no job or worker",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "all thirteen actual job kinds are typed explicitly, including CASE_WRITE_OFF and retired PREPARE metadata",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "parsed callers compose with the fixed raw transport but do not send or execute returned jobs",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "response reader waits for EOF, decodes chunks and releases its stream lock",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "declared oversize cancels unread response; exact 32KiB fits and dishonest smaller header cannot evade bound",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "fresh explicit calls use only fresh owner results, never cached missing/progress/unknown receipts",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      },
+      {
+        "file": "tests/bpay-next-runtime-rpc.test.js",
+        "name": "module exposes exactly four metadata RPCs and no browser actor/private clock/lease/queue bindings",
+        "code": "ERR_TEST_FAILURE",
+        "failureType": "testCodeFailure"
+      }
+    ]
+  },
+  "identicalFailingNames": true,
+  "pureSourceTimeoutMilliseconds": 90000,
+  "focusedPpAndReleaseTests": {
+    "cancelled": 0,
+    "skipped": 0,
+    "pass": 104,
+    "fail": 0
+  },
+  "databaseSourceIntegrity": {
+    "passed": true,
+    "migrations": 389,
+    "repeatables": 1019
+  },
+  "contractCouplingPassed": true,
+  "nativeFullRehearsal": "NOT_RUN",
+  "note": "Original npm test had an unbounded stale Banking fixture wait. Only its exact owned child was stopped. The repeated bounded source suite and isolated baseline give the same failures and cancelled fixture. No database rehearsal deadline, test assertion or Banking runtime was changed."
+}
