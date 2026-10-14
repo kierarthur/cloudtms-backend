@@ -1,0 +1,427 @@
+{
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "label": "HealthRoster complete Workbench seam verifier native-default bounded reproduction",
+  "sqlSha256": "710b33ad61256e87bac21b50fb1ca54de7529bfa92100ee62782267047591542",
+  "statementCount": 42,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 20,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 21,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 22,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 23,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 24,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 25,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 26,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 27,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 28,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 29,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 30,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 31,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 32,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 33,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 34,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 35,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 36,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 37,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 38,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 39,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 40,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 41,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 42,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "result"
+      ],
+      "rows": [
+        {
+          "result": {
+            "ok": true,
+            "seams": [
+              "private.pay_workbench_unit_economic_occurrence_page_v1",
+              "private.pay_workbench_timesheet_input_fingerprint_v1"
+            ],
+            "scenarios": [
+              "no-head ordinary composition",
+              "one-valid-head replacement",
+              "H2-004",
+              "H2-025",
+              "SPI-081",
+              "SPI-082",
+              "SPI-083",
+              "SPI-084",
+              "SPI-085",
+              "certified-zero WB-009",
+              "R5-B2 zero head addition suppressed",
+              "R5-B2 zero head expense suppressed",
+              "R5-B2 zero head worked time still emitted (ordinary-path alignment)",
+              "R5-B2 zero identity preserved in the evidence seam and the receipt",
+              "R5-B2 paging exact at page sizes 1, 2 and 25 after suppression",
+              "R5-B1 outcome 1: certified zero, no row, identity published",
+              "R5-B1 outcome 2: missing/incomplete evidence refuses by name",
+              "R5-B1 outcome 3: expected nonzero with no fact row refuses by name",
+              "R5-B1 the integrity failure carries no CERTIFIED_ZERO token",
+              "fail-closed EVIDENCE_INCOMPLETE (three digests, and certified zero)",
+              "ordinary Timesheet byte-identical with all eight head refusals present",
+              "fail-closed STAGED",
+              "fail-closed AMBIGUOUS",
+              "fail-closed STALE (version and re-pointed booking id)",
+              "fail-closed INCOMPLETE (over-declared, and certified zero holding a component)",
+              "fail-closed MALFORMED (no receipt digest, no scope-change token)",
+              "fail-closed COMPONENT_UNSUPPORTED (adjustment in a head; missing code)",
+              "fingerprint nine facts",
+              "fingerprint moves on the next head revision",
+              "fingerprint never scans the component population",
+              "D8: the selector reads neither Weekly Source authorisation relation",
+              "other two fact families unaffected",
+              "pre-existing refusals unchanged"
+            ],
+            "verification": "weekly_source_workbench_seams_v1",
+            "workbench_definitions_changed": 2,
+            "banking_pay_definitions_changed": 0
+          }
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "exact_test",
+          "temporary_world_absent",
+          "synthetic_heads_absent",
+          "synthetic_timesheets_absent"
+        ],
+        "rows": [
+          {
+            "exact_test": true,
+            "temporary_world_absent": true,
+            "synthetic_heads_absent": true,
+            "synthetic_timesheets_absent": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ]
+}

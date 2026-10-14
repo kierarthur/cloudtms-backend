@@ -513,3 +513,33 @@ No second restart: fresh postmaster09:07:33.240096 unchanged; restartcounter2/OO
 Own sharedturn9968 explicitly unlocked/closed12:33:47.126; fresh ownPID/lock absent/zero ownfull sessions at12:36:22. Sanitised complete run, exact source error mapping, closed profile/constraints and original receipts are backed up under install1-retry-20261014T120607Z. The profile is structured setting/unit:131072*8kB=1GiB shared_buffers,393216*8kB=3GiB effective_cache_size,262144kB=256MiB maintenance_work_mem,max_connections97; the earlier concatenated-string profile receipt is preserved and not interpreted as byte capacity. Actual three head constraints are initially deferred. A bounded own Arthur lab under a separately released sharedturn proves SAVEPOINT rollback restores deferred mode; the first own probe syntax refusal is retained. Thus no default-mode leak cause is guessed. No jobs/triggers/schedules paused, no pool/credential/allocation mutation, no Bank chat message, no TEST promotion/runtime/Office install.
 
 Office actual Daily close/Save-and-close/Abandon return hook is pushed767db513 with exact caller token/async-entry guards and535sourcePASS; nearest surviving row/item anchors are pushedae461ef with19sourcePASS, and assetcache successor4d26716 with5checks. Browser/native/phone qualification and public Checklist SQL/scopedQueries-seek remain open. Money APPLIED11 accepted/source backed1be1b623; realMissing/Accept/caller/financial/source-fence construction continues with Agency and A0. Current retained native journal remains needed and no deletion was attempted/refused.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded fixture/constraint rollback diagnosis","status":"TAKEN","takenAt":"2026-10-14T12:52:50.478Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded fixture/constraint rollback diagnosis","status":"RELEASED","takenAt":"2026-10-14T12:52:50.478Z","releasedAt":"2026-10-14T12:53:41.835Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded fixture/constraint rollback diagnosis","status":"TAKEN","takenAt":"2026-10-14T12:54:52.892Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded fixture/constraint rollback diagnosis","status":"RELEASED","takenAt":"2026-10-14T12:54:52.892Z","releasedAt":"2026-10-14T13:00:47.263Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded workbench exact native REPEATABLE READ verifier","status":"TAKEN","takenAt":"2026-10-14T13:14:23.948Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded workbench exact native REPEATABLE READ verifier","status":"RELEASED","takenAt":"2026-10-14T13:14:23.948Z","releasedAt":"2026-10-14T13:14:31.000Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded released exact native REPEATABLE READ verifier","status":"TAKEN","takenAt":"2026-10-14T13:15:30.767Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded released exact native REPEATABLE READ verifier","status":"RELEASED","takenAt":"2026-10-14T13:15:30.767Z","releasedAt":"2026-10-14T13:15:37.832Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded workbench exact native REPEATABLE READ verifier","status":"TAKEN","takenAt":"2026-10-14T13:18:10.228Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded workbench exact native REPEATABLE READ verifier","status":"RELEASED","takenAt":"2026-10-14T13:18:10.228Z","releasedAt":"2026-10-14T13:18:20.797Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded released exact native REPEATABLE READ verifier","status":"TAKEN","takenAt":"2026-10-14T13:21:27.904Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"HealthRoster bounded released exact native REPEATABLE READ verifier","status":"RELEASED","takenAt":"2026-10-14T13:21:27.904Z","releasedAt":"2026-10-14T13:22:01.624Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+## Bounded native diagnosis and source backup — 14 October 2026, 13:22 UTC
+
+Both original complete failing verifiers pass separately at native REPEATABLE READ; Workbench also passes with the exact one-unit full protocol, and ReleasedReview passes with both actual pending candidate repeatables plus its complete body. Every native short receipt proves explicit rollback/actualparentaborted/ownPIDabsent/LEGACY1/restored finite UUID counts/postmaster unchanged09:07:33.240096. The Arthur default-isolation complete Workbench lab also PASS42/freshverification. Separate sharedturns explicitlyreleased, backgroundjobsrunning. These narrow the context diagnosis; they do not waive the full retry's three errors or qualify installation. Released census has4existing upload/work-event matches before/after, not a blanket absence claim. No product/fixture source changed. No new full retry or promotion/release. Exact sanitised receipts and secret-free archived harness are backed up in install1-bounded-diagnosis-20261014; retained native journals still needed/no deletion attempt.
+
+I1 closing-DO source attribution fix independently SOURCE_ACCEPTED,37creator/19critic tests, exacttwofullreverses; pushed b1bcdb52e6e5d3b39b9e7b475208bc895ed08da8, remoteverified. NativeSQL/assertion/exclusion/restoration/contract unchanged. A0 successor pushed9755f656,47effect-free sourcechecks with independent source review under completion; nativewholetransaction/ordinarycontention/Agency38 remain true gates. Money finiteMissing16checks/eightfullownerreversals proposal prepared; genuineAccept and Agencyrealpaid-source construction continue. Install1 remains HELD; the two-install plan is unchanged. No owner answer is pending. Completion estimate remains dependent on resolving the full-context verifier failures and completing the remaining native packages and acceptance; no calendar-week wait is required.

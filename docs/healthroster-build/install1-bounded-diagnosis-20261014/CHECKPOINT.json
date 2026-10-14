@@ -1,0 +1,35 @@
+{
+  "status": "BOUNDED_DIAGNOSTIC_ONLY_NOT_FULL_OR_INSTALL",
+  "recordedAt": "2026-10-14T13:25:18.856Z",
+  "install1SourceCommit": "b1bcdb52e6e5d3b39b9e7b475208bc895ed08da8",
+  "files": [
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/README.md",
+      "sha256": "5fa44773bedecd31ee4b77bfdb6c5b4a684f7cb2ecb561eecf875609f239f5b5"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/RELEASED_REVIEW_CANDIDATE_PRELUDE_RR.json",
+      "sha256": "1c8daf46113e91e269391b3895a9e2f556cb3ebd479c80a2567ff44c8d09d3cd"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/RELEASED_REVIEW_NATIVE_RR.json",
+      "sha256": "905fa5ee83439c711b6d6d4e2ef86bfe5ee499ff52c1e7853147d705e53603aa"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/WORKBENCH_ARTHUR_LAB_NATIVE_DEFAULT.json",
+      "sha256": "75fc366313e09ebf93c8e59c190c8185e07ed309041983070d420a62e0d6d80d"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/WORKBENCH_NATIVE_RR.json",
+      "sha256": "f9136679ab6bd7036cc4d90ba2aea4abb38fc2256a3ded6ce4f7c75640a5c706"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/WORKBENCH_SINGLE_UNIT_PROTOCOL_RR.json",
+      "sha256": "19a504f4ee5984f21b18dc4b4655e55005931b2fb1b85a3c010fb3719c087f6e"
+    },
+    {
+      "file": "docs/healthroster-build/install1-bounded-diagnosis-20261014/hr-short-native.mjs.txt",
+      "sha256": "2e3670e10b1379abd787546591ae91e9fad4abb83e0aead785e30806918f99be"
+    }
+  ]
+}

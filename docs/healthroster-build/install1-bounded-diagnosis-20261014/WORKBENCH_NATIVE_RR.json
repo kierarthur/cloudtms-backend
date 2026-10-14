@@ -1,0 +1,68 @@
+{
+  "status": "NATIVE_SHORT_VERIFIER_PASS",
+  "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+  "sourceSqlHash": "f627f8acdd169847ff13edf9289f1c940b370cccbee6def6cf190bc33d08d762",
+  "bodyHash": "47930821d824e6b7224c2ea64b71d997f12f6bca06325066cca54c2366a18bd9",
+  "executedSqlHash": "4f3261f6d4869c3f0ab6f0b71074d1c2397db86f5cec48fc7840248bece9156b",
+  "isolation": "REPEATABLE READ",
+  "completeBodyRetained": true,
+  "fixtureIdCount": 44,
+  "fixtureRelationCount": 14,
+  "errors": [],
+  "exitCode": 0,
+  "rollbackReached": true,
+  "rollbackProved": true,
+  "fresh": {
+    "database": "cloudtms_test_clone",
+    "parentAborted": true,
+    "ownPidAbsent": true,
+    "legacyOne": true,
+    "postmasterStart": "2026-10-14T09:07:33.240096+00:00"
+  },
+  "fixtureCountsRestored": true,
+  "fixtureVacancyClaimed": false,
+  "beforeCounts": {
+    "public.clients": 0,
+    "public.contracts": 0,
+    "public.tms_users": 0,
+    "public.candidates": 0,
+    "public.timesheets": 0,
+    "public.client_settings": 0,
+    "public.ts_pay_adjustments": 0,
+    "public.timesheets_financials": 0,
+    "public.settings_finance_windows": 0,
+    "public.banking_pay_snapshot_runs": 0,
+    "public.banking_pay_workbench_sessions": 0,
+    "public.weekly_source_entitlement_heads": 0,
+    "public.weekly_source_entitlement_head_components": 0,
+    "public.weekly_source_entitlement_decision_bundles": 0
+  },
+  "afterCounts": {
+    "public.clients": 0,
+    "public.contracts": 0,
+    "public.tms_users": 0,
+    "public.candidates": 0,
+    "public.timesheets": 0,
+    "public.client_settings": 0,
+    "public.ts_pay_adjustments": 0,
+    "public.timesheets_financials": 0,
+    "public.settings_finance_windows": 0,
+    "public.banking_pay_snapshot_runs": 0,
+    "public.banking_pay_workbench_sessions": 0,
+    "public.weekly_source_entitlement_heads": 0,
+    "public.weekly_source_entitlement_head_components": 0,
+    "public.weekly_source_entitlement_decision_bundles": 0
+  },
+  "turn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 13780,
+    "turnId": "hr_turn_9a7a1c530962c2fac049bc0ba29bf4ac",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T13:14:23.948Z",
+    "task": "HealthRoster bounded workbench exact native REPEATABLE READ verifier"
+  }
+}

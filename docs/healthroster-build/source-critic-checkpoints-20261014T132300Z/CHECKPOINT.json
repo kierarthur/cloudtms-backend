@@ -1,0 +1,9 @@
+{
+  "purpose":"Exact independent Money APPLIED11 and A0 successor source verdict snapshot; no native or mount acceptance.",
+  "report":"BUILD_MONEY_OFF_SOURCE_CRITIC_14102026.md",
+  "sha256":"deb5c8580403cd6fceff392256c9367565b9339cce5ffb5c796a4a0f0110f08b",
+  "a0SourceCommit":"9755f656daa297a7e156111ae981bddb1f0e10aa",
+  "moneyAppliedSourceCommit":"1be1b623eb6567d9fd483ae28e48b887dd2868bd",
+  "sourceDisposition":"NO_NEW_P0_P1_IN_BOUNDED_A0_SOURCE_DELTA; NATIVE_AND_AGENCY38_HOLDS_RETAINED",
+  "rawWhitespaceCheck":"ONE_CAPTURED_REPORT_BLANK_LINE_AT_EOF_451; EXACT_REPORT_BYTES_PRESERVED; NOT_RAW_PASS"
+}

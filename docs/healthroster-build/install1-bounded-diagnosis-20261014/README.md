@@ -1,0 +1,11 @@
+# Bounded diagnostic receipts, 14 October 2026
+
+The complete original Workbench verifier passed on Arthur's server-owned rollback lab at native default isolation. Both original complete verifiers then passed separately on the approved native fallback with their original Repeatable Read requirement retained. The original Workbench also passed inside the exact single-unit full protocol. ReleasedReview passed with both actual pending candidate repeatables followed by its exact complete verifier, inside that protocol.
+
+These are short rollback diagnostic trials, not another full rehearsal, an Install1 verdict, or an installation. Every native receipt records explicit rollback, the actual parent XID aborted on a fresh connection, own backend absent, LEGACY:1, unchanged postmaster start and restored before/after UUID count vectors. ReleasedReview's broad UUID census includes four existing upload and work-event matches before and after; this is deliberately not a blanket fixture-absence or vacancy claim. Workbench's finite vectors are all zero before and after. Background jobs remained running. Each separate SEND7 turn was released.
+
+The three native errors from the sole full retry remain unresolved. Neither product code nor verifier bodies were changed on the strength of these isolated passes. The next diagnosis concerns the preceding verifier context. No further full retry, promotion or release was dispatched.
+
+`hr-short-native.mjs.txt` is an exact archival snapshot of the task-owned ignored harness, with no secrets. Restore it to `.codex-tmp/hr-short-native.mjs` in the Install1 repository to preserve its relative imports. Importing opens no connection. The original two-body scope had a brief independent source safety review; subsequently added protocol/candidate-prelude modes are distinct and were not covered by that earlier verdict. The runner has a 120-second owned-child timeout and never cancels another session.
+
+The reviewed diagnostic line-map correction is independently source-accepted and pushed at `b1bcdb52e6e5d3b39b9e7b475208bc895ed08da8` (37 creator tests,19 critic tests). It changes source attribution only. The candidate's two pending SQL bodies remain unchanged from8ddd.
