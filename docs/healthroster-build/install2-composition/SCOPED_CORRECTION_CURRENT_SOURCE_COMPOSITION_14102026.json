@@ -1,0 +1,334 @@
+{
+  "sourceOnly": true,
+  "status": "SCOPED_CORRECTION_AND_CONTEXT_CURRENT_SOURCE_MOUNTED_FUTURE_IMPLEMENTATION_AND_NATIVE_GATES_HELD",
+  "rootInputCommit": "2339ecb74851ebe05d7188a60c6b42e0ec83b3ca",
+  "selectedOwnersReviewedAgainst": "61ce56ff5a0df2e4e4a85fdbb9efc25267d3c966",
+  "noWholeRootEquivalenceClaim": true,
+  "publication": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+  "recipeFile": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/FINAL_CURRENT_MOUNT_REVERSE_AND_PINS.json",
+  "recipeSha256": "23b061cc119ec06feb9c3ae8999c113d10c381cf22df8e0f33a4f99861436db1",
+  "selectedSourceOutputs": 4,
+  "wholeUniqueReversals": 33,
+  "nativePins": 27,
+  "permissionPins": 9,
+  "importObjects": 134,
+  "preservedFreezeArtifacts": 77,
+  "nativeCalls": 0,
+  "compiledNativeSeal": null,
+  "featureChanges": 0,
+  "futureSeams": "Primary R239 preset T0 request/recovery, full U3/Undo, original eligibility, kept/rekey, hidden-RR and final census remain incomplete.",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/FINAL_CURRENT_MOUNT_REVERSE_AND_PINS.json",
+      "sha256": "23b061cc119ec06feb9c3ae8999c113d10c381cf22df8e0f33a4f99861436db1",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/FINAL_CURRENT_MOUNT_REVERSE_AND_PINS.json",
+      "bytes": 80803
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/SOURCE_HANDOFF.md",
+      "sha256": "598c332e4639ba672dbc3660c7620d03cc4e7e13560c7b0c0788cffd8a557b97",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/SOURCE_HANDOFF.md",
+      "bytes": 2628
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/prepare-final-current-mount.mjs",
+      "sha256": "a4c933e9400d3c04694d526f2fd66a8c01c05fe9859c22fc6e25060c5c0a8f6c",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-current-mount-checkpoint-20261014/prepare-final-current-mount.mjs",
+      "bytes": 6259
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_NATIVE_SCOPED_ACTOR_OWNER.js.txt",
+      "sha256": "5a065f04f0bbba826ab4cf7d42fb871172515c0270b679c76cbceeb1a2f426bb",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_NATIVE_SCOPED_ACTOR_OWNER.js.txt",
+      "bytes": 972
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_PERMISSION_SOURCE_PINS.json",
+      "sha256": "f1060c646777958d44ea980dd4edcdf546e1a4c02ab112c45374c559d8aff9bd",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_PERMISSION_SOURCE_PINS.json",
+      "bytes": 2095
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_SCOPED_PAY_FULL_REVERSE.json",
+      "sha256": "3c27349bbc38bf3fd56403ac7d6b5ae1c0431765107a54d9c10e252800053fb5",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_SCOPED_PAY_FULL_REVERSE.json",
+      "bytes": 14196
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "b6726cb2f897c0abba319b148535b255f1fd3c10684acf9d3d53342045608d14",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/REVIEW_MANIFEST.json",
+      "bytes": 3962
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/RUNTIME_IMPORT_CLOSURE.json",
+      "sha256": "0651189b3d7c8db0d80124325ef25889b9a28d275c341c32722401a1a79cce3a",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 43012
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "5e64a00f1f94feb3336cd2fb85aeda38f1dbad8f16d703fbd1e701939d19c95c",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 2036
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/SOURCE_HANDOFF.md",
+      "sha256": "3afc9ac55fad4b081cb5600bb63a77907333dafc0f26c6fdda80232cc3ad220a",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/SOURCE_HANDOFF.md",
+      "bytes": 3711
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/index.js",
+      "sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/index.js",
+      "bytes": 8922018
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "2930371dc338c1d5a864b584f789db4ad959b4972ddf52bf518f51bd80954ced",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 12517
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/before/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 43934
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/index.js",
+      "sha256": "41efc91deec656ee740b3c0a2b4a8765af74fcf832e05aad9c002c18554c7961",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/index.js",
+      "bytes": 8925618
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/payment-actor-permission.js",
+      "bytes": 2692
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 13709
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bbe161040d4bd6e87cbd239fee23b8ce6526b43c965aa0a34fbca270aa8af15f",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 44591
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/freeze-scoped-pay-successor.mjs",
+      "sha256": "00ba5175f9bf339d313a071bc120292267cc56926c5810fc400fe972b31436fe",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/freeze-scoped-pay-successor.mjs",
+      "bytes": 1579
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/prepare-scoped-pay-forward.mjs",
+      "sha256": "dfb0953ebd56a43354a2861f9f5054c439a5687f07bb6a9e69e244a8d86bb93a",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/prepare-scoped-pay-forward.mjs",
+      "bytes": 13940
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/prepare-source-tests.mjs",
+      "sha256": "b1f8e6a588f3975a9a76d4b62a46434219731202b94df4d2eb1c60c09266392c",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/prepare-source-tests.mjs",
+      "bytes": 6726
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/reference/broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/reference/broker/src/payment-actor-permission.js",
+      "bytes": 2692
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/reference/broker/src/weekly-source/authorise-routing.mjs",
+      "sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/reference/broker/src/weekly-source/authorise-routing.mjs",
+      "bytes": 7289
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/scoped-pay-cases.inc.mjs",
+      "sha256": "be421c3a837a7bf7169139bbc286c483965c423fe59cdaeeb8debb0dfe16f7de",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/scoped-pay-cases.inc.mjs",
+      "bytes": 13900
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/scoped-pay-successor.test.mjs",
+      "sha256": "0e487e85a998806bc4d578a8e931c463e17e30d76688e87ae0730710b810a164",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/scoped-pay-successor.test.mjs",
+      "bytes": 40162
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/verify-scoped-pay-successor.mjs",
+      "sha256": "2175eb8dd1314401e82528acff669433e7c76cd0b302ea1cdc30989a7f26b457",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/verify-scoped-pay-successor.mjs",
+      "bytes": 5288
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/BACKEND_CONTEXT_FULL_REVERSE.json",
+      "sha256": "40bb8db568227a7176a36873cb21da560c0031d6e247ab6ef6422d4fe3fcd528",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/BACKEND_CONTEXT_FULL_REVERSE.json",
+      "bytes": 3484
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/REVIEW_MANIFEST.json",
+      "sha256": "e902a71b39fe67d1070e3bedbe8b6bcdb7b24fc9e92b01e3ce2d62f8617f24ae",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/REVIEW_MANIFEST.json",
+      "bytes": 2757
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "5d6d9d64358f7827a37d47f84d930f9abab1ee5e8b3dc733eb61b5a90394c4fc",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_CHECK_RESULT.json",
+      "bytes": 448
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_HANDOFF.md",
+      "sha256": "d3164ab66641801c6460b5b8fdc13150ac1043c9170f2b07a8bf86ff19b7f768",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_HANDOFF.md",
+      "bytes": 2392
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_INPUTS.json",
+      "sha256": "885fca59802cb33df06fbf4850fd4e6371fa5854bebc06361fa773ee9267162e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/SOURCE_INPUTS.json",
+      "bytes": 1246
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/correction-context.test.mjs",
+      "sha256": "e233f7f4ee25fc27e3c45427b8a0fd7906f64e2d8376f15e8c06c1b160bde112",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/correction-context.test.mjs",
+      "bytes": 10176
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/index.js",
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/index.js",
+      "bytes": 8927507
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/timesheet-correction-office-context.mjs",
+      "sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/timesheet-correction-office-context.mjs",
+      "bytes": 5475
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/freeze-context-packet.mjs",
+      "sha256": "a2b88d5516acfb4875ea19a58777c5de61e286d4008ef93c4e59bd1d4b8aabd2",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/freeze-context-packet.mjs",
+      "bytes": 1541
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/prepare-context-packet.mjs",
+      "sha256": "8a1875135cd86e2a9c55d27e07726653058de45395e9019e5f9e1d331fbf4440",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/prepare-context-packet.mjs",
+      "bytes": 1851
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/prepare-correction-context-forward.mjs",
+      "sha256": "032adacb85ee0e2917a0dfe95a6607a1206a4314b3d0d7ac3a9badb61ecdaf9e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/prepare-correction-context-forward.mjs",
+      "bytes": 5267
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/payment-actor-permission.js",
+      "bytes": 2692
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/timesheet-correction-office-context.mjs",
+      "sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/timesheet-correction-office-context.mjs",
+      "bytes": 5475
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/reference/backend/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 13709
+    },
+    {
+      "file": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/verify-context-packet.mjs",
+      "sha256": "904a5ed71eb38e1e8c9bd4cae922d65748114bf21abcb435e55e5cef899ad618",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/verify-context-packet.mjs",
+      "bytes": 2464
+    },
+    {
+      "file": "broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 13709
+    },
+    {
+      "file": "broker/src/timesheet-correction-office-context.mjs",
+      "sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/timesheet-correction-office-context.mjs",
+      "bytes": 5475
+    }
+  ],
+  "replacements": [
+    {
+      "file": "broker/src/index.js",
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d",
+      "beforeSha256": "6dcaec638015d190ed2ff46b10540a6e8795c0f17892ef17ee7738ffa6c6ba8b",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/forward/backend/broker/src/index.js",
+      "bytes": 8927507
+    },
+    {
+      "file": "broker/src/timesheet-correction-orchestrator.mjs",
+      "sha256": "bbe161040d4bd6e87cbd239fee23b8ce6526b43c965aa0a34fbca270aa8af15f",
+      "beforeSha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced",
+      "sourceCommit": "83e228be1bf39d36705e55ae9dbf74da23a54649",
+      "sourceFile": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 44591
+    }
+  ]
+}

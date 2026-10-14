@@ -1,0 +1,117 @@
+{
+  "schema": "A0_SCOPED_PAY_SOURCE_SUCCESSOR_FREEZE_V1",
+  "source_only": true,
+  "status": "FROZEN_FOR_INDEPENDENT_CRITIC_NATIVE_AND_CONSUMERS_HELD",
+  "source_check_sha256": "5e64a00f1f94feb3336cd2fb85aeda38f1dbad8f16d703fbd1e701939d19c95c",
+  "credential_scan": {
+    "all_artifacts": 21,
+    "findings": 0
+  },
+  "artifacts": [
+    {
+      "path": "before/broker/src/index.js",
+      "bytes": 8922018,
+      "sha256": "d796037265f6165341a38c9ba8a9c12f3ab4dc81f356862300db829d120eb052"
+    },
+    {
+      "path": "before/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 12517,
+      "sha256": "2930371dc338c1d5a864b584f789db4ad959b4972ddf52bf518f51bd80954ced"
+    },
+    {
+      "path": "before/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 43934,
+      "sha256": "bdb6db888eb4a9588f860503716edfa03a4a71f3629624130ddf88677eab5ced"
+    },
+    {
+      "path": "CURRENT_NATIVE_SCOPED_ACTOR_OWNER.js.txt",
+      "bytes": 972,
+      "sha256": "5a065f04f0bbba826ab4cf7d42fb871172515c0270b679c76cbceeb1a2f426bb"
+    },
+    {
+      "path": "CURRENT_PERMISSION_SOURCE_PINS.json",
+      "bytes": 2095,
+      "sha256": "f1060c646777958d44ea980dd4edcdf546e1a4c02ab112c45374c559d8aff9bd"
+    },
+    {
+      "path": "CURRENT_SCOPED_PAY_FULL_REVERSE.json",
+      "bytes": 14196,
+      "sha256": "3c27349bbc38bf3fd56403ac7d6b5ae1c0431765107a54d9c10e252800053fb5"
+    },
+    {
+      "path": "forward/broker/src/index.js",
+      "bytes": 8925618,
+      "sha256": "41efc91deec656ee740b3c0a2b4a8765af74fcf832e05aad9c002c18554c7961"
+    },
+    {
+      "path": "forward/broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "path": "forward/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 13709,
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e"
+    },
+    {
+      "path": "forward/broker/src/timesheet-correction-orchestrator.mjs",
+      "bytes": 44591,
+      "sha256": "bbe161040d4bd6e87cbd239fee23b8ce6526b43c965aa0a34fbca270aa8af15f"
+    },
+    {
+      "path": "freeze-scoped-pay-successor.mjs",
+      "bytes": 1579,
+      "sha256": "00ba5175f9bf339d313a071bc120292267cc56926c5810fc400fe972b31436fe"
+    },
+    {
+      "path": "prepare-scoped-pay-forward.mjs",
+      "bytes": 13940,
+      "sha256": "dfb0953ebd56a43354a2861f9f5054c439a5687f07bb6a9e69e244a8d86bb93a"
+    },
+    {
+      "path": "prepare-source-tests.mjs",
+      "bytes": 6726,
+      "sha256": "b1f8e6a588f3975a9a76d4b62a46434219731202b94df4d2eb1c60c09266392c"
+    },
+    {
+      "path": "reference/broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "path": "reference/broker/src/weekly-source/authorise-routing.mjs",
+      "bytes": 7289,
+      "sha256": "587f0ff02e2da0b29e6ef996c0b2ef94fd83cca49287e9d9a1f3edc47ef21de9"
+    },
+    {
+      "path": "RUNTIME_IMPORT_CLOSURE.json",
+      "bytes": 43012,
+      "sha256": "0651189b3d7c8db0d80124325ef25889b9a28d275c341c32722401a1a79cce3a"
+    },
+    {
+      "path": "scoped-pay-cases.inc.mjs",
+      "bytes": 13900,
+      "sha256": "be421c3a837a7bf7169139bbc286c483965c423fe59cdaeeb8debb0dfe16f7de"
+    },
+    {
+      "path": "scoped-pay-successor.test.mjs",
+      "bytes": 40162,
+      "sha256": "0e487e85a998806bc4d578a8e931c463e17e30d76688e87ae0730710b810a164"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 2036,
+      "sha256": "5e64a00f1f94feb3336cd2fb85aeda38f1dbad8f16d703fbd1e701939d19c95c"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 3711,
+      "sha256": "3afc9ac55fad4b081cb5600bb63a77907333dafc0f26c6fdda80232cc3ad220a"
+    },
+    {
+      "path": "verify-scoped-pay-successor.mjs",
+      "bytes": 5288,
+      "sha256": "2175eb8dd1314401e82528acff669433e7c76cd0b302ea1cdc30989a7f26b457"
+    }
+  ]
+}

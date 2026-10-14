@@ -1,0 +1,111 @@
+{
+  "sourceOnly": true,
+  "records": [
+    {
+      "source": "docs/healthroster-build/proposals/install2-a0-scoped-pay-permission-successor-20261014/scoped-pay-successor.test.mjs",
+      "sourceSha256": "0e487e85a998806bc4d578a8e931c463e17e30d76688e87ae0730710b810a164",
+      "destination": "docs/healthroster-build/install2-composition/scoped-correction-current-pay.test.mjs",
+      "destinationSha256": "eaed0315d91716391548c2df9b8d9b73e0d4bb861eca89ee064fe7670c214bc5",
+      "exactSubstitutions": [
+        [
+          "./forward/broker/src/timesheet-correction-orchestrator.mjs",
+          "../../../broker/src/timesheet-correction-orchestrator.mjs"
+        ],
+        [
+          "./forward/broker/src/timesheet-correction-office-routes.mjs",
+          "../../../broker/src/timesheet-correction-office-routes.mjs"
+        ],
+        [
+          "./reference/broker/src/weekly-source/authorise-routing.mjs",
+          "../../../broker/src/weekly-source/authorise-routing.mjs"
+        ],
+        [
+          "./reference/broker/src/payment-actor-permission.js",
+          "../../../broker/src/payment-actor-permission.js"
+        ],
+        [
+          "./forward/broker/src/index.js",
+          "../../../broker/src/index.js"
+        ],
+        [
+          "./CURRENT_NATIVE_SCOPED_ACTOR_OWNER.js.txt",
+          "../proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_NATIVE_SCOPED_ACTOR_OWNER.js.txt"
+        ],
+        [
+          "./CURRENT_SCOPED_PAY_FULL_REVERSE.json",
+          "../proposals/install2-a0-scoped-pay-permission-successor-20261014/CURRENT_SCOPED_PAY_FULL_REVERSE.json"
+        ],
+        [
+          "const actualAuth =",
+          "assert.equal(source.split(scopedOwner).length, 2, 'Actual root scoped actor owner must equal the frozen complete snippet');\nconst actualAuth ="
+        ],
+        [
+          "../install2-a0-runtime-route-wiring-20261014/unit-fixtures.mjs",
+          "../proposals/install2-a0-runtime-route-wiring-20261014/unit-fixtures.mjs"
+        ],
+        [
+          "../install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json",
+          "../proposals/install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json"
+        ]
+      ]
+    },
+    {
+      "source": "docs/healthroster-build/proposals/install2-office-correction-context-20261014/correction-context.test.mjs",
+      "sourceSha256": "e233f7f4ee25fc27e3c45427b8a0fd7906f64e2d8376f15e8c06c1b160bde112",
+      "destination": "docs/healthroster-build/install2-composition/scoped-correction-current-context.test.mjs",
+      "destinationSha256": "5fb044d8bc858d6518c367559e9c19d30548110cfcbf289b88a7122591d1af24",
+      "exactSubstitutions": [
+        [
+          "./reference/backend/broker/src/timesheet-correction-office-context.mjs",
+          "../../../broker/src/timesheet-correction-office-context.mjs"
+        ],
+        [
+          "../install2-a0-scoped-pay-permission-successor-20261014/reference/broker/src/weekly-source/authorise-routing.mjs",
+          "../../../broker/src/weekly-source/authorise-routing.mjs"
+        ],
+        [
+          "./BACKEND_CONTEXT_FULL_REVERSE.json",
+          "../proposals/install2-office-correction-context-20261014/BACKEND_CONTEXT_FULL_REVERSE.json"
+        ],
+        [
+          "const env=",
+          "const actualIndex=fs.readFileSync(new URL('../../../broker/src/index.js',import.meta.url),'utf8');\nconst env="
+        ],
+        [
+          "h=reverse.hunks[1].replacement;",
+          "h=reverse.hunks[1].replacement;assert.equal(actualIndex.split(h).length,2,'Actual root context owner must equal the frozen full hunk');"
+        ],
+        [
+          "../install2-a0-runtime-route-wiring-20261014/unit-fixtures.mjs",
+          "../proposals/install2-a0-runtime-route-wiring-20261014/unit-fixtures.mjs"
+        ],
+        [
+          "../install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json",
+          "../proposals/install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json"
+        ]
+      ]
+    },
+    {
+      "source": "docs/healthroster-build/proposals/install2-a0-auth-tenant-successor-20261014/actual-auth-owner.test.mjs",
+      "sourceSha256": "877ad97af301a5b76c87cc8f4b78b368781b80b4c24d2b9d2639993cdcc23a29",
+      "destination": "docs/healthroster-build/install2-composition/scoped-correction-current-auth.test.mjs",
+      "destinationSha256": "4475516900d9ea71fa86c2805640edcae2579910fb10bfe686842356834f84a8",
+      "exactSubstitutions": [
+        [
+          "./forward/broker/src/timesheet-correction-office-routes.mjs",
+          "../../../broker/src/timesheet-correction-office-routes.mjs"
+        ],
+        [
+          "./CURRENT_AUTH_OWNER_SOURCE.json",
+          "../proposals/install2-a0-auth-tenant-successor-20261014/CURRENT_AUTH_OWNER_SOURCE.json"
+        ],
+        [
+          "const id=n=>",
+          "const actualIndex=fs.readFileSync(new URL('../../../broker/src/index.js',import.meta.url),'utf8');\nfor(const snippet of [pin.index.tenant_owner_source,pin.index.require_user_source])assert.equal(actualIndex.split(snippet).length,2,'Current root auth owner must equal the frozen full snippet');\nconst id=n=>"
+        ]
+      ]
+    }
+  ],
+  "unitOnly": true,
+  "noDbNetworkOrNativeCall": true
+}

@@ -1,0 +1,29 @@
+{
+  "source_only": true,
+  "inputs": [
+    {
+      "path": "install2-a0-scoped-pay-permission-successor-20261014/REVIEW_MANIFEST.json",
+      "sha256": "b6726cb2f897c0abba319b148535b255f1fd3c10684acf9d3d53342045608d14"
+    },
+    {
+      "path": "install2-a0-scoped-pay-permission-successor-20261014/SOURCE_CHECK_RESULT.json",
+      "sha256": "5e64a00f1f94feb3336cd2fb85aeda38f1dbad8f16d703fbd1e701939d19c95c"
+    },
+    {
+      "path": "install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/index.js",
+      "sha256": "41efc91deec656ee740b3c0a2b4a8765af74fcf832e05aad9c002c18554c7961"
+    },
+    {
+      "path": "install2-a0-scoped-pay-permission-successor-20261014/forward/broker/src/timesheet-correction-office-routes.mjs",
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e"
+    }
+  ],
+  "public_read_rpc_signatures": [
+    "public.timesheet_correction_create_projection_v1(uuid,uuid,uuid,uuid)",
+    "public.timesheet_correction_request_projection_v1(uuid,uuid)",
+    "public.timesheet_correction_request_authority_v1(uuid,uuid)"
+  ],
+  "native_owners_pin_source": "../install2-a0-runtime-route-wiring-20261014/NATIVE_OWNER_SOURCE_PINS.json",
+  "new_sql_signatures": 0,
+  "native_calls": 0
+}

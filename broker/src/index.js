@@ -1,6 +1,8 @@
 import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';
 import { buildExactRequestA0WeeklyClockSnapshot } from './exact-request-a0-weekly-clock-arm.mjs';
 import { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';
+import { assertTimesheetCorrectionOfficeActor, createTimesheetCorrectionLifecycleResolver, handleTimesheetCorrectionOfficeAction, matchTimesheetCorrectionOfficeRoute } from './timesheet-correction-office-routes.mjs';
+import { readTimesheetCorrectionOfficeContext } from './timesheet-correction-office-context.mjs';
 import { handleBpayNextPayMethodChange, createBpayNextPayMethodChangeRpc } from './bpay-next-pay-method-change.js';
 import { validateLegacyInvoiceManifestSuppressions } from './weekly-source/invoice-render-qualification.js';
 /**
@@ -76430,7 +76432,7 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
   if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
-      env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
+      env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user, req
     );
     if (pairFlow?.is_pair) {
       if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
@@ -76468,6 +76470,8 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, int
       });
     }
   } catch (error) {
+    if (['CORRECTION_SOURCE_SCOPE_NOT_ALLOWED', 'WEEKLY_SOURCE_AUTHORISE_ROUTING_UNAVAILABLE', 'SOURCE_CHECK_IN_PROGRESS'].includes(error?.code))
+      return withJson(error.status, { ok: false, error: error.code, error_code: error.code, refresh_required: true, retryable: error.status === 503 });
     return withJson(409, {
       ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
       error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
@@ -93999,7 +94003,7 @@ async function validateBulkAuthoriseRequiredExpenseEvidence(env, timesheetId) {
   };
 }
 
-async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, expectedTimesheetId, expectedRowSignature, body, user) {
+async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, expectedTimesheetId, expectedRowSignature, body, user, req) {
   const item = {
     timesheet_id: timesheetId,
     expected_timesheet_id: expectedTimesheetId || timesheetId,
@@ -94024,6 +94028,11 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
   }
   if (!preview?.valid || !group?.action_ready) {
     return { is_pair: true, blocked: true, preview, group };
+  }
+  if (user?.role !== 'admin') {
+    const members = Array.isArray(preview.groups)
+      ? preview.groups.flatMap(value => Array.isArray(value.members) ? value.members.map(member => member.timesheet_id) : [null]) : [null];
+    await assertTimesheetCorrectionSourceSubjects(env, req, user, [timesheetId, ...members]);
   }
   if (action === 'UNAUTHORISE') {
     const members = Array.isArray(preview.groups)
@@ -166913,10 +166922,163 @@ function createTimesheetCorrectionNativeOrchestrator(env, dependencies) {
   });
 }
 
-// Root's guarded route mounting supplies its existing qualified Office actor,
-// RPC, request-read, cleanup and ordinary lifecycle dependencies to this factory.
-// They remain exactly the original adapter dependencies; no new route/auth is
-// mounted by this source proposal.
+// This finite Office consumer binds existing native owners. Feature/certificate,
+// actual actor, CAS and isolation admission remain inside those native owners.
+// Uses the unchanged W14/W15 current native routing owner. It is a permission
+// probe only; native correction owners retain qualification and economic admission.
+async function assertTimesheetCorrectionSourceSubjects(env, req, user, timesheetIds) {
+  if (user?.role === 'admin') return;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const error = (code, status) => { const e = new Error(code); e.code = code; e.status = status; throw e; };
+  if (!Array.isArray(timesheetIds) || !timesheetIds.length || timesheetIds.length > 100 ||
+      timesheetIds.some(id => typeof id !== 'string' || !uuid.test(id))) error('CORRECTION_LIFECYCLE_SCOPE_UNPROVED', 409);
+  for (const id of new Set(timesheetIds.map(id => id.toLowerCase()))) {
+    const scope = await weeklySourceScopedLifecycleActor(env, req, id, user);
+    if (scope.ok) continue;
+    const body = await scope.response.clone().json().catch(() => null);
+    if (scope.response.status === 503) error('WEEKLY_SOURCE_AUTHORISE_ROUTING_UNAVAILABLE', 503);
+    if (body?.error_code === 'SOURCE_CHECK_IN_PROGRESS') error('SOURCE_CHECK_IN_PROGRESS', 409);
+    error('CORRECTION_SOURCE_SCOPE_NOT_ALLOWED', 403);
+  }
+}
+
+function createTimesheetCorrectionOfficeOrchestrator(env, req, ctx, admittedActor, admittedAction) {
+  const nativeNames = new Set(['timesheet_correction_send_v1', 'timesheet_correction_prepare_v1',
+    'timesheet_correction_authorise_atomic_v1', 'timesheet_correction_cancel_atomic_v1',
+    'timesheet_correction_return_to_draft_v1']);
+  const error = (code, status = 409) => { const e = new Error(code); e.code = code; e.status = status; throw e; };
+  const payLifecycle = admittedAction === 'authorise' || admittedAction === 'runLifecycle';
+  async function currentActor(action) {
+    if (!['SEND', 'PREPARE', 'AUTHORISE', 'CANCEL', 'RETURN', 'UNAUTHORISE'].includes(action))
+      error('CORRECTION_ACTOR_NOT_ALLOWED', 403);
+    const payAction = payLifecycle && ['PREPARE', 'AUTHORISE', 'UNAUTHORISE'].includes(action);
+    const user = await requireUser(env, req, payAction ? [] : ['admin']);
+    const actor = assertTimesheetCorrectionOfficeActor(env, user, payAction ? 'PAY_LIFECYCLE' : 'ADMIN');
+    if (actor.actor_user_id !== admittedActor.actor_user_id) error('CORRECTION_ACTOR_NOT_ALLOWED', 403);
+    return { user, actor };
+  }
+  async function assertSubjects(timesheetIds, actor, action) {
+    const current = await currentActor(action);
+    if (current.actor.actor_user_id !== actor.actor_user_id) error('CORRECTION_ACTOR_NOT_ALLOWED', 403);
+    await assertTimesheetCorrectionSourceSubjects(env, req, current.user, timesheetIds);
+  }
+  let orchestrator;
+  const resolveLifecycleItem = createTimesheetCorrectionLifecycleResolver({
+    assertSubjects,
+    readContexts: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),
+    readProjection: (timesheetId, candidateId) => sbRpc(env, 'timesheet_correction_request_projection_v1', {
+      p_timesheet_id: timesheetId, p_candidate_id: candidateId
+    }),
+    readPrepare: payload => orchestrator.prepare(payload, req),
+    readTransition: (timesheetId, action, actor) => sbRpc(env, 'timesheet_correction_pair_transition_v1', {
+      p_timesheet_id: timesheetId, p_action: action, p_actor_user_id: actor.actor_user_id,
+      p_operation_id: null, p_expected_chain_fingerprint: null, p_lock_rows: false, p_max_members: 100
+    })
+  });
+  orchestrator = createTimesheetCorrectionNativeOrchestrator(env, {
+    assertActor: async (context, action) => {
+      if (context !== req || !['SEND', 'PREPARE', 'AUTHORISE', 'CANCEL', 'RETURN', 'UNAUTHORISE'].includes(action))
+        error('CORRECTION_ACTOR_NOT_ALLOWED', 403);
+      return (await currentActor(action)).actor;
+    },
+    assertRequestSubject: ({ authority, actor }) => assertSubjects([authority.replacement_timesheet_id], actor, 'PREPARE'),
+    assertPreparedSubjects: ({ prepare, actor }) => assertSubjects([prepare.authority.replacement_timesheet_id,
+      prepare.authority.original_timesheet_id], actor, 'PREPARE'),
+    rpc: (name, args) => {
+      if (!nativeNames.has(name)) error('CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE', 503);
+      return sbRpcRecordingGuardRefusal(env, name, args, { timeoutMs: 20000 });
+    },
+    readRequestAuthority: ({ requestId, actor }) => sbRpc(env, 'timesheet_correction_request_authority_v1', {
+      p_request_id: requestId, p_actor_user_id: actor.actor_user_id
+    }),
+    deleteCommittedTimesheetR2Keys: (result, options) => deleteCommittedTimesheetR2Keys(env, result, options),
+    resolveLifecycleItem,
+    runOrdinaryLifecycle: async ({ items, action, actor }) => {
+      if (!['AUTHORISE', 'UNAUTHORISE'].includes(action)) error('CORRECTION_PAYLOAD_INVALID', 400);
+      await assertSubjects(items.map(item => item.timesheet_id || item.timesheetId || item.current_timesheet_id ||
+        item.currentTimesheetId || item.requested_timesheet_id || item.requestedTimesheetId || item.row_key?.slice(10)), actor, action);
+      if (action === 'UNAUTHORISE') {
+        // Identical current Source/NEXT preflight, including native expanded whole members.
+        const scope = await weeklySourceUnauthorisePairPreflight({
+          rpc: (name, args, options) => sbRpc(env, name, args, options), ownerStatusRpc: bpayNextOwnerStatusRpc(env),
+          actorUserId: actor.actor_user_id, readPhysicalTimesheet: id => sbGetOne(env,
+            env.SUPABASE_URL + '/rest/v1/timesheets?timesheet_id=eq.' + encodeURIComponent(id) + '&select=timesheet_id,sheet_scope,contract_id'),
+          timesheetIds: [...new Set(items.map(item => item.timesheet_id || item.timesheetId || item.current_timesheet_id ||
+            item.currentTimesheetId || item.requested_timesheet_id || item.requestedTimesheetId || item.row_key?.slice(10)))]
+        });
+        if (!scope.ordinary) error(scope.body?.code || scope.body?.error_code || 'CORRECTION_LIFECYCLE_SCOPE_UNPROVED', scope.status || 409);
+      }
+      const result = await sbRpcRecordingGuardRefusal(env, action === 'AUTHORISE' ? 'timesheet_authorise_bulk_atomic' : 'timesheet_unauthorise_bulk_atomic', {
+        p_items: items, p_actor_user_id: actor.actor_user_id, p_now_utc: nowIso()
+      }, { timeoutMs: 20000 });
+      requestTimesheetLifecycleWorkbenchWake(env, ctx, { action, sourceRoute: 'TIMESHEET_CORRECTION_NATIVE_LIFECYCLE',
+        lifecycleChangedCount: timesheetLifecycleMutationChangedCount(result), actorUserId: actor.actor_user_id });
+      return result;
+    }
+  });
+  return orchestrator;
+}
+
+function timesheetCorrectionOfficeFailure(error) {
+  const values = [error?.json?.error_code, error?.json?.message, error?.error_code, error?.code, error?.message];
+  const code = values.find(value => typeof value === 'string' && (/^(?:CORRECTION_|WEEKLY_SOURCE_|BPAY_NEXT_|CANDIDATE_CONTEXT_)[A-Z0-9_]+$/.test(value) || value === 'SOURCE_CHECK_IN_PROGRESS'))
+    || 'CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE';
+  const sqlstate = error?.json?.code || error?.code;
+  const explicitStatus = Number(error?.status);
+  const status = code === 'CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE' ? 503
+    : Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus <= 599 ? explicitStatus
+    : sqlstate === '42501' ? 403 : sqlstate === '22023' ? 400 : sqlstate === 'P0002' ? 404 : 409;
+  return new Response(JSON.stringify({ ok: false, error_code: code }), {
+    status, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
+  });
+}
+
+async function handleTimesheetCorrectionOfficeContext(env, req, timesheetId) {
+  try {
+    const result = await readTimesheetCorrectionOfficeContext(env, req, timesheetId, {
+      requireUser,
+      assertScope: ({ timesheetId, user }) => assertTimesheetCorrectionSourceSubjects(env, req, user, [timesheetId]),
+      readContexts: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),
+      // Read-only native projections retain their real existing purpose/selector.
+      // The total WP-14c mutation wrapper remains unchanged on mutation calls.
+      readCreateProjection: ({ candidateId, timesheetId }) => sbRpc(env, 'timesheet_correction_create_projection_v1', {
+        p_candidate_id: candidateId, p_contract_week_id: null, p_target_timesheet_id: timesheetId, p_anchor_timesheet_id: null
+      }, { timeoutMs: 12000 }),
+      readRequestProjection: ({ candidateId, timesheetId }) => sbRpc(env, 'timesheet_correction_request_projection_v1', {
+        p_timesheet_id: timesheetId, p_candidate_id: candidateId
+      }, { timeoutMs: 12000 }),
+      readRequestAuthority: ({ requestId, actor }) => sbRpc(env, 'timesheet_correction_request_authority_v1', {
+        p_request_id: requestId, p_actor_user_id: actor.actor_user_id
+      }, { timeoutMs: 12000 })
+    });
+    return withCORS(env, req, new Response(JSON.stringify(result), {
+      status: 200, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
+    }));
+  } catch (error) { return withCORS(env, req, timesheetCorrectionOfficeFailure(error)); }
+}
+
+async function handleTimesheetCorrectionOfficeRoute(env, req, action, ctx) {
+  try {
+    const result = await handleTimesheetCorrectionOfficeAction(env, req, action, {
+      requireUser,
+      createOrchestrator: ({ actor, action }) => createTimesheetCorrectionOfficeOrchestrator(env, req, ctx, actor, action),
+      afterAuthorise: (receipt, actor) => {
+        const receipts = Array.isArray(receipt.results) ? receipt.results.filter(result => result.kind === 'CORRECTION_REQUEST' &&
+          result.success === true).map(result => result.receipt) : [receipt];
+        for (const applied of receipts) {
+          if (applied?.state !== 'APPLIED' || applied.replayed === true) continue;
+          // The orchestrator already requires the exact native singleton P0 list.
+          requestTimesheetLifecycleWorkbenchWake(env, ctx, { action: 'AUTHORISE',
+            sourceRoute: 'TIMESHEET_CORRECTION_NATIVE_APPROVAL', lifecycleChangedCount: 1,
+            actorUserId: actor.actor_user_id, timesheetId: applied.ordinary_notification_timesheet_ids[0] });
+        }
+      }
+    });
+    return withCORS(env, req, new Response(JSON.stringify(result.body), {
+      status: result.status, headers: { ...JSON_HEADERS, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
+    }));
+  } catch (error) { return withCORS(env, req, timesheetCorrectionOfficeFailure(error)); }
+}
 
 async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {
   // Local helpers used by both branches
@@ -168608,7 +168770,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   if (!sourcePayPermission.ok) return sourcePayPermission.response;
   try {
     const pairFlow = await runCorrectionPairLifecycleIfApplicable(
-      env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
+      env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user, req
     );
     if (pairFlow?.is_pair) {
       if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
@@ -168646,6 +168808,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       });
     }
   } catch (error) {
+    if (['CORRECTION_SOURCE_SCOPE_NOT_ALLOWED', 'WEEKLY_SOURCE_AUTHORISE_ROUTING_UNAVAILABLE', 'SOURCE_CHECK_IN_PROGRESS'].includes(error?.code))
+      return withJson(error.status, { ok: false, error: error.code, error_code: error.code, refresh_required: true, retryable: error.status === 503 });
     const pairRateRefusal = bpayNextAuthoriseKnownRefusal(error?.code, error, error?.message);
     if (pairRateRefusal) return withJson(409, pairRateRefusal);
     return withJson(409, {
@@ -200097,6 +200261,12 @@ if (req.method === 'GET' && p === '/api/timesheets/bulk-row-freshness') {
   }
 }
 
+
+const correctionOfficeContext = matchPath(p, '/api/timesheets/:id/corrections/context');
+if (correctionOfficeContext && req.method === 'GET') return handleTimesheetCorrectionOfficeContext(env, req, correctionOfficeContext.id);
+
+const correctionOfficeAction = matchTimesheetCorrectionOfficeRoute(req.method, p);
+if (correctionOfficeAction) return handleTimesheetCorrectionOfficeRoute(env, req, correctionOfficeAction, ctx);
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {
   return handleBulkTimesheetAuthoriseSelected(env, req, ctx);

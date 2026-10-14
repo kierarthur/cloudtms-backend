@@ -1,0 +1,53 @@
+{
+  "schema": "A0_SCOPED_PAY_SOURCE_CHECK_V1",
+  "source_only": true,
+  "unit_pass": 42,
+  "syntax_pass": 15,
+  "syntax_files": [
+    "before/broker/src/index.js",
+    "before/broker/src/timesheet-correction-office-routes.mjs",
+    "before/broker/src/timesheet-correction-orchestrator.mjs",
+    "forward/broker/src/index.js",
+    "forward/broker/src/payment-actor-permission.js",
+    "forward/broker/src/timesheet-correction-office-routes.mjs",
+    "forward/broker/src/timesheet-correction-orchestrator.mjs",
+    "freeze-scoped-pay-successor.mjs",
+    "prepare-scoped-pay-forward.mjs",
+    "prepare-source-tests.mjs",
+    "reference/broker/src/payment-actor-permission.js",
+    "reference/broker/src/weekly-source/authorise-routing.mjs",
+    "scoped-pay-cases.inc.mjs",
+    "scoped-pay-successor.test.mjs",
+    "verify-scoped-pay-successor.mjs"
+  ],
+  "full_forward_reverse_files": 3,
+  "full_unique_hunks": 23,
+  "current_permission_pins": 9,
+  "static_import_objects": 133,
+  "prior_frozen_artifacts_including_manifests": 40,
+  "prior_freezes": [
+    {
+      "name": "install2-a0-runtime-route-wiring-20261014",
+      "manifest_sha256": "0bd3742eca2bc387d3dcfd521ea4b1c7de7d559aa479aee598ebd593fefca9c9"
+    },
+    {
+      "name": "install2-a0-runtime-refusal-successor-20261014",
+      "manifest_sha256": "471786b4e046e3b4a49093ac9d2665550f25c6ab97a76da0df4de999d50eba10"
+    },
+    {
+      "name": "install2-a0-auth-tenant-successor-20261014",
+      "manifest_sha256": "313d6f10623780b04c79e7c29bf2bfd990d0e0873b084725654050d42c043647"
+    }
+  ],
+  "introduced_whitespace_findings": 0,
+  "inherited_index_whitespace_lines": 264,
+  "statement": "Full added copies retain inherited whitespace; this is not a full git-diff-check PASS.",
+  "sql_changes": 0,
+  "new_public_or_private_signatures": 0,
+  "new_grants": 0,
+  "native_observations": 0,
+  "compiled_contract_sha256": null,
+  "feature_activation": false,
+  "native_api_role_session_rc_and_five_isolation_schedules": "HELD",
+  "office_consumer": "SEPARATE_FORWARD_IN_PROGRESS"
+}

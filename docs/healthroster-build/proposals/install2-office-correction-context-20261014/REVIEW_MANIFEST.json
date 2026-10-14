@@ -1,0 +1,82 @@
+{
+  "schema": "OFFICE_NATIVE_CORRECTION_READ_CONTEXT_FREEZE_V1",
+  "source_only": true,
+  "status": "FROZEN_FOR_INDEPENDENT_CRITIC_NATIVE_AND_UI_HELD",
+  "source_check_sha256": "5d6d9d64358f7827a37d47f84d930f9abab1ee5e8b3dc733eb61b5a90394c4fc",
+  "credential_scan": {
+    "all_artifacts": 14,
+    "findings": 0
+  },
+  "artifacts": [
+    {
+      "path": "BACKEND_CONTEXT_FULL_REVERSE.json",
+      "bytes": 3484,
+      "sha256": "40bb8db568227a7176a36873cb21da560c0031d6e247ab6ef6422d4fe3fcd528"
+    },
+    {
+      "path": "correction-context.test.mjs",
+      "bytes": 10176,
+      "sha256": "e233f7f4ee25fc27e3c45427b8a0fd7906f64e2d8376f15e8c06c1b160bde112"
+    },
+    {
+      "path": "forward/backend/broker/src/index.js",
+      "bytes": 8927507,
+      "sha256": "63d1f8364d8c7fb9544a5b0f8a39810a4481033c5417584c80d9f3a2de21d10d"
+    },
+    {
+      "path": "forward/backend/broker/src/timesheet-correction-office-context.mjs",
+      "bytes": 5475,
+      "sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0"
+    },
+    {
+      "path": "freeze-context-packet.mjs",
+      "bytes": 1541,
+      "sha256": "a2b88d5516acfb4875ea19a58777c5de61e286d4008ef93c4e59bd1d4b8aabd2"
+    },
+    {
+      "path": "prepare-context-packet.mjs",
+      "bytes": 1851,
+      "sha256": "8a1875135cd86e2a9c55d27e07726653058de45395e9019e5f9e1d331fbf4440"
+    },
+    {
+      "path": "prepare-correction-context-forward.mjs",
+      "bytes": 5267,
+      "sha256": "032adacb85ee0e2917a0dfe95a6607a1206a4314b3d0d7ac3a9badb61ecdaf9e"
+    },
+    {
+      "path": "reference/backend/broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "path": "reference/backend/broker/src/timesheet-correction-office-context.mjs",
+      "bytes": 5475,
+      "sha256": "38fbbc24868d4d1725224b8ca43407854ef8146c6a0d2bd409f66fa8e1b32de0"
+    },
+    {
+      "path": "reference/backend/broker/src/timesheet-correction-office-routes.mjs",
+      "bytes": 13709,
+      "sha256": "106360f3f60ddfd5aaae6ad9b51ffda56ed7d49f81d402c1ba7be3fd923d134e"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 448,
+      "sha256": "5d6d9d64358f7827a37d47f84d930f9abab1ee5e8b3dc733eb61b5a90394c4fc"
+    },
+    {
+      "path": "SOURCE_HANDOFF.md",
+      "bytes": 2392,
+      "sha256": "d3164ab66641801c6460b5b8fdc13150ac1043c9170f2b07a8bf86ff19b7f768"
+    },
+    {
+      "path": "SOURCE_INPUTS.json",
+      "bytes": 1246,
+      "sha256": "885fca59802cb33df06fbf4850fd4e6371fa5854bebc06361fa773ee9267162e"
+    },
+    {
+      "path": "verify-context-packet.mjs",
+      "bytes": 2464,
+      "sha256": "904a5ed71eb38e1e8c9bd4cae922d65748114bf21abcb435e55e5cef899ad618"
+    }
+  ]
+}

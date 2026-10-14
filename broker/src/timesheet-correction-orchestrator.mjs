@@ -10,6 +10,8 @@
  * rpc:(name:string,args:object)=>Promise<object>,
  * buildReplacementSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,
  * buildOriginalSnapshot?:(input:{prepare:object,actor:CorrectionActor})=>Promise<object>,
+ * assertRequestSubject?:(input:{authority:RequestAuthority,actor:CorrectionActor})=>Promise<void>,
+ * assertPreparedSubjects?:(input:{prepare:object,actor:CorrectionActor})=>Promise<void>,
  * readRequestAuthority?:(input:{requestId:string,actor:CorrectionActor})=>Promise<RequestAuthority>,
  * resolveLifecycleItem?:(input:{item:object,timesheetId:string,selectedTimesheetIds:string[],action:string,actor:CorrectionActor})=>Promise<object|null>,
  * runOrdinaryLifecycle?:(input:{items:object[],action:string,actor:CorrectionActor})=>Promise<object>,
@@ -462,6 +464,10 @@ export function createTimesheetCorrectionOrchestrator(deps) {
     return Object.freeze({ actor_user_id: result.actor_user_id.toLowerCase(), environment: 'TEST' });
   }
   async function rawPrepare(p, a) {
+    if (typeof deps.assertRequestSubject === 'function') {
+      const authority = await readAuthority(p, a, { replay: true });
+      await deps.assertRequestSubject({ authority, actor: a });
+    }
     return rpcSuccess(await deps.rpc('timesheet_correction_prepare_v1', { p_request_id: p.request_id, p_actor_user_id: a.actor_user_id }));
   }
   async function readAuthority(p, a, options) {
@@ -486,6 +492,7 @@ export function createTimesheetCorrectionOrchestrator(deps) {
     const raw = await rawPrepare(p, a);
     if (raw.state != null) return appliedReceipt(raw, p);
     const prepare = waitingPrepare(raw, p);
+    if (typeof deps.assertPreparedSubjects === 'function') await deps.assertPreparedSubjects({ prepare, actor: a });
     let original;
     if (prepare.original_materialisation_required) {
       if (typeof deps.buildOriginalSnapshot !== 'function') fail('CORRECTION_CANONICAL_ORIGINAL_PRODUCER_UNAVAILABLE', 503);
@@ -541,7 +548,9 @@ export function createTimesheetCorrectionOrchestrator(deps) {
       const authority = await readAuthority(p, a, { replay: true });
       return freezeJson(cloneJson(cancelReceipt(raw, p, authority)));
     }
-    return waitingPrepare(raw, p); // Internal DTO: root must never serialize this to public clients.
+    const result = waitingPrepare(raw, p);
+    if (typeof deps.assertPreparedSubjects === 'function') await deps.assertPreparedSubjects({ prepare: result, actor: a });
+    return result; // Internal DTO: root must never serialize this to public clients.
   }
   async function authorise(payload, context) {
     const p = actionPayload(payload), a = await actor(context, 'AUTHORISE');
