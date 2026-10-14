@@ -1,0 +1,49 @@
+{
+  "status": "SANITIZED_PLAIN_POSTGRES_RESTART_MESSAGES",
+  "checkedAt": "2026-10-14T11:21:54.139Z",
+  "rows": [
+    {
+      "at": "2026-10-14T09:06:35.164Z",
+      "container": "plugin-barman-cloud",
+      "severity": null,
+      "message": null,
+      "criticalKeywords": [],
+      "length": 517,
+      "hasJsonObject": true,
+      "lineSha256": "1db1b7c2341de8824ddbc803d2f0b16db9b8c43ec2d287076f55f4aa978fa303"
+    },
+    {
+      "at": "2026-10-14T09:06:52.726Z",
+      "container": "plugin-barman-cloud",
+      "severity": null,
+      "message": null,
+      "criticalKeywords": [],
+      "length": 354,
+      "hasJsonObject": true,
+      "lineSha256": "9ddc06e0ec4a544d0a06486fffefac84df93fe7578fc5da235da4b4c6b59f5c5"
+    },
+    {
+      "at": "2026-10-14T09:06:55.271Z",
+      "container": "postgres",
+      "severity": null,
+      "message": null,
+      "criticalKeywords": [],
+      "length": 1672,
+      "hasJsonObject": true,
+      "lineSha256": "60a264f776f914f69fe4eb7b9d56c85cd9fbf13ef914c680896e38c2b1b877c5"
+    },
+    {
+      "at": "2026-10-14T09:07:25.376Z",
+      "container": "postgres",
+      "severity": null,
+      "message": null,
+      "criticalKeywords": [],
+      "length": 1672,
+      "hasJsonObject": true,
+      "lineSha256": "797b679e95c1014e5ea63617719303c2011fa5cefe99e6eaa305ffe7cf875ab7"
+    }
+  ],
+  "rawLogsRetained": false,
+  "secretsReturned": false,
+  "mutations": false
+}

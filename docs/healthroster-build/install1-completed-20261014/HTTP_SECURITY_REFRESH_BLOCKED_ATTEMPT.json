@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-10-14T16:06:44.308Z",
+  "target": "TEST",
+  "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+  "sourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "readOnlyApiCalls": true,
+  "fixtureOrBusinessMutation": false,
+  "anonymousWorkspaceStatus": 401,
+  "status": "HTTP_FIRST_USE_INCOMPLETE",
+  "failure": "page.evaluate: Error: CloudTMS could not renew the session because the connection is temporarily unavailable. Please try again.\n    at runRequest ([redacted origin]\n    at async au",
+  "assertionsPassed": false
+}

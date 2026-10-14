@@ -1,0 +1,139 @@
+{
+  "status": "MINIMAL_SYNTAX_ROLLBACK_PASS_SHARED_TURN_CLOSE_UNQUALIFIED",
+  "proof": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "HealthRoster post-restart minimal guard syntax and rollback proof",
+    "sqlSha256": "d6c3edde7198012559ac2f13a6b34d1a74845080a262a3b88fa5f1cd8b26a5b1",
+    "statementCount": 10,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "DISCARD",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "INSERT",
+        "rowCount": 1,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "exact_test",
+          "memory_bounded",
+          "hash_bounded",
+          "no_parallel",
+          "disconnect_check",
+          "temporary_probe_present"
+        ],
+        "rows": [
+          {
+            "exact_test": true,
+            "memory_bounded": true,
+            "hash_bounded": true,
+            "no_parallel": true,
+            "disconnect_check": true,
+            "temporary_probe_present": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "exact_test",
+            "temporary_probe_absent"
+          ],
+          "rows": [
+            {
+              "exact_test": true,
+              "temporary_probe_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  },
+  "explicitUnlockConfirmed": false,
+  "ownPidAndLockAbsent": true,
+  "fullRetryConsumed": false
+}

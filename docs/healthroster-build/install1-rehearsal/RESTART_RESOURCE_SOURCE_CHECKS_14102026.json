@@ -1,0 +1,25 @@
+{
+  "status": "RESTART_RESOURCE_SAFEGUARD_SOURCE_PASS",
+  "beforeCommit": "f7526663331456358707c8bde8d4ad8acbbef359",
+  "files": [
+    "tests/healthroster-install1-full-rehearsal.test.mjs",
+    "tests/healthroster-install1-native-coordinator.test.mjs",
+    "tests/healthroster-source-check-environment.test.mjs",
+    "tests/healthroster-turn-control.test.mjs",
+    "tests/healthroster-receipt-journal.test.mjs",
+    "tests/healthroster-rehearsal-turn.test.mjs",
+    "tests/healthroster-full-rehearsal-protocol.test.mjs",
+    "tests/healthroster-live-test-restoration.test.mjs",
+    "tests/healthroster-rehearsal-stream-observer.test.mjs",
+    "tests/healthroster-rehearsal-resource-guard.test.mjs"
+  ],
+  "exitCode": 0,
+  "tests": 109,
+  "pass": 109,
+  "fail": 0,
+  "failedTitles": [],
+  "outputSha256": "7cfad3e18f13060a0081b95083dd5f38097d305062abcce999b932f86cd936eb",
+  "sourceOnly": true,
+  "native": false,
+  "installation": false
+}

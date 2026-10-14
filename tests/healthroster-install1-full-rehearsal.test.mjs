@@ -106,22 +106,45 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
   const tx=scanManagedSql(plan.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO');
   assert.deepEqual(tx.map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
   assert.equal(plan.lineMap.length,2271);assert.equal(plan.sqlHash,digest(plan.sql));
+  // Real psql reports a failing DO at its closing delimiter/semicolon line.
+  // These are the exact three locations observed in the held native retry.
+  for (const [closing,file,statement,code] of [
+    ['end $released_review$;','supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql',60,'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID'],
+    ['$verify_one_head$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',19,'WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH'],
+    ['$verify_fingerprint$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',20,'ASSERTION_FAILED']
+  ]) {
+    const line=plan.sql.split('\n').findIndex(value=>value.trim()===closing)+1;
+    assert.ok(line>0);
+    const location=plan.lineMap.find(row=>line>=row.startLine&&line<=row.endLine);
+    assert.equal(location.file,file);assert.equal(location.statement,statement);
+    const diagnostic=closedRehearsalDiagnostic('psql:<stdin>:'+line+': ERROR: 55000: '+code,plan.lineMap,new Set(plan.diagnosticCodes));
+    assert.equal(diagnostic.file,file);assert.equal(diagnostic.statement,statement);
+  }
+
   assert.ok(plan.sql.includes('do $hr_contract_compare$'));
   assert.ok(plan.sql.indexOf('do $hr_contract_compare$')<plan.sql.lastIndexOf('rollback;'));
   assert.ok(plan.diagnosticCodes.includes('WP_PP_FIXTURE_ID_COLLISION'));
+  const live=compileFullRehearsal({candidatePin,currentRemoteTestPin:base,expectedContractHash,contractDigest,installed,review,marker,observeLiveBusiness:true});
+  assert.equal(live.fixtureObservationUnits.length,143);
+  assert.deepEqual(live.units.map(r=>({file:r.file,sqlHash:r.sqlHash})),plan.units.map(r=>({file:r.file,sqlHash:r.sqlHash})));
+  assert.equal(live.lineMap.filter(r=>r.phase==='fixture_observation').length,429);
+  assert.equal(live.sql.split('HR_REHEARSAL_TRANSACTION_JSON ').length,2);
+  assert.equal(live.sql.split('HR_FIXTURE_OBSERVATION_JSON ').length,144);
+  assert.deepEqual(scanManagedSql(live.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO').map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
 });
 
-function model({executionDelta={},afterDelta={},publishFailure=false}={}){
- const events=[],controller=new AbortController();
+function model({executionDelta={},afterDelta={},publishFailure=false,executionFailure=null}={}){
+ const events=[],receipts=[],controller=new AbortController();
  const turn={identity,signal:controller.signal,assertHeld:async phase=>events.push('held:'+phase)};
  const callbacks={freshGate:async phase=>{events.push('gate:'+phase);return gate();},before:async()=>{events.push('before');return before();},
   executeSameSession:async args=>{events.push('execute');assert.equal(args.noHarnessDeadline,true);assert.equal(args.settings.statementTimeout,0);
+   if(executionFailure)throw executionFailure;
    return {sameSession:true,explicitRollback:true,exitCode:0,errorCollectionComplete:true,errors:[],installedContract:{matched:true,sha256:hash},...executionDelta};},
   freshAfter:async()=>{events.push('fresh');return {...after(),...afterDelta};},
-  recordReceipt:async receipt=>{events.push('record:'+receipt.status);},
+  recordReceipt:async receipt=>{receipts.push(receipt);events.push('record:'+receipt.status);},
   publishManaged:async args=>{events.push('publish');assert.equal(args.turn,turn);if(publishFailure)throw Error('PROTECTED_FAILED');return {status:'ROOT_MANAGED_PUBLISHED'};}};
- return {events,controller,options:{turn,candidatePin,currentRemoteTestPin:base,expectedContractHash:hash,marker,review:{},callbacks,
+ return {events,receipts,controller,options:{turn,candidatePin,currentRemoteTestPin:base,expectedContractHash:hash,marker,review:{},callbacks,
   compilePlan:()=>({version:REHEARSAL_VERSION,sql:'begin; rollback;',sqlHash:hash,lineMap:[],currentCounts:{},pendingCounts:{},exclusions:[],expectedContractHash:hash,diagnosticCodes:[],sourceBinding:{sha256:hash}})}};
 }
 
@@ -138,6 +161,24 @@ test('SQL errors or missing explicit rollback always get fresh proof and hold pu
   const m=model({executionDelta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/HOLD_INSTALL|INCOMPLETE/);
   assert.ok(m.events.includes('fresh'));assert.ok(m.events.some(x=>x.startsWith('record:')));assert.ok(!m.events.includes('publish'));
  }
+});
+
+test('interrupted or incomplete execution and collected SQL errors never receive an intermediate SQL-pass receipt',async()=>{
+ const thrown=model({executionFailure:Error('TURN_CONNECTION_CLOSED')});
+ const originalHeld=thrown.options.turn.assertHeld;
+ thrown.options.turn.assertHeld=async phase=>{if(phase==='install1-fresh')throw Error('TURN_CONNECTION_CLOSED');return originalHeld(phase);};
+ await assert.rejects(runFullRehearsalWithinOwnedTurn(thrown.options),/TURN_CONNECTION_CLOSED/);
+ assert.equal(thrown.receipts.length,1);assert.equal(thrown.receipts[0].status,'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED');
+ assert.equal(thrown.receipts[0].execution,null);assert.equal(thrown.receipts[0].restorationProved,false);
+ assert.ok(!thrown.events.includes('fresh'));assert.ok(!thrown.events.includes('publish'));
+ for(const [delta,status] of [[{explicitRollback:false},'EXECUTION_INCOMPLETE_RESTORATION_UNVERIFIED'],[{errors:[{sqlstate:'23514'}]},'SQL_ERRORS_FINISHED_RESTORATION_UNVERIFIED']]){
+  const m=model({executionDelta:delta});await assert.rejects(runFullRehearsalWithinOwnedTurn(m.options),/INCOMPLETE|HOLD_INSTALL/);
+  assert.equal(m.receipts[0].status,status);assert.ok(m.receipts.every(r=>r.status!=='SQL_PASS_FINISHED_RESTORATION_UNVERIFIED'));
+  assert.ok(m.events.includes('fresh'));assert.ok(!m.events.includes('publish'));
+ }
+ const clean=model();await runFullRehearsalWithinOwnedTurn(clean.options);
+ assert.equal(clean.receipts[0].status,'SQL_PASS_FINISHED_RESTORATION_UNVERIFIED');
+ assert.equal(clean.receipts.at(-1).status,'FULL_CLEAN_ROLLBACK_PROVED');
 });
 
 test('restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure',async()=>{

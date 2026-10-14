@@ -1,4 +1,5 @@
 import {scanManagedSql, digest} from './cloudtms-managed-release-sql.mjs';
+import {fixtureObservationSql} from './healthroster-live-test-restoration.mjs';
 
 // A source safety reviewer authorises exact envelope removals before rendering.
 // Hash-bound full SQL remains retained; this never opens a connection or grants
@@ -43,7 +44,7 @@ export function neutraliseReviewedVerifierEnvelope(unit, review) {
 // Source-only renderer. This module opens no database/network connection.
 // The post-Banking coordinator must supply exact pushed, independently reviewed
 // units, hold SEND_7 before its before probes, and retain it through fresh proof.
-export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
+export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusiness=false} = {}) {
   if (!Array.isArray(units) || !units.length) throw Error('REHEARSAL_UNITS_REQUIRED');
   if (outerIsolation !== undefined && !['READ COMMITTED','REPEATABLE READ','SERIALIZABLE'].includes(outerIsolation)) {
     throw Error('REHEARSAL_ISOLATION_VALUE_REFUSED');
@@ -88,7 +89,13 @@ export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
       }
     }
     const parts = [`\\echo HR_FILE_BEGIN ${index}`, 'reset role;', 'reset session authorization;',
-      'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;'];
+      // Managed release verifiers normally get fresh backends. The single outer
+      // rehearsal transaction must not retain every previous unit's plan cache.
+      // PLANS preserves the transaction, locks, objects, roles and every body.
+      'discard plans;',
+      'set local jit=off;', 'set local pg_show_plans.is_enabled=off;', 'set local statement_timeout=0;',
+      'set local work_mem=\'4MB\';', 'set local hash_mem_multiplier=1;',
+      'set local max_parallel_workers_per_gather=0;', 'set local client_connection_check_interval=\'1s\';'];
     // psql variables are client state: SQL savepoint rollback cannot clear them.
     // Keep each verifier's own internal set/if behavior, with no predecessor leak.
     const clientVariables = [...new Set(['weekly_source_verification_outer_transaction',
@@ -100,6 +107,7 @@ export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
     if (clientVariables.some(name=>!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw Error('REHEARSAL_CLIENT_VARIABLE_REFUSED');
     if (verifier) parts.push(...clientVariables.map(name=>'\\unset '+name), `savepoint hr_verifier_${index};`);
     parts.push(unit.sql);
+    if (verifier&&observeLiveBusiness) parts.push(fixtureObservationSql(index));
     if (verifier) parts.push(`rollback to savepoint hr_verifier_${index};`, `release savepoint hr_verifier_${index};`,
       ...clientVariables.map(name=>'\\unset '+name));
     parts.push(`\\echo HR_FILE_END ${index}`);

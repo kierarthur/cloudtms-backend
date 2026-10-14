@@ -1,0 +1,22 @@
+{
+  "status": "READ_ONLY_FIELDS_PASS",
+  "database": "cloudtms_test_clone",
+  "writerCount": 4,
+  "sqlSha256": "f75c9db841c47c604fd26436133e30a19c775492ac01144b898046088acb2c05",
+  "relations": [
+    {
+      "relation": "private.candidate_daily_batch_receipts",
+      "rowCount": 70110
+    },
+    {
+      "relation": "public.ts_financials_outbox",
+      "rowCount": 20
+    }
+  ],
+  "nativeClaimRows": 69288,
+  "rowMapsRetained": false,
+  "backgroundJobsPaused": false,
+  "fullRehearsal": false,
+  "installation": false,
+  "checkedAt": "2026-10-14T08:49:10.968Z"
+}

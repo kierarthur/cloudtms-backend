@@ -1,0 +1,47 @@
+{
+  "status": "POST_RESTART_NORMAL_TEST_ROUTE_READ_ONLY_HEALTH",
+  "checkedAt": "2026-10-14T11:24:34.959Z",
+  "results": [
+    {
+      "url": "https://test-cloudtms-backend.kier-88a.workers.dev/readyz",
+      "status": 503,
+      "durationMs": 5055,
+      "bytes": 472,
+      "bodySha256": "f8d29595b507993a2bf6a07bb17ae7f245fdeb472f98550fdb5238b591433b13",
+      "safeFlags": {
+        "ready": false,
+        "backend_ready": true,
+        "processor_ready": false,
+        "dispatcher_ready": true
+      },
+      "openapi": false,
+      "openApiPaths": null,
+      "postgresErrorCode": null
+    },
+    {
+      "url": "https://cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com/",
+      "status": 200,
+      "durationMs": 534,
+      "bytes": 83430,
+      "bodySha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796",
+      "safeFlags": {},
+      "openapi": true,
+      "openApiPaths": 12,
+      "postgresErrorCode": null
+    },
+    {
+      "url": "https://codex-cloudtms-miget-gateway.kier-88a.workers.dev/rest/v1/",
+      "status": 200,
+      "durationMs": 701,
+      "bytes": 83430,
+      "bodySha256": "b467354ada2a06c06cda8baa91ec15af803f63feb1a6785db3b6aff3d1e13796",
+      "safeFlags": {},
+      "openapi": true,
+      "openApiPaths": 12,
+      "postgresErrorCode": null
+    }
+  ],
+  "mutations": false,
+  "rawPayloadsRetained": false,
+  "secretsReturned": false
+}

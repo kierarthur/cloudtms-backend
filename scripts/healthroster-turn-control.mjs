@@ -30,12 +30,14 @@ export function abortableDelay(ms,signal) {
 
 // No wall-clock limit on full SQL. Cancellation is exclusively a loss signal
 // applied to the exact child object created here; no PID search or remote cancel.
-export async function runOwnedTurnChild({file,args=[],options={},input,signal,assertHeld,cancelOnLoss=true,spawnChild=spawn}) {
+export async function runOwnedTurnChild({file,args=[],options={},input,signal,assertHeld,cancelOnLoss=true,spawnChild=spawn,resourceGuard}) {
  await assertHeld('before-owned-child');
  if(signal.aborted)throw signal.reason;
+ if(resourceGuard&&(!cancelOnLoss||typeof resourceGuard.start!=='function'||typeof resourceGuard.stop!=='function'))throw closedTurnError('RESOURCE_GUARD_ONLY_FOR_OWN_ROLLBACK_CHILD');
  const child=spawnChild(file,args,{...options,windowsHide:true});
  return await new Promise((resolve,reject)=>{
-  let stdout='',stderr='',killTimer,inputError,observerError;
+  let stdout='',stderr='',killTimer,inputError,observerError,resourceError,ownedClosed=false;
+  const stopOwnedChild=()=>{if(ownedClosed)return;child.kill('SIGTERM');killTimer=setTimeout(()=>{if(!ownedClosed)child.kill('SIGKILL');},5000);killTimer.unref?.();};
   const observe=(callback,chunk)=>{
    if(observerError||!callback)return;
    try{callback(chunk);}catch{
@@ -55,12 +57,16 @@ export async function runOwnedTurnChild({file,args=[],options={},input,signal,as
   signal.addEventListener('abort',abort,{once:true});
   child.once('error',()=>{signal.removeEventListener('abort',abort);clearTimeout(killTimer);reject(closedTurnError('OWNED_CHILD_START_FAILED'));});
   child.once('close',async(code,childSignal)=>{
+   ownedClosed=true;
    signal.removeEventListener('abort',abort);clearTimeout(killTimer);
+   if(resourceGuard)try{const result=await resourceGuard.stop();if(result.failed)resourceError??=closedTurnError(result.code);}catch{resourceError??=closedTurnError('REHEARSAL_RESOURCE_OBSERVATION_FAILED');}
    if(signal.aborted){reject(signal.reason);return;}
    if(inputError){reject(inputError);return;}
    if(observerError){reject(observerError);return;}
+   if(resourceError){reject(resourceError);return;}
    try {await assertHeld('after-owned-child');resolve({code,signal:childSignal,stdout,stderr});}catch(error){reject(error);}
   });
+  if(resourceGuard)try{resourceGuard.start(cause=>{resourceError??=closedTurnError(cause.code??'REHEARSAL_RESOURCE_OBSERVATION_FAILED');stopOwnedChild();});}catch{resourceError=closedTurnError('REHEARSAL_RESOURCE_GUARD_START_FAILED');stopOwnedChild();}
   if(input!==undefined){if(typeof input!=='string'||!child.stdin){child.kill('SIGTERM');reject(closedTurnError('OWNED_CHILD_INPUT_REFUSED'));return;}child.stdin.end(input);}
   if(signal.aborted)abort();
  });

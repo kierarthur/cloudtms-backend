@@ -1,0 +1,68 @@
+{
+  "formatVersion": 2,
+  "target": "TEST",
+  "startedAt": "2026-10-14T14:44:49.540Z",
+  "status": "DEPLOYED_ACCEPTANCE_PENDING",
+  "stages": [
+    {
+      "name": "database",
+      "status": "VERIFIED_OR_EXACT_UNCHANGED",
+      "runId": 38583323424,
+      "url": "https://github.com/kierarthur/cloudtms-backend/actions/runs/38583323424",
+      "at": "2026-10-14T15:47:11.510Z"
+    },
+    {
+      "name": "backend",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "checkId": 115952882656,
+      "at": "2026-10-14T15:52:20.117Z"
+    },
+    {
+      "name": "candidate-private",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "checkId": 115954926697,
+      "at": "2026-10-14T15:56:26.451Z"
+    },
+    {
+      "name": "candidate-synthetic",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "checkId": 115956717396,
+      "at": "2026-10-14T16:00:00.598Z"
+    },
+    {
+      "name": "candidate-broker",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "checkId": 115959518289,
+      "at": "2026-10-14T16:05:25.500Z"
+    },
+    {
+      "name": "office",
+      "status": "PAGES_DEPLOY_SUCCEEDED",
+      "commit": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+      "url": "https://api.github.com/repos/kierarthur/TEST-Frontend/pages/builds/1284513296",
+      "at": "2026-10-14T16:06:33.035Z"
+    }
+  ],
+  "sharedTurn": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 18462,
+    "turnId": "hr_turn_b0a639891bb0313cc64a023ba0e7772a",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-14T14:44:41.796Z",
+    "task": "Owner-ruled Install1 protected database then Workers then Office; no additional full rehearsal"
+  },
+  "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "officeCommit": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "databaseDispatchAttempted": true,
+  "databaseDispatchStartedAt": "2026-10-14T14:45:10.444Z",
+  "databaseRunId": 38583323424,
+  "databaseRunUrl": "https://github.com/kierarthur/cloudtms-backend/actions/runs/38583323424"
+}

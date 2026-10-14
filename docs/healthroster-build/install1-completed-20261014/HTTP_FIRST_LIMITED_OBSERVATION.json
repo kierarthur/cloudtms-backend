@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-10-14T15:58:53.435Z",
+  "target": "TEST",
+  "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+  "sourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "readOnlyApiCalls": true,
+  "fixtureOrBusinessMutation": false,
+  "anonymousWorkspaceStatus": 401,
+  "authenticatedWorkspace": {
+    "status": 200,
+    "contract": "WEEKLY_SOURCE_IMPORT_WORKSPACE_V1",
+    "payReadOnly": false,
+    "queriesPresent": true,
+    "sourceScopePresent": true
+  },
+  "refusedOriginCount": 0,
+  "assertionsPassed": true
+}

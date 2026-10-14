@@ -1,0 +1,107 @@
+{
+  "recordedAt": "2026-10-14T16:26:34.019Z",
+  "sourceOnly": true,
+  "integratedTest": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "installedCode": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "predecessor": "39a9e2af81bec30cf1235e5c709a98fa43e089d4",
+  "conflicts": [
+    {
+      "path": "docs/healthroster-build/PUBLISHED_HELPERS.md",
+      "preservedPriorGitBlobSha256": "9f023a8a3caccbf23c5862a078f21e979134b57449d7cf22e015d6fe2aec8403",
+      "incomingPublicationGitBlobSha256": "be5fb30014c41e763247dae72bd93f309a649ccb4e1fc8fd6adf11b14d43927d"
+    },
+    {
+      "path": "docs/healthroster-build/TEST_INSTALLS.md",
+      "preservedPriorGitBlobSha256": "e75440a6d196eb115b7414018067acda7516f6eb340e84a18653b4212a94033b",
+      "incomingPublicationGitBlobSha256": "fea7c6aca416873e2fcfffce971662efa96edcf411a1b395fdb40e43657e1db3"
+    },
+    {
+      "path": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "resolution": "Keep genuine optional native transaction/fixture observations and fail complete collection on fixture-capture failure; preserve all unmapped diagnostics and contract checks",
+      "resolvedSavedSha256": "e8066e76234be3443c7cdbcb5a351638c2788a7570251adf6d292cb12eaf2c9a"
+    }
+  ],
+  "preservedCleanupRefusedDrafts": [
+    {
+      "file": "weekly_exceptional_pay_complete_local_v1.actual.diff",
+      "sha256": "dc2d7547587e5f086b921112121c38cd9483b3bd0c0117ae745914a3528d41ea"
+    },
+    {
+      "file": "weekly_exceptional_pay_complete_local_v1.broad.diff",
+      "sha256": "519aa0a44f90ec899341f3c727022a0d62e357a9c934335c842cbc804b9c810d"
+    },
+    {
+      "file": "weekly_exceptional_pay_complete_local_v1.complete.diff",
+      "sha256": "4230fea49209b56da0b6758a3aefc32aef2a102d6edff29fda96873bd467f889"
+    },
+    {
+      "file": "weekly_exceptional_pay_complete_local_v1.draft.txt",
+      "sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d"
+    },
+    {
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.actual.diff",
+      "sha256": "d1ffe3368db1eafe5357d2685bdef8671f7eb90075cf2ef156af2da0228d6825"
+    },
+    {
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.broad.diff",
+      "sha256": "f7552205a7c3c8cb774841cf0c41bedf273ca54b3e03ae0ee5593acf03a9a5c0"
+    },
+    {
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.complete.diff",
+      "sha256": "d68b8d804cb261337d0b3804362fc48d839ed24c7ea98b5430155575b44e8575"
+    },
+    {
+      "file": "weekly_exceptional_pay_stage_c1_request_v1.draft.txt",
+      "sha256": "de94ddb5eea5cd4939678d40cff82634e68c7e2be7fca2ad86e5ac8b4455bed3"
+    },
+    {
+      "file": "weekly_source_candidate_submission_compare_sync_v1.actual.diff",
+      "sha256": "6b2370638580a4c0895e9a9a1c5d78e5820e69d86b95f8dbd7bd5e766dd21095"
+    },
+    {
+      "file": "weekly_source_candidate_submission_compare_sync_v1.broad.diff",
+      "sha256": "112193495f733fd5510334443d681ec75e25b62f181ac16c2d54976a32e7c48d"
+    },
+    {
+      "file": "weekly_source_candidate_submission_compare_sync_v1.complete.diff",
+      "sha256": "c4acf47494810db8e325e19c257e11a9534c169d2d07513d2b6ff700624cc852"
+    },
+    {
+      "file": "weekly_source_candidate_submission_compare_sync_v1.draft.txt",
+      "sha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f"
+    },
+    {
+      "file": "weekly_source_manual_reviews_finalised_v1.actual.diff",
+      "sha256": "3f97e0cc85482db9babfd65829d30b1a9a7b5987f73af47de845b2d464c195c6"
+    },
+    {
+      "file": "weekly_source_manual_reviews_finalised_v1.broad.diff",
+      "sha256": "5e08be3ed12ce6bf8d123d72cf18ed6495a3033cfe35e2a65597f782f2218313"
+    },
+    {
+      "file": "weekly_source_manual_reviews_finalised_v1.complete.diff",
+      "sha256": "9e34d5d888a0c8a70263726bb024c6480190b4e2733d4f884336a472ef3585e1"
+    },
+    {
+      "file": "weekly_source_manual_reviews_finalised_v1.draft.txt",
+      "sha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32"
+    },
+    {
+      "file": "weekly_source_manual_review_resolve_v1.actual.diff",
+      "sha256": "3cf8f251e88116eea575f7c8fbe03d097d41bc39748585c5db4e745b18f603a7"
+    },
+    {
+      "file": "weekly_source_manual_review_resolve_v1.broad.diff",
+      "sha256": "b9656715fc2147efc04328ad0c7799d76587915803859692b37ddef6ee822d00"
+    },
+    {
+      "file": "weekly_source_manual_review_resolve_v1.complete.diff",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "weekly_source_manual_review_resolve_v1.draft.txt",
+      "sha256": "e630d670d099ec33353c4680407d12e471abe06d913c7203a3825fe568bf115a"
+    }
+  ],
+  "notAnInstallationCandidate": true
+}
