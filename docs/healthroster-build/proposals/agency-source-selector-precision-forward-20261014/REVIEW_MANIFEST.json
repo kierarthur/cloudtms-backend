@@ -1,0 +1,66 @@
+{
+  "schema": "AGENCY_SOURCE_SELECTOR_PRECISION_MANIFEST_V1",
+  "source_only": true,
+  "native": false,
+  "consumed_root": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "source20_input_commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+  "mount_ready": false,
+  "independent_review_pending": true,
+  "entries": [
+    {
+      "path": "HANDBACK.md",
+      "bytes": 1563,
+      "sha256": "f370f0b09dc3ffd0e7a72da4a84c9eb9a201a8e91d6a6cb464ebc2e8eb7d2b81"
+    },
+    {
+      "path": "INPUT_PINS.json",
+      "bytes": 875,
+      "sha256": "d4ea963ce919c913c3bc3fd8ac3db4e3b66ea0f6d5acaf34d82541d9538ce4db"
+    },
+    {
+      "path": "PURE_TEST_OUTPUT.txt",
+      "bytes": 1870,
+      "sha256": "0cfb9e3aec26bb09fb3865a58443fb6b35fed28536429a12724b06eab0a7a5d7"
+    },
+    {
+      "path": "SELECTOR_GUARD_SEAMS.md",
+      "bytes": 3297,
+      "sha256": "ca18106b8cf5315b72dd37ed816fabc8a001fe85f192093328477867d25194a7"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 695,
+      "sha256": "562076aabeb78cf831c5cad6829f76455a2e1957163ab5503864206b396d3ff2"
+    },
+    {
+      "path": "construction/01_source20_witness_before.sql.txt",
+      "bytes": 12185,
+      "sha256": "0f475d7896b7fffe553fdc5c164d14a6cfef680609c01cb3857d69f2c4cdb155"
+    },
+    {
+      "path": "construction/85_complete_source_dependency_witness_with_exact_selector_tuples.sqlinc",
+      "bytes": 14843,
+      "sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b"
+    },
+    {
+      "path": "construction/SOURCE_SELECTOR_COMPLETE_REVERSE.json",
+      "bytes": 3921,
+      "sha256": "d091d451f1ea0fdec2f6261fb54048e02d3eb0d70a9a7a910740c4b7cdccd4b2"
+    },
+    {
+      "path": "construction/source-selector-precision.test.mjs",
+      "bytes": 7166,
+      "sha256": "b3ad4ffd1f931fb8d880e0a534043c9eb7fb6e38afe58f762f6d94402cfb082f"
+    },
+    {
+      "path": "generators/prepare-source-selector-precision-forward.mjs",
+      "bytes": 4929,
+      "sha256": "b736b3f8838b438ebf108a46b186c15f15913b9fb4867ed421d76eef087d7d55"
+    },
+    {
+      "path": "reference/02_complete_current_source_facts_with_contract_client.sqlinc",
+      "bytes": 19291,
+      "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+✔ UNIT_ONLY complete three-hunk owner reverse exactly restores frozen Source20 (4.0079ms)
+✔ UNIT_ONLY empty visible resolution set still retains every actual phantom slot (22.2402ms)
+✔ UNIT_ONLY actual generation takes precedence over authority version (0.2024ms)
+✔ UNIT_ONLY precise resolution slot excludes excluded generation (0.1176ms)
+✔ UNIT_ONLY precise resolution slot excludes foreign Client (0.0872ms)
+✔ UNIT_ONLY precise resolution slot excludes other raw row (0.1049ms)
+✔ UNIT_ONLY precise resolution slot excludes unselected upload row (0.0649ms)
+✔ UNIT_ONLY raw upload-parent identity alone cannot select a resolution slot (0.0942ms)
+✔ UNIT_ONLY publication without Source rows adds no fictional slot (0.1086ms)
+✔ UNIT_ONLY native row IDs remain distinct despite a shared economic event (0.1565ms)
+✔ UNIT_ONLY exact Report-bound resolution is retained separately regardless of selected publication generation (0.1459ms)
+✔ UNIT_ONLY revision/Client pair preserves every selected conjunction (0.0874ms)
+✔ UNIT_ONLY revision/event pair never becomes revision-OR-event scope (0.0653ms)
+✔ UNIT_ONLY OLD and NEW resolve to exact predicates separately, preserving selected-to-excluded movement (0.0535ms)
+✔ UNIT_ONLY complete large projection has no sample/count equality shortcut (32.6688ms)
+✔ UNIT_ONLY literal native SQL retains actual publication fallback and native integer generation (0.3042ms)
+✔ UNIT_ONLY literal native SQL uses full revision/Client and revision/event cartesian predicates (0.0998ms)
+✔ UNIT_ONLY Source facts read and genuine CAS domain remain single and unchanged (1.333ms)
+✔ UNIT_ONLY selector successor introduces no retention/lock/qualification authority or new signature (0.2726ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269.642

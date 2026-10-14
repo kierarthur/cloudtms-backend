@@ -1,0 +1,25 @@
+{
+  "source_only": true,
+  "native": false,
+  "input_path": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/01_native_source_dependency_witness.sqlinc",
+  "input_commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+  "input_sha256": "0f475d7896b7fffe553fdc5c164d14a6cfef680609c01cb3857d69f2c4cdb155",
+  "forward_sha256": "d3e032b911499cfe0563a4f21f55643b05b51ebd6cb8c1313f112ea04f2fca2b",
+  "hunks": [
+    {
+      "label": "local complete native selector projection fields",
+      "before": " billing_movements jsonb; rule_set_ids jsonb;",
+      "after": " billing_movements jsonb; rule_set_ids jsonb; resolution_slots jsonb; revision_client_pairs jsonb;\n revision_event_pairs jsonb; exact_report_bound_resolutions jsonb;"
+    },
+    {
+      "label": "full real Source row/publication/client and revision conjunctions",
+      "before": " -- Group/client and date predicates are retained as typed native selectors,",
+      "after": " -- Predicate-shaped phantom scopes come from the SAME real facts read.\n -- Every Source row/publication upload match is retained for every actually\n -- selected Client, including slots with no currently visible resolution.\n -- An existing report-bound resolution is a separate exact object dependency.\n -- No parent-only upload/revision/event/Client scope substitutes for these\n -- conjunctions, and no LIMIT/sample/truncation can claim a complete footprint.\n with actual_rows as (\n  select (row_data->>'id')::uuid upload_row_id,(row_data->>'upload_id')::uuid upload_id\n   from jsonb_array_elements(facts->'rows') row_data\n ), actual_publications as (\n  select (publication->>'upload_id')::uuid upload_id,\n   coalesce(publication->>'projection_generation',publication->>'authority_scope_version')::integer generation\n   from jsonb_array_elements(facts->'publications') publication\n ), actual_slots as (\n  select distinct row_data.upload_row_id,publication.generation,client_id\n   from actual_rows row_data join actual_publications publication on publication.upload_id=row_data.upload_id\n   cross join unnest(clients) client_id\n )\n select coalesce(jsonb_agg(jsonb_build_array(upload_row_id,generation,client_id)\n  order by upload_row_id,generation,client_id),'[]'::jsonb) into resolution_slots from actual_slots;\n select coalesce(jsonb_agg(jsonb_build_array(revision_id,client_id) order by revision_id,client_id),'[]'::jsonb)\n  into revision_client_pairs from(\n   select distinct (revision->>'id')::uuid revision_id,client_id\n    from jsonb_array_elements(facts->'revisions') revision cross join unnest(clients) client_id\n  ) native;\n select coalesce(jsonb_agg(jsonb_build_array(revision_id,event_id) order by revision_id,event_id),'[]'::jsonb)\n  into revision_event_pairs from(\n   select distinct (revision->>'id')::uuid revision_id,(event->>'id')::uuid event_id\n    from jsonb_array_elements(facts->'revisions') revision cross join jsonb_array_elements(facts->'events') event\n  ) native;\n select coalesce(jsonb_agg(to_jsonb(resolution_id) order by resolution_id),'[]'::jsonb)\n  into exact_report_bound_resolutions from(\n   select distinct (binding->>'bound_row_resolution_id')::uuid resolution_id\n    from jsonb_array_elements(facts->'report_bindings') binding\n    where binding->>'bound_row_resolution_id' is not null\n  ) native;\n -- Group/client and date predicates are retained as typed native selectors,"
+    },
+    {
+      "label": "closed literal tuple fields for the SAME arbiter",
+      "before": "   'contract_coverage',jsonb_build_object('client_ids',to_jsonb(clients),",
+      "after": "   'resolution_slots',resolution_slots,\n   'revision_client_pairs',revision_client_pairs,'revision_event_pairs',revision_event_pairs,\n   'exact_report_bound_resolution_ids',exact_report_bound_resolutions,\n   'contract_coverage',jsonb_build_object('client_ids',to_jsonb(clients),"
+    }
+  ]
+}

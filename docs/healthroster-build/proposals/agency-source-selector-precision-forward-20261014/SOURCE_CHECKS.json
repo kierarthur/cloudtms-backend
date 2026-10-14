@@ -1,0 +1,23 @@
+{
+  "source_only": true,
+  "native": false,
+  "tests": 19,
+  "syntax_checks": 2,
+  "whole_reverse_owners": 1,
+  "unique_reverse_hunks": 3,
+  "sql_lexical_statements": 3,
+  "sql_compiled": false,
+  "signature": "private.weekly_source_agency_source_dependencies_v1(uuid,uuid[])",
+  "acl": "OWNER_ONLY_UNCHANGED",
+  "new_tables": 0,
+  "new_columns": 0,
+  "new_signatures": 0,
+  "source_cas_domain_unchanged": true,
+  "full_selector_projection": true,
+  "added_tuple_count_cap": false,
+  "inherited_result_byte_bound": 8388608,
+  "inherited_byte_bound_action": "REFUSE_FULL_RESULT; NEVER_PARTIAL_EQUALITY",
+  "raw_whitespace_pass": null,
+  "compiled_contract_sha256": null,
+  "mount_ready": false
+}

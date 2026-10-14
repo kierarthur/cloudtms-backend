@@ -1,0 +1,213 @@
+create or replace function private.weekly_source_bulk_source_facts_v1(p_cycle_id uuid,p_client_ids uuid[])
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype;
+  p public.weekly_source_projection_publications%rowtype; u public.weekly_source_uploads%rowtype;
+  clients uuid[]; facts jsonb; actual_client uuid;
+begin
+  if p_cycle_id is null or p_client_ids is null or array_position(p_client_ids,null::uuid) is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='22023'; end if;
+  select coalesce(array_agg(distinct value order by value),'{}'::uuid[]) into clients from unnest(p_client_ids) value;
+  if cardinality(clients)>100 then raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_SCOPE_TOO_LARGE' using errcode='54000'; end if;
+  select * into strict c from public.weekly_source_cycles where id=p_cycle_id;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and active and source_family='ROSTER';
+  select * into strict p from public.weekly_source_projection_publications where id=c.current_projection_publication_id
+    and source_cycle_id=c.id and state='CURRENT' and authority_scope_kind='CYCLE' and correction_session_id is null and report_scope_id is null;
+  select * into strict u from public.weekly_source_uploads where id=c.current_complete_upload_id and id=p.upload_id
+    and source_cycle_id=c.id and state='CURRENT' and report_scope_id is null;
+  perform private.weekly_source_query_current_publication_v1(c.id,p.id);
+  actual_client:=private.weekly_source_checking_client_scope_v1(p.id);
+  if exists(select 1 from unnest(clients) client where (actual_client is not null and actual_client<>client)
+    or not exists(select 1 from public.weekly_source_group_clients member where member.source_group_id=g.id and member.client_id=client
+      and daterange(member.valid_from,coalesce(member.valid_to,'infinity'::date),'[]')
+        && daterange(coalesce(u.confirmed_coverage_start_local_date,c.finalisation_week_ending-6),
+          coalesce(u.confirmed_coverage_end_local_date,c.finalisation_week_ending),'[]'))) then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_CLIENT_SCOPE_CHANGED' using errcode='40001'; end if;
+  -- CTE scope comes from saved Source parents. Incident IDs contribute stable
+  -- work-event scope irrespective of OPEN/CLOSED; their mutable rows do not.
+  with report_scopes as materialized (
+    select scope.* from public.weekly_source_report_scopes scope where scope.source_group_id=g.id
+      and scope.client_id=any(clients) and scope.self_bill_report_id is not null
+  ), report_bindings as materialized (
+    select binding.* from public.weekly_source_self_bill_report_line_bindings binding
+      join public.weekly_source_self_bill_reports report on report.id=binding.self_bill_report_id
+      where report.source_group_id=g.id and report.client_id=any(clients) and binding.state='CURRENT'
+  ), publications as materialized (
+    select publication.* from public.weekly_source_projection_publications publication where publication.id=p.id
+      or publication.id in(select current_projection_publication_id from report_scopes)
+      or publication.id in(select export_projection_publication_id from report_bindings)
+  ), uploads as materialized (
+    select upload.* from public.weekly_source_uploads upload where upload.id=u.id
+      or upload.id in(select upload_id from publications)
+  ), source_rows as materialized (
+    select row_data.* from public.weekly_source_upload_rows row_data where row_data.upload_id in(select id from uploads)
+  ), resolutions as materialized (
+    select resolution.* from public.weekly_source_row_resolutions resolution
+      join source_rows row_data on row_data.id=resolution.upload_row_id
+      join publications publication on publication.upload_id=row_data.upload_id
+        and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+      where resolution.client_id=any(clients)
+      union select resolution.* from public.weekly_source_row_resolutions resolution
+        join report_bindings binding on binding.bound_row_resolution_id=resolution.id
+  ), events as materialized (
+    select event.* from public.weekly_work_events event where event.first_source_group_id=g.id and event.client_id=any(clients)
+      and (event.id in(select work_event_id from resolutions) or event.id in(select work_event_id from report_bindings)
+        or exists(select 1 from public.weekly_discrepancy_incidents incident where incident.source_cycle_id=c.id
+          and incident.work_event_id=event.id and incident.client_id=event.client_id))
+  ), revisions as materialized (
+    select revision.* from public.weekly_source_final_revisions revision
+      join public.weekly_source_cycles source_cycle on source_cycle.id=revision.source_cycle_id and source_cycle.source_group_id=g.id
+      where revision.state in ('CURRENT','PREPARED','SUPERSEDED') and (
+        revision.source_cycle_id=c.id or revision.report_scope_id in(select id from report_scopes)
+        or exists(select 1 from public.weekly_source_final_snapshot_lines snapshot where snapshot.final_revision_id=revision.id
+          and snapshot.work_event_id in(select id from events)))
+  ), snapshots as materialized (
+    select snapshot.* from public.weekly_source_final_snapshot_lines snapshot where snapshot.final_revision_id in(select id from revisions)
+      and snapshot.client_id=any(clients)
+  ), lineages as materialized (
+    select lineage.* from public.weekly_source_row_timesheet_lineages lineage where lineage.client_id=any(clients)
+      and (lineage.row_resolution_id in(select id from resolutions) or lineage.work_event_id in(select id from events))
+  ), pay_receipts as materialized (
+    select receipt.* from public.weekly_source_ordinary_pay_projection_receipts receipt where receipt.client_id=any(clients)
+      and receipt.final_revision_id in(select id from revisions)
+  ), financial_identities as materialized (
+    -- The Source receipt is immutable and already pins all published economics
+    -- and root-before/after/service hashes. Protection may replace currentness
+    -- on the same native family; the Source financial identity stays exact.
+    select financial.id,financial.timesheet_id,financial.client_id,financial.candidate_id,
+      (select min(m.contract_id::text)::uuid
+        from pay_receipts receipt
+        cross join lateral jsonb_array_elements(case when jsonb_typeof(receipt.source_unit_outcomes_json)='array'
+          then receipt.source_unit_outcomes_json else '[]'::jsonb end) unit
+        join public.weekly_source_billing_movements m on m.id=(unit->>'movement_id')::uuid
+          and m.final_revision_id=receipt.final_revision_id and m.invoice_timesheet_id=receipt.root_timesheet_id
+          and m.actual_client_id=receipt.client_id and m.candidate_id=financial.candidate_id
+          and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'
+          and m.source_profile_kind<>'SELF_BILL_REPORT'
+          and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+        where receipt.published_timesheet_financial_id=financial.id
+        having count(distinct m.contract_id)=1) as contract_id
+      from public.timesheets_financials financial where financial.id in(select published_timesheet_financial_id from pay_receipts)
+  ), root_identities as materialized (
+    select root.timesheet_id,contract.client_id as client_id,contract.candidate_id,root.contract_id,root.booking_id
+      from public.timesheets root join public.contracts contract on contract.id=root.contract_id
+      where root.timesheet_id in(select root_timesheet_id from pay_receipts)
+  ), cycles as materialized (
+    select cycle.* from public.weekly_source_cycles cycle where cycle.id=c.id or cycle.id in(select source_cycle_id from publications)
+      or cycle.id in(select source_cycle_id from revisions)
+  ), contracts as materialized (
+    select contract.* from public.contracts contract where contract.client_id=any(clients)
+      and (daterange(contract.start_date,contract.end_date,'[]') && daterange(
+        coalesce(u.confirmed_coverage_start_local_date,c.finalisation_week_ending-6),
+        coalesce(u.confirmed_coverage_end_local_date,c.finalisation_week_ending),'[]')
+        or contract.id in(select contract_id from resolutions) or contract.id in(select contract_id from snapshots)
+        or exists(select 1 from public.weekly_issue_comparison_revisions comparison
+          join public.weekly_discrepancy_incidents incident on incident.current_comparison_revision_id=comparison.id
+          where incident.source_cycle_id=c.id and incident.client_id=contract.client_id and comparison.contract_id=contract.id))
+  ), policy_dates as materialized (
+    select client client_id,null::uuid contract_id,c.finalisation_week_ending work_date from unnest(clients) client
+    union select client_id,contract_id,work_date from snapshots
+    union select resolution.client_id,resolution.contract_id,row_data.work_date from resolutions resolution
+      join source_rows row_data on row_data.id=resolution.upload_row_id
+    union select client_id,null::uuid,work_date from events
+    union select contract.client_id,contract.id,greatest(contract.start_date,
+      coalesce(u.confirmed_coverage_start_local_date,c.finalisation_week_ending-6)) from contracts contract
+  ), resolved_policies as materialized (
+    select client_id,contract_id,work_date,private._weekly_source_effective_policy_v1(client_id,contract_id,work_date) policy
+      from policy_dates
+  )
+  select jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_SOURCE_FACTS_V1','source_cycle_id',c.id,
+    'client_ids',to_jsonb(clients),'group',to_jsonb(g),
+    'cycles',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from cycles x),'[]'::jsonb),
+    'clients',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from public.clients x where x.id=any(clients)),'[]'::jsonb),
+    'memberships',coalesce((select jsonb_agg(to_jsonb(x) order by x.client_id,x.valid_from,x.id)
+      from public.weekly_source_group_clients x where x.source_group_id=g.id and x.client_id=any(clients)),'[]'::jsonb),
+    'client_policies',coalesce((select jsonb_agg(to_jsonb(x) order by x.client_id,x.effective_from,x.id)
+      from public.weekly_source_client_policies x where x.source_group_id=g.id and x.client_id=any(clients)),'[]'::jsonb),
+    'client_settings',coalesce((select jsonb_agg(to_jsonb(x) order by x.client_id,x.id) from public.client_settings x where x.client_id=any(clients)),'[]'::jsonb),
+    'contracts',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from contracts x),'[]'::jsonb),
+    'contract_policies',coalesce((select jsonb_agg(to_jsonb(x) order by x.contract_id,x.effective_from,x.id)
+      from public.weekly_source_contract_policies x where x.contract_id in(select id from contracts)),'[]'::jsonb),
+    'global_settings',coalesce((select jsonb_agg(to_jsonb(x)) from public.weekly_source_global_settings x where x.singleton),'[]'::jsonb),
+    'resolved_policies',coalesce((select jsonb_agg(to_jsonb(x) order by x.client_id,x.contract_id nulls first,x.work_date) from resolved_policies x),'[]'::jsonb),
+    'assignments',coalesce((select jsonb_agg(to_jsonb(x) order by x.effective_from_week_ending,x.id)
+      from public.weekly_source_group_rule_assignments x where x.source_group_id=g.id),'[]'::jsonb),
+    'rule_versions',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from public.weekly_source_rule_set_versions x
+      where x.id in(select rule_set_version_id from public.weekly_source_group_rule_assignments where source_group_id=g.id)
+        or x.id in(select rule_set_version_id from revisions)),'[]'::jsonb),
+    'effective_rules',coalesce((select jsonb_agg(jsonb_build_object('client_id',client,
+      'effective_rule_set',private.weekly_source_operational_effective_rule_set_v1(client,c.id)) order by client) from unnest(clients) client),'[]'::jsonb),
+    'profiles',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from public.weekly_source_format_profiles x
+      where x.id in(select source_format_profile_id from uploads)),'[]'::jsonb),
+    'uploads',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from uploads x),'[]'::jsonb),
+    'publications',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from publications x),'[]'::jsonb),
+    'rows',coalesce((select jsonb_agg(to_jsonb(x) order by x.upload_id,x.source_row_ordinal,x.id) from source_rows x),'[]'::jsonb),
+    'resolutions',coalesce((select jsonb_agg(to_jsonb(x) order by x.upload_row_id,x.generation,x.id) from resolutions x),'[]'::jsonb),
+    'economics',coalesce((select jsonb_agg(to_jsonb(x) order by x.row_resolution_id,x.id) from public.weekly_source_row_economic_snapshots x
+      where x.row_resolution_id in(select id from resolutions)),'[]'::jsonb),
+    'expense_policy_snapshots',coalesce((select jsonb_agg(to_jsonb(x) order by x.row_resolution_id,x.id)
+      from public.weekly_source_row_expense_policy_snapshots x where x.row_resolution_id in(select id from resolutions)),'[]'::jsonb),
+    'expense_authorities',coalesce((select jsonb_agg(to_jsonb(x) order by x.work_event_id,x.generation,x.id)
+      from public.weekly_expense_authority_generations x where x.final_revision_id in(select id from revisions)
+        and x.work_event_id in(select id from events)),'[]'::jsonb),
+    'expense_cell_evidence',coalesce((select jsonb_agg(to_jsonb(x) order by x.upload_id,x.source_row_ordinal,x.id)
+      from public.weekly_source_expense_cell_evidence x where x.upload_id in(select id from uploads)),'[]'::jsonb),
+    'charge_checks',coalesce((select jsonb_agg(to_jsonb(x) order by x.row_resolution_id,x.id)
+      from public.weekly_source_charge_checks x where x.row_resolution_id in(select id from resolutions)),'[]'::jsonb),
+    'charge_acceptances',coalesce((select jsonb_agg(to_jsonb(x) order by x.row_resolution_id,x.id)
+      from public.weekly_source_charge_acceptances x where x.row_resolution_id in(select id from resolutions)),'[]'::jsonb),
+    'invoice_hold_releases',coalesce((select jsonb_agg(to_jsonb(x) order by x.upload_row_id,x.hold_kind,x.id)
+      from public.weekly_source_invoice_hold_releases x where x.upload_row_id in(select id from source_rows)),'[]'::jsonb),
+    'transitions',coalesce((select jsonb_agg(to_jsonb(x) order by x.final_revision_id,x.work_event_id,x.id)
+      from public.weekly_source_state_transitions x where x.final_revision_id in(select id from revisions)
+        and x.work_event_id in(select id from events)),'[]'::jsonb),
+    'report_scopes',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from report_scopes x),'[]'::jsonb),
+    'reports',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from public.weekly_source_self_bill_reports x
+      where x.source_group_id=g.id and x.client_id=any(clients)),'[]'::jsonb),
+    'report_bindings',coalesce((select jsonb_agg(to_jsonb(x) order by x.report_row_id,x.id) from report_bindings x),'[]'::jsonb),
+    'events',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from events x),'[]'::jsonb),
+    'revisions',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from revisions x),'[]'::jsonb),
+    'snapshots',coalesce((select jsonb_agg(to_jsonb(x) order by x.final_revision_id,x.work_event_id,x.id) from snapshots x),'[]'::jsonb),
+    'lineages',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from lineages x),'[]'::jsonb),
+    'pay_receipts',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from pay_receipts x),'[]'::jsonb),
+    'financial_identities',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from financial_identities x),'[]'::jsonb),
+    'root_identities',coalesce((select jsonb_agg(to_jsonb(x) order by x.timesheet_id) from root_identities x),'[]'::jsonb)) into facts;
+  if exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt
+    where receipt->>'published_timesheet_financial_id' is not null and (
+      jsonb_typeof(receipt->'source_unit_outcomes_json') is distinct from 'array'
+      or case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'
+        then jsonb_array_length(receipt->'source_unit_outcomes_json')=0 else true end
+      or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(receipt->'source_unit_outcomes_json')='array'
+          then receipt->'source_unit_outcomes_json' else '[]'::jsonb end) unit
+        where not exists(select 1 from public.weekly_source_billing_movements m
+          where m.id=(unit->>'movement_id')::uuid and m.final_revision_id=(receipt->>'final_revision_id')::uuid
+            and m.invoice_timesheet_id=(receipt->>'root_timesheet_id')::uuid
+            and m.actual_client_id=(receipt->>'client_id')::uuid
+            and exists(select 1 from jsonb_array_elements(facts->'financial_identities') financial
+              where financial->>'id'=receipt->>'published_timesheet_financial_id'
+                and financial->>'candidate_id'=m.candidate_id::text
+                and financial->>'contract_id'=m.contract_id::text)
+            and encode(m.movement_economic_hash,'hex')=unit->>'movement_economic_hash'
+            and m.source_profile_kind<>'SELF_BILL_REPORT'
+            and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION'))))) then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;
+  if (select count(*) from public.clients where id=any(clients))<>cardinality(clients)
+    or exists(select 1 from jsonb_array_elements(facts->'pay_receipts') receipt
+      where receipt->>'published_timesheet_financial_id' is not null and not exists(
+        select 1 from jsonb_array_elements(facts->'financial_identities') financial
+          where financial->>'id'=receipt->>'published_timesheet_financial_id'
+            and financial->>'timesheet_id'=receipt->>'root_timesheet_id' and financial->>'client_id'=receipt->>'client_id'
+            and exists(select 1 from jsonb_array_elements(facts->'root_identities') root
+              join jsonb_array_elements(facts->'contracts') contract on contract->>'id'=financial->>'contract_id'
+              where root->>'timesheet_id'=financial->>'timesheet_id'
+                and root->>'candidate_id'=financial->>'candidate_id' and root->>'contract_id'=financial->>'contract_id'
+                and (root->>'client_id' is null or root->>'client_id'=financial->>'client_id')
+                and contract->>'client_id'=financial->>'client_id' and contract->>'candidate_id'=financial->>'candidate_id'))) then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_FINANCIAL_IDENTITY_INVALID' using errcode='55000'; end if;
+  if octet_length(convert_to(facts::text,'UTF8'))>8388608 then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_SCOPE_TOO_LARGE' using errcode='54000'; end if;
+  return facts;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_SCOPE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

@@ -1,0 +1,16 @@
+# Literal current native selector and raw guard seams
+
+Source20 raw UUID column arrays are evidence of selected native objects and parents, not an instruction to emit every parent object token from every ordinary child. Root owns the SAME arbiter grammar/acquire and whole OLD/NEW guards.
+
+| Literal projection | Root proposed typed domain | Exact ordinary raw grain |
+|---|---|---|
+| native_selector_scopes.resolution_slots: [upload_row_id UUID, native generation INTEGER, Client UUID] | SOURCE_RESOLUTION_SLOT | Row resolutions OLD/NEW upload_row_id + generation + client_id before any parent lookup. Other generation or other Client cannot emit a broad raw-row/upload/Client token instead. |
+| native_selector_scopes.revision_client_pairs: [final_revision_id UUID, Client UUID] | SOURCE_REVISION_CLIENT | Snapshot lines and ordinary PAY projection receipts OLD/NEW final_revision_id + client_id. A child outside either selected value is excluded; do not replace AND with OR. |
+| native_selector_scopes.revision_event_pairs: [final_revision_id UUID, WorkEvent UUID] | SOURCE_REVISION_EVENT | Expense authorities and Source state transitions OLD/NEW final_revision_id + work_event_id. Both conjuncts apply. |
+| native_selector_scopes.exact_report_bound_resolution_ids: UUID[] | Exact SOURCE_OBJECT row-resolution keys | Genuine CURRENT Report binding bound_row_resolution_id is retained separately, irrespective of that resolution's generation/Client. |
+
+All Source upload rows join every selected native publication by actual upload_id, then every actual selected Client; missing visible resolutions still have complete phantom slots. Publication generation is the actual coalesce(projection_generation,authority_scope_version), cast to the resolution column's native INTEGER type. Every selected revision crosses actual selected Clients; every selected revision crosses actual selected WorkEvents. UUID identity and sort/dedup are native; no economic-event dedup may remove a real NONE B row. These projections use the existing single facts read and do not recalculate its Source CAS.
+
+The current source facts also select economics/expense-policy/check/acceptance by exact selected resolution IDs; raw upload rows and expense-cell evidence by exact selected uploads; invoice hold releases by exact selected raw rows; incidents by Cycle+Client in every state; Contracts by Client AND (coverage overlap OR actual referenced Contract IDs). Reports/memberships/policies use their own actual group/Client/state predicates. A raw child containing an unrelated group/Client/parent UUID must not automatically emit those broad scopes. The nested revision-selection predicate also depends on actual Source group, current cycle, selected Report scopes and selected snapshot-event links: this tuple increment does not claim that root's complete revision-parent/OLD-RR/phantom coverage is already built.
+
+Existing selected object changes retain exact object IDs even when OLD or NEW later leaves its selector. All ordinary guards must inspect both raw OLD and raw NEW before lookup so old-RR hidden parents do not silently disappear. Native trigger/order/allocated-parent, transitive policy/header/claim and between-RPC ACTIVE foreign-Source/recovery coverage remain separate codework and real schedules.

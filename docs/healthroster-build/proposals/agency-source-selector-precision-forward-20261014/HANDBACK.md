@@ -1,0 +1,7 @@
+# Source selector precision — immutable successor
+
+Complete85 adds three literal tuple arrays and separate exact Report-bound resolution IDs to the existing owner-private Source20 dependency witness. It uses the SAME genuine native facts read, retains the original CAS domain/body and reverses all three unique hunks to frozen Source20 exactly. No new arbiter, public helper, table, column, signature, grant, classifier, token-retention or qualification assertion is introduced. Root composes the shared typed domains/raw guards/caller; this leaf alone does not establish admission.
+
+The projection is complete: all matching Source rows/publications times selected Clients and all selected revision/Client or revision/event pairs, without LIMIT, sample, truncation or a new tuple-count cap. The inherited8MiB full-result bound remains explicit: if exceeded, the complete projection refuses; a partial set is never returned or called equal. PostgreSQL INTEGER generation is the actual native resolution grain, not a caller string or guessed epoch.
+
+19 UNIT_ONLY relational/source/reverse cases, two syntax checks and three lexical SQL statements pass. The large20,002-slot case proves only the effect-free model does not truncate; it is not a hosted SQL or native size/performance proof. Real native compilation, complete guard coverage, hidden-RR/unrelated scope schedules, exact role/session/current Source and final source/CAS/claim/financial/UI proof remain held. Source20/one-click30/all prior frozen packets stay unchanged; no canonical source was edited.

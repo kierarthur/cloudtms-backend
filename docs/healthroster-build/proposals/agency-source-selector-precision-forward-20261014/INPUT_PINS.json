@@ -1,0 +1,15 @@
+{
+  "source_only": true,
+  "native": false,
+  "source20_commit": "63965738af6f148a75cd1bea5052600e4b007da5",
+  "source20_witness": {
+    "path": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/01_native_source_dependency_witness.sqlinc",
+    "sha256": "0f475d7896b7fffe553fdc5c164d14a6cfef680609c01cb3857d69f2c4cdb155"
+  },
+  "current_source_facts": {
+    "path": "docs/healthroster-build/proposals/agency-source-dependency-current-reader-forward-20261014/construction/02_complete_current_source_facts_with_contract_client.sqlinc",
+    "sha256": "8b89135204d33caf83b387fb0aa0d2ef03d5711e1184fac9120a14a957829b60"
+  },
+  "proposed_root_core_commit": "62b72fa4a3b23a9c1936127184b40d0e2a56366d",
+  "root_core_scope": "Root-reported bounded core-only source acceptance; not a native/compiled/Source38 coverage receipt."
+}
