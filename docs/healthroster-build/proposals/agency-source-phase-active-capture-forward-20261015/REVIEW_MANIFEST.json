@@ -1,0 +1,147 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "entries": [
+    {
+      "path": "86_agency_source_phase_admission.sqlinc",
+      "bytes": 8188,
+      "sha256": "e737e82491bec65293f0f7a6d09b858d24e9e785a9342daf7ebb04547516dd07"
+    },
+    {
+      "path": "87_agency_active_source_mutation_guard.sqlinc",
+      "bytes": 6995,
+      "sha256": "bc9a072716073fe6a006f95738b52d4339c0e0101bd9dbe0d32f0dca6421f5d7"
+    },
+    {
+      "path": "88_complete_same_request_store_source_tokens.sqlinc",
+      "bytes": 10611,
+      "sha256": "264c0b1719ac57224b60528d3268f5f5d2cee8a1c8c1b4f1c88f67a0da0f2bb7"
+    },
+    {
+      "path": "89_complete_native_capture_source_phase_admission.sqlinc",
+      "bytes": 23550,
+      "sha256": "8826b9ebc41fe9124d9333e2c2cfe321d7ac4486b9d9c902a2ea455accce9be7"
+    },
+    {
+      "path": "90_complete_native_begin_immutable_source_tokens.sqlinc",
+      "bytes": 14018,
+      "sha256": "9b9e18d28bea1ac712b9096df99828bd3d533b6b1c575b76273c7659a1ad3508"
+    },
+    {
+      "path": "91_complete_current_request_source_phase_resume.sqlinc",
+      "bytes": 16248,
+      "sha256": "56feb3d665a4ccc73d1d5ddf64c577bace4227c71a46825382fbf1a8bbba5921"
+    },
+    {
+      "path": "92_complete_same_source_before_with_active_capture.sqlinc",
+      "bytes": 13785,
+      "sha256": "805a2967dfcb4f809e57814005905da7dfaad0ab941e49f94831688e8bd6b5fe"
+    },
+    {
+      "path": "before/88_complete_same_request_store_source_tokens.sqlinc.txt",
+      "bytes": 8644,
+      "sha256": "4e5e59d5600f84cb917875246390c21cf4c8230c5d5e9418b8525ae7704f0aa0"
+    },
+    {
+      "path": "before/89_complete_native_capture_source_phase_admission.sqlinc.txt",
+      "bytes": 22958,
+      "sha256": "eb83e2335a3eb5c54c6c6a5fcdc034a3fa6257acb950ef529257d328a32569eb"
+    },
+    {
+      "path": "before/90_complete_native_begin_immutable_source_tokens.sqlinc.txt",
+      "bytes": 13285,
+      "sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9"
+    },
+    {
+      "path": "before/91_complete_current_request_source_phase_resume.sqlinc.txt",
+      "bytes": 13742,
+      "sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230"
+    },
+    {
+      "path": "before/92_complete_same_source_before_with_active_capture.sqlinc.txt",
+      "bytes": 13244,
+      "sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6"
+    },
+    {
+      "path": "build-source-reference.mjs.txt",
+      "bytes": 13919,
+      "sha256": "47dd20cf0133e7be506af3118549b834d5f95d85ccf11ca0d598d882062d2daa"
+    },
+    {
+      "path": "COMPLETE_SOURCE_PHASE_REVERSES.json",
+      "bytes": 17977,
+      "sha256": "8fe5f3ccda73293728a529b6c30978840101581ccf8d900de34185f370412ae8"
+    },
+    {
+      "path": "freeze-source-reference.mjs.txt",
+      "bytes": 3935,
+      "sha256": "dd0b096a0816dede5931354535992214c5547121114c97afb4900249c76934a9"
+    },
+    {
+      "path": "HANDBACK.md",
+      "bytes": 5597,
+      "sha256": "e80e7b68387f38b9b2da940b28679e7326c66db722cc140d5c8960225da01b96"
+    },
+    {
+      "path": "reference/19_agency_native_worker_apply.sqlinc",
+      "bytes": 14688,
+      "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e"
+    },
+    {
+      "path": "reference/38_agency_candidate_native_admission.sqlinc",
+      "bytes": 4042,
+      "sha256": "9086104bf6e173ac75d62a0cc3c440bd22669c1c643e0c4a4ab7c55dc7d8d57a"
+    },
+    {
+      "path": "reference/46_agency_native_authorise_step.sqlinc",
+      "bytes": 12290,
+      "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924"
+    },
+    {
+      "path": "reference/53_agency_same_draft_return_step.sqlinc",
+      "bytes": 10423,
+      "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804"
+    },
+    {
+      "path": "reference/packaging-parser.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "reference/root-00_source_token_grammar.sqlinc",
+      "bytes": 5502,
+      "sha256": "46d9d29656ae2158c056954163156c05d7add3479b834d45c65c729a7e368018"
+    },
+    {
+      "path": "reference/root-01_complete_same_arbiter_schema.sqlinc",
+      "bytes": 6396,
+      "sha256": "6c65c6ff3c3b377628acb7c0f2b05c97a2055d7453f4833a31981e9a8d689c74"
+    },
+    {
+      "path": "reference/root-02_complete_scalar_helpers.sqlinc",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "path": "reference/root-03_coverage_and_compatibility_acquire.sqlinc",
+      "bytes": 6806,
+      "sha256": "da2969244917a2fa383d640754b5e89994e2cef737c6373f6ced9b0c13b11425"
+    },
+    {
+      "path": "reference/root-04_native_source_footprint.sqlinc",
+      "bytes": 10409,
+      "sha256": "bae96628383b3cfe6cef01547045e69b0c2a1cce9f4fa52edaf512ae583e42b3"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 7070,
+      "sha256": "a733475d8feceb70e210a97cce6b4e2649cdd069629e2c9b0e63859fa0e7f81d"
+    },
+    {
+      "path": "source-phase-admission.test.mjs",
+      "bytes": 14104,
+      "sha256": "61596c64adcb6bdceae3d513f12b39bfc7fd96828ab33798b8ea50bb71b81acf"
+    }
+  ]
+}

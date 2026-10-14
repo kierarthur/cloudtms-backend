@@ -1,0 +1,94 @@
+-- Purpose-bound admission for an existing ORDINARY physical T0. No Source
+-- correction/claim, planned P0, generation or alternative arbiter is created.
+create or replace function private.weekly_source_agency_source_phase_admit_v1(
+ p_timesheet_id uuid,p_actor_user_id uuid,p_candidate_id uuid,p_source_cycle_id uuid,
+ p_client_id uuid,p_expected_source_cas jsonb,p_native_admission jsonb
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $agency_source_phase$
+declare t public.timesheets%rowtype;c public.contracts%rowtype;cycle public.weekly_source_cycles%rowtype;
+ gate jsonb:=p_native_admission;locks jsonb;family jsonb;family_before jsonb;family_after jsonb;before_footprint jsonb;after_footprint jsonb;
+ members uuid[];scope_hash bytea;token_digest bytea;old_timeout text:=current_setting('lock_timeout');
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001';end if;
+ select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+ select * into strict c from public.contracts where id=t.contract_id;
+ select * into strict cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+ if p_candidate_id is null or p_client_id is null or c.candidate_id is distinct from p_candidate_id
+  or c.client_id is distinct from p_client_id or t.is_current is distinct from true
+  or t.archived_at_utc is not null or t.sheet_scope::text is distinct from 'WEEKLY'
+  or t.line_type::text is distinct from 'HOURS' or t.correction_id is not null or coalesce(t.is_adjustment,false)
+  or t.week_ending_date is distinct from cycle.finalisation_week_ending
+  or(cycle.scope_client_id is not null and cycle.scope_client_id is distinct from p_client_id) then
+  raise exception 'AGENCY_CHANGE_SOURCE_PHASE_SUBJECT_CHANGED' using errcode='40001';end if;
+ perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',cycle.source_group_id,p_client_id,t.week_ending_date);
+ -- The exact actual Candidate/I1 result is passed only by the two reviewed
+ -- private capture/resume callers, from their literal native invocation BEFORE
+ -- D1 invoice/family locks. It is neither a public input nor a callback/flag.
+ -- Do not reacquire a potentially changed Candidate after holding that order.
+ if jsonb_typeof(gate) is distinct from 'object' or gate->>'ok' is distinct from 'true'
+  or gate->>'gate' is distinct from 'GRANTED' or gate->>'candidate_id' is distinct from p_candidate_id::text then
+  raise exception 'AGENCY_CHANGE_CANDIDATE_NATIVE_SCOPE_INVALID' using errcode='55000';end if;
+ begin
+  perform set_config('lock_timeout','1ms',true);
+  locks:=private.weekly_source_lock_family_rows_v1(array[t.timesheet_id],p_candidate_id);
+  if locks->>'ok' is distinct from 'true' or jsonb_typeof(locks->'families') is distinct from 'array'
+   or jsonb_array_length(locks->'families')<>1 then
+   raise exception 'AGENCY_CHANGE_NATIVE_FAMILY_LOCK_REFUSED' using errcode='55000';end if;
+  family:=locks->'families'->0;
+  if family->>'requested_timesheet_id' is distinct from t.timesheet_id::text
+   or family->>'canonical_timesheet_id' is distinct from t.timesheet_id::text
+   or family->'requested_is_canonical' is distinct from 'true'::jsonb
+   or family->>'canonical_version' is distinct from t.version::text
+   or jsonb_typeof(family->'member_timesheet_ids') is distinct from 'array' then
+   raise exception 'AGENCY_CHANGE_NATIVE_FAMILY_CHANGED' using errcode='40001';end if;
+  select array_agg(value::uuid order by value::uuid) into members from jsonb_array_elements_text(family->'member_timesheet_ids');
+  select coalesce(jsonb_agg(to_jsonb(s) order by s.family_timesheet_id),'[]'::jsonb) into family_before
+   from public._pay_timesheet_rotation_scope(array[t.timesheet_id]) s;
+  -- SAME arbiter PHYSICAL then existing workflow/week/cycle dependencies.
+  perform private.timesheet_correction_a0_family_tokens_retain_v1(t.timesheet_id,members);
+  before_footprint:=private.timesheet_correction_a0_source_footprint_v1(p_source_cycle_id,array[p_client_id]);
+  if before_footprint->>'schema_version' is distinct from 'CORRECTION_A0_NATIVE_SOURCE_FOOTPRINT_V1'
+   or jsonb_typeof(before_footprint->'tokens') is distinct from 'array'
+   or(p_expected_source_cas is not null and before_footprint->'source_cas' is distinct from p_expected_source_cas) then
+   raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001';end if;
+  perform private.timesheet_correction_a0_fence_acquire_v1(before_footprint->'tokens',true);
+  -- Separate actual pre-mutation native reads, after retention; no same-write
+  -- AFTER/STABLE snapshot assumption and no currentness inferred from a token.
+  after_footprint:=private.timesheet_correction_a0_source_footprint_v1(p_source_cycle_id,array[p_client_id]);
+  if after_footprint is distinct from before_footprint then
+   raise exception 'AGENCY_CHANGE_SOURCE_FOOTPRINT_CHANGED_UNDER_LOCK' using errcode='40001';end if;
+  select coalesce(jsonb_agg(to_jsonb(s) order by s.family_timesheet_id),'[]'::jsonb) into family_after
+   from public._pay_timesheet_rotation_scope(array[t.timesheet_id]) s;
+  if family_after is distinct from family_before or jsonb_array_length(family_after) is distinct from cardinality(members)
+   or exists(select 1 from jsonb_array_elements(family_after) s where s->>'requested_timesheet_id' is distinct from t.timesheet_id::text
+    or s->>'canonical_timesheet_id' is distinct from t.timesheet_id::text
+    or s->>'booking_id' is distinct from family->>'family_booking_id'
+    or not (s->>'family_timesheet_id')::uuid=any(members)) then
+   raise exception 'AGENCY_CHANGE_NATIVE_FAMILY_CHANGED' using errcode='40001';end if;
+  select * into strict t from public.timesheets where timesheet_id=p_timesheet_id;
+  select * into strict c from public.contracts where id=t.contract_id;
+  if c.candidate_id is distinct from p_candidate_id or c.client_id is distinct from p_client_id
+   or t.version::text is distinct from family->>'canonical_version' or t.is_current is distinct from true then
+   raise exception 'AGENCY_CHANGE_SOURCE_PHASE_SUBJECT_CHANGED' using errcode='40001';end if;
+  perform set_config('lock_timeout',old_timeout,true);
+ exception when others then perform set_config('lock_timeout',old_timeout,true);raise;end;
+ token_digest:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',after_footprint->'tokens');
+ scope_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_PHASE_ADMISSION_V1',jsonb_build_object(
+  'actor_user_id',p_actor_user_id,'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'candidate_id',p_candidate_id,
+  'client_id',p_client_id,'source_cycle_id',p_source_cycle_id,'source_cas',after_footprint->'source_cas',
+  'native_gate',gate,'native_family',locks,'native_rotation_scope',family_after,'native_source_footprint',after_footprint,
+  'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()));
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_SOURCE_PHASE_ADMISSION_V1','actor_user_id',p_actor_user_id,
+  'timesheet_id',t.timesheet_id,'timesheet_version',t.version,'candidate_id',p_candidate_id,'client_id',p_client_id,
+  'source_cycle_id',p_source_cycle_id,'source_cas',after_footprint->'source_cas','source_dependency_tokens',after_footprint->'tokens',
+  'source_dependency_tokens_sha256',encode(token_digest,'hex'),'admission_sha256',encode(scope_hash,'hex'),
+  'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid());
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_CHANGE_SOURCE_PHASE_UNAVAILABLE' using errcode='55000';
+end;
+$agency_source_phase$;
+alter function private.weekly_source_agency_source_phase_admit_v1(uuid,uuid,uuid,uuid,uuid,jsonb,jsonb) owner to postgres;
+revoke all on function private.weekly_source_agency_source_phase_admit_v1(uuid,uuid,uuid,uuid,uuid,jsonb,jsonb) from public,anon,authenticated,service_role;

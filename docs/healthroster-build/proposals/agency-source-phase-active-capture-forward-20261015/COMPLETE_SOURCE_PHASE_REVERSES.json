@@ -1,0 +1,215 @@
+{
+  "source_only": true,
+  "native": false,
+  "mount_ready": false,
+  "sourcePin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+  "rootPin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+  "inputs": [
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/00_agency_request_schema.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 8644,
+      "sha256": "4e5e59d5600f84cb917875246390c21cf4c8230c5d5e9418b8525ae7704f0aa0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/37_complete_capture_with_candidate_admission.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 22958,
+      "sha256": "eb83e2335a3eb5c54c6c6a5fcdc034a3fa6257acb950ef529257d328a32569eb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/42_complete_native_begin_with_actual_removal_hold.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 13285,
+      "sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/36_complete_request_authority_with_candidate_admission.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 13742,
+      "sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 13244,
+      "sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/00_source_token_grammar.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 5502,
+      "sha256": "46d9d29656ae2158c056954163156c05d7add3479b834d45c65c729a7e368018"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/01_complete_same_arbiter_schema.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 6396,
+      "sha256": "6c65c6ff3c3b377628acb7c0f2b05c97a2055d7453f4833a31981e9a8d689c74"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/02_complete_scalar_helpers.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 23386,
+      "sha256": "09ff44428b193d02253c7227ec18fc33d4261b4d7c5f4ce0354af8876ca05653"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/03_coverage_and_compatibility_acquire.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 6806,
+      "sha256": "da2969244917a2fa383d640754b5e89994e2cef737c6373f6ced9b0c13b11425"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/04_native_source_footprint.sqlinc",
+      "pin": "7f2ce2fb1e33aa7cd77d294e464e5cd98aa7f2a3",
+      "bytes": 10409,
+      "sha256": "bae96628383b3cfe6cef01547045e69b0c2a1cce9f4fa52edaf512ae583e42b3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/46_agency_native_authorise_step.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 12290,
+      "sha256": "6f11838b3b00a59e2f686fefa5c601d2fce78fc91779ca364f048f44923d9924"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/53_agency_same_draft_return_step.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 10423,
+      "sha256": "f4d7100d119f1afd2f9e47ead804a605773ef17b7499480395db15ec51cdc804"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/19_agency_native_worker_apply.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 14688,
+      "sha256": "dda07384e18c02b66b384d701539e5235900328bd5652e65ad6b9194b8301b2e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/38_agency_candidate_native_admission.sqlinc",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 4042,
+      "sha256": "9086104bf6e173ac75d62a0cc3c440bd22669c1c643e0c4a4ab7c55dc7d8d57a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-mode-a-source-support-issue-construction-20261014/reference/cloudtms-managed-release-sql.mjs",
+      "pin": "b9100ea9d9b8f84098c593d5c6b80ead373f1e2b",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    }
+  ],
+  "reverses": [
+    {
+      "output": "88_complete_same_request_store_source_tokens.sqlinc",
+      "input": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/00_agency_request_schema.sqlinc",
+      "before_sha256": "4e5e59d5600f84cb917875246390c21cf4c8230c5d5e9418b8525ae7704f0aa0",
+      "after_sha256": "264c0b1719ac57224b60528d3268f5f5d2cee8a1c8c1b4f1c88f67a0da0f2bb7",
+      "hunks": [
+        {
+          "before": "  initial_timesheet_id uuid not null references",
+          "after": "  -- Immutable native capture tokens and the current monotonic native footprint\n  -- live on this SINGLE planned request. No parallel scope/claim ledger.\n  source_dependency_tokens jsonb not null check(jsonb_typeof(source_dependency_tokens)='array'\n    and octet_length(source_dependency_tokens::text)<=8388608),\n  current_source_dependency_tokens jsonb not null check(jsonb_typeof(current_source_dependency_tokens)='array'\n    and octet_length(current_source_dependency_tokens::text)<=8388608\n    and current_source_dependency_tokens @> source_dependency_tokens),\n  initial_timesheet_id uuid not null references"
+        },
+        {
+          "before": "  'last_refusal_code','completed_receipt','updated_at_utc','completed_at_utc','updated_by_user_id','completed_by_user_id'];",
+          "after": "  'last_refusal_code','completed_receipt','updated_at_utc','completed_at_utc','updated_by_user_id','completed_by_user_id','current_source_dependency_tokens'];"
+        },
+        {
+          "before": "  if old.state='COMPLETED' and to_jsonb(new) is distinct from to_jsonb(old) then",
+          "after": "  if new.current_source_dependency_tokens is distinct from old.current_source_dependency_tokens then\n    if old.state is distinct from 'ACTIVE' or not new.current_source_dependency_tokens @> old.current_source_dependency_tokens\n      or new.native_receipts#>>'{source_admission,schema_version}' is distinct from 'WEEKLY_SOURCE_AGENCY_SOURCE_PHASE_ADMISSION_V1'\n      or new.native_receipts#>>'{source_admission,request_id}' is distinct from old.id::text\n      or new.native_receipts#>>'{source_admission,request_sha256}' is distinct from encode(old.request_sha256,'hex')\n      or new.native_receipts#>>'{source_admission,actor_user_id}' is distinct from new.updated_by_user_id::text\n      or new.native_receipts#>>'{source_admission,transaction_id}' is distinct from pg_current_xact_id()::text\n      or new.native_receipts#>>'{source_admission,backend_pid}' is distinct from pg_backend_pid()::text\n      or new.native_receipts#>'{source_admission,source_cas}' is distinct from old.source_cas\n      or new.native_receipts#>>'{source_admission,source_dependency_tokens_sha256}' is distinct from encode(\n        private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',new.current_source_dependency_tokens),'hex') then\n      raise exception 'AGENCY_CHANGE_NATIVE_SOURCE_FOOTPRINT_RECEIPT_REQUIRED' using errcode='55000';end if;\n  end if;\n  if old.state='COMPLETED' and to_jsonb(new) is distinct from to_jsonb(old) then"
+        }
+      ]
+    },
+    {
+      "output": "89_complete_native_capture_source_phase_admission.sqlinc",
+      "input": "docs/healthroster-build/proposals/agency-native-paid-purpose-forward-20261014/construction/37_complete_capture_with_candidate_admission.sqlinc",
+      "before_sha256": "eb83e2335a3eb5c54c6c6a5fcdc034a3fa6257acb950ef529257d328a32569eb",
+      "after_sha256": "8826b9ebc41fe9124d9333e2c2cfe321d7ac4486b9d9c902a2ea455accce9be7",
+      "hunks": [
+        {
+          "before": "  v_count integer; v_ids uuid[];",
+          "after": "  native_admission jsonb; source_admission jsonb;\n  v_count integer; v_ids uuid[];"
+        },
+        {
+          "before": "  perform private.weekly_source_agency_candidate_admit_v1(v_requested_timesheet_id,p_actor_user_id);",
+          "after": "  native_admission:=private.weekly_source_agency_candidate_admit_v1(v_requested_timesheet_id,p_actor_user_id);"
+        },
+        {
+          "before": "  select * into strict v_publication from public.weekly_source_projection_publications",
+          "after": "  source_admission:=private.weekly_source_agency_source_phase_admit_v1(v_ts.timesheet_id,p_actor_user_id,\n    v_contract.candidate_id,v_cycle.id,v_contract.client_id,null::jsonb,native_admission);\n  select * into strict v_publication from public.weekly_source_projection_publications"
+        },
+        {
+          "before": "  v_cas:=private.weekly_source_bulk_source_cas_v1(v_cycle.id,array[v_contract.client_id]);",
+          "after": "  v_cas:=private.weekly_source_bulk_source_cas_v1(v_cycle.id,array[v_contract.client_id]);\n  if v_cas is distinct from source_admission->'source_cas' then\n    raise exception 'AGENCY_CHANGE_SOURCE_FOOTPRINT_CHANGED_UNDER_LOCK' using errcode='40001';end if;"
+        },
+        {
+          "before": "    'initial_timesheet_id',v_ts.timesheet_id,'initial_timesheet_version',v_ts.version,",
+          "after": "    'source_dependency_tokens',source_admission->'source_dependency_tokens',\n    'source_dependency_tokens_sha256',source_admission->>'source_dependency_tokens_sha256',\n    'initial_timesheet_id',v_ts.timesheet_id,'initial_timesheet_version',v_ts.version,"
+        }
+      ]
+    },
+    {
+      "output": "90_complete_native_begin_immutable_source_tokens.sqlinc",
+      "input": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/42_complete_native_begin_with_actual_removal_hold.sqlinc",
+      "before_sha256": "d74c3c6957a98f10fb677f060b263e078a0dcfe21253b415738ae2388ef509d9",
+      "after_sha256": "9b9e18d28bea1ac712b9096df99828bd3d533b6b1c575b76273c7659a1ad3508",
+      "hunks": [
+        {
+          "before": " audit_id uuid; receipts jsonb; pay_purpose jsonb;",
+          "after": " audit_id uuid; receipts jsonb; pay_purpose jsonb; dependency_tokens jsonb;"
+        },
+        {
+          "before": "  if capture->>'initial_row_signature' is distinct from p_expected_signature then",
+          "after": "  dependency_tokens:=capture->'source_dependency_tokens';\n  if jsonb_typeof(dependency_tokens) is distinct from 'array'\n   or capture->>'source_dependency_tokens_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n    'WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',dependency_tokens),'hex') then\n   raise exception 'AGENCY_CHANGE_NATIVE_SOURCE_FOOTPRINT_REQUIRED' using errcode='55000';end if;\n  -- Keep the actual full immutable tokens on the same request, and only their\n  -- native digest in the original small capture / request-input hash.\n  capture:=capture-'source_dependency_tokens';\n  if capture->>'initial_row_signature' is distinct from p_expected_signature then"
+        },
+        {
+          "before": "   source_cas,initial_timesheet_id,initial_timesheet_version,initial_row_signature,canonical_family_booking_id,",
+          "after": "   source_cas,source_dependency_tokens,current_source_dependency_tokens,initial_timesheet_id,initial_timesheet_version,initial_row_signature,canonical_family_booking_id,"
+        },
+        {
+          "before": "   (capture->>'rule_set_version_id')::uuid,capture->'source_cas',(capture->>'initial_timesheet_id')::uuid,",
+          "after": "   (capture->>'rule_set_version_id')::uuid,capture->'source_cas',dependency_tokens,dependency_tokens,(capture->>'initial_timesheet_id')::uuid,"
+        }
+      ]
+    },
+    {
+      "output": "91_complete_current_request_source_phase_resume.sqlinc",
+      "input": "docs/healthroster-build/proposals/agency-business-entry-inline-source-forward-20261014/reference/36_complete_request_authority_with_candidate_admission.sqlinc",
+      "before_sha256": "55c0daf9f5e9fdff29077039743a3a7df2abf1e22dbd40ad92abedc089636230",
+      "after_sha256": "56feb3d665a4ccc73d1d5ddf64c577bace4227c71a46825382fbf1a8bbba5921",
+      "hunks": [
+        {
+          "before": "  v_hash bytea; v_unauthorise_actor text; v_rule_version uuid;",
+          "after": "  v_hash bytea; v_unauthorise_actor text; v_rule_version uuid; native_admission jsonb; source_admission jsonb; merged_tokens jsonb;"
+        },
+        {
+          "before": "  perform private.weekly_source_agency_candidate_admit_v1(v_week.timesheet_id,p_actor_user_id);",
+          "after": "  native_admission:=private.weekly_source_agency_candidate_admit_v1(v_week.timesheet_id,p_actor_user_id);"
+        },
+        {
+          "before": "  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_ts.timesheet_id,v_week.id,false);",
+          "after": "  if v_original->>'source_dependency_tokens_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n    'WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',v_request.source_dependency_tokens),'hex') then\n    raise exception 'AGENCY_CHANGE_ORIGINAL_NATIVE_SOURCE_FOOTPRINT_CHANGED' using errcode='55000';end if;\n  source_admission:=private.weekly_source_agency_source_phase_admit_v1(v_ts.timesheet_id,p_actor_user_id,\n    v_request.candidate_id,v_request.source_cycle_id,v_request.client_id,v_request.source_cas,native_admission);\n  select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into merged_tokens from(\n    select distinct value from jsonb_array_elements(v_request.current_source_dependency_tokens||(source_admission->'source_dependency_tokens'))\n  ) native_current_union;\n  if merged_tokens is distinct from v_request.current_source_dependency_tokens then\n    source_admission:=(source_admission-'source_dependency_tokens')||jsonb_build_object('request_id',v_request.id,\n      'request_sha256',encode(v_request.request_sha256,'hex'),'source_dependency_tokens_sha256',encode(\n        private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',merged_tokens),'hex'));\n    update private.weekly_source_agency_timesheet_change_requests set current_source_dependency_tokens=merged_tokens,\n      native_receipts=native_receipts||jsonb_build_object('source_admission',source_admission),\n      updated_by_user_id=p_actor_user_id,updated_at_utc=transaction_timestamp(),version=version+1\n      where id=v_request.id returning * into v_request;\n    insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)\n      select gen_random_uuid(),transaction_timestamp(),p_actor_user_id,a.role,'WEEKLY_SOURCE_AGENCY_CHANGE',v_request.id::text,\n        'NATIVE_SOURCE_FOOTPRINT_RETAINED',jsonb_build_object('phase',v_request.phase,'request_version',v_request.version,\n          'original_creator_user_id',v_request.actor_user_id,'current_resumer_user_id',p_actor_user_id,\n          'source_dependency_tokens_sha256',source_admission->>'source_dependency_tokens_sha256'),v_request.reason,v_request.request_key\n      from public.tms_users a where a.id=p_actor_user_id and a.is_active;\n    if not found then raise exception 'AGENCY_CHANGE_CURRENT_ACTOR_UNAVAILABLE' using errcode='42501';end if;\n  end if;\n  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_ts.timesheet_id,v_week.id,false);"
+        }
+      ]
+    },
+    {
+      "output": "92_complete_same_source_before_with_active_capture.sqlinc",
+      "input": "docs/healthroster-build/proposals/a0-source-revision-selector-successor-20261015/forward/05_raw_selector_helpers.sqlinc",
+      "before_sha256": "cf542ddbf992da40a5e0bcabc6cf2451d1d37b38abffa45764e1858a411b05f6",
+      "after_sha256": "805a2967dfcb4f809e57814005905da7dfaad0ab941e49f94831688e8bd6b5fe",
+      "hunks": [
+        {
+          "before": " perform private.timesheet_correction_a0_fence_acquire_v1(nested_tokens,false);",
+          "after": " perform private.timesheet_correction_a0_fence_acquire_v1(nested_tokens,false);\n -- BOTH ordinary same-arbiter phases precede ACTIVE business lookup.\n -- A foreign Client snapshot may still select the revision through the actual\n -- group/event EXISTS arm; never discard those nested native tokens.\n -- Only the real native OLD/NEW frames are passed; no caller scope flag.\n perform private.weekly_source_agency_active_source_mutation_assert_v1('public.'||tg_table_name,\n  case when tg_op in('UPDATE','DELETE') then to_jsonb(old) end,\n  case when tg_op in('INSERT','UPDATE') then to_jsonb(new) end,tokens||nested_tokens);"
+        }
+      ]
+    }
+  ],
+  "one_existing_request_store": true,
+  "source_cas_owner_unchanged": true,
+  "after_trigger_selected": false,
+  "reader_volatility_relabelled": false,
+  "public_signature_changes": [],
+  "new_owner_private_signatures": [
+    "private.weekly_source_agency_source_phase_admit_v1(uuid,uuid,uuid,uuid,uuid,jsonb,jsonb)",
+    "private.weekly_source_agency_source_mutation_basis_v1(text,jsonb)",
+    "private.weekly_source_agency_active_source_mutation_assert_v1(text,jsonb,jsonb,jsonb)"
+  ]
+}

@@ -1,0 +1,192 @@
+-- One current-actor admission for an existing immutable business request.
+-- A genuine scoped resumer is independent of its immutable original creator.
+create or replace function private.weekly_source_agency_change_request_assert_v1(
+  p_contract_week_id uuid,p_reason text,p_expected_signature text,p_request_key text,p_actor_user_id uuid
+) returns private.weekly_source_agency_timesheet_change_requests
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_request private.weekly_source_agency_timesheet_change_requests%rowtype;
+  v_week public.contract_weeks%rowtype; v_ts public.timesheets%rowtype;
+  v_contract public.contracts%rowtype; v_group public.weekly_source_groups%rowtype;
+  v_locks jsonb; v_signature jsonb; v_original jsonb; v_cas jsonb; v_scope jsonb;
+  v_hash bytea; v_unauthorise_actor text; v_rule_version uuid; native_admission jsonb; source_admission jsonb; merged_tokens jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if current_setting('transaction_isolation') is distinct from 'read committed' then
+    raise exception 'AGENCY_CHANGE_READ_COMMITTED_REQUIRED' using errcode='25001'; end if;
+  if p_contract_week_id is null or p_actor_user_id is null or p_request_key is null
+    or length(p_request_key) not between 1 and 200 or p_request_key is distinct from btrim(p_request_key)
+    or p_reason is null or length(p_reason) not between 1 and 2000 or p_reason is distinct from btrim(p_reason)
+    or p_expected_signature is null or length(p_expected_signature) not between 1 and 512 then
+    raise exception 'AGENCY_CHANGE_REQUEST_INVALID' using errcode='22023'; end if;
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+  select * into strict v_request from private.weekly_source_agency_timesheet_change_requests where request_key=p_request_key;
+  if p_contract_week_id is distinct from v_request.contract_week_id or p_reason is distinct from v_request.reason
+    or p_expected_signature is distinct from v_request.initial_row_signature then
+    raise exception 'AGENCY_CHANGE_REQUEST_KEY_REUSED' using errcode='22023'; end if;
+  v_original:=v_request.native_receipts->'original_capture';
+  if jsonb_typeof(v_original) is distinct from 'object'
+    or v_original->>'schema_version' is distinct from 'WEEKLY_SOURCE_AGENCY_CHANGE_NATIVE_CAPTURE_V1'
+    or v_original->>'contract_week_id' is distinct from v_request.contract_week_id::text
+    or v_original->>'contract_id' is distinct from v_request.contract_id::text
+    or v_original->>'candidate_id' is distinct from v_request.candidate_id::text
+    or v_original->>'client_id' is distinct from v_request.client_id::text
+    or v_original->>'agency_id' is distinct from v_request.agency_id::text
+    or v_original->>'environment' is distinct from v_request.environment
+    or v_original->>'week_ending_date' is distinct from v_request.week_ending_date::text
+    or v_original->>'source_group_id' is distinct from v_request.source_group_id::text
+    or v_original->>'source_cycle_id' is distinct from v_request.source_cycle_id::text
+    or v_original->>'source_upload_id' is distinct from v_request.source_upload_id::text
+    or v_original->>'source_publication_id' is distinct from v_request.source_publication_id::text
+    or v_original->>'rule_set_version_id' is distinct from v_request.rule_set_version_id::text
+    or v_original->'source_cas' is distinct from v_request.source_cas
+    or v_original->>'initial_timesheet_id' is distinct from v_request.initial_timesheet_id::text
+    or v_original->>'initial_timesheet_version' is distinct from v_request.initial_timesheet_version::text
+    or v_original->>'initial_row_signature' is distinct from v_request.initial_row_signature
+    or v_original->>'canonical_family_booking_id' is distinct from v_request.canonical_family_booking_id
+    or v_original->>'original_draft_invoice_id' is distinct from v_request.original_draft_invoice_id::text
+    or v_original->>'original_draft_invoice_no' is distinct from v_request.original_draft_invoice_no then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_CAPTURE_INVALID' using errcode='55000'; end if;
+  -- The current actor is deliberately NOT the creator parameter here. This
+  -- rechecks the original immutable capture even after a native phase changed T0.
+  v_hash:=private.weekly_source_agency_change_request_sha256_v1(p_contract_week_id,p_reason,p_expected_signature,
+    p_request_key,v_request.actor_user_id,v_original);
+  if v_hash is distinct from v_request.request_sha256 then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_REQUEST_DIGEST_INVALID' using errcode='55000'; end if;
+  select * into strict v_week from public.contract_weeks where id=v_request.contract_week_id;
+  select * into strict v_contract from public.contracts where id=v_request.contract_id;
+  if v_week.contract_id is distinct from v_request.contract_id or v_week.week_ending_date is distinct from v_request.week_ending_date
+    or coalesce(v_week.additional_seq,0)<>0 or coalesce(v_week.is_adjustment,false)
+    or v_week.timesheet_id is null or v_contract.candidate_id is distinct from v_request.candidate_id
+    or v_contract.client_id is distinct from v_request.client_id then
+    raise exception 'AGENCY_CHANGE_CURRENT_SUBJECT_SCOPE_CHANGED' using errcode='40001'; end if;
+  native_admission:=private.weekly_source_agency_candidate_admit_v1(v_week.timesheet_id,p_actor_user_id);
+  -- Preserve invoice -> Timesheet/financial order. The immutable D1 is the
+  -- only return destination; an unrelated placement is never adopted.
+  if v_request.state='ACTIVE' then
+    if v_request.original_draft_invoice_id is not null then
+      perform 1 from public.invoices where id=v_request.original_draft_invoice_id for update;
+      if not found then
+        raise exception 'AGENCY_DRAFT_ROUND_TRIP_ORIGINAL_D1_CHANGED' using errcode='40001'; end if;
+    end if;
+    if exists(select 1 from public.invoice_lines line
+      where line.timesheet_id in(v_request.initial_timesheet_id,v_request.current_timesheet_id)
+        and line.invoice_id is distinct from v_request.original_draft_invoice_id) then
+      raise exception 'AGENCY_DRAFT_ROUND_TRIP_FOREIGN_PLACEMENT' using errcode='40001'; end if;
+  end if;
+  v_locks:=private.weekly_source_lock_family_rows_v1(array[v_week.timesheet_id],v_request.candidate_id);
+  if v_locks->>'ok' is distinct from 'true' then
+    raise exception 'AGENCY_CHANGE_NATIVE_FAMILY_LOCK_REFUSED' using errcode='55000',detail=v_locks::text; end if;
+  select * into strict v_week from public.contract_weeks where id=v_request.contract_week_id for update;
+  select * into strict v_ts from public.timesheets where timesheet_id=v_week.timesheet_id for update;
+  select * into strict v_group from public.weekly_source_groups where id=v_request.source_group_id and active and source_family='ROSTER' for update;
+  if v_group.agency_id is distinct from v_request.agency_id or v_group.environment is distinct from 'TEST'
+    or v_ts.contract_id is distinct from v_request.contract_id or v_ts.week_ending_date is distinct from v_request.week_ending_date
+    or v_ts.is_current is distinct from true or v_ts.archived_at_utc is not null
+    or v_ts.sheet_scope::text is distinct from 'WEEKLY' or v_ts.line_type::text is distinct from 'HOURS'
+    or v_ts.correction_id is not null or coalesce(v_ts.is_adjustment,false) then
+    raise exception 'AGENCY_CHANGE_CURRENT_SUBJECT_SCOPE_CHANGED' using errcode='40001'; end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    v_group.id,v_request.client_id,v_request.week_ending_date);
+  if (select count(*) from public.weekly_source_group_clients membership
+    join public.weekly_source_groups source_group on source_group.id=membership.source_group_id and source_group.active
+    where membership.client_id=v_request.client_id and v_request.week_ending_date between membership.valid_from
+      and coalesce(membership.valid_to,'infinity'::date))<>1 then
+    raise exception 'WEEKLY_SOURCE_AUTHORISE_SCOPE_AMBIGUOUS' using errcode='55000'; end if;
+  select * into strict v_request from private.weekly_source_agency_timesheet_change_requests where id=v_request.id for update;
+  if v_request.state='COMPLETED' then
+    -- No economic action or relabelled authorisation. Exact completed receipt
+    -- is readable only after the genuine current user's present subject scope.
+    v_scope:=public.weekly_source_office_authorise_scope_v1(jsonb_build_object(
+      'actor_user_id',p_actor_user_id,'timesheet_id',v_ts.timesheet_id));
+    if v_scope->>'contract' is distinct from 'WEEKLY_SOURCE_AUTHORISE_SCOPE_V1'
+      or v_scope->>'applicable' is distinct from 'true' then
+      raise exception 'AGENCY_CHANGE_SOURCE_SCOPE_REFUSED' using errcode='42501'; end if;
+    return v_request;
+  end if;
+  if exists(select 1 from public.invoice_lines line
+    where line.timesheet_id in(v_request.initial_timesheet_id,v_request.current_timesheet_id)
+      and line.invoice_id is distinct from v_request.original_draft_invoice_id) then
+    raise exception 'AGENCY_DRAFT_ROUND_TRIP_FOREIGN_PLACEMENT' using errcode='40001'; end if;
+  if v_ts.timesheet_id is distinct from v_request.current_timesheet_id
+    or v_ts.version is distinct from v_request.current_timesheet_version
+    or btrim(v_ts.booking_id) is distinct from v_request.canonical_family_booking_id then
+    raise exception 'AGENCY_INVOICE_TIMESHEET_ROTATED' using errcode='40001'; end if;
+  if v_ts.revoked_at is not null then
+    v_unauthorise_actor:=v_request.native_receipts#>>'{unauthorise,phase_actor_user_id}';
+    if v_request.phase not in('UNAUTHORISED','SCHEDULE_APPLIED','RECOMPUTE_PENDING','FINANCIAL_CURRENT')
+      or v_ts.revoked_reason is distinct from 'TIMESHEET_UNAUTHORISE'
+      or v_ts.revoked_by is distinct from v_unauthorise_actor
+      or v_request.native_receipts#>>'{unauthorise,result,timesheet_id}' is distinct from v_ts.timesheet_id::text
+      or v_request.native_receipts#>>'{unauthorise,result,ok}' is distinct from 'true' then
+      raise exception 'AGENCY_INVOICE_TIMESHEET_ROTATED' using errcode='40001'; end if;
+  end if;
+  v_cas:=private.weekly_source_bulk_source_cas_v1(v_request.source_cycle_id,array[v_request.client_id]);
+  if v_cas is distinct from v_request.source_cas then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_SOURCE_CAS_CHANGED' using errcode='40001'; end if;
+  select (private.weekly_source_effective_rule_set_v1(v_request.client_id,v_request.source_cycle_id)->>'rule_set_version_id')::uuid
+    into v_rule_version;
+  if v_rule_version is distinct from v_request.rule_set_version_id then
+    raise exception 'AGENCY_CHANGE_OPERATIONAL_RULE_UNAVAILABLE' using errcode='55000'; end if;
+  if v_original->>'source_dependency_tokens_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',v_request.source_dependency_tokens),'hex') then
+    raise exception 'AGENCY_CHANGE_ORIGINAL_NATIVE_SOURCE_FOOTPRINT_CHANGED' using errcode='55000';end if;
+  source_admission:=private.weekly_source_agency_source_phase_admit_v1(v_ts.timesheet_id,p_actor_user_id,
+    v_request.candidate_id,v_request.source_cycle_id,v_request.client_id,v_request.source_cas,native_admission);
+  select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into merged_tokens from(
+    select distinct value from jsonb_array_elements(v_request.current_source_dependency_tokens||(source_admission->'source_dependency_tokens'))
+  ) native_current_union;
+  if merged_tokens is distinct from v_request.current_source_dependency_tokens then
+    source_admission:=(source_admission-'source_dependency_tokens')||jsonb_build_object('request_id',v_request.id,
+      'request_sha256',encode(v_request.request_sha256,'hex'),'source_dependency_tokens_sha256',encode(
+        private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_SOURCE_DEPENDENCY_TOKENS_V1',merged_tokens),'hex'));
+    update private.weekly_source_agency_timesheet_change_requests set current_source_dependency_tokens=merged_tokens,
+      native_receipts=native_receipts||jsonb_build_object('source_admission',source_admission),
+      updated_by_user_id=p_actor_user_id,updated_at_utc=transaction_timestamp(),version=version+1
+      where id=v_request.id returning * into v_request;
+    insert into public.audit_events(id,ts_utc,actor_user_id,actor_role_at_time,object_type,object_id_text,action,after_json,reason,correlation_id)
+      select gen_random_uuid(),transaction_timestamp(),p_actor_user_id,a.role,'WEEKLY_SOURCE_AGENCY_CHANGE',v_request.id::text,
+        'NATIVE_SOURCE_FOOTPRINT_RETAINED',jsonb_build_object('phase',v_request.phase,'request_version',v_request.version,
+          'original_creator_user_id',v_request.actor_user_id,'current_resumer_user_id',p_actor_user_id,
+          'source_dependency_tokens_sha256',source_admission->>'source_dependency_tokens_sha256'),v_request.reason,v_request.request_key
+      from public.tms_users a where a.id=p_actor_user_id and a.is_active;
+    if not found then raise exception 'AGENCY_CHANGE_CURRENT_ACTOR_UNAVAILABLE' using errcode='42501';end if;
+  end if;
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_ts.timesheet_id,v_week.id,false);
+  -- A changed signature is admissible only when the existing canonical writer
+  -- observation has retained its actual matching outbox/current financial cut.
+  -- Generic TSFIN currentness or outbox disappearance alone never proves it.
+  if btrim(coalesce(v_signature->>'backend_row_signature',v_signature->>'row_signature',v_signature->>'signature'))
+    is distinct from v_request.current_row_signature
+    and coalesce((v_request.phase='UNAUTHORISED'
+      and v_request.native_receipts#>>'{financial_write_frame,mode}'='MANUAL'
+      and v_request.native_receipts#>>'{financial_write_frame,request_id}'=v_request.id::text
+      and v_request.native_receipts#>>'{financial_write_frame,request_sha256}'=encode(v_request.request_sha256,'hex')
+      and v_request.native_receipts#>>'{financial_write_frame,transaction_id}'=pg_current_xact_id()::text
+      and v_request.native_receipts#>>'{financial_write_frame,backend_pid}'=pg_backend_pid()::text
+      and v_request.native_receipts#>>'{financial_write_frame,phase_actor_user_id}'=v_request.updated_by_user_id::text
+      and v_request.native_receipts#>>'{financial_write_frame,timesheet_id}'=v_ts.timesheet_id::text
+      and v_request.native_receipts#>>'{financial_write_frame,timesheet_version}'=v_ts.version::text
+      and v_request.native_receipts#>'{financial_write_frame,source_cas}'=v_request.source_cas
+      and v_ts.actual_schedule_json=v_request.native_receipts#>'{original_capture,schedule}')
+     or(v_request.phase='RECOMPUTE_PENDING'
+      and v_request.native_receipts#>>'{recompute,observed_outbox_id}'=v_request.outbox_id::text
+      and v_request.native_receipts#>>'{recompute,timesheet_id}'=v_request.current_timesheet_id::text
+      and v_request.native_receipts#>>'{recompute,timesheet_version}'=v_request.current_timesheet_version::text
+      and exists(select 1 from public.timesheets_financials tf where tf.is_current
+        and tf.id::text=v_request.native_receipts#>>'{recompute,financial_id}'
+        and tf.timesheet_id=v_request.current_timesheet_id and tf.timesheet_version=v_request.current_timesheet_version
+        and encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_RECOMPUTE_ROW_V1',to_jsonb(tf)),'hex')
+          =v_request.native_receipts#>>'{recompute,financial_row_sha256}')),false) is distinct from true then
+    raise exception 'AGENCY_CHANGE_CURRENT_PHASE_SIGNATURE_CHANGED' using errcode='40001'; end if;
+  return v_request;
+exception when no_data_found or too_many_rows then
+  raise exception 'AGENCY_CHANGE_CURRENT_REQUEST_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_change_request_assert_v1(uuid,text,text,text,uuid)
+  from public,anon,authenticated,service_role;

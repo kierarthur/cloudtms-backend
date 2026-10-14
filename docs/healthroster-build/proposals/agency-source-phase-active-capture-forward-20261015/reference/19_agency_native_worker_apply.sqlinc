@@ -1,0 +1,187 @@
+-- Source construction: actual canonical Worker/manual/native queued writer
+-- bridge. This does not complete paid-domain, protection or AUTHORISE/D1 proof.
+create or replace function private.weekly_source_agency_snapshot_provenance_assert_v1(
+ p_request_id uuid,p_snapshot jsonb
+) returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ schedule jsonb; segments jsonb; source_entry jsonb; segment jsonb; matches integer;
+begin
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+ schedule:=r.native_receipts#>'{original_capture,schedule}';
+ segments:=p_snapshot#>'{invoice_breakdown_json,segments}';
+ if jsonb_typeof(p_snapshot) is distinct from 'object' or octet_length(p_snapshot::text)>1048576
+  or p_snapshot->>'timesheet_id' is distinct from r.current_timesheet_id::text
+  or p_snapshot->>'timesheet_version' is distinct from r.current_timesheet_version::text
+  or p_snapshot->>'candidate_id' is distinct from r.candidate_id::text
+  or p_snapshot->>'client_id' is distinct from r.client_id::text
+  or p_snapshot->'actual_schedule_json' is distinct from schedule
+  or jsonb_typeof(schedule) is distinct from 'array' or jsonb_typeof(segments) is distinct from 'array'
+  or jsonb_array_length(schedule)>100 or jsonb_array_length(segments)<>jsonb_array_length(schedule)
+  or p_snapshot#>>'{invoice_breakdown_json,mode}' is distinct from 'SEGMENTS' then
+  raise exception 'AGENCY_CHANGE_CANONICAL_SOURCE_PROVENANCE_INVALID' using errcode='22023'; end if;
+ perform public._ctms_assert_tsfin_snapshot_policy_v1(r.current_timesheet_id,p_snapshot);
+ for source_entry in select value from jsonb_array_elements(schedule) loop
+  -- Re-derive membership from the locked actual native capture and native
+  -- event identity. Native Source CAS/rule/finalisation is checked separately.
+  if not exists(select 1 from public.weekly_work_events e
+    where e.id=(source_entry->>'work_event_id')::uuid and e.candidate_id=r.candidate_id
+      and e.client_id=r.client_id and e.first_source_group_id=r.source_group_id
+      and e.work_date=(source_entry->>'date')::date)
+   or source_entry->>'source_shift_id' is distinct from source_entry->>'work_event_id' then
+   raise exception 'AGENCY_CHANGE_NATIVE_SOURCE_EVENT_CHANGED' using errcode='40001'; end if;
+  select count(*) into matches from jsonb_array_elements(segments) s
+   where s->>'work_event_id'=source_entry->>'work_event_id'
+     and s->>'source_shift_id'=source_entry->>'work_event_id'
+     and s->>'date'=source_entry->>'date' and s->>'start'=source_entry->>'start'
+     and s->>'end'=source_entry->>'end'
+     and (s->>'break_mins')::numeric=(source_entry->>'break_minutes')::numeric
+     and (s->>'is_reversal')::boolean is not true;
+  if matches<>1 then raise exception 'AGENCY_CHANGE_NATIVE_SOURCE_EVENT_CHANGED' using errcode='40001'; end if;
+ end loop;
+ for segment in select value from jsonb_array_elements(segments) loop
+  if not exists(select 1 from jsonb_array_elements(schedule) e where e->>'work_event_id'=segment->>'work_event_id')
+   or segment->>'segment_id' is null or segment->>'segment_id'=''
+   or nullif(segment->>'invoice_locked_invoice_id','') is not null then
+   raise exception 'AGENCY_CHANGE_CANONICAL_SOURCE_PROVENANCE_INVALID' using errcode='22023'; end if;
+ end loop;
+ if (select count(distinct s->>'segment_id') from jsonb_array_elements(segments) s)<>jsonb_array_length(segments) then
+  raise exception 'AGENCY_CHANGE_CANONICAL_SOURCE_PROVENANCE_INVALID' using errcode='22023'; end if;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'AGENCY_CHANGE_CANONICAL_SOURCE_PROVENANCE_INVALID' using errcode='22023';
+end;
+$function$;
+alter function private.weekly_source_agency_snapshot_provenance_assert_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_agency_snapshot_provenance_assert_v1(uuid,jsonb)
+ from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_agency_change_worker_apply_v1(
+ p_request_id uuid,p_expected_request_version bigint,p_expected_context_sha256 text,p_snapshot jsonb
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ r private.weekly_source_agency_timesheet_change_requests%rowtype;
+ t public.timesheets%rowtype; before_ts public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ q public.ts_financials_outbox%rowtype; before_queue jsonb; context jsonb; result jsonb; observation jsonb;
+ receipts jsonb; signature jsonb; old_phase text; actor uuid; observed boolean:=false; queue_complete boolean:=false;
+ error_code text; write_result record; next_signature text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_request_id is null or p_expected_request_version is null or p_expected_request_version<1
+  or p_expected_context_sha256 is null or p_expected_context_sha256!~'^[0-9a-f]{64}$' then
+  raise exception 'AGENCY_CHANGE_WORKER_APPLY_INVALID' using errcode='22023'; end if;
+ context:=private.weekly_source_agency_change_worker_context_v1(p_request_id);
+ select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id for update;
+ if r.version is distinct from p_expected_request_version
+  or context->>'context_sha256' is distinct from p_expected_context_sha256 then
+  raise exception 'AGENCY_CHANGE_WORKER_CONTEXT_CHANGED' using errcode='40001'; end if;
+ old_phase:=r.phase;actor:=r.updated_by_user_id;
+ begin
+  perform private.weekly_source_agency_snapshot_provenance_assert_v1(r.id,p_snapshot);
+  if old_phase='UNAUTHORISED' then
+   select * into strict before_ts from public.timesheets where timesheet_id=r.current_timesheet_id;
+   perform private.weekly_source_agency_financial_frame_open_v1(r.id,'MANUAL',p_snapshot,null::uuid);
+   -- One existing manual owner, same physical T0, no rotation/evidence selector.
+   -- Patch is derived entirely from the genuine immutable Source capture.
+   result:=public.contract_week_manual_upsert_atomic(
+    p_week_id=>r.contract_week_id,p_expected_timesheet_id=>r.current_timesheet_id,
+    p_timesheet_create_json=>null::jsonb,
+    p_timesheet_patch_json=>jsonb_build_object('actual_schedule_json',r.native_receipts#>'{original_capture,schedule}'),
+    p_contract_week_patch_json=>'{}'::jsonb,p_tsfin_snapshot_json=>p_snapshot,p_rotation_json=>null::jsonb,
+    p_actor_user_id=>actor,p_materialise_staged_evidence=>false,p_now_utc=>transaction_timestamp(),
+    p_expected_row_signature=>r.current_row_signature,
+    p_queue_timesheet_materialisation_json=>jsonb_build_object('suppress_timesheet_evidence_materialisation',true));
+   select * into strict t from public.timesheets where timesheet_id=r.current_timesheet_id;
+   select * into strict f from public.timesheets_financials where timesheet_id=t.timesheet_id and is_current;
+   select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+   observation:=r.native_receipts->'manual_financial_write';
+   if result->>'ok' is distinct from 'true' or result->>'operation' is distinct from 'weekly_manual_process_update'
+    or result->>'created_now' is distinct from 'false' or result->>'timesheet_id' is distinct from t.timesheet_id::text
+    or result->>'timesheet_financials_id' is distinct from f.id::text
+    or t.version is distinct from r.current_timesheet_version
+    or to_jsonb(t)-array['actual_schedule_json','updated_at']
+      is distinct from to_jsonb(before_ts)-array['actual_schedule_json','updated_at']
+    or t.actual_schedule_json is distinct from r.native_receipts#>'{original_capture,schedule}'
+    or observation->>'financial_id' is distinct from f.id::text
+    or observation->>'transaction_id' is distinct from pg_current_xact_id()::text
+    or observation->>'backend_pid' is distinct from pg_backend_pid()::text then
+    raise exception 'AGENCY_CHANGE_NATIVE_MANUAL_POSTCONDITION_UNPROVED'; end if;
+   next_signature:=result->>'backend_row_signature';
+   if nullif(btrim(next_signature),'') is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE'; end if;
+   receipts:=r.native_receipts||jsonb_build_object('manual_process',jsonb_build_object(
+     'schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_MANUAL_PROCESS_V1','phase_actor_user_id',actor,
+     'native_result_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_NATIVE_MANUAL_RESULT_V1',result),'hex'),
+     'timesheet_id',t.timesheet_id,'financial_id',f.id,'current_row_signature',next_signature));
+   update private.weekly_source_agency_timesheet_change_requests set phase='SCHEDULE_APPLIED',native_receipts=receipts,
+    current_financial_id=f.id,current_row_signature=next_signature,version=version+1,updated_at_utc=transaction_timestamp()
+    where id=r.id returning * into r;
+   select to_jsonb(existing) into before_queue from public.ts_financials_outbox existing
+    where existing.timesheet_id=t.timesheet_id and existing.reason='MANUAL'::public.ts_fin_reason_enum;
+   -- Preserve the existing upsert/queue owner and its genuine row identity.
+   perform public.enqueue_ts_financials(t.timesheet_id,'MANUAL'::public.ts_fin_reason_enum);
+   select * into strict q from public.ts_financials_outbox
+    where timesheet_id=t.timesheet_id and reason='MANUAL'::public.ts_fin_reason_enum for update;
+   if q.attempt_count<>0 or q.next_attempt_at is not null or q.last_error is not null then
+    raise exception 'AGENCY_CHANGE_NATIVE_ENQUEUE_UNPROVED'; end if;
+   receipts:=r.native_receipts||jsonb_build_object('enqueue',jsonb_build_object(
+    'schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_ENQUEUE_V1','phase_actor_user_id',actor,
+    'outbox_id',q.id,'timesheet_id',q.timesheet_id,'reason',q.reason,
+    'before_sha256',case when before_queue is null then null else encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_NATIVE_QUEUE_BEFORE_V1',before_queue),'hex') end,
+    'after_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AGENCY_NATIVE_QUEUE_AFTER_V1',to_jsonb(q)),'hex')));
+   update private.weekly_source_agency_timesheet_change_requests set phase='RECOMPUTE_PENDING',native_receipts=receipts,
+    outbox_id=q.id,outbox_reason=q.reason,version=version+1,updated_at_utc=transaction_timestamp(),last_refusal_code=null
+    where id=r.id returning * into r;
+   observed:=true;
+  elsif old_phase='RECOMPUTE_PENDING' then
+   -- This is the exact queued native owner; no Worker no-op or paid-success
+   -- shortcut. The new E26 observation must precede its real queue success.
+   select * into strict write_result from public.tsfin_write_snapshots_and_complete(jsonb_build_array(
+     jsonb_build_object('outbox_id',r.outbox_id,'timesheet_id',r.current_timesheet_id,'snapshot',p_snapshot)));
+   select * into strict r from private.weekly_source_agency_timesheet_change_requests where id=p_request_id;
+   observation:=r.native_receipts->'recompute';
+   select * into strict f from public.timesheets_financials where id=r.current_financial_id and is_current;
+   if write_result.ok_count is distinct from 1 or write_result.fail_count is distinct from 0
+    or write_result.errors is distinct from '[]'::jsonb
+    or observation->>'observed_outbox_id' is distinct from r.outbox_id::text
+    or observation->>'financial_id' is distinct from f.id::text
+    or observation->>'transaction_id' is distinct from pg_current_xact_id()::text
+    or observation->>'backend_pid' is distinct from pg_backend_pid()::text
+    or observation->>'financial_row_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_AGENCY_RECOMPUTE_ROW_V1',to_jsonb(f)),'hex')
+    or exists(select 1 from public.ts_financials_outbox where id=r.outbox_id) then
+    raise exception 'AGENCY_CHANGE_NATIVE_RECOMPUTE_POSTCONDITION_UNPROVED'; end if;
+   signature:=public.timesheet_lifecycle_guard_signature_v1(r.current_timesheet_id,r.contract_week_id,false);
+   next_signature:=btrim(coalesce(signature->>'backend_row_signature',signature->>'row_signature',signature->>'signature'));
+   if nullif(next_signature,'') is null then raise exception 'AGENCY_CHANGE_NATIVE_SIGNATURE_UNAVAILABLE'; end if;
+   receipts:=r.native_receipts||jsonb_build_object('queue_completion',jsonb_build_object(
+    'schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_QUEUE_COMPLETION_V1','outbox_id',r.outbox_id,
+    'timesheet_id',r.current_timesheet_id,'financial_id',f.id,'phase_actor_user_id',actor,
+    'native_ok_count',write_result.ok_count,'native_fail_count',write_result.fail_count,
+    'actual_observation_transaction_id',observation->'transaction_id','actual_observation_backend_pid',observation->'backend_pid'));
+   update private.weekly_source_agency_timesheet_change_requests set phase='FINANCIAL_CURRENT',native_receipts=receipts,
+    current_row_signature=next_signature,version=version+1,updated_at_utc=transaction_timestamp(),last_refusal_code=null
+    where id=r.id returning * into r;
+   observed:=true;queue_complete:=true;
+  else raise exception 'AGENCY_CHANGE_WORKER_PHASE_NOT_READY'; end if;
+  if octet_length(r.native_receipts::text)>65536 then raise exception 'AGENCY_CHANGE_NATIVE_RECEIPT_BOUND_EXCEEDED'; end if;
+ exception when others then
+  get stacked diagnostics error_code=MESSAGE_TEXT;
+  update private.weekly_source_agency_timesheet_change_requests set last_refusal_code=case
+    when error_code~'^[A-Z][A-Z0-9_]{0,199}$' then error_code else 'AGENCY_CHANGE_NATIVE_PHASE_FAILED' end,
+    version=version+1,updated_at_utc=transaction_timestamp() where id=p_request_id returning * into r;
+  observed:=false;queue_complete:=false;
+ end;
+ return jsonb_build_object('schema_version','WEEKLY_SOURCE_AGENCY_NATIVE_WORKER_RESULT_V1',
+  'request_id',r.id,'request_version',r.version,'phase',r.phase,'phase_actor_user_id',r.updated_by_user_id,
+  'timesheet_id',r.current_timesheet_id,'timesheet_version',r.current_timesheet_version,
+  'current_financial_id',r.current_financial_id,'outbox_id',r.outbox_id,'last_refusal_code',r.last_refusal_code,
+  'native_write_observed',observed,'native_queue_completed',queue_complete);
+end;
+$function$;
+alter function public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb) owner to postgres;
+revoke all on function public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_change_worker_apply_v1(uuid,bigint,text,jsonb) to service_role;
