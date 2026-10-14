@@ -1,0 +1,27 @@
+[
+  {
+    "file": "BUILD_PPV2_REPORT_D10_POPULATION_SOURCE_CRITIC_14102026.md",
+    "bytes": 4573,
+    "sha256": "e9c70c2f9f21e15a1b9c526d34c5255df192a381923d5accd458c45a9b85f276"
+  },
+  {
+    "file": "BUILD_MONEY_OFFICE_PAID_MATCH_SOURCE_CRITIC_14102026.md",
+    "bytes": 5178,
+    "sha256": "e00b0b78dbf271a7cdc6b9775208738d7fc2772756e87a37ee6d485abb819248"
+  },
+  {
+    "file": "BUILD_INSTALL2_PREDECESSOR_GATE_SOURCE_CRITIC_14102026.md",
+    "bytes": 9967,
+    "sha256": "7ad56cc862d42cf76d8a648417ef077db6ae66854d5a62402a63d3573ebdcfc2"
+  },
+  {
+    "file": "BUILD_CHECKLIST_R254_SUCCESSOR_SOURCE_CRITIC_14102026.md",
+    "bytes": 11815,
+    "sha256": "2ecfba7b2f4711e30d0da1cf6dcb93454445496467fd2a1bbf6d87303be6a8b9"
+  },
+  {
+    "file": "ROOT_OFFICE_WORKSPACE_UNION_SOURCE_CHECKS.json",
+    "bytes": 2300,
+    "sha256": "e850ee1077f573f23e778405818d921fbd2445729c7e9936e344db500e21c5b1"
+  }
+]

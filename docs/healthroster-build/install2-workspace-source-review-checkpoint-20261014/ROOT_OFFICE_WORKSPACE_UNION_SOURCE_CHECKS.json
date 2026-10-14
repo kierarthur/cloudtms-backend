@@ -1,0 +1,51 @@
+{
+  "source_only": true,
+  "native": false,
+  "independent_review_pending": true,
+  "source_pins": [
+    {
+      "file": "scripts/healthroster-owner-source-compose.mjs",
+      "sha256": "11bf448f16fb4569972dd72d822db74c7127c9ee92071e18be54051533cbae35"
+    },
+    {
+      "file": "scripts/healthroster-prepare-office-workspace-union.mjs",
+      "sha256": "98ca9a1e163fd3f5a9370c2db39745d28121f58dbd82958471ce2ccd94b0053c"
+    },
+    {
+      "file": "tests/healthroster-owner-source-compose.test.mjs",
+      "sha256": "d3c0f2c6922079fa9b96c503fab575b81d27eb7a00f8c0f44a651617ba7afdac"
+    },
+    {
+      "file": "tests/healthroster-office-workspace-union.test.mjs",
+      "sha256": "37b4564c1ba2e6a9a897a82aa2a25d68fb15695475cc001616caa1cd293151e9"
+    }
+  ],
+  "packet": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014",
+  "manifest_sha256": "90613aca6b3b6da1c1b5fa3837bc66dafee7f4e0597052a4aad6466c0d2d3e54",
+  "whole_workspace_sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2",
+  "tests": {
+    "args": [
+      "--test",
+      "tests/healthroster-owner-source-compose.test.mjs",
+      "tests/healthroster-office-workspace-union.test.mjs"
+    ],
+    "exitCode": 0,
+    "passed": 10,
+    "failed": 0,
+    "output_sha256": "505aa87e86cc21d015377f03343afb97a58e6664065b695ee21eccd733459358"
+  },
+  "source_integrity": {
+    "migrations": 399,
+    "repeatables": 1060,
+    "passed": true
+  },
+  "retained_source_failures": [
+    "Initial creator used entries for both input manifest schemas; Money uses artifacts. Refused before output creation; corrected to explicit supported schema fields.",
+    "Initial block-preservation test treated the early D10 census and all later Finalise content as one unchanged tail. Paid-match edits legitimately occur later. It failed; exact full census/bulk, query population and PAY reduction blocks are now compared separately. Six-hunk complete reversal always passed."
+  ],
+  "holds": [
+    "Unmounted source proposal, not PostgreSQL canonical compilation or native first-use.",
+    "Independent union review and final complete native financial/security/Office/acceptance proof remain required.",
+    "No connector call, SQL execution, lock, deployment, feature activation or app submission occurred."
+  ]
+}
