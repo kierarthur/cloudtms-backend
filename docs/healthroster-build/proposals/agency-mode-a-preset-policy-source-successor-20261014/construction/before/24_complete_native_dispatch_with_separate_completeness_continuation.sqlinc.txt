@@ -1,0 +1,414 @@
+create or replace function public.weekly_source_mode_a_dispatch_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_publication_id uuid;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_client_id uuid;
+  v_client public.clients%rowtype;
+  v_authority record;
+  v_operation_key text;
+  v_import_id uuid;
+  v_existing public.hr_imports%rowtype;
+  v_min_date date;
+  v_max_date date;
+  v_staged integer;
+  v_preview jsonb;
+  v_group_row jsonb;
+  v_comparison jsonb;
+  v_timesheet public.timesheets%rowtype;
+  v_work_event_id uuid;
+  v_upload_row public.weekly_source_upload_rows%rowtype;
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_state text;
+  v_reference text;
+  v_break_match boolean;
+  v_fingerprint bytea;
+  v_written integer:=0;
+  v_unrepresentable jsonb:='[]'::jsonb;
+  v_client_results jsonb:='[]'::jsonb;
+  v_source_row_total integer:=0;
+  v_dispatched boolean:=false;
+begin
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','publication_id')
+     ) then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_publication_id:=(p_request->>'publication_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_publication_id is null then
+    raise exception 'WEEKLY_SOURCE_MODE_A_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  select * into v_publication
+  from public.weekly_source_projection_publications where id=v_publication_id for update;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_PUBLICATION_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_publication.state not in ('CURRENT','CORRECTION_READY') then
+    raise exception 'WEEKLY_SOURCE_MODE_A_PUBLICATION_NOT_PUBLISHED' using errcode='55000',
+      detail=v_publication.state;
+  end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;
+
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'RECHECK_SOURCE',v_group.id,null,v_cycle.finalisation_week_ending
+  );
+  perform public._import_review_assert_actor_v1(v_actor);
+
+  -- The signed-Timesheet-authority subset of this publication.  Mode A
+  -- membership is the resolved authority the projection owner already wrote
+  -- to public.weekly_timesheet_authority_resolutions; it is never recomputed
+  -- here and never taken from a caller.
+  create temporary table if not exists pg_temp.weekly_source_mode_a_rows(
+    resolution_id uuid primary key,
+    upload_row_id uuid not null,
+    work_event_id uuid not null,
+    candidate_id uuid not null,
+    client_id uuid not null,
+    contract_id uuid not null,
+    work_date date not null,
+    start_at_local timestamp without time zone not null,
+    end_at_local timestamp without time zone not null,
+    break_minutes integer not null,
+    source_candidate_identity text not null,
+    role_band_source text,
+    external_source_key text
+  ) on commit drop;
+  delete from pg_temp.weekly_source_mode_a_rows;
+
+  insert into pg_temp.weekly_source_mode_a_rows
+  select resolution.id,source_row.id,resolution.work_event_id,resolution.candidate_id,
+    resolution.client_id,resolution.contract_id,source_row.work_date,
+    source_row.start_at_local,source_row.end_at_local,coalesce(source_row.break_minutes,0),
+    source_row.source_candidate_identity,
+    coalesce(nullif(pg_catalog.btrim(source_row.role_band_source),''),
+      nullif(pg_catalog.btrim(contract.band),''),nullif(pg_catalog.btrim(contract.role),'')),
+    source_row.external_source_key
+  from public.weekly_source_row_resolutions resolution
+  join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id
+  join public.contracts contract on contract.id=resolution.contract_id
+  where source_row.upload_id=v_upload.id
+    and resolution.generation=coalesce(
+      v_publication.projection_generation,v_publication.authority_scope_version::integer)
+    and resolution.mapping_state='RESOLVED'
+    and resolution.work_event_id is not null
+    and resolution.contract_id is not null
+    and resolution.candidate_id is not null
+    and resolution.client_id is not null
+    and source_row.start_at_local is not null
+    and source_row.end_at_local is not null
+    and (exists(
+      select 1 from public.weekly_timesheet_authority_resolutions authority
+      where authority.source_cycle_id=v_cycle.id
+        and authority.contract_id=resolution.contract_id
+        and authority.work_date=source_row.work_date
+    ) or private.weekly_source_configured_agency_invoice_v1(resolution.client_id,v_group.id,
+      v_group.agency_id,v_group.environment,source_row.work_date));
+
+  select count(*)::integer into v_source_row_total from pg_temp.weekly_source_mode_a_rows;
+  if v_source_row_total=0 then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'dispatched',false,'reason_code','NO_TIMESHEET_AUTHORITY_ROWS',
+      'publication_id',v_publication_id,'clients','[]'::jsonb
+    );
+  end if;
+
+  for v_client_id in
+    select distinct mode_a.client_id from pg_temp.weekly_source_mode_a_rows mode_a order by 1
+  loop
+    select * into strict v_client from public.clients where id=v_client_id;
+
+    -- Route eligibility is the import-review authority's own answer, per
+    -- Contract and worked date.  A Contract that the installed authority does
+    -- not consider validation eligible is never bridged.
+    if exists(
+      select 1 from pg_temp.weekly_source_mode_a_rows mode_a
+      cross join lateral public._import_review_effective_authority_core_v1(
+        'HR_WEEKLY',mode_a.contract_id,mode_a.client_id,mode_a.work_date
+      ) authority
+      where mode_a.client_id=v_client_id
+        and (coalesce(authority.route_eligible,false) is not true
+          or coalesce(authority.validation_eligible,false) is not true)
+    ) then
+      raise exception 'WEEKLY_SOURCE_MODE_A_ROUTE_NOT_ELIGIBLE' using errcode='55000',
+        detail=pg_catalog.jsonb_build_object('client_id',v_client_id)::text;
+    end if;
+
+    v_operation_key:=private.weekly_source_mode_a_operation_key_v1(v_publication_id,v_client_id);
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(v_operation_key,17092026)
+    );
+
+    select * into v_existing from public.hr_imports
+    where coverage_operation_key=v_operation_key for update;
+    if found then
+      v_import_id:=v_existing.id;
+      v_staged:=(select count(*)::integer from public.hr_rows where import_id=v_import_id);
+    else
+      -- WP-37 (WP-31 finding F4).  The bridged import's coverage is the
+      -- OFFICE-CONFIRMED coverage of the upload, not the min/max of the rows
+      -- the file happened to contain.  Deriving it from the rows meant a signed
+      -- day the source omitted was never compared at all: no UNMATCHED, no
+      -- `SOURCE_SHIFT_MISSING`, and `24 §14`'s "a mismatch uses the existing
+      -- manager correction email journey" was bypassed for exactly the case it
+      -- exists for.  Confirmed coverage is nullable on the relation, so an
+      -- unconfirmed upload fails CLOSED here rather than silently falling back
+      -- to the rows.
+      v_min_date:=v_upload.confirmed_coverage_start_local_date;
+      v_max_date:=v_upload.confirmed_coverage_end_local_date;
+      if v_min_date is null or v_max_date is null then
+        raise exception 'WEEKLY_SOURCE_MODE_A_COVERAGE_UNCONFIRMED' using errcode='55000',
+          detail=pg_catalog.jsonb_build_object(
+            'upload_id',v_upload.id,'client_id',v_client_id,
+            'coverage_state',v_upload.coverage_state
+          )::text;
+      end if;
+      if exists(
+        select 1 from pg_temp.weekly_source_mode_a_rows mode_a
+        where mode_a.client_id=v_client_id
+          and mode_a.work_date not between v_min_date and v_max_date
+      ) then
+        raise exception 'WEEKLY_SOURCE_MODE_A_ROW_OUTSIDE_CONFIRMED_COVERAGE' using errcode='55000',
+          detail=pg_catalog.jsonb_build_object(
+            'upload_id',v_upload.id,'client_id',v_client_id,
+            'confirmed_coverage_start',v_min_date,'confirmed_coverage_end',v_max_date
+          )::text;
+      end if;
+
+      v_import_id:=pg_catalog.gen_random_uuid();
+      insert into public.hr_imports(
+        id,filename,uploaded_by,uploaded_at_utc,tz_assumption,parse_summary_json,
+        source_system,file_r2_key,client_id,import_scope,source_file_sha256,parser_version
+      ) values (
+        v_import_id,
+        'Weekly Source signed-Timesheet authority · '||v_upload.original_filename,
+        v_actor,pg_catalog.now(),'Europe/London',
+        pg_catalog.jsonb_build_object(
+          'status','PARSED','input_format','WEEKLY_SOURCE_MODE_A_BRIDGE',
+          'notes','Bridged from a Weekly Source upload for the established validation-only Mode A route',
+          'weekly_source_upload_id',v_upload.id,
+          'weekly_source_projection_publication_id',v_publication_id,
+          'header_rows','[]'::jsonb,'header_columns','[]'::jsonb
+        ),
+        'HEALTHROSTER'::public.hr_source_enum,null,v_client_id,'HR_WEEKLY',
+        pg_catalog.encode(v_upload.content_sha256,'hex'),
+        'WEEKLY_SOURCE_MODE_A_BRIDGE_V1'
+      );
+
+      -- Staged exactly as the installed HealthRoster weekly parser stages a
+      -- file (`broker/src/index.js:114280-114322`): the same payload keys the
+      -- validation preview reads, and the raw Candidate identity the source
+      -- file carried, so the preview resolves the Candidate through the same
+      -- installed alias and mapping authorities.
+      insert into public.hr_rows(
+        import_id,hr_request_id,date_local,start_time_local,end_time_local,
+        staff_norm,role_type,unit_raw,unit_hint,agency_raw,external_row_key,
+        payload_json,staff_raw,assignment_grade_norm,hours_worked
+      )
+      select v_import_id,
+        nullif(pg_catalog.btrim(coalesce(mode_a.external_source_key,'')),''),
+        mode_a.work_date,
+        mode_a.start_at_local::time,
+        mode_a.end_at_local::time,
+        pg_catalog.lower(pg_catalog.btrim(mode_a.source_candidate_identity)),
+        private.weekly_source_mode_a_role_type_v1(
+          mode_a.role_band_source,mode_a.source_candidate_identity
+        ),
+        nullif(pg_catalog.btrim(coalesce(mode_a.role_band_source,'')),''),
+        null,'WEEKLY_SOURCE',
+        'ws:'||mode_a.upload_row_id::text,
+        pg_catalog.jsonb_build_object(
+          'type','WEEKLY_SOURCE_MODE_A',
+          'staff_name',mode_a.source_candidate_identity,
+          'work_date',mode_a.work_date::text,
+          'request_id',nullif(pg_catalog.btrim(coalesce(mode_a.external_source_key,'')),''),
+          'grade_raw',nullif(pg_catalog.btrim(coalesce(mode_a.role_band_source,'')),''),
+          'start_local',pg_catalog.to_char(mode_a.start_at_local,'HH24:MI'),
+          'end_local',pg_catalog.to_char(mode_a.end_at_local,'HH24:MI'),
+          'break_mins',mode_a.break_minutes,
+          'actual_break_mins',mode_a.break_minutes,
+          'break_evidence_supplied',true,
+          'break_inferred_from_worked_hours',false,
+          'start_utc',(mode_a.start_at_local at time zone 'Europe/London'),
+          'end_utc',(mode_a.end_at_local at time zone 'Europe/London'),
+          'weekly_source_upload_row_id',mode_a.upload_row_id,
+          'weekly_source_work_event_id',mode_a.work_event_id
+        ),
+        mode_a.source_candidate_identity,
+        nullif(pg_catalog.btrim(coalesce(mode_a.role_band_source,'')),''),
+        pg_catalog.round(
+          (pg_catalog.date_part('epoch',mode_a.end_at_local-mode_a.start_at_local)/60
+            -mode_a.break_minutes)::numeric/60,2
+        )
+      from pg_temp.weekly_source_mode_a_rows mode_a
+      where mode_a.client_id=v_client_id;
+      get diagnostics v_staged=row_count;
+
+      update public.hr_imports
+      set parse_summary_json=parse_summary_json||pg_catalog.jsonb_build_object(
+        'rows_total',v_staged,'rows_parsed',v_staged,'rows_skipped',0
+      )
+      where id=v_import_id;
+
+      perform public._import_review_create_core_v2(
+        v_import_id,'COMPLETE_ALL',v_min_date,v_max_date,
+        pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'source_client_key','client:'||v_client_id::text,
+          'source_display_label',v_client.name,
+          'client_id',v_client_id
+        )),
+        '[]'::jsonb,
+        pg_catalog.encode(v_upload.content_sha256,'hex'),
+        'WEEKLY_SOURCE_MODE_A_BRIDGE_V1',
+        v_actor,v_operation_key,null,null
+      );
+    end if;
+
+    -- THE established validation-only comparison engine.  Nothing below
+    -- recomputes hours, breaks or references; it only records what this owner
+    -- decided.
+    v_preview:=public.hr_weekly_validation_preview(v_import_id);
+
+    for v_group_row in
+      select value from pg_catalog.jsonb_array_elements(coalesce(v_preview->'rows','[]'::jsonb))
+    loop
+      if nullif(v_group_row->>'timesheet_id','') is null then
+        v_unrepresentable:=v_unrepresentable||pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_object(
+            'reason','NO_TIMESHEET','candidate_id',v_group_row->>'candidate_id',
+            'week_ending_date',v_group_row->>'week_ending_date'
+          )
+        );
+        continue;
+      end if;
+      select * into v_timesheet from public.timesheets
+      where timesheet_id=(v_group_row->>'timesheet_id')::uuid;
+      if not found then continue; end if;
+
+      for v_comparison in
+        select value from pg_catalog.jsonb_array_elements(
+          coalesce(v_group_row->'comparisons','[]'::jsonb)
+        )
+      loop
+        -- Only a comparison that the established owner paired to exactly one
+        -- staged source row can be represented: the relation requires both a
+        -- Weekly Source work event and the signed Candidate times.
+        if nullif(v_comparison->>'hr_row_id','') is null
+           or nullif(v_comparison->>'timesheet_start','') is null
+           or nullif(v_comparison->>'timesheet_end','') is null then
+          v_unrepresentable:=v_unrepresentable||pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object(
+              'reason',coalesce(v_comparison->>'match_status','UNKNOWN'),
+              'timesheet_id',v_group_row->>'timesheet_id',
+              'work_date',v_comparison->>'work_date'
+            )
+          );
+          continue;
+        end if;
+
+        select * into v_upload_row from public.weekly_source_upload_rows
+        where id=(
+          select (row_data.payload_json->>'weekly_source_upload_row_id')::uuid
+          from public.hr_rows row_data where row_data.id=(v_comparison->>'hr_row_id')::uuid
+        );
+        if not found then continue; end if;
+        select * into v_resolution from public.weekly_source_row_resolutions resolution
+        where resolution.upload_row_id=v_upload_row.id
+          and resolution.generation=coalesce(
+            v_publication.projection_generation,v_publication.authority_scope_version::integer);
+        if not found or v_resolution.work_event_id is null then continue; end if;
+        v_work_event_id:=v_resolution.work_event_id;
+
+        v_reference:=nullif(pg_catalog.btrim(coalesce(v_comparison->>'ref_after','')),'');
+        v_break_match:=coalesce(
+          (v_comparison->>'timesheet_break_mins')::integer,0
+        )=coalesce((v_comparison->>'healthroster_break_mins')::integer,0);
+        v_state:=case
+          when pg_catalog.upper(coalesce(v_comparison->>'match_status',''))='MATCH'
+            and v_reference is not null and v_break_match then 'EXACT_MATCH'
+          when pg_catalog.upper(coalesce(v_comparison->>'match_status',''))='MATCH'
+            then 'REFERENCE_MISSING'
+          when pg_catalog.upper(coalesce(v_comparison->>'match_status',''))='AMBIGUOUS'
+            then 'AMBIGUOUS_SOURCE_ROW'
+          else 'HOURS_MISMATCH' end;
+
+        v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_TIMESHEET_SOURCE_COMPARISON_V1',
+          pg_catalog.jsonb_build_object(
+            'projection_publication_id',v_publication_id,
+            'timesheet_id',v_timesheet.timesheet_id,
+            'timesheet_revision',v_timesheet.version,
+            'work_event_id',v_work_event_id,
+            'comparison',v_comparison
+          )
+        );
+
+        insert into public.weekly_timesheet_source_comparisons(
+          source_cycle_id,upload_id,projection_publication_id,upload_row_id,
+          timesheet_id,timesheet_revision,work_event_id,contract_id,work_date,
+          comparison_state,candidate_start_at_local,candidate_end_at_local,
+          candidate_break_minutes,source_start_at_local,source_end_at_local,
+          source_break_minutes,total_break_minutes_match,source_reference_number,
+          comparison_fingerprint
+        ) values (
+          v_cycle.id,v_upload.id,v_publication_id,v_upload_row.id,
+          v_timesheet.timesheet_id,v_timesheet.version,v_work_event_id,
+          v_resolution.contract_id,(v_comparison->>'work_date')::date,
+          v_state,
+          ((v_comparison->>'work_date')||' '||(v_comparison->>'timesheet_start'))::timestamp,
+          ((v_comparison->>'work_date')||' '||(v_comparison->>'timesheet_end'))::timestamp
+            +case when (v_comparison->>'timesheet_end')::time<=(v_comparison->>'timesheet_start')::time
+                  then interval '1 day' else interval '0' end,
+          coalesce((v_comparison->>'timesheet_break_mins')::integer,0),
+          v_upload_row.start_at_local,v_upload_row.end_at_local,
+          v_upload_row.break_minutes,v_break_match,v_reference,
+          v_fingerprint
+        ) on conflict (projection_publication_id,timesheet_id,timesheet_revision,work_event_id)
+          do nothing;
+        if found then v_written:=v_written+1; end if;
+      end loop;
+    end loop;
+
+    v_dispatched:=true;
+    v_client_results:=v_client_results||pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'client_id',v_client_id,'import_id',v_import_id,
+        'staged_source_rows',v_staged,
+        'unmapped_candidate_rows',v_preview->'unmapped_candidate_rows',
+        'unmatched_timesheet_triples',v_preview->'unmatched_timesheet_triples'
+      )
+    );
+  end loop;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'dispatched',v_dispatched,'publication_id',v_publication_id,
+    'timesheet_authority_rows',v_source_row_total,
+    'comparisons_written',v_written,
+    'comparisons_not_representable',v_unrepresentable,
+    'clients',v_client_results
+  );
+end;
+$function$;

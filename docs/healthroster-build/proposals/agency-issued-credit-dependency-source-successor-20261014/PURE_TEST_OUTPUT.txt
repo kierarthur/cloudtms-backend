@@ -1,0 +1,25 @@
+UNIT_ONLY complete source reversal and actual identity relationship vectors; no native credit or financial operation.
+✔ complete unique successor reverse preserves the original45 credit counterexample (1.0167ms)
+✔ actual T0 clone identity and R0 metadata replace the invalid R0 line search (0.1701ms)
+✔ native exact-clone resume owner supplies existing money and member authority (0.1459ms)
+✔ actual issued frozen Credit Note and current real R0 invoice lock are required (0.0992ms)
+✔ before-issue native pair without original issued Invoice has no invented credit requirement (0.08ms)
+✔ native-shaped T0/R0/CN relationship reproduces original refusal and successor permits exact native proof (0.6904ms)
+✔ foreign/missing native credit relationship issued refuses (0.1514ms)
+✔ foreign/missing native credit relationship document refuses (0.0586ms)
+✔ foreign/missing native credit relationship cnOriginal refuses (0.0652ms)
+✔ foreign/missing native credit relationship headerReversed refuses (0.1044ms)
+✔ foreign/missing native credit relationship headerReversal refuses (0.0549ms)
+✔ foreign/missing native credit relationship lineTS refuses (0.0606ms)
+✔ foreign/missing native credit relationship lineR0 refuses (0.065ms)
+✔ foreign/missing native credit relationship r0Lock refuses (0.0325ms)
+✔ foreign/missing native credit relationship nativeResume refuses (0.0302ms)
+✔ foreign/missing native credit relationship nativeResume refuses (0.0661ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 136.2594

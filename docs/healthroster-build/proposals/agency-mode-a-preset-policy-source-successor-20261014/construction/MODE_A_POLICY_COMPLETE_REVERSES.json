@@ -1,0 +1,161 @@
+{
+  "source_only": true,
+  "native": false,
+  "pin": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "bytes": 275109,
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "commit": null,
+      "bytes": 142656,
+      "sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/issue-support-construction/before/06_public_weekly_source_mode_a_reference_apply_atomic_v1.sql.txt",
+      "commit": null,
+      "bytes": 16072,
+      "sha256": "ffe342df0eefe945f9785fe6b8771a3ab8a9266279c6a11d17c6e167e195869e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/mode-a-policy-construction/19_complete_native_mode_a_dispatch_with_preset_selection.sqlinc",
+      "commit": null,
+      "bytes": 19473,
+      "sha256": "fc2f833effc15f3a54000b66db052e505851e870e0527fee0778589618230f7b"
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "bytes": 66355,
+      "sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef"
+    }
+  ],
+  "reverses": [
+    {
+      "input": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql#public._import_review_ready_action_ids_core_v1(uuid)",
+      "input_sha256": "e65254f1a4c58015fcda37a42f0b1c1cb7ce0eff96c77295cdca6e394045e442",
+      "output": "21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+      "forward_sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd",
+      "hunks": [
+        {
+          "before": "  with selected_units as (",
+          "after": "  with preset_units as materialized (\n    select n.candidate_id,n.client_id\n    from private.weekly_source_agency_mode_a_units_v1(p_import_id) n where n.has_preset\n  ), selected_units as ("
+        },
+        {
+          "before": "    from selected_units u\n    where not exists (",
+          "after": "    from selected_units u\n    -- Preserve the native COMPLETE Candidate/Client unit boundary. A unit with\n    -- a dated preset week is reserved for its sole completeness writer; other\n    -- candidates/clients remain the existing native ready set.\n    where not exists(select 1 from preset_units p\n      where p.candidate_id=u.candidate_id and p.client_id=u.client_id)\n      and not exists ("
+        }
+      ],
+      "complete_reverse": true
+    },
+    {
+      "input": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/71_complete_current_mode_a_with_preset_refusal.sqlinc",
+      "input_sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+      "output": "22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+      "forward_sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9",
+      "hunks": [
+        {
+          "before": "begin\n  -- Mode A/reference apply cannot feed a second validation writer for a preset.\n  perform private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id);\n  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','START'));",
+          "after": "begin\n  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','START'));"
+        },
+        {
+          "before": "  v_review_operation_id:=(v_review_contract->>'operation_id')::uuid;",
+          "after": "  -- This is refusal only: claimed action IDs resolve back to real current\n  -- decisions and the native preview census. No payload grants membership.\n  if exists(select 1 from private.weekly_source_agency_mode_a_units_v1(p_import_id) n\n    join public.import_review_decisions d on d.import_id=p_import_id and d.is_current\n      and d.candidate_id=n.candidate_id and d.client_id=n.client_id\n    where n.has_preset and d.action_id in (select jsonb_array_elements_text(v_review_selected_ids))) then\n    raise exception 'AGENCY_INVOICE_USES_COMPLETENESS_WRITER' using errcode='55000';end if;\n  v_review_operation_id:=(v_review_contract->>'operation_id')::uuid;"
+        },
+        {
+          "before": "  if not exists(select 1 from tmp_review_batch_units) then",
+          "after": "  -- Recheck the actual guard-admitted complete units before ANY legacy\n  -- validation, manager email, mirror or import auto-authorisation owner.\n  if exists(select 1 from private.weekly_source_agency_mode_a_units_v1(p_import_id) n\n    join pg_temp.tmp_review_batch_units u on u.candidate_id=n.candidate_id and u.client_id=n.client_id\n    where n.has_preset) then\n    raise exception 'AGENCY_INVOICE_USES_COMPLETENESS_WRITER' using errcode='55000';end if;\n  if not exists(select 1 from tmp_review_batch_units) then"
+        }
+      ],
+      "complete_reverse": true
+    },
+    {
+      "input": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/issue-support-construction/before/06_public_weekly_source_mode_a_reference_apply_atomic_v1.sql.txt",
+      "input_sha256": "ffe342df0eefe945f9785fe6b8771a3ab8a9266279c6a11d17c6e167e195869e",
+      "output": "23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+      "forward_sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f",
+      "hunks": [
+        {
+          "before": "  v_applied_ids uuid[];",
+          "after": "  v_applied_ids uuid[];\n  v_native_units jsonb;\n  v_preset_refused integer:=0;"
+        },
+        {
+          "before": "    select * into strict v_state from public.import_review_states where import_id=v_import.id;",
+          "after": "    select * into strict v_state from public.import_review_states where import_id=v_import.id;\n    select coalesce(jsonb_agg(to_jsonb(n) order by n.candidate_id,n.client_id),'[]'::jsonb)\n      into v_native_units from private.weekly_source_agency_mode_a_units_v1(v_import.id) n;"
+        },
+        {
+          "before": "      select * into strict v_timesheet from public.timesheets where timesheet_id=v_timesheet_id;",
+          "after": "      select * into strict v_timesheet from public.timesheets where timesheet_id=v_timesheet_id;\n      if exists(select 1 from jsonb_to_recordset(v_native_units) n(candidate_id uuid,client_id uuid,has_preset boolean)\n        join public.contracts c on c.id=v_timesheet.contract_id and c.candidate_id=n.candidate_id and c.client_id=n.client_id\n        where n.has_preset) then\n        perform private.weekly_source_mode_a_refuse_operation_v1(v_cycle.id,v_upload.id,\n          v_publication_id,v_timesheet_id,v_actor,'AGENCY_INVOICE_USES_COMPLETENESS_WRITER');\n        v_preset_refused:=v_preset_refused+1;\n        continue;\n      end if;"
+        },
+        {
+          "before": "    'superseded_heads_refused',v_refused",
+          "after": "    'superseded_heads_refused',v_refused,\n    'preset_units_refused',v_preset_refused"
+        }
+      ],
+      "complete_reverse": true
+    },
+    {
+      "input": "docs/healthroster-build/proposals/install2-agency-current-native-20261014/mode-a-policy-construction/19_complete_native_mode_a_dispatch_with_preset_selection.sqlinc",
+      "input_sha256": "fc2f833effc15f3a54000b66db052e505851e870e0527fee0778589618230f7b",
+      "output": "24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+      "forward_sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10",
+      "hunks": [
+        {
+          "before": "  v_dispatched boolean:=false;",
+          "after": "  v_dispatched boolean:=false;\n  v_reference_apply_required boolean:=false;\n  v_preset_units integer:=0;"
+        },
+        {
+          "before": "      'publication_id',v_publication_id,'clients','[]'::jsonb",
+          "after": "      'publication_id',v_publication_id,'clients','[]'::jsonb,\n      'reference_apply_required',false,'preset_units',0"
+        },
+        {
+          "before": "    v_dispatched:=true;",
+          "after": "    -- Native units are read AFTER the unchanged comparison/bridge writer.\n    -- The caller gets only the owner's continuation choice, never raw units.\n    v_reference_apply_required:=v_reference_apply_required or exists(\n      select 1 from private.weekly_source_agency_mode_a_units_v1(v_import_id) n where not n.has_preset);\n    v_preset_units:=v_preset_units+(select count(*)::integer\n      from private.weekly_source_agency_mode_a_units_v1(v_import_id) n where n.has_preset);\n    v_dispatched:=true;"
+        },
+        {
+          "before": "  return pg_catalog.jsonb_build_object(\n    'ok',true,'dispatched',v_dispatched",
+          "after": "  -- Comparison staging remains Mode A's. Validation is the one typed\n  -- whole-week writer and observes the actual bridge/comparisons now present.\n  perform private.weekly_source_agency_publication_validation_v1(v_publication_id);\n  return pg_catalog.jsonb_build_object(\n    'ok',true,'dispatched',v_dispatched"
+        },
+        {
+          "before": "    'clients',v_client_results",
+          "after": "    'clients',v_client_results,\n    'reference_apply_required',v_reference_apply_required,'preset_units',v_preset_units"
+        }
+      ],
+      "complete_reverse": true
+    },
+    {
+      "input": "broker/src/weekly-source/routes.js",
+      "input_sha256": "8fb9728d252597d60512101ea6908dee7087f4c638d324f0aa9fc9cc9dae13ef",
+      "output": "25_complete_current_routes_with_native_mode_a_continuation.js",
+      "forward_sha256": "17df5abcff20a95c24bf8727b2dc3e34fa18626776df0a251953c18504e03649",
+      "hunks": [
+        {
+          "before": "  if (dispatched.dispatched !== true) return null;\n  const applied = await modeARpc(",
+          "after": "  if (dispatched.dispatched !== true) return null;\n  if (typeof dispatched.reference_apply_required !== 'boolean'\n    || !Number.isSafeInteger(dispatched.preset_units) || dispatched.preset_units < 0) {\n    fail('WEEKLY_SOURCE_MODE_A_CONTINUATION_UNAVAILABLE',\n      'The current checking continuation is unavailable.', 503,\n      { publication_id: publicationId, publication_state: 'CURRENT' });\n  }\n  // Primary26.3: preset units use the actual native completeness writer.\n  // The native owner derives this choice; Office supplies no mode/selector.\n  if (!dispatched.reference_apply_required) return Object.freeze({\n    dispatched: true,\n    timesheet_authority_rows: dispatched.timesheet_authority_rows ?? 0,\n    comparisons_written: dispatched.comparisons_written ?? 0,\n    preset_units: dispatched.preset_units,\n    reference_apply_operations: 0,\n    auto_authorise_requested: 0,\n    superseded_heads_refused: 0,\n    auto_authorise_follow_up: Object.freeze({ required: false, completed: 0 }),\n  });\n  const applied = await modeARpc("
+        },
+        {
+          "before": "    reference_apply_operations: operations.length,",
+          "after": "    reference_apply_operations: operations.length,\n    preset_units: dispatched.preset_units,\n    preset_units_refused: applied.preset_units_refused ?? 0,"
+        }
+      ],
+      "complete_reverse": true
+    }
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_agency_mode_a_units_v1(uuid)"
+  ],
+  "public_signature_changes": [],
+  "caller_selectors": [],
+  "stored_selection_mutations": [],
+  "rejected_source45_outputs": [
+    "11_native_mode_a_preset_reference_admission.sqlinc",
+    "12_complete_native_mode_a_with_preset_reference_only.sqlinc"
+  ],
+  "complete_native_unit_boundary_preserved": true,
+  "mount_ready": false,
+  "independent_review_pending": true
+}

@@ -1,0 +1,93 @@
+create or replace function private.weekly_source_agency_publication_validation_v1(p_publication_id uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare p public.weekly_source_projection_publications%rowtype; c public.weekly_source_cycles%rowtype; r record;
+begin
+ select * into strict p from public.weekly_source_projection_publications where id=p_publication_id;
+ if p.authority_scope_kind<>'CYCLE' or p.correction_session_id is not null or p.state<>'CURRENT' then return;end if;
+ select * into strict c from public.weekly_source_cycles where id=p.source_cycle_id;
+ if c.current_projection_publication_id is distinct from p.id or c.current_complete_upload_id is distinct from p.upload_id then
+  raise exception 'AGENCY_INVOICE_VALIDATION_PUBLICATION_STALE' using errcode='40001';end if;
+ for r in select cw.timesheet_id from public.contract_weeks cw join public.contracts con on con.id=cw.contract_id
+  join public.weekly_source_group_clients m on m.source_group_id=c.source_group_id and m.client_id=con.client_id
+   and cw.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+  where cw.week_ending_date=c.finalisation_week_ending and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment
+   and cw.timesheet_id is not null and (c.scope_client_id is null or c.scope_client_id=con.client_id)
+   and private.weekly_source_agency_invoice_check_only_v1(cw.timesheet_id) is true order by cw.timesheet_id loop
+  perform public.weekly_source_agency_week_validation_refresh_v1(r.timesheet_id,p.id);
+ end loop;
+end;
+$function$;
+alter function private.weekly_source_agency_publication_validation_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_publication_validation_v1(uuid) from public,anon,authenticated,service_role;
+
+-- Ordinary native generic Authorise/pair Authorise update the actual current
+-- financial approval. This AFTER update sees both native TS and TF approvals;
+-- it does not fire on the subsequent E26 INSERT before its observer retention.
+create or replace function private.weekly_source_agency_authorise_validation_after_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare main_id uuid; facts jsonb;
+begin
+ if new.is_current is not true or new.authorised_at_utc is null
+  or new.authorised_at_utc is not distinct from old.authorised_at_utc
+  or private.weekly_source_agency_invoice_check_only_v1(new.timesheet_id) is distinct from true then return new;end if;
+ select cw.timesheet_id into strict main_id from public.timesheets t join public.contract_weeks cw
+  on cw.contract_id=t.contract_id and cw.week_ending_date=t.week_ending_date and coalesce(cw.additional_seq,0)=0 and not cw.is_adjustment
+  where t.timesheet_id=new.timesheet_id;
+ facts:=private.weekly_source_agency_week_facts_v1(main_id);
+ perform public.weekly_source_agency_week_validation_refresh_v1(main_id,(facts->>'publication_id')::uuid);
+ return new;
+end;
+$function$;
+alter function private.weekly_source_agency_authorise_validation_after_v1() owner to postgres;
+revoke all on function private.weekly_source_agency_authorise_validation_after_v1() from public,anon,authenticated,service_role;
+drop trigger if exists weekly_source_agency_authorise_validation_after_v1 on public.timesheets_financials;
+create trigger weekly_source_agency_authorise_validation_after_v1 after update of authorised_at_utc on public.timesheets_financials
+ for each row execute function private.weekly_source_agency_authorise_validation_after_v1();
+
+-- The legacy import admission uses the EXISTING native preview resolver. Its
+-- recipients/raw comparison rows stay private; the HTTP caller gets one bool.
+create or replace function private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id uuid)
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare hi public.hr_imports%rowtype; preview jsonb; first_date date; last_date date; client uuid;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict hi from public.hr_imports where id=p_import_id and pruned_at is null;
+ if hi.import_scope is not null and upper(hi.import_scope::text)<>'HR_WEEKLY' then return true;end if;
+ preview:=public.hr_weekly_validation_preview(p_import_id);
+ if preview->>'import_id' is distinct from p_import_id::text or jsonb_typeof(preview->'rows') is distinct from 'array'
+  or jsonb_array_length(preview->'rows')>5000 then raise exception 'HR_VALIDATION_NATIVE_TARGETS_UNAVAILABLE' using errcode='55000';end if;
+ client:=(preview->>'client_id')::uuid;
+ first_date:=coalesce((preview->>'file_date_min')::date,hi.coverage_start_date);
+ last_date:=coalesce((preview->>'file_date_max')::date,hi.coverage_end_date);
+ if client is null or first_date is null or last_date is null then
+  raise exception 'HR_VALIDATION_NATIVE_TARGETS_UNAVAILABLE' using errcode='55000';end if;
+ if exists(select 1 from public.contract_weeks cw join public.contracts con on con.id=cw.contract_id
+  where con.client_id=client and cw.timesheet_id is not null and cw.week_ending_date>=first_date and cw.week_ending_date-6<=last_date
+   and private.weekly_source_agency_invoice_check_only_v1(cw.timesheet_id) is true) then
+  raise exception 'AGENCY_INVOICE_USES_COMPLETENESS_WRITER' using errcode='55000';end if;
+ return true;
+end;
+$function$;
+alter function private.weekly_source_agency_legacy_import_validation_admit_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_agency_legacy_import_validation_admit_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id uuid,p_actor_user_id uuid)
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if not exists(select 1 from public.tms_users where id=p_actor_user_id and is_active and lower(btrim(role))='admin') then
+  raise exception 'ADMIN_REQUIRED' using errcode='42501';end if;
+ return private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id);
+end;
+$function$;
+alter function public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid) owner to postgres;
+revoke all on function public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.weekly_source_agency_legacy_import_validation_admit_v1(uuid,uuid) to service_role;

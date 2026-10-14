@@ -1,0 +1,43 @@
+{
+  "source_only": true,
+  "native": false,
+  "predecessor_commit": "f44a95b5501d964e17fe6175fa4e1e1654bf622c",
+  "predecessor_manifest": "cac6a8e1545f1ff78df34705c251fa30955284b55c50ccc4acd3bb1f0de4ba1e",
+  "input_sha256": "1cebb076129f067754d8e899ea55b66836e8f24a3b08216bfbc163658c9cb756",
+  "final_sha256": "3e2e17853e94404eb86b89032710baf4086a44330db6569e70938c0081d825f9",
+  "complete_reverse_hunks": 2,
+  "tests": 16,
+  "syntax": [
+    "construction/issued-credit-dependency.test.mjs",
+    "generators/prepare-agency-issued-credit-dependency-successor.mjs"
+  ],
+  "lexical_statements": 3,
+  "dependencies": [
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resume.sqlinc",
+      "packet_path": "reference/13102026_1111_resume.sqlinc",
+      "bytes": 4098,
+      "sha256": "f46bdcc85c717de157738ea0a21591d9cb32695c95ca23efff8117678038b0f8"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "packet_path": "reference/13102026_1143_context.sqlinc",
+      "bytes": 14958,
+      "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9"
+    },
+    {
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "packet_path": "reference/13102026_1143_generation.sqlinc",
+      "bytes": 117898,
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12"
+    }
+  ],
+  "signature_changes": [],
+  "raw_whitespace_pass": false,
+  "compiled_native_proof": null,
+  "mount_ready": false,
+  "independent_review_pending": true
+}

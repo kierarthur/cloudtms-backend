@@ -1,0 +1,19 @@
+{
+  "source_only": true,
+  "native": false,
+  "input": "before/05_public_weekly_source_mode_a_dispatch_atomic_v1.sql.txt",
+  "input_sha256": "5cd589e5b903ad0dd2b09ecad1be083bff49af090042574c7a83c4289791e4ce",
+  "output": "19_complete_native_mode_a_dispatch_with_preset_selection.sqlinc",
+  "forward_sha256": "fc2f833effc15f3a54000b66db052e505851e870e0527fee0778589618230f7b",
+  "hunks": [
+    {
+      "before": "    and exists(\n      select 1 from public.weekly_timesheet_authority_resolutions authority\n      where authority.source_cycle_id=v_cycle.id\n        and authority.contract_id=resolution.contract_id\n        and authority.work_date=source_row.work_date\n    );",
+      "after": "    and (exists(\n      select 1 from public.weekly_timesheet_authority_resolutions authority\n      where authority.source_cycle_id=v_cycle.id\n        and authority.contract_id=resolution.contract_id\n        and authority.work_date=source_row.work_date\n    ) or private.weekly_source_configured_agency_invoice_v1(resolution.client_id,v_group.id,\n      v_group.agency_id,v_group.environment,source_row.work_date));"
+    }
+  ],
+  "complete_reverse": true,
+  "signature_changes": [],
+  "reference_apply_preset_refusal_must_remain": true,
+  "independent_review_pending": true,
+  "mount_ready": false
+}

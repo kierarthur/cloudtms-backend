@@ -1,0 +1,64 @@
+{
+  "source_only": true,
+  "native": false,
+  "predecessor_commit": "f44a95b5501d964e17fe6175fa4e1e1654bf622c",
+  "mount_ready": false,
+  "independent_review_pending": true,
+  "entries": [
+    {
+      "path": "HANDBACK.md",
+      "bytes": 2005,
+      "sha256": "72d113338bd794035394d3f05eb802c1bbe9f6783b4eee656eebe616f613e08d"
+    },
+    {
+      "path": "PURE_TEST_OUTPUT.txt",
+      "bytes": 1594,
+      "sha256": "affb41a260f8ad2e03695e75c4e4e9cadc46665dacb342f73125cf07f6184001"
+    },
+    {
+      "path": "SOURCE_CHECKS.json",
+      "bytes": 1823,
+      "sha256": "97c23c73375f96e2974febd64cbfa8e0aaeb8aa9c260f3bc0913efa5df84afff"
+    },
+    {
+      "path": "before/13_native_agency_issue_requirements.sqlinc",
+      "bytes": 5028,
+      "sha256": "1cebb076129f067754d8e899ea55b66836e8f24a3b08216bfbc163658c9cb756"
+    },
+    {
+      "path": "construction/18_complete_native_agency_issue_requirements_with_actual_scoped_credit.sqlinc",
+      "bytes": 6149,
+      "sha256": "3e2e17853e94404eb86b89032710baf4086a44330db6569e70938c0081d825f9"
+    },
+    {
+      "path": "construction/ISSUED_CREDIT_FULL_REVERSE.json",
+      "bytes": 4663,
+      "sha256": "63dd2aa6b4d8259f71af564a11f6a5e449c3bccb9081835f6d70211084ca22a1"
+    },
+    {
+      "path": "construction/issued-credit-dependency.test.mjs",
+      "bytes": 3595,
+      "sha256": "b37336908acbef74d292bd5533c944f453caab6ee840fdc3dcb1fe16d8e8f0b1"
+    },
+    {
+      "path": "generators/prepare-agency-issued-credit-dependency-successor.mjs",
+      "bytes": 4796,
+      "sha256": "31b77c49ddc0728a69957fcdc051a9342abfbb4c5e64846720efea00333f325f"
+    },
+    {
+      "path": "reference/13102026_1111_resume.sqlinc",
+      "bytes": 4098,
+      "sha256": "f46bdcc85c717de157738ea0a21591d9cb32695c95ca23efff8117678038b0f8"
+    },
+    {
+      "path": "reference/13102026_1143_context.sqlinc",
+      "bytes": 14958,
+      "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9"
+    },
+    {
+      "path": "reference/13102026_1143_generation.sqlinc",
+      "bytes": 117898,
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "source_only": true,
+  "native": false,
+  "tests": 33,
+  "syntax": [
+    "construction/mode-a-policy.test.mjs",
+    "construction/25_complete_current_routes_with_native_mode_a_continuation.js",
+    "generators/prepare-agency-native-dispatch-selection-forward.mjs",
+    "generators/prepare-agency-mode-a-policy-successor.mjs"
+  ],
+  "lexical": [
+    {
+      "path": "construction/19_complete_native_mode_a_dispatch_with_preset_selection.sqlinc",
+      "statements": 1,
+      "sha256": "fc2f833effc15f3a54000b66db052e505851e870e0527fee0778589618230f7b"
+    },
+    {
+      "path": "construction/20_native_mode_a_unit_census.sqlinc",
+      "statements": 3,
+      "sha256": "0523d4f2da7606898b976ffde228e2a489ab8c6927168fe413c667f304f7aade"
+    },
+    {
+      "path": "construction/21_complete_native_ready_units_with_preset_exclusion.sqlinc",
+      "statements": 1,
+      "sha256": "990b6a5d99f2366baab3c83be66e52ba1e2dcaf5eb82c36b8902dce2260d39cd"
+    },
+    {
+      "path": "construction/22_complete_native_mode_a_with_selected_preset_refusal.sqlinc",
+      "statements": 1,
+      "sha256": "0c356e53deda0838420f2ddf58fb0f9a169c30d12827e90da415dccdcb2264e9"
+    },
+    {
+      "path": "construction/23_complete_native_reference_apply_with_preset_row_refusal.sqlinc",
+      "statements": 1,
+      "sha256": "cc37ba5defb97047e75efa7a15054a123efddb60ba510727590df8332ecf334f"
+    },
+    {
+      "path": "construction/24_complete_native_dispatch_with_separate_completeness_continuation.sqlinc",
+      "statements": 1,
+      "sha256": "81ba4a969f7f2b748b6a4fa63d3d4701d2f6afd254c06e58553afcc26454ec10"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "supabase/repeatable/21072026_1820_13_hr_weekly_validation_preview.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/21072026_1820_13_hr_weekly_validation_preview.sql",
+      "bytes": 55461,
+      "sha256": "c7800ba6fb7b000398c66430fe6972edccd61ab34bd6950144201498331afbf3"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "bytes": 136624,
+      "sha256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/21072026_1820_00_import_review_internal_core.sql",
+      "bytes": 275109,
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "bytes": 143100,
+      "sha256": "9559e417369550cfca8ffff0fd078034c1201abf1975f87d6bcc0b0a43909ace"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101268,
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+      "packet_path": "reference/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "bytes": 44246,
+      "sha256": "a393f7af18322ea13c7746bdb9162d8ac784b79d84bfe9d7215ccd8883d75447"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-native-whole-week-validation-runtime-forward-20261014/construction/66_agency_actual_validation_hooks.sqlinc",
+      "commit": "f44a95b5501d964e17fe6175fa4e1e1654bf622c",
+      "packet_path": "reference/66_agency_actual_validation_hooks.sqlinc",
+      "bytes": 6729,
+      "sha256": "c3365ef24ba533289fdea63d77f7f3ae88504091f2430e426725500e35e35130"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/agency-validation-marker-override-source-successor-20261014/construction/73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "commit": "f44a95b5501d964e17fe6175fa4e1e1654bf622c",
+      "packet_path": "reference/73_complete_sole_writer_with_superseded_override_retirement.sqlinc",
+      "bytes": 16065,
+      "sha256": "2d76d3dd3f5f78ea5d08b6b7e8e22342c9c7947d4d22922d20af718448ebfaa0"
+    }
+  ],
+  "complete_reverse_hunks": 17,
+  "actual_current_hr_reverse": true,
+  "predecessor45_immutable": true,
+  "new_private_signatures": [
+    "private.weekly_source_agency_mode_a_units_v1(uuid)"
+  ],
+  "native_seal": null,
+  "compilation": null,
+  "mount_ready": false,
+  "independent_review_pending": true,
+  "raw_whitespace_pass": false
+}

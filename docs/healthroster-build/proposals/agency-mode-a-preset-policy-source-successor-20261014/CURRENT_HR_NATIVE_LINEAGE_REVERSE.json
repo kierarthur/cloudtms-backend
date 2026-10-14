@@ -1,0 +1,13 @@
+{
+  "source_only": true,
+  "native": false,
+  "current_commit": "fa66183f01913e86651e82816f5e88f97e07123c",
+  "current_definition_sha256": "5ccd41513c538e3ccace71183d79308320f655ce8577404bd84f9eac6f60bb61",
+  "current_file_sha256": "9559e417369550cfca8ffff0fd078034c1201abf1975f87d6bcc0b0a43909ace",
+  "prior71_sha256": "7b546c7a95915f16b89b7bd9ec8499f15ad3d77838e45d129e67bca3842778e0",
+  "exact_body_reverse": true,
+  "before": "  -- Mode A/reference apply cannot feed a second validation writer for a preset.\n  perform private.weekly_source_agency_legacy_import_validation_admit_v1(p_import_id);\n",
+  "after": "",
+  "metadata_preserved_separately": true,
+  "native_body_amendments_not_assumed": true
+}
