@@ -1,0 +1,55 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import crypto from 'node:crypto';
+const file='supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc';
+const before=fs.readFileSync(file,'utf8'),newline=before.includes('\r\n')?'\r\n':'\n';let body=before;
+const changes=[];
+function replace(old,next,count=1){
+ const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const pattern=new RegExp(old.replaceAll('\r\n','\n').split('\n').map(escape).join('\\r?\\n'),'g');
+ const matches=[...body.matchAll(pattern)];assert.equal(matches.length,count,old);
+ for(const match of matches.toReversed()){
+  const original=match[0],ending=original.includes('\r\n')?'\r\n':'\n';
+  const replacement=next.replaceAll('\r\n','\n').replaceAll('\n',ending);
+  body=body.slice(0,match.index)+replacement+body.slice(match.index+original.length);
+  changes.push({old:original,next:replacement,count:1});
+ }
+}
+replace("    'sort_direction','status','candidate','issue','cycle_filter'\n  ]::text[];","    'sort_direction','status','candidate','issue','cycle_filter','row_key'\n  ]::text[];");
+replace('  v_unknown text;','  v_unknown text;\n  v_query_row_key text;');
+replace("  if v_actor is null or v_tab not in ('imports','queries','finalise','history')",`  v_query_row_key:=p_request->>'row_key';
+  if p_request ? 'row_key' and (jsonb_typeof(p_request->'row_key') is distinct from 'string'
+    or v_query_row_key='' or length(v_query_row_key)>512 or v_query_row_key~'[[:cntrl:]]'
+    or v_tab<>'queries' or v_group_id is null or v_cycle_id is null or v_client_id is null
+    or nullif(p_request->>'cursor','') is not null or v_report_scope_id is not null
+    or v_publication_id is not null) then
+    raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if v_actor is null or v_tab not in ('imports','queries','finalise','history')`);
+replace("    where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n      where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'\n        or coalesce((child->>'accept_eligible')::boolean,false)));",`    where (v_client_id is null or query.client_id=v_client_id)
+      and (v_query_row_key is null or query.group_key=v_query_row_key)
+      and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
+      where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'
+        or coalesce((child->>'accept_eligible')::boolean,false)));
+    if v_query_row_key is not null and v_query_count<>1 then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';
+    end if;`);
+replace("      where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child\n      where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'\n        or coalesce((child->>'accept_eligible')::boolean,false)))",`      where (v_client_id is null or query.client_id=v_client_id)
+        and (v_query_row_key is null or query.group_key=v_query_row_key)
+        and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
+      where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'
+        or coalesce((child->>'accept_eligible')::boolean,false)))`);
+replace("  v_queries:=v_queries||pg_catalog.jsonb_build_object('bulk_actions',v_bulk_actions);",`  if v_query_row_key is not null then
+    -- The exact scoped target comes from the unchanged native query universe
+    -- before pagination. A closed or out-of-scope target never falls back to
+    -- the first page; ordinary cursors and all row action proofs stay native.
+    if v_publication_id is null then
+      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';
+    end if;
+    -- ALL_FILTERED authority is broader than this deliberate single-row view.
+    -- Keep the row's actual explicit actions; do not advertise bulk authority.
+    v_bulk_actions:='{}'::jsonb;
+  end if;
+  v_queries:=v_queries||pg_catalog.jsonb_build_object('bulk_actions',v_bulk_actions);`);
+let reversed=body;for(const change of changes.toReversed()){assert.equal(reversed.split(change.next).length-1,change.count);reversed=reversed.split(change.next).join(change.old);}assert.equal(reversed,before);
+const digest=v=>crypto.createHash('sha256').update(v).digest('hex');
+fs.writeFileSync(file,body);fs.writeFileSync('.codex-tmp/checklist-query-target-source-patch.json',JSON.stringify({status:'SOURCE_ONLY_NATIVE_SCOPE_TARGET_BEFORE_PAGE',file,before:digest(before),after:digest(body),reversals:changes.length,wholeReversePassed:true,native:false,publicChecklist:false,officeConsumer:false},null,2)+'\n');
+console.log(JSON.stringify({file,before:digest(before),after:digest(body),changes:changes.length,wholeReversePassed:true}));

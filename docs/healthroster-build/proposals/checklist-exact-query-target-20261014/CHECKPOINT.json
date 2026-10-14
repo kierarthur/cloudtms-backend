@@ -1,0 +1,29 @@
+{
+  "status": "SOURCE_WIP_ONLY_NATIVE_AND_OFFICE_TARGET_CONSUMER_UNPROVED",
+  "parent": "33927fff2f7b90b90241d746d9e35aa21c57bd07",
+  "pins": [
+    {
+      "file": ".codex-tmp/patch-checklist-query-target.mjs",
+      "savedAs": "patch-checklist-query-target.mjs.txt",
+      "sha256": "517cc7e26f4397b1a073fe9106e28f8ae3e2a5bbe4823a3d99df12778863e01b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "savedAs": "OFFICE_WORKSPACE_CURRENT_SOURCE.sqlinc.txt",
+      "sha256": "c968bad8bd17e046623d971c99c0e2a662e0230350c7edfaed0d14031835d6f4"
+    }
+  ],
+  "changes": "Optional exact current native query row_key with full actor/group/client/cycle admission before count/page; no fallback after closed scope; target view suppresses global bulk authority while retaining unchanged explicit row actions. Ordinary queries retain existing native selection.",
+  "creatorChecks": {
+    "sourceIntegrity": "399 migrations/1060 repeatables",
+    "existingSourceTests": 62,
+    "existingSourceTestsPassed": 62,
+    "whitespaceExitCode": 0
+  },
+  "independentCritic": "PENDING",
+  "native": false,
+  "publicChecklistImplemented": false,
+  "officeConsumer": false,
+  "canonicalSeal": false,
+  "installed": false
+}

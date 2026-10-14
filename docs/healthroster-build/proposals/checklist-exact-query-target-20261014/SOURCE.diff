@@ -1,0 +1,74 @@
+diff --git a/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc b/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc
+index 3cbb4e14..584fa066 100644
+--- a/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc
++++ b/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc
+@@ -11,9 +11,10 @@ declare
+   v_allowed_keys constant text[]:=array[
+     'actor_user_id','tab','source_group_id','source_cycle_id','client_id',
+     'report_scope_id','projection_publication_id','cursor','limit','sort_key',
+-    'sort_direction','status','candidate','issue','cycle_filter'
++    'sort_direction','status','candidate','issue','cycle_filter','row_key'
+   ]::text[];
+   v_unknown text;
++  v_query_row_key text;
+   v_actor uuid;
+   v_pay_view boolean;
+   v_pay_row jsonb;
+@@ -129,6 +130,14 @@ begin
+   exception when others then
+     raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';
+   end;
++  v_query_row_key:=p_request->>'row_key';
++  if p_request ? 'row_key' and (jsonb_typeof(p_request->'row_key') is distinct from 'string'
++    or v_query_row_key='' or length(v_query_row_key)>512 or v_query_row_key~'[[:cntrl:]]'
++    or v_tab<>'queries' or v_group_id is null or v_cycle_id is null or v_client_id is null
++    or nullif(p_request->>'cursor','') is not null or v_report_scope_id is not null
++    or v_publication_id is not null) then
++    raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';
++  end if;
+   if v_actor is null or v_tab not in ('imports','queries','finalise','history')
+      or v_limit not between 1 and 100 then
+     raise exception 'WEEKLY_SOURCE_WORKSPACE_REQUEST_INVALID' using errcode='22023';
+@@ -295,9 +304,13 @@ begin
+       coalesce(pg_catalog.jsonb_agg(query.group_key order by query.group_key),'[]'::jsonb)
+     into v_query_count,v_ask_eligible_count,v_manager_eligible_count,v_all_group_keys
+     from private.weekly_source_office_query_groups_v1(v_cycle.id,v_publication.id,v_filters) query
+-    where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
++    where (v_query_row_key is null or (query.group_key=v_query_row_key and query.client_id=v_client_id))
++      and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
+       where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'
+         or coalesce((child->>'accept_eligible')::boolean,false)));
++    if v_query_row_key is not null and v_query_count<>1 then
++      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';
++    end if;
+     v_ask_selection_proof:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+       'WEEKLY_SOURCE_BULK_FILTER_SELECTION_V1',pg_catalog.jsonb_build_object(
+         'action','ASK_CANDIDATES','source_cycle_id',v_cycle.id,
+@@ -931,7 +944,8 @@ begin
+         group by generation.id,generation.manual_reminder_available_at_utc
+         limit 1
+       ) submission_reminder on true
+-      where (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
++      where (v_query_row_key is null or (query.group_key=v_query_row_key and query.client_id=v_client_id))
++        and (not v_pay_view or exists(select 1 from jsonb_array_elements(query.children) child
+       where child ? 'manual_review_id' or jsonb_typeof(child->'protected_pay_seed')='object'
+         or coalesce((child->>'accept_eligible')::boolean,false)))
+       order by
+@@ -954,6 +968,17 @@ begin
+     v_queries:=pg_catalog.jsonb_build_object('rows','[]'::jsonb,'total_count',v_query_count,
+       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
+   end if;
++  if v_query_row_key is not null then
++    -- The exact scoped target comes from the unchanged native query universe
++    -- before pagination. A closed or out-of-scope target never falls back to
++    -- the first page; ordinary cursors and all row action proofs stay native.
++    if v_publication_id is null then
++      raise exception 'WEEKLY_SOURCE_CHECKLIST_QUERY_TARGET_STALE' using errcode='40001';
++    end if;
++    -- ALL_FILTERED authority is broader than this deliberate single-row view.
++    -- Keep the row's actual explicit actions; do not advertise bulk authority.
++    v_bulk_actions:='{}'::jsonb;
++  end if;
+   v_queries:=v_queries||pg_catalog.jsonb_build_object('bulk_actions',v_bulk_actions);
+ 
+   if v_publication_id is not null then
