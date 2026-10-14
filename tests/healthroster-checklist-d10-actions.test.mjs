@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {d10OfficePins,d10ReviewEdits,applyD10ReviewEdits,currentOpenReviewOwner,forwardOpenReviewOwner} from '../docs/healthroster-build/proposals/checklist-native-20261014/build-d10-review-packet.mjs';
 const directory=new URL('../docs/healthroster-build/proposals/checklist-native-20261014/',import.meta.url);
 const helper=fs.readFileSync(new URL('office-d10-review-action.jsinc',directory),'utf8');
@@ -55,7 +56,7 @@ test('current complete Office files retain exact native bodies under full revers
     const current=saved.toString('utf8').replaceAll('\r\n','\n'),forward=applyD10ReviewEdits(current,pin.path);
     assert.equal(applyD10ReviewEdits(forward,pin.path,'reverse'),current);new vm.Script(forward);
   }
-  assert.equal(d10ReviewEdits().length,10);
+  assert.equal(d10ReviewEdits().length,11);
   const changes=d10ReviewEdits().map(edit=>edit.after).join('\n');
   assert.ok(changes.includes('skipAutoRecheck: true'));assert.ok(changes.includes('assertCheckOnlyD10ReviewFresh'));
   assert.doesNotMatch(changes,/method: 'PUT'|\/apply\b|\/selections\b|\.dirty\.set|REMIND_CANDIDATE|ASK_CANDIDATES/);
@@ -63,10 +64,14 @@ test('current complete Office files retain exact native bodies under full revers
 });
 
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
-function wholeReview({stage='scope',bound=true,original=false}={}){
+function wholeReview({stage='scope',bound=true,original=false,openReviewSource=null}={}){
   const entered=deferred(),pending=deferred(),calls={header:0,scope:0,page:0,show:0,install:0,poll:0,return:0};
   const oldState={review:null,reviewEpoch:0},parent={_token:'real-parent'},child={_token:'real-review'};
   const root={__modalStack:[parent],setTimeout:callback=>{calls.timer=callback;return 1;},clearTimeout(){}};
+  root.showModal=(_title,_tabs,renderTab,_save,_hasId,_return,options)=>{
+    calls.show++;Object.assign(child,{kind:options.kind,renderTab,_ctxRef:root.modalCtx});root.__modalStack.push(child);
+    calls.render=()=>renderTab('main');calls.rendered=calls.render();
+  };
   const initialHeader=header(frame().action_bindings.map(native));
   const dependencies={state:oldState,global:root,SESSION:{user:{id:actor,role:'admin',is_active:true,roles:['admin']}},
     ACTIVE_VIEWS:['PENDING','READY','EMAIL','NO_ACTION'],PAGE_SIZES:[25,50,75,100],
@@ -75,15 +80,17 @@ function wholeReview({stage='scope',bound=true,original=false}={}){
     fetchScope:async()=>{calls.scope++;if(stage==='scope'){entered.resolve();await pending.promise;}return {native_scope:true};},
     fetchActionPage:async()=>{calls.page++;if(stage==='page'){entered.resolve();await pending.promise;}return {items:[{status:'TIMESHEET_EVIDENCE_PREPARING'}]};},
     request:async()=>{throw Error('No native refresh or extra action page permitted in this fixture');},
-    renderReview:()=>({header:oldState.review?.header,actor:dependencies.SESSION.user.id}),
-    showScreen:(_title,render)=>{calls.show++;calls.render=render;calls.rendered=render();root.__modalStack=[parent,child];},
+    renderReview:()=>{calls.renderReview=(calls.renderReview||0)+1;return '<div>Native review content</div>';},
     installReviewReturn:()=>{calls.install++;},scheduleDocumentPreparationPoll:()=>{calls.poll++;},
-    pageNeedsDocumentPreparationPoll:()=>true,currentImportScreenIsVisible:()=>true,currentImportFrame:()=>child,
+    pageNeedsDocumentPreparationPoll:()=>true,currentImportScreenIsVisible:()=>true,
+    IMPORT_SCREEN_KINDS:new Set(['imports-v1','import-coverage-v1','import-review-v1','import-review-confirm-v1']),document:{getElementById:()=>null},
     notify:()=>{calls.notify=(calls.notify||0)+1;}
   };
-  const ctx=vm.createContext(dependencies);vm.runInContext(helper+'\n'+(original?currentOpenReviewOwner():forwardOpenReviewOwner()),ctx);
+  const ctx=vm.createContext(dependencies);vm.runInContext(helper+'\n'+(openReviewSource||(original?currentOpenReviewOwner():forwardOpenReviewOwner())),ctx);
   const current=fs.readFileSync(d10OfficePins[1].path,'utf8').replaceAll('\r\n','\n');
   const composed=original?current:applyD10ReviewEdits(current,d10OfficePins[1].path);
+  const screens=composed.slice(composed.indexOf('  function currentImportFrame() {'),composed.indexOf('  function cancelDocumentPreparationPoll() {'));
+  vm.runInContext(screens,ctx);
   const install=composed.slice(composed.indexOf('  function installReviewReturn(review) {'),composed.indexOf('  async function leaveReview() {')).trim();
   vm.runInContext(install,ctx);const nativeInstall=ctx.installReviewReturn;
   ctx.installReviewReturn=review=>{calls.install++;nativeInstall(review);};
@@ -103,6 +110,7 @@ test('complete actual bound openReview cancels actor/user/session/permission rep
 test('complete unchanged bound review publishes once; ordinary unbound continuation matches actual predecessor',async()=>{
   const positive=wholeReview(),run=positive.run();await positive.entered.promise;positive.pending.resolve();await run;
   assert.equal(positive.calls.show,1);assert.equal(positive.calls.install,1);assert.equal(positive.calls.poll,1);
+  assert.equal(positive.calls.renderReview,1);assert.equal(positive.calls.rendered,'<div>Native review content</div>');
   assert.equal(positive.state.review.header.state.last_opened_by_user_id,actor);assert.equal(positive.state.review.scope.native_scope,true);
   vm.runInContext(`SESSION.user = {id:'${id(30)}'};`,positive.ctx);assert.equal(positive.calls.render(),'');
   for(const original of [true,false]){
@@ -111,6 +119,54 @@ test('complete unchanged bound review publishes once; ordinary unbound continuat
     assert.equal(ordinary.calls.show,1);assert.equal(ordinary.calls.install,1);assert.equal(ordinary.calls.poll,1);
     assert.equal(ordinary.state.review.header.state.last_opened_by_user_id,actor);
     assert.deepEqual(JSON.parse(JSON.stringify(ordinary.state.review.scope)),{native_scope:true});
+  }
+});
+function actualModalHost(fixture,beforeHost=()=>{}){
+  const mainPath=d10OfficePins[1].path.replace('import-review-v1.js','main.js'),saved=fs.readFileSync(mainPath);
+  assert.equal(crypto.createHash('sha256').update(saved).digest('hex'),'d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847');
+  const main=saved.toString('utf8').replaceAll('\r\n','\n'),start=main.indexOf('function showModal(title, tabs, renderTab, onSave, hasId, onReturn, options) {');
+  const host=main.slice(start,main.indexOf('function applyTimesheetLifecyclePatchToModal(',start));
+  assert.ok(host.includes('stack().push(frame);'));assert.ok(host.includes('byId(\'modalBody\').innerHTML = this.renderTab(k, merged)'));
+  const nodes=new Map();class Element {
+    constructor(){this.style={};this.dataset={};this.classList={toggle(){},add(){},remove(){},contains:()=>false};this.innerHTML='';}
+    setAttribute(){}removeAttribute(){}getAttribute(){return null;}querySelector(){return null;}querySelectorAll(){return [];}addEventListener(){}removeEventListener(){}appendChild(){}
+  }
+  const document={getElementById:id=>{if(id==='irv1Review')return null;if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},
+    createElement:()=>new Element(),querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},removeEventListener(){},body:{children:[]},activeElement:null};
+  Object.assign(fixture.ctx,{window:fixture.root,document,HTMLElement:Element,byId:id=>document.getElementById(id),
+    qs:()=>null,qsa:()=>[],console:{log(){},warn(){},error(){},groupCollapsed(){},groupEnd(){}}});
+  Object.assign(fixture.root,{__LOG_MODAL:false,addEventListener(){},removeEventListener(){}});
+  vm.runInContext(host,fixture.ctx);const native=fixture.ctx.showModal;
+  fixture.root.showModal=(...args)=>{fixture.calls.show++;beforeHost();return native(...args);};
+  return {nodes,host};
+}
+test('complete native showModal/setTab push-before-render reproduces preserved FRAME1 and renders only the exact bound child in successor',async()=>{
+  const predecessor=execFileSync('git',['show','8c1727a77f8840527afe8266ec928abb988df2ab:docs/healthroster-build/proposals/checklist-native-20261014/office-open-review.forward.jsinc'],{encoding:'utf8'});
+  for(const old of [true,false]){
+    const fixture=wholeReview({openReviewSource:old?predecessor:null}),host=actualModalHost(fixture),run=fixture.run();
+    await fixture.entered.promise;fixture.pending.resolve();await run;await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(fixture.calls.renderReview||0,old?0:1);assert.equal(host.nodes.get('modalBody').innerHTML,old?'':'<div>Native review content</div>');
+    const child=fixture.root.__modalStack.at(-1);assert.equal(fixture.state.review.returnOwner.reviewFrame,child);
+    assert.equal(fixture.calls.install,1);
+    if(!old){
+      await fixture.ctx.openReview(importId,{checkOnlyD10Action:frame(),skipAutoRecheck:true,preserveLocal:true});
+      assert.equal(fixture.calls.renderReview,2);assert.equal(fixture.root.__modalStack.at(-1),child);assert.equal(fixture.calls.show,1);
+      fixture.root.__modalStack.push({_token:'foreign',kind:'import-review-v1',renderTab:child.renderTab,_ctxRef:child._ctxRef});
+      assert.equal(child.renderTab('main'),'');assert.equal(fixture.calls.renderReview,2);
+    }
+  }
+  const ordinary=wholeReview({bound:false,original:true}),ordinaryHost=actualModalHost(ordinary),ordinaryRun=ordinary.run();
+  await ordinary.entered.promise;ordinary.pending.resolve();await ordinaryRun;await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(ordinary.calls.renderReview,1);assert.equal(ordinaryHost.nodes.get('modalBody').innerHTML,'<div>Native review content</div>');
+  for(const mutation of ['foreign','session','token']){
+    const fixture=wholeReview();actualModalHost(fixture,()=>{
+      if(mutation==='foreign')fixture.root.__modalStack.push({_token:'foreign',kind:'import-review-v1',renderTab:()=>'<div>Foreign</div>'});
+      if(mutation==='session')vm.runInContext('SESSION = {user:SESSION.user};',fixture.ctx);
+      if(mutation==='token')fixture.parent._token='changed';
+    });
+    const run=fixture.run();await fixture.entered.promise;fixture.pending.resolve();await run;await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(fixture.calls.renderReview||0,0,mutation);assert.equal(fixture.calls.install,0,mutation);assert.equal(fixture.calls.poll,0,mutation);
+    assert.equal(fixture.state.review.returnOwner.reviewFrame,null,mutation);
   }
 });
 test('actual composed poll and return-owner continuations refuse changed session and retain ordinary native modal ownership',async()=>{

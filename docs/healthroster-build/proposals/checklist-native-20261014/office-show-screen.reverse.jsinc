@@ -1,0 +1,13 @@
+  function showScreen(title, render, kind) {
+    global.modalCtx = { entity: kind, data: {}, importsState: state };
+    if (repaintImportFrame(title, render, kind)) return;
+    global.showModal(
+      title,
+      [{ key: 'main', label: title }],
+      (key) => key === 'main' ? render() : '',
+      null,
+      false,
+      null,
+      { kind, noParentGate: true, forceEdit: true, dirtyClosePolicy: 'close', showSave: false, stayOpenOnSave: true }
+    );
+  }

@@ -13,6 +13,23 @@ export function currentOpenReviewOwner(){
   const source=saved.toString('utf8').replaceAll('\r\n','\n'),start=source.indexOf('  async function openReview(importId, options = {}) {'),end=source.indexOf('  function reviewUiState(review) {',start);
   if(start<0||end<=start)throw Error('Complete native openReview boundary absent.');return source.slice(start,end).trimEnd()+'\n';
 }
+export function currentShowScreenOwner(){
+  const source=fs.readFileSync(d10OfficePins[1].path,'utf8').replaceAll('\r\n','\n');
+  return source.slice(source.indexOf('  function showScreen(title, render, kind) {'),source.indexOf('  function cancelDocumentPreparationPoll() {')).trimEnd()+'\n';
+}
+export function forwardShowScreenOwner(){
+  return once(currentShowScreenOwner(),'  function showScreen(title, render, kind) {',`  function showScreen(title, render, kind, beforeOwnedRender) {
+    if (typeof beforeOwnedRender === 'function') {
+      const context = { entity: kind, data: {}, importsState: state };
+      global.modalCtx = context;
+      if (repaintImportFrame(title, () => beforeOwnedRender(currentImportFrame(), null, context) ? render() : '', kind)) return;
+      const nativeRenderTab = key => key === 'main'
+        && beforeOwnedRender(currentImportFrame(), nativeRenderTab, context) ? render() : '';
+      global.showModal(title, [{ key: 'main', label: title }], nativeRenderTab, null, false, null,
+        { kind, noParentGate: true, forceEdit: true, dirtyClosePolicy: 'close', showSave: false, stayOpenOnSave: true });
+      return;
+    }`);
+}
 export function forwardOpenReviewOwner(){
   let source=currentOpenReviewOwner();
   source=once(source,'    const previousReview = state.review;\n',`    const previousReview = state.review;
@@ -67,8 +84,29 @@ export function forwardOpenReviewOwner(){
       state.review.pageData = await fetchActionPage(state.review);
     }
     if (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent()) return;
-    showScreen('Import review', boundAction ? () => epoch === state.reviewEpoch && returnCallerCurrent() && boundSessionCurrent() ? renderReview() : '' : renderReview, 'import-review-v1');
-    if (boundAction && (epoch !== state.reviewEpoch || !boundSessionCurrent())) return;
+    const renderStack = Array.isArray(global.__modalStack) ? global.__modalStack.slice() : [];
+    const repaintFrame = boundAction ? currentImportFrame() : null;
+    const beforeOwnedRender = (frame, nativeRenderTab, context) => {
+      if (epoch !== state.reviewEpoch || !boundSessionCurrent() || state.review !== openingReview
+        || !returnOwner || returnOwner.completed || !returnOwner.caller
+        || returnOwner.caller._token !== returnOwner.callerToken
+        || !frame || frame.kind !== 'import-review-v1' || frame._ctxRef !== context) return false;
+      if (returnOwner.reviewFrame) return frame === returnOwner.reviewFrame && returnCallerCurrent();
+      const stack = Array.isArray(global.__modalStack) ? global.__modalStack : [];
+      const samePrefix = renderStack.every((entry, index) => stack[index] === entry);
+      const exactChild = nativeRenderTab && frame.renderTab === nativeRenderTab
+        && stack.length === renderStack.length + 1 && samePrefix && stack[stack.length - 1] === frame;
+      const exactRepaint = !nativeRenderTab && frame === repaintFrame && frame === returnOwner.caller
+        && stack.length === renderStack.length && samePrefix && stack[stack.length - 1] === frame;
+      if (!exactChild && !exactRepaint) return false;
+      // The native host already pushed this exact renderer-bound child. Pin
+      // it before its first synchronous render; never adopt a foreign top.
+      returnOwner.reviewFrame = frame;
+      return returnCallerCurrent();
+    };
+    showScreen('Import review', boundAction ? () => epoch === state.reviewEpoch && returnCallerCurrent() && boundSessionCurrent() ? renderReview() : '' : renderReview,
+      'import-review-v1', boundAction ? beforeOwnedRender : undefined);
+    if (boundAction && (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent())) return;
     installReviewReturn(state.review);
     if (boundAction && (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent())) return;
     scheduleDocumentPreparationPoll(state.review);`);
@@ -81,6 +119,7 @@ export function d10ReviewEdits(){
     {path:d10OfficePins[0].path,before:"    const label = asText(detail.label);\n    if (label === 'Retry recheck'",after:"    const label = asText(detail.label);\n    if (detail.kind === 'CHECK_ONLY_D10_REVIEW') {\n      const actorId = typeof SESSION !== 'undefined' ? SESSION?.user?.id : null;\n      const action = normaliseCheckOnlyD10ReviewAction(detail.payload, actorId);\n      if (!action || label !== 'View details' || detail.enabled === false || typeof root.CloudTmsImportReviewV1?.openReview !== 'function') {\n        return openDetail({ detail: { problem: 'This HealthRoster query could not be verified. Return to Queries and recheck.' } }, 'View details');\n      }\n      const workspace = workspaceApi();\n      return root.CloudTmsImportReviewV1.openReview(action.action_bindings[0].import_id, {\n        checkOnlyD10Action: action, skipAutoRecheck: true,\n        returnTo: () => (typeof SESSION !== 'undefined' ? SESSION?.user?.id : null) === actorId\n          && workspaceApi() === workspace ? workspace?.refresh?.('queries') : undefined,\n        view: action.action_bindings.every(binding => ['EMAIL_ISSUE','EMAIL_REMINDER'].includes(binding.action_kind)) ? 'EMAIL' : 'PENDING'\n      });\n    }\n    if (label === 'Retry recheck'"},
     {path:d10OfficePins[1].path,before:'  async function openReview(importId, options = {}) {',after:helper+'\n  async function openReview(importId, options = {}) {'},
     {path:d10OfficePins[1].path,before:currentOpenReviewOwner().trimEnd(),after:forwardOpenReviewOwner().trimEnd()},
+    {path:d10OfficePins[1].path,before:currentShowScreenOwner().trimEnd(),after:forwardShowScreenOwner().trimEnd()},
     {path:d10OfficePins[1].path,before:'    cancelDocumentPreparationPoll();\n    if (!review || state.review !== review || !pageNeedsDocumentPreparationPoll(review)) return;',after:'    cancelDocumentPreparationPoll();\n    if (review?.checkOnlyD10SessionCurrent && !review.checkOnlyD10SessionCurrent()) return;\n    if (!review || state.review !== review || !pageNeedsDocumentPreparationPoll(review)) return;'},
     {path:d10OfficePins[1].path,before:"      const current = state.review;\n      if (!current || current !== review || current.importId !== importId || current.epoch !== epoch) return;",after:"      const current = state.review;\n      if (review?.checkOnlyD10SessionCurrent && !review.checkOnlyD10SessionCurrent()) return;\n      if (!current || current !== review || current.importId !== importId || current.epoch !== epoch) return;"},
     {path:d10OfficePins[1].path,before:'        await openReview(importId, { preserveLocal: true, documentPoll: true });',after:'        await openReview(importId, { preserveLocal: true, documentPoll: true,\n          ...(current.checkOnlyD10Action ? { checkOnlyD10Action: current.checkOnlyD10Action, skipAutoRecheck: true } : {}) });\n        if (current.checkOnlyD10SessionCurrent && !current.checkOnlyD10SessionCurrent()) return;'},
@@ -105,5 +144,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
   fs.writeFileSync(path.join(directory,'office-d10-review.reverse.json'),JSON.stringify({pins:d10OfficePins,edits:d10ReviewEdits().reverse().map(edit=>({...edit,before:edit.after,after:edit.before}))},null,2)+'\n');
   fs.writeFileSync(path.join(directory,'office-open-review.forward.jsinc'),forwardOpenReviewOwner());
   fs.writeFileSync(path.join(directory,'office-open-review.reverse.jsinc'),currentOpenReviewOwner());
-  console.log('Ten exact Office D10 navigation hunks, complete openReview forward/reverse generated; Office source unchanged.');
+  fs.writeFileSync(path.join(directory,'office-show-screen.forward.jsinc'),forwardShowScreenOwner());
+  fs.writeFileSync(path.join(directory,'office-show-screen.reverse.jsinc'),currentShowScreenOwner());
+  console.log('Eleven exact Office D10 navigation hunks, complete openReview forward/reverse generated; Office source unchanged.');
 }

@@ -106,8 +106,29 @@
       state.review.pageData = await fetchActionPage(state.review);
     }
     if (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent()) return;
-    showScreen('Import review', boundAction ? () => epoch === state.reviewEpoch && returnCallerCurrent() && boundSessionCurrent() ? renderReview() : '' : renderReview, 'import-review-v1');
-    if (boundAction && (epoch !== state.reviewEpoch || !boundSessionCurrent())) return;
+    const renderStack = Array.isArray(global.__modalStack) ? global.__modalStack.slice() : [];
+    const repaintFrame = boundAction ? currentImportFrame() : null;
+    const beforeOwnedRender = (frame, nativeRenderTab, context) => {
+      if (epoch !== state.reviewEpoch || !boundSessionCurrent() || state.review !== openingReview
+        || !returnOwner || returnOwner.completed || !returnOwner.caller
+        || returnOwner.caller._token !== returnOwner.callerToken
+        || !frame || frame.kind !== 'import-review-v1' || frame._ctxRef !== context) return false;
+      if (returnOwner.reviewFrame) return frame === returnOwner.reviewFrame && returnCallerCurrent();
+      const stack = Array.isArray(global.__modalStack) ? global.__modalStack : [];
+      const samePrefix = renderStack.every((entry, index) => stack[index] === entry);
+      const exactChild = nativeRenderTab && frame.renderTab === nativeRenderTab
+        && stack.length === renderStack.length + 1 && samePrefix && stack[stack.length - 1] === frame;
+      const exactRepaint = !nativeRenderTab && frame === repaintFrame && frame === returnOwner.caller
+        && stack.length === renderStack.length && samePrefix && stack[stack.length - 1] === frame;
+      if (!exactChild && !exactRepaint) return false;
+      // The native host already pushed this exact renderer-bound child. Pin
+      // it before its first synchronous render; never adopt a foreign top.
+      returnOwner.reviewFrame = frame;
+      return returnCallerCurrent();
+    };
+    showScreen('Import review', boundAction ? () => epoch === state.reviewEpoch && returnCallerCurrent() && boundSessionCurrent() ? renderReview() : '' : renderReview,
+      'import-review-v1', boundAction ? beforeOwnedRender : undefined);
+    if (boundAction && (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent())) return;
     installReviewReturn(state.review);
     if (boundAction && (epoch !== state.reviewEpoch || !returnCallerCurrent() || !boundSessionCurrent())) return;
     scheduleDocumentPreparationPoll(state.review);

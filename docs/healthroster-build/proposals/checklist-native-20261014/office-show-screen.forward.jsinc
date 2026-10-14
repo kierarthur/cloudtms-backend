@@ -1,0 +1,23 @@
+  function showScreen(title, render, kind, beforeOwnedRender) {
+    if (typeof beforeOwnedRender === 'function') {
+      const context = { entity: kind, data: {}, importsState: state };
+      global.modalCtx = context;
+      if (repaintImportFrame(title, () => beforeOwnedRender(currentImportFrame(), null, context) ? render() : '', kind)) return;
+      const nativeRenderTab = key => key === 'main'
+        && beforeOwnedRender(currentImportFrame(), nativeRenderTab, context) ? render() : '';
+      global.showModal(title, [{ key: 'main', label: title }], nativeRenderTab, null, false, null,
+        { kind, noParentGate: true, forceEdit: true, dirtyClosePolicy: 'close', showSave: false, stayOpenOnSave: true });
+      return;
+    }
+    global.modalCtx = { entity: kind, data: {}, importsState: state };
+    if (repaintImportFrame(title, render, kind)) return;
+    global.showModal(
+      title,
+      [{ key: 'main', label: title }],
+      (key) => key === 'main' ? render() : '',
+      null,
+      false,
+      null,
+      { kind, noParentGate: true, forceEdit: true, dirtyClosePolicy: 'close', showSave: false, stayOpenOnSave: true }
+    );
+  }
