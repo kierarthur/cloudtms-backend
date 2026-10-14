@@ -1,0 +1,91 @@
+{
+  "status": "SOURCE_ONLY_CHECKS_PASS",
+  "native": false,
+  "independentReviewPending": true,
+  "beforePin": "14dabc880b510e5d7a95154f3c4895f718cb65c4",
+  "pins": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "96bddacd87c6e4720e7453eef51f2cac069f0304022eb31d5d8534339e379aca"
+    },
+    {
+      "file": "scripts/healthroster-install2-source-relationship.mjs",
+      "sha256": "00b393c823d7390f1b5a35ffe078b6ccc0b330fd7a4b55ea39ad1090ff336466"
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be"
+    },
+    {
+      "file": "scripts/healthroster-install2-installed-source.mjs",
+      "sha256": "e4bd2904103c01446bc65e8c7590a86b20964a7ed4e3ecce2fe0970d6c98ecdc"
+    },
+    {
+      "file": "tests/healthroster-install2-native-gate.test.mjs",
+      "sha256": "1ec37f7c1372bcb872e0036fe8e2d42c996daee8d0e8802676fb3ce6dbe5a573"
+    },
+    {
+      "file": "tests/healthroster-install2-installed-source.test.mjs",
+      "sha256": "845ab2d20be95e290f875b57082bc3ce528ec291b33561ade2a25d89129321e3"
+    }
+  ],
+  "checks": [
+    {
+      "args": [
+        "--test",
+        "tests/healthroster-install2-native-gate.test.mjs",
+        "tests/healthroster-install2-installed-source.test.mjs",
+        "tests/healthroster-live-test-restoration.test.mjs"
+      ],
+      "exitCode": 0,
+      "tests": 34,
+      "pass": 34,
+      "fail": 0,
+      "outputSha256": "695d8069721a04a452b19ed868fb8a402793db4c7ba91fddbad14bc415989456"
+    },
+    {
+      "args": [
+        "--test",
+        "--test-name-pattern",
+        "fresh gate|fresh restoration|one supplied retained turn|live observation|restore|publication|owner|missing|source binding|hold",
+        "tests/healthroster-install1-full-rehearsal.test.mjs"
+      ],
+      "exitCode": 0,
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "outputSha256": "d908926741cb58f60e04629fb146e047a9436ee7b5e5b3fba2c494508fccbcf6"
+    },
+    {
+      "args": [
+        "--test",
+        "tests/healthroster-install1-native-coordinator.test.mjs"
+      ],
+      "exitCode": 0,
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "outputSha256": "255f5fa491f8fb32cd076647ed370a8dca695d689729645253aa34ca321aea74"
+    }
+  ],
+  "canonicalInstalledSourceCompatibility": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "migrations": 389,
+    "repeatables": 1019,
+    "sourceObjects": 1423,
+    "contractHash": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+    "gitOnly": true,
+    "independentCanonicalInventoryMatch": true
+  },
+  "retainedHistoricalFailures": [
+    "Initial callback model placed completion timestamp in the future; native gate correctly refused it; corrected model time only.",
+    "First Git reader omitted tracked nested SQL roots; compatibility comparison failed before any native action. Reader now includes every tracked SQL root and matches complete canonical inventory."
+  ],
+  "holds": [
+    "No native predecessor observation or actual full rehearsal is claimed.",
+    "Old 158-verifier review still refuses current 173; final union review is required.",
+    "No runnable Install 2 promotion/release dispatcher is created by this increment.",
+    "Twenty pre-existing untracked source drafts remain; full clean Git assertion is not waived.",
+    "Native Kier1978 tool pickup still absent in this chat. No other account route is used."
+  ]
+}
