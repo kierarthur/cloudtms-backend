@@ -1,0 +1,17 @@
+[
+  {
+    "file": "build-source.mjs",
+    "bytes": 20096,
+    "sha256": "30d184010423f7f07580fcf6b5c307e3900e8512b724dd3da3925eff7f87656f"
+  },
+  {
+    "file": "SOURCE_CHECKS.json",
+    "bytes": 1648,
+    "sha256": "36fdf53f4225d07b34121e9d99470b4371b4e73b7686c86fb64de3bb73d3ca35"
+  },
+  {
+    "file": "SOURCE_TEST_OUTPUT.txt",
+    "bytes": 999,
+    "sha256": "95024f73f085bafef2584a009ad158e27006e2c0105447dff269ec551f78f74d"
+  }
+]

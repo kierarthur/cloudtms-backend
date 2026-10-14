@@ -1,0 +1,48 @@
+-- Closed grammar for actual Source dependencies in the SAME proposed A0 arbiter.
+-- No caller SQL, fake family identity or monetary permission is introduced.
+create or replace function private.timesheet_correction_a0_source_token_assert_v1(p_token jsonb)
+returns void language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $source_token$
+declare kind text:=p_token->>'kind';identity jsonb; i integer; expected jsonb; span daterange;
+begin
+ if kind not in('SOURCE_OBJECT','SOURCE_GROUP_CLIENT','SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS','SOURCE_CONTRACT_COVERAGE') then
+  if p_token ? 'coverage' then raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  return;
+ end if;
+ if kind='SOURCE_CONTRACT_COVERAGE' then
+  if jsonb_typeof(p_token->'coverage') is distinct from 'array' or jsonb_array_length(p_token->'coverage')<>2
+   or exists(select 1 from jsonb_array_elements(p_token->'coverage') x where jsonb_typeof(x) not in('string','null')
+    or(jsonb_typeof(x)='string' and pg_input_is_valid(x#>>'{}','date') is distinct from true)) then
+   raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  span:=daterange((p_token->'coverage'->>0)::date,(p_token->'coverage'->>1)::date,'[]');
+  if isempty(span) then raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  return;
+ end if;
+ if p_token ? 'coverage' or jsonb_typeof(p_token->'json') is distinct from 'string' then
+  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+ if kind='SOURCE_GLOBAL_SETTINGS' then
+  if p_token->>'json' is distinct from 'true' then raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  return;
+ end if;
+ begin identity:=(p_token->>'json')::jsonb;
+ exception when invalid_text_representation then raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end;
+ if jsonb_typeof(identity) is distinct from 'array' or jsonb_array_length(identity)<>2 then
+  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+ if kind='SOURCE_OBJECT' then
+  if jsonb_typeof(identity->0) is distinct from 'string' or identity->>0 not in('public.weekly_source_groups','public.weekly_source_cycles','public.weekly_source_uploads','public.weekly_source_upload_rows','public.weekly_source_projection_publications','public.weekly_source_row_resolutions','public.weekly_source_row_economic_snapshots','public.weekly_source_row_expense_policy_snapshots','public.weekly_expense_authority_generations','public.weekly_source_expense_cell_evidence','public.weekly_source_charge_checks','public.weekly_source_charge_acceptances','public.weekly_source_invoice_hold_releases','public.weekly_source_state_transitions','public.weekly_source_report_scopes','public.weekly_source_self_bill_reports','public.weekly_source_self_bill_report_line_bindings','public.weekly_work_events','public.weekly_source_final_revisions','public.weekly_source_final_snapshot_lines','public.weekly_source_row_timesheet_lineages','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_discrepancy_incidents','public.weekly_issue_comparison_revisions','public.weekly_source_billing_movements','public.weekly_source_group_clients','public.weekly_source_client_policies','public.weekly_source_contract_policies','public.weekly_source_group_rule_assignments','public.weekly_source_rule_set_versions','public.weekly_source_rule_sets','public.weekly_source_format_profiles','public.clients','public.client_settings','public.contracts','public.timesheets','public.timesheets_financials')
+   or jsonb_typeof(identity->1) is distinct from 'string' or pg_input_is_valid(identity->>1,'uuid') is distinct from true then
+   raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  expected:=jsonb_build_array(identity->>0,(identity->>1)::uuid);
+ else
+  for i in 0..1 loop
+   if jsonb_typeof(identity->i) is distinct from 'string' or pg_input_is_valid(identity->>i,'uuid') is distinct from true then
+    raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+  end loop;
+  expected:=jsonb_build_array((identity->>0)::uuid,(identity->>1)::uuid);
+ end if;
+ if p_token->>'json' is distinct from expected::text then
+  raise exception 'CORRECTION_A0_TOKEN_SHAPE_INVALID' using errcode='55000';end if;
+end;
+$source_token$;
+alter function private.timesheet_correction_a0_source_token_assert_v1(jsonb) owner to postgres;
+revoke all on function private.timesheet_correction_a0_source_token_assert_v1(jsonb) from public,anon,authenticated,service_role;

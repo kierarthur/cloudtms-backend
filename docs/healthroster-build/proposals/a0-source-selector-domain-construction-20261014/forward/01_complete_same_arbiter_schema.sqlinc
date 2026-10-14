@@ -1,0 +1,85 @@
+-- SOURCE successor only. One physical arbiter; no business authority store.
+-- No frozen predecessor was rewritten or assumed installed.
+do $native_fence_domains$
+declare r record;v_count integer:=0;
+begin
+  if current_setting('block_size')::integer<>8192 or not exists(
+    select 1 from pg_catalog.pg_extension e join pg_catalog.pg_namespace n on n.oid=e.extnamespace
+      where e.extname='btree_gist' and n.nspname='public') then
+    raise exception 'CORRECTION_A0_NATIVE_EXCLUSION_PROFILE_UNPROVED' using errcode='55000';end if;
+  if not exists(select 1 from pg_catalog.pg_collation c where c.oid='pg_catalog.default'::regcollation
+    and c.collisdeterministic) then
+    raise exception 'CORRECTION_A0_JSONB_DEDUP_EQUALITY_UNPROVED' using errcode='55000';end if;
+  if not exists(select 1 from pg_catalog.pg_opclass c join pg_catalog.pg_namespace n on n.oid=c.opcnamespace
+    join pg_catalog.pg_am a on a.oid=c.opcmethod where n.nspname='public' and c.opcname='gist_bool_ops'
+      and c.opcintype='boolean'::regtype and a.amname='gist') then
+    raise exception 'CORRECTION_A0_SOURCE_COVERAGE_OPCLASS_UNPROVED' using errcode='55000';end if;
+  for r in select a.atttypid,c.collisdeterministic from pg_catalog.pg_attribute a
+    join pg_catalog.pg_class t on t.oid=a.attrelid join pg_catalog.pg_namespace n on n.oid=t.relnamespace
+    join pg_catalog.pg_collation c on c.oid=a.attcollation
+    where n.nspname='public' and a.attnum>0 and not a.attisdropped and (t.relname,a.attname) in(values
+      ('timesheets','booking_id'),('invoice_lines','booking_id'),('timesheets','occupant_key_norm'),('candidates','key_norm'),
+      ('weekly_source_row_timesheet_lineages','family_booking_id'))
+  loop
+    v_count:=v_count+1;
+    if r.atttypid<>'text'::regtype or r.collisdeterministic is distinct from true then
+      raise exception 'CORRECTION_A0_NATIVE_TEXT_EQUALITY_UNPROVED' using errcode='55000';end if;
+  end loop;
+  if v_count<>5 or not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid='public.candidates'::regclass
+    and a.attname='nhsp_hr_name_aliases' and not a.attisdropped and a.atttypid='jsonb'::regtype)
+    or to_regclass('private.timesheet_correction_a0_transaction_fences') is not null then
+    raise exception 'CORRECTION_A0_NATIVE_TOKEN_SCHEMA_UNPROVED' using errcode='55000';end if;
+  if not exists(select 1 from pg_catalog.pg_opclass c join pg_catalog.pg_namespace n on n.oid=c.opcnamespace
+    join pg_catalog.pg_am a on a.oid=c.opcmethod where n.nspname='public' and c.opcname='gist_uuid_ops'
+    and c.opcintype='uuid'::regtype and a.amname='gist') or not exists(
+    select 1 from pg_catalog.pg_opclass c join pg_catalog.pg_namespace n on n.oid=c.opcnamespace
+    join pg_catalog.pg_am a on a.oid=c.opcmethod where n.nspname='public' and c.opcname='gist_text_ops'
+    and c.opcintype='text'::regtype and a.amname='gist') then
+    raise exception 'CORRECTION_A0_NATIVE_EXCLUSION_OPCLASS_UNPROVED' using errcode='55000';end if;
+end;
+$native_fence_domains$;
+create table private.timesheet_correction_a0_transaction_fences(
+  token_kind text collate "C" not null,
+  uuid_identity uuid,
+  text_identity text collate "C",
+  retained boolean not null,
+  intent_span numrange not null,
+  coverage_span daterange,
+  touch_bit boolean not null default false,
+  constraint timesheet_correction_a0_fences_identity_shape check(
+    (coverage_span is null and (
+      (token_kind in('FAMILY_UUID','PHYSICAL_UUID','WORKFLOW_UUID','CONTRACT_WEEK_UUID','SOURCE_CYCLE_UUID')
+        and uuid_identity is not null and text_identity is null)
+      or(token_kind in('BOOKING','KEY_NORM','ALIAS_JSON_STRING','SOURCE_OBJECT','SOURCE_GROUP_CLIENT',
+        'SOURCE_CYCLE_CLIENT','SOURCE_GLOBAL_SETTINGS') and uuid_identity is null
+        and text_identity is not null and octet_length(text_identity)<=1536)))
+    or(token_kind='SOURCE_CONTRACT_COVERAGE' and uuid_identity is not null and text_identity is null
+      and coverage_span is not null and not isempty(coverage_span))),
+  constraint timesheet_correction_a0_fences_span_shape check(
+    not isempty(intent_span) and ((retained and lower_inf(intent_span) and upper_inf(intent_span))
+      or(not retained and not lower_inf(intent_span) and not upper_inf(intent_span)
+        and lower_inc(intent_span) and not upper_inc(intent_span) and lower(intent_span)>=0
+        and trunc(lower(intent_span))=lower(intent_span) and upper(intent_span)=lower(intent_span)+1))),
+  constraint timesheet_correction_a0_fences_uuid_excl exclude using gist(
+    token_kind public.gist_text_ops with =,uuid_identity public.gist_uuid_ops with =,intent_span with &&)
+    where(uuid_identity is not null and coverage_span is null),
+  constraint timesheet_correction_a0_fences_text_excl exclude using gist(
+    token_kind public.gist_text_ops with =,text_identity public.gist_text_ops with =,intent_span with &&)
+    where(text_identity is not null),
+  constraint timesheet_correction_a0_fences_coverage_excl exclude using gist(
+    token_kind public.gist_text_ops with =,uuid_identity public.gist_uuid_ops with =,
+    coverage_span with &&,intent_span with &&,retained public.gist_bool_ops with <>)
+    where(coverage_span is not null)
+);
+-- Retained scopes stay exact. Different overlapping scopes are not merged or
+-- client-wide serialized; an ordinary range conflicts with either real scope.
+create unique index timesheet_correction_a0_fences_coverage_retained_unique
+  on private.timesheet_correction_a0_transaction_fences(token_kind,uuid_identity,coverage_span)
+  where(retained and coverage_span is not null);
+alter table private.timesheet_correction_a0_transaction_fences owner to postgres;
+alter table private.timesheet_correction_a0_transaction_fences enable row level security;
+create policy cloudtms_miget_service_owner_all on private.timesheet_correction_a0_transaction_fences
+  for all to CURRENT_USER,service_role using(true) with check(true);
+revoke all on table private.timesheet_correction_a0_transaction_fences from public,anon,authenticated,service_role;
+-- Ordinary spans use only the actual top-level XID and are immediately deleted.
+-- Correction span is unbounded. No ordinary store, retirement timer or history bump.
