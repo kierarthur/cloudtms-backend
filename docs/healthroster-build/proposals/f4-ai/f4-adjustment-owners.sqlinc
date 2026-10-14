@@ -1,0 +1,192 @@
+-- Proposal only. Root integrates beside the current Money/Report/PP owners.
+-- Existing invoice_lines/meta/audit/document invalidation own all persistence.
+create or replace function private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id uuid,p_binding_ids uuid[] default null)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare inv public.invoices%rowtype; v_ids uuid[]; v_count integer; v_rates integer; v_null_rates integer;
+  v_rate numeric; v_records jsonb; v_payload jsonb; v_group uuid; v_versions uuid[];
+begin
+  select * into inv from public.invoices where id=p_invoice_id;
+  if not found or inv.type::text is distinct from 'INVOICE'
+    or inv.header_snapshot_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+    or inv.header_snapshot_json#>>'{meta,source}' is distinct from 'WEEKLY_FINAL_SOURCE' then
+    return jsonb_build_object('allowed',false); end if;
+  if pg_input_is_valid(inv.header_snapshot_json#>>'{meta,source_group_id}','uuid') is distinct from true then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+  v_group:=(inv.header_snapshot_json#>>'{meta,source_group_id}')::uuid;
+  if p_binding_ids is null then
+    select array_agg(id order by id) into v_ids from public.weekly_source_invoice_line_bindings where invoice_id=inv.id and state='CURRENT';
+  else
+    if cardinality(p_binding_ids)=0 or array_position(p_binding_ids,null::uuid) is not null then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+    select array_agg(distinct id order by id) into v_ids from unnest(p_binding_ids) id;
+  end if;
+  if v_ids is null or cardinality(v_ids)=0 then return jsonb_build_object('allowed',false); end if;
+  -- CURRENT proves new edit admission. A sealed existing adjustment can retain
+  -- its exact SUPERSEDED binding history after an ordinary Source move; it
+  -- never follows the movement to another invoice or chooses a new tax rate.
+  select count(*) into v_count from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    join public.weekly_source_final_revisions revision on revision.id=binding.original_final_revision_id and revision.id=movement.final_revision_id
+    join public.weekly_source_cycles cycle on cycle.id=binding.original_cycle_id and cycle.id=revision.source_cycle_id
+    join public.weekly_source_rule_set_versions rules on rules.id=revision.rule_set_version_id
+    where binding.id=any(v_ids) and binding.invoice_id=inv.id and binding.state in('CURRENT','SUPERSEDED')
+      and binding.client_id=inv.client_id and movement.actual_client_id=inv.client_id and cycle.source_group_id=v_group
+      and rules.values_json->>'invoice_sender'='CLIENT_SELF_BILL'
+      and rules.values_json->>'negative_adjustment_policy'='NEGATIVE_ADJUSTMENT_LINE';
+  if v_count<>cardinality(v_ids) then return jsonb_build_object('allowed',false); end if;
+  select count(distinct movement.vat_rate_pct),count(*) filter(where movement.vat_rate_pct is null),min(movement.vat_rate_pct)
+    into v_rates,v_null_rates,v_rate from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    where binding.id=any(v_ids) and movement.source_line_kind<>'INVOICE_VAT_ROUNDING';
+  if v_rates<>1 or v_null_rates<>0 or v_rate is null or v_rate<0 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_VAT_UNAVAILABLE' using errcode='55000'; end if;
+  select jsonb_agg(jsonb_build_object('binding_id',binding.id,'movement_id',movement.id,
+      'final_revision_id',revision.id,'source_cycle_id',cycle.id,'manifest_hash',encode(binding.manifest_hash,'hex'),
+      'rule_set_version_id',rules.id,'rule_values_sha256',rules.values_sha256,'vat_rate_pct',movement.vat_rate_pct) order by binding.id),
+    array_agg(distinct rules.id order by rules.id) into v_records,v_versions
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    join public.weekly_source_final_revisions revision on revision.id=binding.original_final_revision_id
+    join public.weekly_source_cycles cycle on cycle.id=binding.original_cycle_id
+    join public.weekly_source_rule_set_versions rules on rules.id=revision.rule_set_version_id where binding.id=any(v_ids);
+  v_payload:=jsonb_build_object('schema_version','WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_V1','allowed',true,
+    'invoice_id',inv.id,'client_id',inv.client_id,'source_group_id',v_group,'binding_ids',to_jsonb(v_ids),
+    'rule_set_version_ids',to_jsonb(v_versions),'vat_rate_pct',v_rate,'bound_movements',v_records);
+  return v_payload||jsonb_build_object('authority_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_AUTHORITY_V1',v_payload),'hex'));
+end;
+$function$;
+alter function private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[]) owner to postgres;
+revoke all on function private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[]) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_invoice_adjustment_line_valid_v1(p_invoice_line_id uuid,p_invoice_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare line public.invoice_lines%rowtype; v_authority jsonb; v_actual jsonb; v_ids uuid[]; v_meta jsonb;
+begin
+  select * into line from public.invoice_lines where id=p_invoice_line_id and invoice_id=p_invoice_id;
+  if not found or line.timesheet_id is not null or line.booking_id is not null or line.source_key not like 'ADJ:%'
+    or line.meta_json->>'line_type' is distinct from 'ADJUSTMENT' or line.total_pay_ex_vat is distinct from 0
+    or line.total_charge_ex_vat is null or line.total_charge_ex_vat>=0 or line.margin_ex_vat is distinct from line.total_charge_ex_vat
+    or (line.hours_day,line.hours_night,line.hours_sat,line.hours_sun,line.hours_bh) is distinct from (0::numeric,0::numeric,0::numeric,0::numeric,0::numeric)
+    or (line.pay_day,line.pay_night,line.pay_sat,line.pay_sun,line.pay_bh,line.charge_day,line.charge_night,line.charge_sat,line.charge_sun,line.charge_bh)
+      is distinct from (null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric,null::numeric)
+    or line.vat_amount is null or line.vat_rate_pct is null
+    or line.total_inc_vat is distinct from round(line.total_charge_ex_vat+line.vat_amount,2)
+    or line.meta_json ? 'credited_work_event_id' then return false; end if;
+  v_authority:=line.meta_json->'weekly_source_adjustment_authority';
+  if jsonb_typeof(v_authority) is distinct from 'object' or jsonb_typeof(v_authority->'binding_ids') is distinct from 'array' then return false; end if;
+  select array_agg(value::uuid order by value::uuid) into v_ids from jsonb_array_elements_text(v_authority->'binding_ids') value;
+  v_actual:=private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,v_ids);
+  v_meta:=line.meta_json;
+  if exists(select 1 from jsonb_object_keys(v_meta) k where k not in(
+    'line_type','client_token','description','amount_ex_vat','vat_rate_pct','vat_amount','vat_chargeable',
+    'vat_overridden','weekly_source_adjustment_authority')) then return false; end if;
+  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority
+    and line.vat_rate_pct=(v_actual->>'vat_rate_pct')::numeric
+    and line.source_key='ADJ:'||(v_meta->>'client_token') and line.description=v_meta->>'description'
+    and line.total_charge_ex_vat=(v_meta->>'amount_ex_vat')::numeric and line.vat_amount=(v_meta->>'vat_amount')::numeric
+    and jsonb_typeof(v_meta->'vat_overridden')='boolean'
+    and jsonb_typeof(v_meta->'vat_chargeable')='boolean'
+    and (v_meta->>'vat_chargeable')::boolean=(line.vat_rate_pct<>0)
+    and ((v_meta->>'vat_overridden')::boolean or line.vat_amount=public._inv_round2(line.total_charge_ex_vat*line.vat_rate_pct/100)),false);
+exception when invalid_text_representation or numeric_value_out_of_range or invalid_parameter_value then return false;
+end;
+$function$;
+alter function private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
+-- Used only to exempt this adjustment-only branch from the existing generic
+-- import-correction financial-edit prohibition. The actual writer rechecks
+-- admission and all line facts after the native invoice UPDATE lock.
+create or replace function private.weekly_source_invoice_adjustment_payload_admit_v1(p_invoice_id uuid,p_payload jsonb)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if jsonb_typeof(p_payload) is distinct from 'object' then return false; end if;
+  if exists(select 1 from jsonb_object_keys(p_payload) k where k not in('add_adjustments','remove_invoice_line_ids')) then return false; end if;
+  return coalesce(private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,null)->>'allowed'='true',false);
+end;
+$function$;
+alter function private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_invoice_adjustments_apply_v1(p_invoice_id uuid,p_payload jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare inv public.invoices%rowtype; line public.invoice_lines%rowtype; v_authority jsonb; item jsonb; v_rate numeric;
+  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not exists(select 1 from public.tms_users where id=p_actor_user_id and is_active and lower(btrim(role))='admin') then
+    raise exception 'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED' using errcode='42501'; end if;
+  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);
+  select * into strict inv from public.invoices where id=p_invoice_id for update;
+  v_authority:=private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,null);
+  if v_authority->>'allowed' is distinct from 'true' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENTS_NOT_ALLOWED' using errcode='55000'; end if;
+  if jsonb_typeof(p_payload) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_payload) k
+    where k not in('add_adjustments','remove_invoice_line_ids')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+  if p_payload ? 'remove_invoice_line_ids' then
+    if jsonb_typeof(p_payload->'remove_invoice_line_ids') is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+    for v_id in select value::uuid from jsonb_array_elements_text(p_payload->'remove_invoice_line_ids') value loop
+      select * into strict line from public.invoice_lines where id=v_id and invoice_id=p_invoice_id for update;
+      if private.weekly_source_invoice_adjustment_line_valid_v1(line.id,p_invoice_id) is distinct from true then
+        raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+      delete from public.invoice_lines where id=line.id;
+    end loop;
+  end if;
+  v_rate:=(v_authority->>'vat_rate_pct')::numeric;
+  if p_payload ? 'add_adjustments' then
+    if jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+    for item in select value from jsonb_array_elements(p_payload->'add_adjustments') loop
+      if jsonb_typeof(item) is distinct from 'object' or exists(select 1 from jsonb_object_keys(item) k
+        where k not in('client_token','description','amount_ex_vat','vat_amount','credited_work_event_id')) then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      if item ? 'credited_work_event_id' then
+        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+      v_token:=btrim(item->>'client_token'); v_description:=btrim(item->>'description');
+      if coalesce(v_token,'') !~ '^[A-Za-z0-9:_-]{1,200}$' or length(coalesce(v_description,'')) not between 1 and 1000
+        or coalesce(item->>'amount_ex_vat','') !~ '^-[0-9]+([.][0-9]{1,2})?$'
+        or (item ? 'vat_amount' and coalesce(item->>'vat_amount','') !~ '^[+-]?[0-9]+([.][0-9]{1,2})?$') then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      v_ex:=(item->>'amount_ex_vat')::numeric;
+      v_vat:=case when item ? 'vat_amount' then (item->>'vat_amount')::numeric else public._inv_round2(v_ex*v_rate/100) end;
+      if v_ex>=0 or abs(v_ex)>9999999999.99 or abs(v_vat)>9999999999.99 then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      v_meta:=jsonb_build_object('line_type','ADJUSTMENT','client_token',v_token,'description',v_description,
+        'amount_ex_vat',v_ex,'vat_rate_pct',v_rate,'vat_amount',v_vat,'vat_chargeable',v_rate<>0,
+        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority);
+      select * into line from public.invoice_lines where invoice_id=p_invoice_id and source_key='ADJ:'||v_token;
+      if found then
+        if line.meta_json is distinct from v_meta or private.weekly_source_invoice_adjustment_line_valid_v1(line.id,p_invoice_id) is distinct from true then
+          raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_REPLAY_CONFLICT' using errcode='23505'; end if;
+      else
+        insert into public.invoice_lines(invoice_id,timesheet_id,booking_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+          pay_day,pay_night,pay_sat,pay_sun,pay_bh,charge_day,charge_night,charge_sat,charge_sun,charge_bh,
+          total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json,source_key)
+          values(p_invoice_id,null,null,v_description,0,0,0,0,0,null,null,null,null,null,null,null,null,null,null,
+            0,v_ex,v_ex,v_rate,v_vat,round(v_ex+v_vat,2),v_meta,'ADJ:'||v_token);
+      end if;
+    end loop;
+  end if;
+  perform public.invoice_recompute_totals(p_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(p_invoice_id);
+  perform public._audit_insert('invoices',p_invoice_id::text,'INVOICE_ADJUSTMENTS_APPLIED',null,
+    jsonb_build_object('source','WEEKLY_FINAL_SOURCE','payload',p_payload),'Trust credit',p_actor_user_id);
+  select jsonb_build_object('invoice_id',id,'status',status,'subtotal_ex_vat',subtotal_ex_vat,'vat_amount',vat_amount,'total_inc_vat',total_inc_vat,
+    'document_revision',document_revision,'document_state',document_state,'preview_document_version_id',preview_document_version_id,
+    'active_document_operation_id',active_document_operation_id,'issue_state',issue_state,'active_issue_operation_id',active_issue_operation_id,
+    'reference_updates_applied',0,'timesheet_location_updates_applied',0,'timesheet_source_changed',false,
+    'source_edit_queue_contract',null,'changed_timesheet_ids','[]'::jsonb,'changed_timesheet_revisions','[]'::jsonb,
+    'source_edit_preexisting_preview',false,'invoice_replacement_required',false,'accepted_operations','[]'::jsonb,'document_queue_requested',false)
+    into v_result from public.invoices where id=p_invoice_id;
+  return v_result;
+end;
+$function$;
+alter function private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,2038 @@
+-- Isolated complete source proposal. No installation/runtime acceptance.
+create or replace function public.weekly_source_protected_editor_context_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_client uuid;
+  v_candidate uuid;
+  v_date date;
+  v_group_id uuid;
+  v_groups integer;
+  v_cycle uuid;
+  v_contracts jsonb;
+  v_client_name text;
+  v_candidate_name text;
+  v_events jsonb;
+  v_event jsonb;
+  v_event_id uuid;
+  v_signed jsonb;
+  v_final_source jsonb;
+  v_history jsonb:='[]'::jsonb;
+  v_pending boolean:=false;
+  v_resume jsonb;
+  v_original jsonb;
+  v_original_hash bytea;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','client_id','candidate_id','work_date','source_group_id','work_event_id'],
+    'WEEKLY_PROTECTED_EDITOR_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  v_client:=(p_request->>'client_id')::uuid;
+  v_candidate:=(p_request->>'candidate_id')::uuid;
+  v_date:=(p_request->>'work_date')::date;
+  v_event_id:=nullif(p_request->>'work_event_id','')::uuid;
+  if v_client is null or v_candidate is null or v_date is null then
+    raise exception 'WEEKLY_PROTECTED_EDITOR_SELECTION_REQUIRED' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY');
+  select count(distinct source_group.id),min(source_group.id::text)::uuid
+    into v_groups,v_group_id
+  from public.weekly_source_groups source_group
+  join public.weekly_source_group_clients membership on membership.source_group_id=source_group.id
+  join public.weekly_source_client_policies policy on policy.source_group_id=source_group.id
+    and policy.client_id=membership.client_id
+  where source_group.active and membership.client_id=v_client
+    and v_date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+    and v_date between policy.effective_from and coalesce(policy.effective_to,'infinity'::date)
+    and policy.authority_mode='SOURCE_AUTHORITY'
+    and (nullif(p_request->>'source_group_id','') is null
+      or source_group.id=(p_request->>'source_group_id')::uuid);
+  if v_groups<>1 then
+    raise exception 'WEEKLY_PROTECTED_EDITOR_SOURCE_SCOPE_REQUIRED' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',v_group_id,v_client,v_date);
+  select client.name into strict v_client_name from public.clients client where client.id=v_client;
+  select coalesce(nullif(candidate.display_name,''),
+    nullif(concat_ws(' ',candidate.first_name,candidate.last_name),''),candidate.tms_ref,'Candidate')
+    into strict v_candidate_name from public.candidates candidate where candidate.id=v_candidate;
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id',contract.id,
+      'label',concat_ws(' · ',nullif(contract.role,''),nullif(contract.band,''),nullif(contract.display_site,''),
+        nullif(contract.ward_hint,''),to_char(contract.start_date,'DD Mon YYYY')||' – '||to_char(contract.end_date,'DD Mon YYYY')),
+      'week_ending_date',v_date+((contract.week_ending_weekday_snapshot-extract(dow from v_date)::integer+7)%7)
+    ) order by contract.role,contract.start_date,contract.id),'[]'::jsonb)
+    into v_contracts
+  from public.contracts contract
+  cross join lateral (select private._weekly_source_effective_policy_v1(v_client,contract.id,v_date) value) effective
+  join public.weekly_source_groups source_group on source_group.id=v_group_id
+  where contract.client_id=v_client and contract.candidate_id=v_candidate
+    and v_date between contract.start_date and contract.end_date
+    and contract.week_ending_weekday_snapshot between 0 and 6
+    and effective.value->>'authority_mode'='SOURCE_AUTHORITY'
+    and coalesce((effective.value->>'self_bill_enabled')::boolean,false)
+    and effective.value->>'c1_source_mode' in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY')
+    and (source_group.source_family='NHSP')=(effective.value->>'c1_source_mode'='NHSP_WEEKLY');
+  select cycle.id into v_cycle from public.weekly_source_cycles cycle
+    where cycle.source_group_id=v_group_id
+      and (cycle.scope_client_id is null or cycle.scope_client_id=v_client)
+    order by (cycle.state<>'FINALISED') desc,cycle.finalisation_week_ending desc,cycle.scope_client_id nulls last,cycle.id limit 1;
+  -- Read each distinct work identity, not one arbitrary same-day shift. The
+  -- Office must choose the existing identity before changing its protected pay.
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'work_event_id',event.id,'identity_kind',event.identity_kind,
+    'source_hours',case when source_row.id is not null then
+      to_char(source_row.start_at_local,'HH24:MI')||'–'||to_char(source_row.end_at_local,'HH24:MI')
+        ||' · '||source_row.break_minutes::text||' min break' end,
+    'candidate_hours',case when comparison.candidate_start_at_local is not null then
+      to_char(comparison.candidate_start_at_local,'HH24:MI')||'–'||to_char(comparison.candidate_end_at_local,'HH24:MI')
+        ||' · '||comparison.candidate_break_minutes::text||' min break' end,
+    'candidate_timesheet_id',comparison.candidate_timesheet_id,
+    'booking_reference',source_row.external_source_key,
+    'candidate_sort',(select coalesce(nullif(candidate.last_name,''),candidate.display_name)
+      from public.candidates candidate where candidate.id=v_candidate),
+    'pay_query_open',query_location.source_cycle_id is not null,
+    'query_source_group_id',case when query_location.source_cycle_id is not null then v_group_id end,
+    'query_week_ending',query_cycle.finalisation_week_ending,
+    'final_report_key',case when final_report.manifest_id is not null then 'FINAL:'||final_report.manifest_id::text end,
+    'final_report_week_ending',final_report.week_ending,
+    'finalise_source_cycle_id',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_upload.source_cycle_id end,
+    'finalise_report_scope_id',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_upload.report_scope_id end,
+    'finalise_week_ending',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_cycle.finalisation_week_ending end,
+    'family_id',family.id,'contract_id',coalesce(family.contract_id,resolution.contract_id,comparison.contract_id),
+    'expected_family_bound_version',family.bound_version::text,
+    'protected_state',protected.state,
+    'start',to_char(coalesce(protected.start_at_local,comparison.candidate_start_at_local,source_row.start_at_local),'HH24:MI'),
+    'end',to_char(coalesce(protected.end_at_local,comparison.candidate_end_at_local,source_row.end_at_local),'HH24:MI'),
+    'source_start',to_char(source_row.start_at_local,'HH24:MI'),
+    'source_end',to_char(source_row.end_at_local,'HH24:MI'),
+    'candidate_start',to_char(comparison.candidate_start_at_local,'HH24:MI'),
+    'candidate_end',to_char(comparison.candidate_end_at_local,'HH24:MI'),
+    'protected_start',to_char(protected.start_at_local,'HH24:MI'),
+    'protected_end',to_char(protected.end_at_local,'HH24:MI'),
+    'break_minutes',coalesce(protected.break_minutes,comparison.candidate_break_minutes,source_row.break_minutes)
+  ) order by event.id),'[]'::jsonb) into v_events
+  from public.weekly_work_events event
+  left join lateral (
+    select item.* from public.weekly_work_event_source_links item
+    join public.weekly_source_row_resolutions resolved on resolved.id=item.row_resolution_id
+    join public.weekly_source_upload_rows linked_row on linked_row.id=item.upload_row_id
+    join public.weekly_source_projection_publications publication on publication.upload_id=linked_row.upload_id
+      and coalesce(publication.projection_generation,publication.authority_scope_version::integer)=resolved.generation
+    where item.work_event_id=event.id and publication.state='CURRENT'
+      and (exists(select 1 from public.weekly_source_cycles cycle
+        where cycle.current_projection_publication_id=publication.id)
+        or exists(select 1 from public.weekly_source_report_scopes scope
+          where scope.current_projection_publication_id=publication.id))
+    order by item.created_at_utc desc,item.id desc limit 1
+  ) link on true
+  left join public.weekly_source_upload_rows source_row on source_row.id=link.upload_row_id
+  left join public.weekly_source_uploads source_upload on source_upload.id=source_row.upload_id
+  left join public.weekly_source_cycles source_cycle on source_cycle.id=source_upload.source_cycle_id
+  left join public.weekly_source_format_profiles source_profile on source_profile.id=source_upload.source_format_profile_id
+  left join public.weekly_source_row_resolutions resolution on resolution.id=link.row_resolution_id
+  left join lateral (
+    select coalesce(
+      (select review.source_cycle_id from private.weekly_source_manual_reviews review
+        where review.source_group_id=v_group_id and review.work_event_id=event.id and review.state='OPEN'
+        order by review.opened_at_utc desc,review.id desc limit 1),
+      (select incident.source_cycle_id from public.weekly_discrepancy_incidents incident
+        join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+        where incident_cycle.source_group_id=v_group_id and incident.work_event_id=event.id
+          and incident.state='OPEN'
+        order by incident.created_at_utc desc,incident.id desc limit 1)) source_cycle_id
+  ) query_location on true
+  left join public.weekly_source_cycles query_cycle on query_cycle.id=query_location.source_cycle_id
+  left join lateral (
+    select manifest.id manifest_id,manifest.finalisation_week_ending week_ending
+    from public.weekly_source_client_manifests manifest
+    join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+    where manifest.source_group_id=v_group_id and manifest.client_id=v_client
+      and revision.state='CURRENT'
+      and (exists(select 1 from public.weekly_source_final_snapshot_lines snapshot
+            where snapshot.final_revision_id=revision.id and snapshot.work_event_id=event.id)
+        or exists(select 1 from public.weekly_source_billing_movements movement
+            where movement.final_revision_id=revision.id and movement.work_event_id=event.id))
+    order by revision.finalised_at_utc desc,manifest.id desc limit 1
+  ) final_report on true
+  left join lateral (
+    select revision.* from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions revision on revision.id=incident.current_comparison_revision_id
+    where incident.work_event_id=event.id
+    order by revision.created_at_utc desc,revision.id desc limit 1
+  ) comparison on true
+  left join lateral (
+    select item.* from public.weekly_exceptional_pay_family_events item
+    where item.durable_work_event_id=event.id
+    order by item.occurred_at_utc desc,item.event_sequence desc,item.id desc limit 1
+  ) protected on true
+  left join public.weekly_exceptional_pay_target_families family on family.id=protected.family_id
+  where event.candidate_id=v_candidate and event.client_id=v_client and event.work_date=v_date
+    and event.first_source_group_id=v_group_id;
+  if v_event_id is not null then
+    select item into v_event from jsonb_array_elements(v_events) item where item->>'work_event_id'=v_event_id::text;
+    if v_event is null then
+      raise exception 'WEEKLY_PROTECTED_EDITOR_SHIFT_STALE' using errcode='PT409';
+    end if;
+    select family.current_generation_id is null
+      and family.c1_publication_state in ('PENDING','PUBLISHING') into v_pending
+    from public.weekly_exceptional_pay_target_families family
+    where family.id=(v_event->>'family_id')::uuid;
+    if v_pending then
+      -- Resume only a retained first approval, never a guessed amendment or
+      -- reconstructed financial target. The original actor and exact request
+      -- fingerprint remain the existing preparation owner's authority.
+      select approval.* into v_approval
+      from public.weekly_exceptional_payment_approvals approval
+      join public.weekly_exceptional_pay_family_events recorded
+        on recorded.evidence_approval_id=approval.id
+      where recorded.family_id=(v_event->>'family_id')::uuid
+        and recorded.durable_work_event_id=v_event_id
+        and recorded.event_sequence=1 and approval.withdrawn_at_utc is null;
+      if found then
+        select run.* into v_run from public.weekly_exceptional_orchestration_runs run
+        where run.id=v_approval.creation_orchestration_run_id
+          and run.family_id=(v_event->>'family_id')::uuid
+          and run.request_kind='APPROVE' and run.state='RUNNING'
+          and run.requested_by_user_id=v_actor
+          and v_approval.approved_by_user_id=v_actor
+          and v_approval.candidate_id=v_candidate and v_approval.client_id=v_client
+          and v_approval.protected_work_date=v_date
+          and exists(select 1 from public.weekly_source_cycles original_cycle
+            where original_cycle.id=v_approval.source_cycle_id
+              and original_cycle.source_group_id=v_group_id)
+          and 1=(select count(*) from public.weekly_exceptional_c1_publication_requests publication
+            where publication.orchestration_run_id=run.id and publication.family_id=run.family_id
+              and publication.state='READY');
+        if found then
+          v_original:=jsonb_build_object('actor_user_id',v_actor,
+            'source_cycle_id',v_approval.source_cycle_id,'candidate_id',v_candidate,
+            'client_id',v_client,'contract_id',v_approval.contract_id,
+            'week_ending_date',v_approval.week_ending::text,'work_event_id',v_event_id,
+            'work_date',v_date::text,
+            'start_at_local',to_char(v_approval.protected_start_at_local,'YYYY-MM-DD HH24:MI:SS'),
+            'end_at_local',to_char(v_approval.protected_end_at_local,'YYYY-MM-DD HH24:MI:SS'),
+            'break_minutes',v_approval.protected_break_minutes,
+            'evidence_timesheet_id',v_approval.evidence_timesheet_id,
+            'reason',v_approval.approval_reason,'idempotency_key',v_run.idempotency_key);
+          v_original_hash:=private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_PROTECTED_PREPARE_FAMILY_REQUEST_V1',v_original);
+          if v_original_hash is distinct from v_run.request_fingerprint then
+            -- A source-absent first approval originally requested creation of
+            -- its work identity. Only an exact hash permits this null variant.
+            v_original:=v_original||jsonb_build_object('work_event_id',null);
+            v_original_hash:=private.weekly_source_sha256_jsonb_v1(
+              'WEEKLY_PROTECTED_PREPARE_FAMILY_REQUEST_V1',v_original);
+          end if;
+          if v_original_hash=v_run.request_fingerprint then
+            perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',
+              v_group_id,v_client,(select finalisation_week_ending from public.weekly_source_cycles
+                where id=v_approval.source_cycle_id));
+            v_resume:=(v_original-array['actor_user_id','start_at_local','end_at_local'])
+              ||jsonb_build_object('start',to_char(v_approval.protected_start_at_local,'HH24:MI'),
+                'end',to_char(v_approval.protected_end_at_local,'HH24:MI'));
+          end if;
+        end if;
+      end if;
+    end if;
+    if nullif(v_event->>'family_id','') is not null and v_cycle is not null then
+      v_final_source:=private.weekly_source_protected_final_source_context_v1(
+        (v_event->>'family_id')::uuid,v_cycle,v_event_id);
+    end if;
+    -- Immutable approvals only: never reconstruct an Office action from an
+    -- imported row or a candidate's unsigned schedule.
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'event_id',history.id,'sequence',history.event_sequence,
+      'at',history.occurred_at_utc,
+      'by',coalesce(nullif(actor.display_name,''),'Office user'),
+      'reason',history.office_reason,'state',history.state,
+      'before',history.previous_schedule,
+      'after',jsonb_build_object('start',to_char(history.start_at_local,'HH24:MI'),
+        'end',to_char(history.end_at_local,'HH24:MI'),'break_minutes',history.break_minutes)
+      ) order by history.event_sequence desc),'[]'::jsonb) into v_history
+    from (
+      select entry.*,lag(jsonb_build_object('start',to_char(entry.start_at_local,'HH24:MI'),
+        'end',to_char(entry.end_at_local,'HH24:MI'),'break_minutes',entry.break_minutes))
+        over(order by entry.event_sequence) previous_schedule
+      from public.weekly_exceptional_pay_family_events entry
+      where entry.family_id=(v_event->>'family_id')::uuid
+        and entry.durable_work_event_id=v_event_id
+    ) history
+    left join public.tms_users actor on actor.id=history.office_actor_user_id;
+    if nullif(v_event->>'candidate_timesheet_id','') is not null then
+      begin
+        v_signed:=private.weekly_exceptional_candidate_signed_evidence_v1((v_event->>'candidate_timesheet_id')::uuid);
+      exception when sqlstate '55000' then v_signed:=null; end;
+    end if;
+  end if;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_PROTECTED_EDITOR_V1',
+    'allowed',true,'source_group_id',v_group_id,'source_cycle_id',v_cycle,
+    'source_family',(select source_family from public.weekly_source_groups where id=v_group_id),
+    'client_id',v_client,'candidate_id',v_candidate,'work_date',v_date,
+    'client',v_client_name,'candidate',v_candidate_name,'contracts',v_contracts,
+    'events',v_events,'work_event_id',v_event_id,
+    'family_id',v_event->>'family_id','expected_family_bound_version',v_event->>'expected_family_bound_version',
+    'protected_state',v_event->>'protected_state','shift_contract_id',v_event->>'contract_id',
+    'pending_approval',coalesce(v_pending,false),'resume_request',v_resume,
+    'can_reconcile',coalesce((v_final_source->>'source_observed')::boolean,false),
+    'final_source_proposal',v_final_source->'source_proposal',
+    'history',v_history,
+    'candidate_hours',coalesce(v_event->>'candidate_hours',case when v_event_id is null and jsonb_array_length(v_events)>0 then 'Choose a shift to inspect its submission' else 'No candidate hours recorded for this shift' end),
+    'source_hours',coalesce(v_event->>'source_hours',case when v_event_id is null and jsonb_array_length(v_events)>0 then 'Choose a shift to inspect its source' else 'Not present in the current import' end),
+    'evidence_timesheet_id',v_signed->>'timesheet_id','signed_evidence_available',v_signed is not null,
+    'current_schedule',jsonb_build_object('start',v_event->>'start','end',v_event->>'end','break_minutes',v_event->'break_minutes'),
+    'create_contract_seed',jsonb_build_object('client_id',v_client,'candidate_id',v_candidate));
+end;
+$function$;
+
+create or replace function public.weekly_source_workspace_scopes_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_group uuid;
+  v_client uuid;
+  v_week date;
+  v_limit integer:=100;
+  v_offset integer:=0;
+  v_cursor jsonb;
+  v_rows jsonb;
+  v_version text;
+  v_total integer;
+  v_missing integer;
+  v_pending integer;
+  v_cutoffs jsonb;
+  v_monday date:=(date_trunc('week',statement_timestamp() at time zone 'Europe/London'))::date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','cursor','limit'],
+    'WEEKLY_SOURCE_SCOPE_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  v_group:=nullif(p_request->>'source_group_id','')::uuid;
+  v_client:=nullif(p_request->>'client_id','')::uuid;
+  v_week:=nullif(p_request->>'week_ending','')::date;
+  v_limit:=coalesce((p_request->>'limit')::integer,100);
+  if v_limit not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_SCOPE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS',v_group);
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 then raise exception 'invalid offset'; end if;
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001';
+    end;
+  end if;
+  with candidates as (
+    select distinct on (source_group.id,membership.client_id,cycle.finalisation_week_ending)
+      source_group.id group_id,source_group.display_name source_name,source_group.source_family,
+      membership.client_id,client.name client_name,cycle.id cycle_id,
+      cycle.scope_client_id,
+      cycle.finalisation_week_ending,cycle.cutoff_at_utc,cycle.version cycle_version,
+      cycle.current_complete_upload_id,cycle.current_projection_publication_id
+    from public.weekly_source_groups source_group
+    join public.weekly_source_cycles cycle on cycle.source_group_id=source_group.id
+    join public.weekly_source_group_clients membership on membership.source_group_id=source_group.id
+      and cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+      and (cycle.scope_client_id is null or cycle.scope_client_id=membership.client_id)
+    join public.clients client on client.id=membership.client_id
+    where source_group.active and (v_group is null or source_group.id=v_group)
+      and (v_client is null or membership.client_id=v_client)
+      and (v_week is null or cycle.finalisation_week_ending=v_week)
+      and exists(select 1 from public.weekly_source_client_policies policy
+        where policy.source_group_id=source_group.id and policy.client_id=membership.client_id
+          and policy.authority_mode='SOURCE_AUTHORITY'
+          and cycle.finalisation_week_ending between policy.effective_from and coalesce(policy.effective_to,'infinity'::date))
+    order by source_group.id,membership.client_id,cycle.finalisation_week_ending,
+      (cycle.scope_client_id is not null) desc,cycle.id
+  ), scopes as (
+    select candidate.*,report.id report_scope_id,report.version report_version,
+      case when candidate.source_family='NHSP' then report.current_complete_upload_id
+        when candidate.scope_client_id=candidate.client_id then candidate.current_complete_upload_id end upload_id,
+      case when candidate.source_family='NHSP' then report.current_projection_publication_id
+        when candidate.scope_client_id=candidate.client_id then candidate.current_projection_publication_id end publication_id,
+      coalesce(final_report.id,completion.id) completion_id,
+      case when final_report.id is not null then 'FINAL_SOURCE' else completion.completion_kind end completion_kind,
+      coalesce(final_report.finalised_at_utc,completion.attested_at_utc) completed_at,
+      encode(coalesce(final_report.manifest_hash,completion.completion_hash),'hex') completion_hash,
+      coalesce(report.cutoff_at_utc,candidate.cutoff_at_utc) actual_cutoff
+    from candidates candidate
+    left join public.weekly_source_report_scopes report on report.source_cycle_id=candidate.cycle_id
+      and report.client_id=candidate.client_id and candidate.source_family='NHSP'
+    left join public.weekly_source_client_cycle_completions completion
+      on completion.source_cycle_id=candidate.cycle_id and completion.client_id=candidate.client_id
+      and completion.state='CURRENT' and completion.completion_kind='NO_SHIFTS_TO_IMPORT'
+    -- Completion belongs to this exact client/report. A completed sibling
+    -- report for the same client/week must not hide another pending report.
+    left join lateral (
+      select revision.id,revision.finalised_at_utc,revision.manifest_hash
+      from public.weekly_source_final_revisions revision
+      join public.weekly_source_client_manifests manifest on coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id and manifest.final_revision_id=revision.id
+        and manifest.client_id=candidate.client_id
+      where revision.source_cycle_id=candidate.cycle_id and revision.state='CURRENT'
+        and revision.report_scope_id is not distinct from report.id
+      order by revision.revision_number desc,revision.id limit 1
+    ) final_report on true
+  ), facts as (
+    select scopes.*,private.weekly_source_import_is_prepared_v1(scopes.upload_id) prepared
+    from scopes
+  ), ordered as (
+    select facts.*,bool_or(prepared) over(partition by cycle_id,client_id) client_has_prepared,
+      row_number() over(order by private.weekly_source_query_ascii_fold_v1(client_name) collate "C",
+      client_id,finalisation_week_ending desc,group_id,report_scope_id nulls first) ordinal
+    from facts
+  )
+  select count(*)::integer,
+    count(distinct (cycle_id,client_id)) filter(where completion_id is null and not client_has_prepared
+      and actual_cutoff<(v_monday::timestamp at time zone 'Europe/London'))::integer,
+    count(distinct (cycle_id,client_id)) filter(where completion_id is null and prepared)::integer,
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_WORKSPACE_SCOPES_V1',
+      jsonb_build_object('filter',p_request-'cursor'-'limit','rows',coalesce(jsonb_agg(jsonb_build_array(
+        cycle_id,client_id,cycle_version,report_scope_id,report_version,upload_id,publication_id,completion_hash,prepared)
+        order by ordinal),'[]'::jsonb))),'hex'),
+    coalesce(jsonb_agg(jsonb_build_object(
+      'key',cycle_id::text||':'||client_id::text||':'||coalesce(report_scope_id::text,'CYCLE'),
+      'source_group_id',group_id,'source_cycle_id',cycle_id,'report_scope_id',report_scope_id,
+      'client_id',client_id,'client',client_name,'source',source_name,'source_family',source_family,
+      'week_ending',finalisation_week_ending,'period',to_char(finalisation_week_ending,'FMDD Mon YYYY'),
+      'cutoff',actual_cutoff,'upload_id',upload_id,'projection_publication_id',publication_id,
+      'prepared',prepared,'completed',completion_id is not null,'completion_kind',completion_kind,
+      'completed_at',completed_at,
+      'missing_previous_report',completion_id is null and not client_has_prepared
+        and actual_cutoff<(v_monday::timestamp at time zone 'Europe/London')
+      ) order by ordinal) filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+    into v_total,v_missing,v_pending,v_version,v_rows from ordered;
+  if v_cursor is not null and v_cursor->>'version' is distinct from v_version then
+    raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('source_group_id',source_group.id,
+    'source',source_group.display_name,'cutoff',deadline.value,
+    'passed',statement_timestamp()>=deadline.value) order by source_group.display_name,source_group.id),'[]'::jsonb)
+  into v_cutoffs from public.weekly_source_groups source_group
+  cross join lateral(select ((v_monday+((source_group.cutoff_weekday+6)%7))
+    +source_group.cutoff_local_time) at time zone source_group.timezone value) deadline
+  where source_group.active and (v_group is null or source_group.id=v_group)
+    and exists(select 1 from public.weekly_source_group_clients membership
+      join public.weekly_source_client_policies policy on policy.source_group_id=source_group.id
+        and policy.client_id=membership.client_id and policy.authority_mode='SOURCE_AUTHORITY'
+      where membership.source_group_id=source_group.id and (v_client is null or membership.client_id=v_client)
+        and (statement_timestamp() at time zone source_group.timezone)::date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+        and (statement_timestamp() at time zone source_group.timezone)::date between policy.effective_from and coalesce(policy.effective_to,'infinity'::date));
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_WORKSPACE_SCOPES_V1',
+    'rows',v_rows,'total_count',v_total,'version',v_version,
+    'missing_previous_reports',v_missing,'reports_awaiting_finalisation',v_pending,
+    'this_week_cutoffs',v_cutoffs,'has_more',v_offset+v_limit<v_total,
+    'next_cursor',case when v_offset+v_limit<v_total then
+      encode(convert_to(jsonb_build_object('offset',v_offset+v_limit,'version',v_version)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.weekly_source_combined_review_workspace_v1(p_request jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+declare
+  v_request jsonb; v_scope_page jsonb; v_scopes jsonb:='[]'; v_scope jsonb;
+  v_workspace jsonb; v_owner_request jsonb; v_rows jsonb:='[]'; v_item jsonb;
+  v_manual_children jsonb; v_question_children jsonb; v_child jsonb;
+  v_follow_workspace jsonb; v_follow_up jsonb;
+  v_versions jsonb:='[]'; v_owners jsonb:='[]'; v_summary jsonb;
+  v_tab text:=coalesce(nullif(p_request->>'tab',''),'queries');
+  v_section text:=coalesce(nullif(p_request->>'section',''),'questions');
+  v_sort text:=coalesce(nullif(p_request->>'sort_key',''),case when nullif(p_request->>'client_id','') is null then 'client' else 'candidate' end);
+  v_direction text:=coalesce(nullif(p_request->>'sort_direction',''),'asc');
+  v_seek text:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
+  v_limit integer:=coalesce((p_request->>'limit')::integer,50);
+  v_offset integer:=0; v_base integer:=0; v_total integer; v_page jsonb; v_counts jsonb;
+  v_version text; v_cursor jsonb; v_client uuid; v_seen text[]:='{}'; v_key text; v_owner_key text;
+  v_attention jsonb; v_attention_first boolean:=coalesce((p_request->>'attention_first')::boolean,false);
+  v_attention_kind text:=coalesce(p_request->>'attention_kind','');
+  v_released_scope record;
+  v_pending record; v_pending_checks jsonb:='[]'::jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','tab','section',
+      'sort_key','sort_direction','seek','cursor','limit','report_key','attention_first','attention_kind'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
+  if v_tab='history' then
+    return public.weekly_source_report_history_v1(p_request-'tab'-'section');
+  end if;
+  if p_request ? 'report_key' then
+    raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if v_tab not in ('imports','queries') or v_section not in ('questions','checks','protected','current','archive')
+    or v_sort not in ('client','candidate','day_date','status','file','uploaded')
+    or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100
+    or v_attention_kind not in ('','missing_source','questions','checks','protected')
+    or (p_request ? 'attention_first' and jsonb_typeof(p_request->'attention_first')<>'boolean') then
+    raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
+  end if;
+  v_client:=nullif(p_request->>'client_id','')::uuid;
+  v_request:=p_request-'tab'-'section'-'sort_key'-'sort_direction'-'seek'-'cursor'-'limit'-'attention_first'-'attention_kind';
+  loop
+    v_scope_page:=public.weekly_source_workspace_scopes_v1(v_request);
+    v_summary:=v_scope_page-'rows'-'next_cursor'-'has_more';
+    v_scopes:=v_scopes||(v_scope_page->'rows');
+    exit when not (v_scope_page->>'has_more')::boolean;
+    v_request:=v_request||jsonb_build_object('cursor',v_scope_page->>'next_cursor');
+  end loop;
+
+  -- Checking-only released NHSP files have row-wise client authority. These
+  -- review scopes are not report obligations and must never feed Finalise.
+  -- Keep contract, charge and Hours questions visible for eligible row clients
+  -- even when they are outside the final backing report's source membership.
+  if v_tab='queries' then
+    for v_released_scope in
+      select distinct cycle.id cycle_id,cycle.source_group_id,
+        cycle.finalisation_week_ending,cycle.cutoff_at_utc,
+        source_group.display_name source_name,resolution.client_id,client.name client_name,
+        upload.id upload_id,publication.id publication_id
+      from public.weekly_source_cycles cycle
+      join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+      join public.weekly_source_uploads upload on upload.id=cycle.current_complete_upload_id
+        and upload.source_cycle_id=cycle.id and upload.state='CURRENT' and upload.report_scope_id is null
+      join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+      join public.weekly_source_projection_publications publication on publication.upload_id=upload.id
+        and publication.source_cycle_id=cycle.id and publication.authority_scope_kind='CYCLE'
+        and publication.report_scope_id is null and publication.authority_scope_version=cycle.version
+      left join private.weekly_source_office_rechecks recheck on recheck.publication_id=publication.id
+      left join public.weekly_source_projection_publications prior_publication on prior_publication.id=recheck.prior_publication_id
+      join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+      join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+        and resolution.generation=case when publication.state='CURRENT'
+          then coalesce(publication.projection_generation,publication.authority_scope_version)
+          else coalesce(prior_publication.projection_generation,prior_publication.authority_scope_version) end
+      join public.clients client on client.id=resolution.client_id
+      where source_group.active and source_group.source_family='NHSP'
+        and profile.profile_code='NHSP_PREFINAL_RELEASED_V1'
+        and profile.row_finalisation_capability='CHECKING_ONLY' and not profile.single_client_required
+        and ((publication.state='CURRENT' and cycle.current_projection_publication_id=publication.id)
+          or (publication.state='BUILDING' and recheck.upload_id=upload.id))
+        and (nullif(p_request->>'source_group_id','') is null or cycle.source_group_id=(p_request->>'source_group_id')::uuid)
+        and (v_client is null or resolution.client_id=v_client)
+        and (nullif(p_request->>'week_ending','') is null or cycle.finalisation_week_ending=(p_request->>'week_ending')::date)
+        and private.weekly_source_upload_client_eligible_v1(upload.id,resolution.client_id,source_row.work_date)
+        and not exists(select 1 from jsonb_array_elements(v_scopes) existing
+          where existing->>'source_cycle_id'=cycle.id::text and existing->>'client_id'=resolution.client_id::text)
+      order by cycle.id,resolution.client_id,publication.id
+    loop
+      perform private.weekly_source_office_authority_v1((p_request->>'actor_user_id')::uuid,
+        'VIEW_SOURCE_PROGRESS',v_released_scope.source_group_id);
+      v_scopes:=v_scopes||jsonb_build_array(jsonb_build_object(
+        'key',v_released_scope.cycle_id::text||':'||v_released_scope.client_id::text||':RELEASED_REVIEW',
+        'source_group_id',v_released_scope.source_group_id,'source_cycle_id',v_released_scope.cycle_id,
+        'report_scope_id',null,'client_id',v_released_scope.client_id,'client',v_released_scope.client_name,
+        'source',v_released_scope.source_name,'source_family','NHSP',
+        'week_ending',v_released_scope.finalisation_week_ending,
+        'period',to_char(v_released_scope.finalisation_week_ending,'FMDD Mon YYYY'),
+        'cutoff',v_released_scope.cutoff_at_utc,'upload_id',v_released_scope.upload_id,
+        'projection_publication_id',v_released_scope.publication_id,
+        'review_only',true,'prepared',false,'completed',false,'completion_kind',null,
+        'missing_previous_report',false));
+    end loop;
+  end if;
+
+  -- A cycle publication is shared across its client scopes. If it has no
+  -- cycle publication, each NHSP client's current report scope can instead
+  -- own distinct query work. Visit each such scope exactly once.
+  for v_scope in select distinct on (item->>'source_cycle_id',
+      case when v_tab='queries' and cycle.current_projection_publication_id is null then item->>'client_id' else '' end)
+      item||jsonb_build_object('cycle_publication_id',cycle.current_projection_publication_id)
+    from jsonb_array_elements(v_scopes) item
+    join public.weekly_source_cycles cycle on cycle.id=(item->>'source_cycle_id')::uuid
+    order by item->>'source_cycle_id',
+      case when v_tab='queries' and cycle.current_projection_publication_id is null then item->>'client_id' else '' end,
+      case when item->>'report_scope_id' is null then 1 else 0 end,
+      item->>'cutoff' desc nulls last,item->>'key'
+  loop
+    v_owner_request:=jsonb_build_object('actor_user_id',p_request->>'actor_user_id',
+      'tab',v_tab,'source_group_id',v_scope->>'source_group_id',
+      'source_cycle_id',v_scope->>'source_cycle_id','limit',100);
+    if v_scope->>'source_family'='ROSTER' or
+      (v_tab='queries' and v_scope->>'source_family'='NHSP' and v_scope->>'cycle_publication_id' is null
+        and v_scope->>'report_scope_id' is not null) then
+      v_owner_request:=v_owner_request||jsonb_build_object('client_id',v_scope->>'client_id');
+    end if;
+    if v_tab='queries' and v_scope->>'source_family'='NHSP' and v_scope->>'cycle_publication_id' is null
+      and v_scope->>'report_scope_id' is not null then
+      v_owner_request:=v_owner_request||jsonb_build_object('report_scope_id',v_scope->>'report_scope_id');
+    end if;
+    loop
+      v_workspace:=public.weekly_source_office_workspace_v1(v_owner_request);
+      v_owner_key:=case when v_tab='imports' then v_scope->>'source_cycle_id'
+        else (v_scope->>'source_cycle_id')||':'||
+          coalesce(v_workspace#>>'{selected,projection_publication_id}','none') end;
+      v_versions:=v_versions||jsonb_build_array(jsonb_build_array(v_scope->>'source_cycle_id',v_workspace->>'workspace_version'));
+      if not (v_owner_request ? 'cursor') then
+        v_owners:=v_owners||jsonb_build_array(jsonb_build_object('key',v_owner_key,
+          'source',v_scope->>'source','period',v_scope->>'period','scope',v_workspace->'selected',
+          'bulk_actions',v_workspace#>'{queries,bulk_actions}',
+          'protected_pay_enabled',v_workspace#>'{queries,protected_pay_enabled}'));
+      end if;
+      for v_item in select item from jsonb_array_elements(coalesce(v_workspace#>array[v_tab,'rows'],'[]')) item
+      loop
+        v_key:=v_tab||':'||v_owner_key;
+        v_key:=v_key||':'||(v_item->>'row_key');
+        if v_key=any(v_seen) then continue; end if;
+        v_seen:=array_append(v_seen,v_key);
+        if nullif(v_item->>'client_id','') is not null and not exists(select 1
+          from jsonb_array_elements(v_scopes) permitted where permitted->>'source_cycle_id'=v_scope->>'source_cycle_id'
+            and permitted->>'client_id'=v_item->>'client_id') then continue; end if;
+        if v_client is not null and nullif(v_item->>'client_id','') is not null
+          and (v_item->>'client_id')::uuid<>v_client then continue; end if;
+        if v_tab='imports' then
+          -- Upload errors remain in their immediate review receipt, not an
+          -- ever-growing archive. Retain only accepted current work here.
+          if v_item->>'state' is distinct from 'CURRENT' then continue; end if;
+          if exists(select 1 from public.weekly_source_final_revisions revision
+            join public.weekly_source_client_manifests manifest on coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id and manifest.final_revision_id=revision.id
+            where revision.upload_id=(v_item->>'row_key')::uuid
+              and revision.state in ('CURRENT','SUPERSEDED')
+              and (nullif(v_item->>'client_id','') is null
+                or manifest.client_id=(v_item->>'client_id')::uuid))
+            and not exists(select 1 from jsonb_array_elements(v_scopes) sibling
+              where sibling->>'upload_id'=v_item->>'row_key'
+                and not coalesce((sibling->>'completed')::boolean,false)) then continue; end if;
+        end if;
+        if v_tab='queries' then
+          -- An Office-created pay review is an Office check, not a request for
+          -- candidate/manager hours evidence. Split only those children so a
+          -- mixed group can retain its genuine Hours questions independently.
+          select coalesce(jsonb_agg(child.value order by child.ordinality)
+              filter(where child.value ? 'manual_review_id'),'[]'::jsonb),
+            coalesce(jsonb_agg(child.value order by child.ordinality)
+              filter(where not (child.value ? 'manual_review_id')),'[]'::jsonb)
+            into v_manual_children,v_question_children
+          from jsonb_array_elements(coalesce(v_item->'children','[]'::jsonb))
+            with ordinality child(value,ordinality);
+          for v_child in select value from jsonb_array_elements(v_manual_children)
+          loop
+            v_rows:=v_rows||jsonb_build_array(jsonb_build_object(
+              'combined_key','manual-check:'||(v_child->>'manual_review_id'),
+              'row_key',v_child->>'row_key','section','checks',
+              'scope_key',v_owner_key,
+              'source',v_scope->>'source','source_family',v_scope->>'source_family',
+              'period',v_scope->>'period',
+              'client',v_item->>'client','client_id',v_item->>'client_id',
+              'candidate',v_item->>'candidate','candidate_id',v_item->>'candidate_id',
+              'day_date',v_child->>'day_date','system_hours',v_child->>'system_hours',
+              'status',v_child->'status','manual_query',v_child->'manual_query',
+              'problem','Accept current source hours or protect pay.',
+              'pay_blocking',true,'actions',v_child->'actions'));
+          end loop;
+          if jsonb_array_length(v_question_children)=0 then continue; end if;
+          if jsonb_array_length(v_manual_children)>0 then
+            v_item:=jsonb_set(v_item,'{actions,0,payload,detail,shifts}',v_question_children,false)
+              ||jsonb_build_object('children',v_question_children,
+                'issues',greatest(0,coalesce((v_item->>'issues')::integer,0)
+                  -jsonb_array_length(v_manual_children)));
+          end if;
+        end if;
+        v_rows:=v_rows||jsonb_build_array(v_item||jsonb_build_object(
+          'combined_key',v_key,'scope_key',v_owner_key,'source',v_scope->>'source',
+          'source_family',v_scope->>'source_family',
+          'period',v_scope->>'period','section',case when v_tab='queries' then 'questions' else 'current' end,
+          'client',coalesce(nullif(v_item->>'client',''),(select name from public.clients
+            where id=nullif(v_item->>'client_id','')::uuid),'Source-wide file')));
+      end loop;
+      if v_tab='queries' and not (v_owner_request ? 'cursor') then
+        for v_item in
+          select item||jsonb_build_object('section','checks') from jsonb_array_elements(coalesce(v_workspace#>'{queries,office_checks,rows}','[]')) item
+          union all
+          select item||jsonb_build_object('section','protected') from jsonb_array_elements(coalesce(v_workspace#>'{queries,protected_shifts,rows}','[]')) item
+        loop
+          v_key:=case when v_item->>'section'='protected' then
+            'protected:'||(v_item->>'family_id')||':'||(v_item->>'work_event_id')
+            else (v_item->>'section')||':'||v_owner_key||':'||(v_item->>'row_key') end;
+          if v_key=any(v_seen) then continue; end if;
+          v_seen:=array_append(v_seen,v_key);
+          if nullif(v_item->>'client_id','') is not null and not exists(select 1
+            from jsonb_array_elements(v_scopes) permitted where permitted->>'source_group_id'=v_scope->>'source_group_id'
+              and permitted->>'client_id'=v_item->>'client_id') then continue; end if;
+          if v_client is not null and nullif(v_item->>'client_id','') is not null
+            and (v_item->>'client_id')::uuid<>v_client then continue; end if;
+          v_rows:=v_rows||jsonb_build_array(v_item||jsonb_build_object('combined_key',v_key,
+            'scope_key',v_owner_key,'source',v_scope->>'source','period',
+              case when v_item->>'section'='protected' then 'Awaiting source period' else v_scope->>'period' end));
+        end loop;
+      end if;
+      exit when not coalesce((v_workspace#>>array[v_tab,'has_more'])::boolean,false);
+      v_owner_request:=v_owner_request||jsonb_build_object('cursor',v_workspace#>>array[v_tab,'next_cursor']);
+    end loop;
+  end loop;
+  -- Finalisation does not complete its separately tracked approved-hours work.
+  -- Keep that exact owner/action reachable from outstanding Office checks.
+  if v_tab='queries' then
+    for v_scope in select item from jsonb_array_elements(v_scopes) item
+      where item->>'completion_kind'='FINAL_SOURCE'
+    loop
+      v_follow_workspace:=public.weekly_source_office_workspace_v1(jsonb_build_object(
+        'actor_user_id',p_request->>'actor_user_id','tab','finalise',
+        'source_group_id',v_scope->>'source_group_id','source_cycle_id',v_scope->>'source_cycle_id',
+        'client_id',v_scope->>'client_id','report_scope_id',v_scope->>'report_scope_id'));
+      v_follow_up:=v_follow_workspace#>'{finalise,approved_hours_follow_up}';
+      if nullif(v_follow_up->>'title','') is null then continue; end if;
+      v_key:='approved-hours:'||(v_scope->>'key');
+      v_versions:=v_versions||jsonb_build_array(jsonb_build_array(v_key,v_follow_workspace->>'workspace_version',v_follow_up));
+      v_rows:=v_rows||jsonb_build_array(jsonb_build_object(
+        'combined_key',v_key,'row_key',v_key,'section','checks',
+        'client',v_scope->>'client','client_id',v_scope->>'client_id',
+        'source',v_scope->>'source','period',v_scope->>'period',
+        'candidate','Report follow-up','requires_attention',
+          v_follow_up->>'state' in ('ACTION_REQUIRED','RECOVERY_REQUIRED')
+          or jsonb_typeof(v_follow_up->'action')='object',
+        'status',jsonb_build_object('text',v_follow_up->>'title'),
+        'problem',v_follow_up->>'body','follow_up_scope',v_follow_workspace->'selected','actions','[]'::jsonb));
+    end loop;
+  end if;
+  -- Rechecks invalidate the old authority before the replacement is ready.
+  -- Retain old unresolved rows as explicitly non-actionable history, with only
+  -- the exact saved recheck available. Never treat a missing CURRENT pointer
+  -- as proof that Office has no work remaining.
+  if v_tab='queries' then
+    for v_pending in
+      select recheck.request_id,recheck.actor_user_id,recheck.request_json,
+        recheck.upload_id,recheck.publication_id,source_row.id as upload_row_id,
+        source_row.work_date,source_row.source_client_identity,source_row.source_candidate_identity,
+        source_row.external_source_key,source_row.start_at_local,source_row.end_at_local,source_row.break_minutes,
+        coalesce(candidate.display_name,source_row.bounded_raw_columns_json->>'worker_name',
+          source_row.bounded_raw_columns_json->>'candidate',source_row.source_candidate_identity) as candidate_name,
+        resolution.mapping_state,charge.phase_severity,cycle.source_group_id,cycle.finalisation_week_ending,
+        (select item->>'source' from jsonb_array_elements(v_scopes) item
+          where item->>'source_cycle_id'=cycle.id::text limit 1) as source_name
+      from private.weekly_source_office_rechecks recheck
+      join public.weekly_source_projection_publications publication on publication.id=recheck.publication_id
+      join public.weekly_source_projection_publications prior_publication on prior_publication.id=recheck.prior_publication_id
+      join public.weekly_source_uploads upload on upload.id=recheck.upload_id
+      join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+      left join public.weekly_source_report_scopes scope on scope.id=upload.report_scope_id
+      join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+      join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+        and resolution.generation=coalesce(prior_publication.projection_generation,prior_publication.authority_scope_version)
+      left join public.weekly_source_charge_checks charge on charge.upload_row_id=source_row.id
+        and charge.generation=resolution.generation
+      left join public.candidates candidate on candidate.id=coalesce(
+        (select choice.candidate_id from private.weekly_source_office_row_choices choice
+          where choice.upload_row_id=source_row.id order by choice.id desc limit 1),resolution.candidate_id)
+      where publication.state='BUILDING' and upload.state='CURRENT'
+        and publication.authority_scope_version=case when upload.report_scope_id is null then cycle.version else scope.version end
+        and upload.id=case when upload.report_scope_id is null then cycle.current_complete_upload_id else scope.current_complete_upload_id end
+        and exists(select 1 from jsonb_array_elements(v_scopes) item where item->>'source_cycle_id'=cycle.id::text)
+        and (v_client is null or resolution.client_id=v_client or scope.client_id=v_client)
+      order by recheck.request_id,source_row.source_row_ordinal
+    loop
+      v_key:='recheck:'||v_pending.request_id::text||':'||v_pending.upload_row_id::text;
+      v_pending_checks:=v_pending_checks||jsonb_build_array(jsonb_build_object(
+        'combined_key',v_key,'row_key',v_key,'section','checks','recheck_pending',true,
+        'client',v_pending.source_client_identity,'candidate',v_pending.candidate_name,
+        'source_reference',v_pending.source_candidate_identity,'booking_reference',v_pending.external_source_key,
+        'source',v_pending.source_name,'period',to_char(v_pending.finalisation_week_ending,'FMDD Mon YYYY'),
+        'work_date',v_pending.work_date,'day_date',to_char(v_pending.work_date,'FMDD Mon YYYY'),
+        'system_hours',to_char(v_pending.start_at_local,'HH24:MI')||'–'||to_char(v_pending.end_at_local,'HH24:MI')
+          ||' · '||v_pending.break_minutes::text||' min break',
+        'pay_blocking',v_pending.mapping_state<>'RESOLVED',
+        'status',jsonb_build_object('text','Recheck incomplete'),
+        'problem',case when v_pending.mapping_state<>'RESOLVED' then 'Previous linking check — selection saved; replacement check incomplete.'
+          when v_pending.phase_severity in ('PROVISIONAL_WARNING','FINALISATION_BLOCKER') then 'Previous contract charge warning — replacement check incomplete.'
+          else 'Previous check — replacement check incomplete.' end,
+        'actions',jsonb_build_array(jsonb_build_object('label','Retry recheck',
+          'enabled',v_pending.actor_user_id=(p_request->>'actor_user_id')::uuid,
+          'command','RECHECK_SOURCE','payload',v_pending.request_json-'actor_user_id'))));
+    end loop;
+    v_rows:=v_rows||v_pending_checks;
+    v_summary:=v_summary||jsonb_build_object('recheck_pending_count',jsonb_array_length(v_pending_checks));
+  end if;
+  -- Classify the complete permitted collection before counting or paging.
+  -- A waiting signature alone is informational; red unresolved work and green
+  -- charge/reconciliation decisions remain visible and count as Office work.
+  select coalesce(jsonb_agg(item||jsonb_build_object(
+    'attention_missing_source_count',case when item->>'section'='questions' then
+      (select count(*) from jsonb_array_elements(coalesce(item->'children','[]')) child
+        where child->'candidate_shift_absent_from_import'='true'::jsonb) else 0 end,
+    'attention_question_count',case when item->>'section'='questions' then
+      (select count(*) from jsonb_array_elements(coalesce(item->'children','[]')) child
+        where child->>'issue' is distinct from 'Timesheet missing'
+          and child->'candidate_shift_absent_from_import' is distinct from 'true'::jsonb) else 0 end,
+    'requires_attention',case
+    when item->>'section'='questions' then exists(select 1
+      from jsonb_array_elements(coalesce(item->'children','[]')) child
+      where child->>'issue' is distinct from 'Timesheet missing')
+    when item->>'section'='checks' then case when item ? 'follow_up_scope'
+      then coalesce((item->>'requires_attention')::boolean,false) else true end
+    when item->>'section'='protected' then coalesce((item->>'requires_attention')::boolean,false)
+    else false end)),'[]') into v_rows from jsonb_array_elements(v_rows) item;
+  select jsonb_build_object('missing_source',coalesce(sum((item->>'attention_missing_source_count')::integer),0),
+    'questions',coalesce(sum((item->>'attention_question_count')::integer),0),
+    'checks',count(*) filter(where item->>'section'='checks'),
+    'protected',count(*) filter(where item->>'section'='protected'),
+    'total',coalesce(sum((item->>'attention_missing_source_count')::integer
+      +(item->>'attention_question_count')::integer),0)
+      +count(*) filter(where item->>'section' in ('checks','protected')),'complete',true) into v_attention
+  from jsonb_array_elements(v_rows) item where item->'requires_attention'='true'::jsonb;
+  select jsonb_build_object('questions',count(*) filter(where item->>'section'='questions'),
+    'checks',count(*) filter(where item->>'section'='checks'),'protected',count(*) filter(where item->>'section'='protected'),
+    'current',count(*) filter(where item->>'section'='current'),'archive',count(*) filter(where item->>'section'='archive'))
+    into v_counts from jsonb_array_elements(v_rows) item;
+  v_version:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_COMBINED_REVIEW_V1',
+    jsonb_build_object('scopes',v_summary->>'version','owners',v_versions,'attention_rows',v_rows,
+      'filters',p_request-'cursor'-'limit')),'hex');
+  -- Attention is an exact view filter, not a tab-total alias. The full census
+  -- above stays intact; only this page collection is narrowed. Never rewrite
+  -- server-owned action selections or comparison/financial proof payloads.
+  if v_attention_kind<>'' then
+    select coalesce(jsonb_agg(item),'[]') into v_rows from jsonb_array_elements(v_rows) item
+    where item->'requires_attention'='true'::jsonb and case v_attention_kind
+      when 'missing_source' then item->>'section'='questions' and (item->>'attention_missing_source_count')::integer>0
+      when 'questions' then item->>'section'='questions' and (item->>'attention_question_count')::integer>0
+      when 'checks' then item->>'section'='checks'
+      when 'protected' then item->>'section'='protected'
+      else false end;
+    if v_attention_kind in ('missing_source','questions') then
+      for v_item in select item from jsonb_array_elements(v_rows) item
+      loop
+        select coalesce(jsonb_agg(child.value order by child.ordinality),'[]') into v_question_children
+          from jsonb_array_elements(v_item->'children') with ordinality child(value,ordinality)
+          where child.value->>'issue' is distinct from 'Timesheet missing' and case v_attention_kind
+            when 'missing_source' then child.value->'candidate_shift_absent_from_import'='true'::jsonb
+            else child.value->'candidate_shift_absent_from_import' is distinct from 'true'::jsonb end;
+        v_item:=v_item||jsonb_build_object('children',v_question_children,'issues',jsonb_array_length(v_question_children),
+          'actions',(select coalesce(jsonb_agg(case when action->>'label'='Open'
+            then jsonb_set(action,'{payload,detail,shifts}',v_question_children,false) else action end),'[]')
+            from jsonb_array_elements(coalesce(v_item->'actions','[]')) action));
+        select coalesce(jsonb_agg(case when item->>'combined_key'=v_item->>'combined_key' then v_item else item end),'[]')
+          into v_rows from jsonb_array_elements(v_rows) item;
+      end loop;
+    end if;
+  end if;
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 or v_cursor->>'version' is distinct from v_version then raise exception 'stale'; end if;
+    exception when others then raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001'; end;
+  end if;
+  with keyed as (
+    select item,private.weekly_source_query_ascii_fold_v1(coalesce(case v_sort
+      when 'candidate' then coalesce(item->>'candidate_sort',item->>'candidate') when 'client' then item->>'client'
+      when 'day_date' then item->>'work_date' when 'file' then item->>'file' when 'uploaded' then item->>'uploaded_at'
+      when 'status' then item#>>'{status,text}' end,'')) sort_value
+    from jsonb_array_elements(v_rows) item where item->>'section'=v_section
+  ), ordered as (
+    select *,row_number() over(order by case when v_attention_first and v_seek='' then
+      case v_attention_kind when 'missing_source' then ((item->>'attention_missing_source_count')::integer>0)::integer
+        when 'questions' then ((item->>'attention_question_count')::integer>0)::integer
+        else 0 end else 0 end desc,
+      case when v_attention_first and v_seek=''
+      then coalesce((item->>'requires_attention')::boolean,false)::integer else 0 end desc,
+      case when v_direction='asc' then sort_value end collate "C" asc,
+      case when v_direction='desc' then sort_value end collate "C" desc,
+      private.weekly_source_query_ascii_fold_v1(item->>'client') collate "C",
+      private.weekly_source_query_ascii_fold_v1(coalesce(item->>'candidate_sort',item->>'candidate')) collate "C",
+      item->>'work_date',item->>'combined_key') ordinal from keyed
+  ), origin as (select coalesce(min(ordinal) filter(where v_seek<>'' and starts_with(sort_value,v_seek)),1)-1 base from ordered)
+  select count(*)::integer,coalesce(max(origin.base),0)::integer,coalesce(jsonb_agg(item order by ordinal)
+    filter(where ordinal>origin.base+v_offset and ordinal<=origin.base+v_offset+v_limit),'[]')
+    into v_total,v_base,v_page from ordered cross join origin;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMBINED_REVIEW_V1','tab',v_tab,'section',v_section,
+    'version',v_version,'rows',v_page,'total_count',v_total,'owners',v_owners,'scope_options',v_scopes,
+    'summary',v_summary,'counts',v_counts,'attention',v_attention,
+    'attention_kind',v_attention_kind,
+    'sort_key',v_sort,'sort_direction',v_direction,
+    'has_more',v_base+v_offset+v_limit<v_total,'next_cursor',case when v_base+v_offset+v_limit<v_total
+      then encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;
+
+create or replace function public.weekly_source_report_history_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid; v_group uuid; v_client uuid; v_week date;
+  v_date_from date; v_date_to date;
+  v_limit integer; v_offset integer:=0; v_cursor jsonb; v_version text;
+  v_sort text; v_direction text; v_seek text;
+  v_reports jsonb; v_options jsonb; v_page jsonb; v_report jsonb;
+  v_total integer; v_base integer:=0; v_key text;
+  v_revision uuid; v_shifts jsonb; v_movements jsonb;
+  v_shift_count integer; v_movement_count integer;
+  v_invoice_total bigint;
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_profile text; v_actions jsonb:='[]'::jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','date_from','date_to','report_key',
+      'sort_key','sort_direction','seek','cursor','limit'],'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  v_group:=nullif(p_request->>'source_group_id','')::uuid;
+  v_client:=nullif(p_request->>'client_id','')::uuid;
+  v_week:=nullif(p_request->>'week_ending','')::date;
+  v_date_from:=nullif(p_request->>'date_from','')::date;
+  v_date_to:=nullif(p_request->>'date_to','')::date;
+  v_key:=nullif(p_request->>'report_key','');
+  v_limit:=coalesce((p_request->>'limit')::integer,50);
+  v_sort:=coalesce(nullif(p_request->>'sort_key',''),'finalised_at');
+  v_direction:=coalesce(nullif(p_request->>'sort_direction',''),'desc');
+  v_seek:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
+  if v_date_from>v_date_to or v_limit not between 1 and 100 or v_sort not in ('client','source','period','report','finalised_at')
+    or v_direction not in ('asc','desc') or length(v_seek)>100 then
+    raise exception 'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID' using errcode='22023';
+  end if;
+  -- History includes retired source groups; the existing global Office read
+  -- authority still requires an active administrator. No new financial right.
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS');
+  with completed as (
+    select 'FINAL:'||manifest.id::text report_key,manifest.source_group_id,
+      manifest.source_cycle_id,manifest.client_id,manifest.finalisation_week_ending,
+      manifest.final_revision_id,manifest.backing_report_number,
+      revision.finalised_at_utc completed_at,revision.finalised_by_user_id actor_id,
+      revision.revision_number,revision.state revision_state,revision.reason,
+      encode(revision.manifest_hash,'hex') evidence_hash,'FINAL_SOURCE' completion_kind,
+      null::text attestation
+    from public.weekly_source_client_manifests manifest
+    join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+    where revision.state in ('CURRENT','SUPERSEDED')
+    union all
+    select 'ZERO:'||completion.id::text,completion.source_group_id,completion.source_cycle_id,
+      completion.client_id,cycle.finalisation_week_ending,null::uuid,null::text,
+      completion.attested_at_utc,completion.attested_by_user_id,completion.completion_generation,
+      completion.state,'NO_SHIFTS_TO_IMPORT',encode(completion.completion_hash,'hex'),
+      completion.completion_kind,completion.attestation_text
+    from public.weekly_source_client_cycle_completions completion
+    join public.weekly_source_cycles cycle on cycle.id=completion.source_cycle_id
+    where completion.completion_kind='NO_SHIFTS_TO_IMPORT'
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'report_key',completed.report_key,'source_group_id',completed.source_group_id,
+    'source_cycle_id',completed.source_cycle_id,'client_id',completed.client_id,
+    'client',client.name,'source',source_group.display_name,'source_family',source_group.source_family,
+    'week_ending',completed.finalisation_week_ending,'period',to_char(completed.finalisation_week_ending,'FMDD Mon YYYY'),
+    'final_revision_id',completed.final_revision_id,'revision_number',completed.revision_number,
+    'revision_state',completed.revision_state,'reason',completed.reason,
+    'report',coalesce(completed.backing_report_number,case when completed.completion_kind='NO_SHIFTS_TO_IMPORT'
+      then 'No shifts to import' else 'Weekly finalisation' end),
+    'finalised_at',to_char(completed.completed_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+    'finalised_at_utc',completed.completed_at,'finalised_by',coalesce(office_user.display_name,'Office'),
+    'completion_kind',completed.completion_kind,'attestation',completed.attestation,
+    'evidence_hash',completed.evidence_hash
+  ) order by completed.completed_at desc,completed.report_key),'[]'::jsonb)
+  into v_reports from completed
+  join public.clients client on client.id=completed.client_id
+  join public.weekly_source_groups source_group on source_group.id=completed.source_group_id
+  left join public.tms_users office_user on office_user.id=completed.actor_id
+  where (v_group is null or completed.source_group_id=v_group)
+    and (v_client is null or completed.client_id=v_client)
+    and (v_date_from is null or (completed.completed_at at time zone 'Europe/London')::date>=v_date_from)
+    and (v_date_to is null or (completed.completed_at at time zone 'Europe/London')::date<=v_date_to);
+  select coalesce(jsonb_agg(distinct jsonb_build_object('source_group_id',item->>'source_group_id',
+    'source',item->>'source','client_id',item->>'client_id','client',item->>'client',
+    'week_ending',item->>'week_ending','period',item->>'period')),'[]'::jsonb)
+    into v_options from jsonb_array_elements(v_reports) item;
+  v_version:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_HISTORY_V1',
+    jsonb_build_object('reports',v_reports,'filter',p_request-'cursor'-'limit')),'hex');
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 or v_cursor->>'version' is distinct from v_version then raise exception 'stale'; end if;
+    exception when others then raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001'; end;
+  end if;
+  if v_key is not null then
+    select item into v_report from jsonb_array_elements(v_reports) item where item->>'report_key'=v_key;
+    if v_report is null then raise exception 'WEEKLY_SOURCE_COMPLETED_REPORT_NOT_FOUND' using errcode='22023'; end if;
+    v_revision:=nullif(v_report->>'final_revision_id','')::uuid;
+    v_client:=(v_report->>'client_id')::uuid;
+    select revision.* into v_final from public.weekly_source_final_revisions revision where revision.id=v_revision;
+    if v_final.state='CURRENT' and exists(select 1 from public.weekly_source_groups source_group
+      join public.weekly_source_group_clients membership on membership.source_group_id=source_group.id
+      where source_group.id=(v_report->>'source_group_id')::uuid and source_group.active
+        and membership.client_id=v_client and (v_report->>'week_ending')::date
+          between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)) then
+      perform private.weekly_source_office_authority_v1(v_actor,'CORRECT_FINAL_SOURCE',
+        (v_report->>'source_group_id')::uuid,v_client,(v_report->>'week_ending')::date);
+      select profile.profile_code into v_profile from public.weekly_source_uploads upload
+        join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+        where upload.id=v_final.upload_id;
+      v_actions:=jsonb_build_array(jsonb_build_object('label','Correct final source','enabled',true,
+        'payload',jsonb_build_object('scope_label',v_report->>'client','current_label',v_report->>'report',
+          'correction_payload',jsonb_build_object('source_cycle_id',v_final.source_cycle_id,
+            'authority_scope_kind',v_final.authority_scope_kind,'report_scope_id',v_final.report_scope_id,
+            'expected_current_final_revision_id',v_final.id,
+            'expected_final_manifest_hash',encode(v_final.manifest_hash,'hex'),
+            'idempotency_key','history-correction:'||gen_random_uuid()::text),
+          'replacement_context',jsonb_build_object('source_group_id',v_report->>'source_group_id',
+            'client_id',v_client,'profile_id',v_profile))));
+    end if;
+    with shifts as (
+      select snapshot.id::text row_key,snapshot.upload_row_id source_row_id,
+        snapshot.work_event_id,snapshot.candidate_id,snapshot.work_date,
+        snapshot.start_at_local,snapshot.end_at_local,snapshot.break_minutes,snapshot.actual_net_minutes,
+        snapshot.external_event_identity booking_reference,
+        source_row.source_total_cost_pence,source_row.source_commission_pence,
+        source_row.source_shift_charge_pence
+      from public.weekly_source_final_snapshot_lines snapshot
+      left join public.weekly_source_upload_rows source_row on source_row.id=snapshot.upload_row_id
+      where snapshot.final_revision_id=v_revision and snapshot.client_id=v_client
+      union all
+      select source_row.id::text,source_row.id,movement.work_event_id,
+        movement.candidate_id,source_row.work_date,source_row.start_at_local,
+        source_row.end_at_local,source_row.break_minutes,source_row.actual_net_minutes,
+        source_row.external_source_key,source_row.source_total_cost_pence,
+        source_row.source_commission_pence,source_row.source_shift_charge_pence
+      from public.weekly_source_billing_movements movement
+      join public.weekly_source_upload_rows source_row on source_row.id=movement.nhsp_upload_row_id
+      where movement.final_revision_id=v_revision and movement.actual_client_id=v_client
+    ), ordered as (
+      select shifts.*,coalesce(candidate.display_name,concat_ws(' ',candidate.first_name,candidate.last_name)) candidate_name,
+        row_number() over(order by private.weekly_source_query_ascii_fold_v1(candidate.last_name),
+          candidate.id,shifts.work_date,shifts.start_at_local,shifts.row_key) ordinal
+      from shifts join public.candidates candidate on candidate.id=shifts.candidate_id
+    )
+    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',row_key,
+      'source_row_id',case when v_final.state='CURRENT' then source_row_id end,
+      'pay_query_open',exists(select 1 from private.weekly_source_manual_reviews review
+        where review.source_group_id=(v_report->>'source_group_id')::uuid
+          and review.work_event_id=ordered.work_event_id and review.state='OPEN')
+        or exists(select 1 from public.weekly_discrepancy_incidents incident
+          join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+          where incident_cycle.source_group_id=(v_report->>'source_group_id')::uuid
+            and incident.work_event_id=ordered.work_event_id and incident.state='OPEN'),
+      'work_event_id',work_event_id,'candidate',candidate_name,
+      'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'start',to_char(start_at_local,'HH24:MI'),
+      'end',to_char(end_at_local,'HH24:MI'),'break_minutes',break_minutes,'net_minutes',actual_net_minutes,
+      'booking_reference',booking_reference,
+      'source_total_cost_pence',source_total_cost_pence,
+      'source_commission_pence',source_commission_pence,
+      'source_shift_charge_pence',source_shift_charge_pence) order by ordinal)
+      filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+      into v_shift_count,v_shifts from ordered;
+    with ordered as (
+      select movement.*,coalesce(candidate.display_name,concat_ws(' ',candidate.first_name,candidate.last_name)) candidate_name,
+        event.work_date,row_number() over(order by event.work_date,candidate.last_name,candidate.id,movement.id) ordinal
+      from public.weekly_source_billing_movements movement
+      join public.candidates candidate on candidate.id=movement.candidate_id
+      join public.weekly_work_events event on event.id=movement.work_event_id
+      where movement.final_revision_id=v_revision and movement.actual_client_id=v_client
+    )
+    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',id,'candidate',candidate_name,
+      'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'movement',initcap(replace(movement_role,'_',' ')),
+      'source_line_kind',source_line_kind,'booking_reference',source_facts_json->>'booking_reference',
+      'pay_ex_vat_pence',round(total_pay_ex_vat*100)::bigint,
+      'invoice_charge_pence',invoice_presentation_charge_pence,
+      'vat_pence',round(vat_amount*100)::bigint,
+      'total_inc_vat_pence',round(total_inc_vat*100)::bigint) order by ordinal)
+      filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+      into v_movement_count,v_movements from ordered;
+    select coalesce(sum(invoice_presentation_charge_pence),0) into v_invoice_total
+      from public.weekly_source_billing_movements where final_revision_id=v_revision and actual_client_id=v_client;
+    return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMPLETED_REPORT_V1','report',v_report,
+      'shifts',v_shifts,'shift_count',v_shift_count,'movements',v_movements,'movement_count',v_movement_count,'actions',v_actions,
+      'invoice_charge_pence',v_invoice_total,'has_more',v_offset+v_limit<greatest(v_shift_count,v_movement_count),
+      'next_cursor',case when v_offset+v_limit<greatest(v_shift_count,v_movement_count) then
+        encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
+  end if;
+  with filtered as (
+    select item,private.weekly_source_query_ascii_fold_v1(case v_sort when 'period' then item->>'week_ending'
+      when 'finalised_at' then item->>'finalised_at_utc' else item->>v_sort end) sort_value
+    from jsonb_array_elements(v_reports) item where v_week is null or (item->>'week_ending')::date=v_week
+  ), ordered as (
+    select item,sort_value,row_number() over(order by case when v_direction='asc' then sort_value end collate "C" asc,
+      case when v_direction='desc' then sort_value end collate "C" desc,item->>'report_key') ordinal from filtered
+  ), origin as (select coalesce(min(ordinal) filter(where v_seek<>'' and starts_with(sort_value,v_seek)),1)-1 base from ordered)
+  select count(*)::integer,coalesce(max(origin.base),0)::integer,coalesce(jsonb_agg(item order by ordinal)
+    filter(where ordinal>origin.base+v_offset and ordinal<=origin.base+v_offset+v_limit),'[]'::jsonb)
+    into v_total,v_base,v_page from ordered cross join origin;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_REPORT_HISTORY_V1','rows',v_page,
+    'scope_options',v_options,'sort_key',v_sort,'sort_direction',v_direction,'total_count',v_total,
+    'has_more',v_base+v_offset+v_limit<v_total,'next_cursor',case when v_base+v_offset+v_limit<v_total then
+      encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;
+
+create or replace function public.weekly_source_manual_review_open_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid; v_row_id uuid; v_reason text;
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_route jsonb; v_existing uuid; v_review uuid;
+  v_week date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+    or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+      where key not in ('actor_user_id','source_row_id','reason')) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_row_id:=(p_request->>'source_row_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  if v_actor is null or v_row_id is null or pg_catalog.char_length(v_reason) not between 1 and 1000 then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select * into v_row from public.weekly_source_upload_rows where id=v_row_id;
+  if not found then raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_ROW_NOT_FOUND' using errcode='22023'; end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into v_resolution from public.weekly_source_row_resolutions
+    where upload_row_id=v_row.id order by generation desc,id desc limit 1;
+  if not found or v_resolution.mapping_state<>'RESOLVED' or v_resolution.work_event_id is null
+    or v_row.row_finalisation_state not in ('NOT_APPLICABLE','SOURCE_WORKED')
+    or v_upload.state not in ('CURRENT','SUPERSEDED')
+    or not (
+      exists(select 1 from public.weekly_source_client_manifests manifest
+        join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+        where manifest.source_cycle_id=v_cycle.id and manifest.client_id=v_resolution.client_id
+          and revision.upload_id=v_upload.id and revision.state='CURRENT')
+      or (not exists(select 1 from public.weekly_source_client_manifests manifest
+            join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+            where manifest.source_cycle_id=v_cycle.id and manifest.client_id=v_resolution.client_id
+              and revision.state='CURRENT')
+        and exists(select 1 from public.weekly_source_projection_publications publication
+          where publication.source_cycle_id=v_cycle.id and publication.upload_id=v_upload.id
+            and publication.state='CURRENT'))
+    ) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_SOURCE_STALE' using errcode='40001';
+  end if;
+  v_route:=private.weekly_source_office_route_key_v1(v_cycle.id,v_resolution.candidate_id,
+    v_resolution.client_id,v_resolution.contract_id,v_row.work_date);
+  if v_route->>'authority_mode'<>'SOURCE_AUTHORITY' then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_AUTHORITY_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'RECHECK_SOURCE',
+    v_cycle.source_group_id,v_resolution.client_id,v_cycle.finalisation_week_ending);
+  v_week:=(date_trunc('week',v_row.work_date)::date+6);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_QUERY_FAMILY:'||v_resolution.contract_id::text||':'||v_week::text,0));
+  if exists(select 1 from public.timesheets timesheet
+      where timesheet.contract_id=v_resolution.contract_id
+        and timesheet.week_ending_date=v_week and timesheet.is_current
+        and timesheet.authorised_at_server is not null) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_ALREADY_AUTHORISED' using errcode='55000';
+  end if;
+  select id into v_existing from private.weekly_source_manual_reviews
+    where source_group_id=v_cycle.source_group_id and work_event_id=v_resolution.work_event_id
+      and state='OPEN' for update;
+  if v_existing is not null then
+    return pg_catalog.jsonb_build_object('ok',true,'review_id',v_existing,
+      'already_open',true,'problem','Manually queried');
+  end if;
+  insert into private.weekly_source_manual_reviews(
+    source_group_id,source_cycle_id,upload_row_id,row_resolution_id,source_row_hash,
+    work_event_id,candidate_id,client_id,contract_id,work_date,state,
+    office_reason,opened_by_user_id)
+  values(v_cycle.source_group_id,v_cycle.id,v_row.id,v_resolution.id,v_row.normalised_row_hash,
+    v_resolution.work_event_id,v_resolution.candidate_id,v_resolution.client_id,
+    v_resolution.contract_id,v_row.work_date,'OPEN',v_reason,v_actor)
+  returning id into v_review;
+  perform public._audit_insert('weekly_source_manual_review',v_review::text,
+    'WEEKLY_SOURCE_MANUAL_REVIEW_OPENED',null,
+    pg_catalog.jsonb_build_object('source_row_id',v_row.id,'work_event_id',v_resolution.work_event_id,
+      'reason',v_reason),'Office sent imported shift back to Queries',v_actor);
+  return pg_catalog.jsonb_build_object('ok',true,'review_id',v_review,
+    'already_open',false,'problem','Manually queried');
+end;
+$function$;
+
+create or replace function public.weekly_source_manual_review_resolve_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid; v_review_id uuid; v_kind text;
+  v_review private.weekly_source_manual_reviews%rowtype;
+  v_current_row public.weekly_source_upload_rows%rowtype;
+  v_expected_hash text;
+  v_week date; v_scope_date date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+    or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+      where key not in ('actor_user_id','review_id','resolution_kind','expected_current_row_hash')) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_review_id:=(p_request->>'review_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_kind:=p_request->>'resolution_kind';
+  if v_actor is null or v_review_id is null or v_kind not in ('OFFICE_ACCEPTED_SOURCE','PROTECTED_PAY') then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select * into v_review from private.weekly_source_manual_reviews where id=v_review_id;
+  if found and v_review.state='RESOLVED' and v_review.resolution_kind=v_kind
+     and v_review.resolved_by_user_id=v_actor then
+    -- Exact retry after the atomic protected Save or a lost response. No
+    -- second resolution, new audit row or current-source reinterpretation.
+    perform private.weekly_source_office_authority_v1(v_actor,
+      case when v_kind='PROTECTED_PAY' then 'APPROVE_PROTECTED_PAY' else 'ACCEPT_SYSTEM_HOURS' end,
+      v_review.source_group_id,v_review.client_id,v_review.work_date);
+    return jsonb_build_object('ok',true,'review_id',v_review.id,
+      'resolution_kind',v_kind,'idempotent_replay',true);
+  end if;
+  if not found or v_review.state<>'OPEN' then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_NOT_OPEN' using errcode='40001';
+  end if;
+  select finalisation_week_ending into strict v_scope_date
+  from public.weekly_source_cycles where id=v_review.source_cycle_id;
+  perform private.weekly_source_office_authority_v1(v_actor,
+    case when v_kind='PROTECTED_PAY' then 'APPROVE_PROTECTED_PAY' else 'ACCEPT_SYSTEM_HOURS' end,
+    v_review.source_group_id,v_review.client_id,v_scope_date);
+  v_week:=(date_trunc('week',v_review.work_date)::date+6);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_QUERY_FAMILY:'||v_review.contract_id::text||':'||v_week::text,0));
+  select * into strict v_review from private.weekly_source_manual_reviews
+    where id=v_review_id and state='OPEN' for update;
+  if v_kind='OFFICE_ACCEPTED_SOURCE' then
+    v_expected_hash:=p_request->>'expected_current_row_hash';
+    if v_expected_hash is null or v_expected_hash!~'^[0-9a-f]{64}$' then
+      raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_CURRENT_SOURCE_REQUIRED' using errcode='22023';
+    end if;
+    -- A later import may replace the original row's hours. Accept only the
+    -- currently displayed source tuple for the same durable work identity.
+    select candidate_row.* into v_current_row
+    from public.weekly_source_upload_rows candidate_row
+    join public.weekly_source_uploads candidate_upload on candidate_upload.id=candidate_row.upload_id
+    join lateral (
+      select mapping.work_event_id,mapping.mapping_state
+      from public.weekly_source_row_resolutions mapping
+      where mapping.upload_row_id=candidate_row.id
+      order by mapping.generation desc,mapping.id desc limit 1
+    ) current_mapping on current_mapping.work_event_id=v_review.work_event_id
+      and current_mapping.mapping_state='RESOLVED'
+    where candidate_upload.source_cycle_id=v_review.source_cycle_id
+      and candidate_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+      and (
+        exists(select 1 from public.weekly_source_client_manifests manifest
+          join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+          where manifest.source_cycle_id=v_review.source_cycle_id
+            and manifest.client_id=v_review.client_id
+            and revision.state='CURRENT' and revision.upload_id=candidate_upload.id)
+        or (not exists(select 1 from public.weekly_source_client_manifests manifest
+            join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+            where manifest.source_cycle_id=v_review.source_cycle_id
+              and manifest.client_id=v_review.client_id and revision.state='CURRENT')
+          and exists(select 1 from public.weekly_source_projection_publications publication
+            where publication.source_cycle_id=v_review.source_cycle_id
+              and publication.upload_id=candidate_upload.id and publication.state='CURRENT'))
+      )
+    order by candidate_row.created_at_utc desc,candidate_row.id desc limit 1;
+    if not found or pg_catalog.encode(v_current_row.normalised_row_hash,'hex')<>v_expected_hash then
+      raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_SOURCE_STALE' using errcode='40001';
+    end if;
+  elsif not exists (
+    select 1 from public.weekly_exceptional_pay_family_events protected_event
+    join public.weekly_exceptional_pay_target_families family
+      on family.id=protected_event.family_id
+    where family.contract_id=v_review.contract_id
+      and family.candidate_id=v_review.candidate_id
+      and family.week_ending_date=v_week
+      and protected_event.durable_work_event_id=v_review.work_event_id
+      and protected_event.state='WAIT'
+      and exists(select 1 from public.weekly_exceptional_payment_approvals approved
+        join public.weekly_exceptional_c1_publication_requests request
+          on request.orchestration_run_id=approved.creation_orchestration_run_id
+        where approved.id=protected_event.evidence_approval_id
+          and (request.state='PUBLISHED' or exists(
+            select 1 from private.weekly_source_local_protected_decision_receipts receipt
+            where receipt.publication_request_id=request.id
+              and receipt.state in ('COMPLETE','PENDING_FREEZE'))))
+      and protected_event.event_sequence=(select max(latest.event_sequence)
+        from public.weekly_exceptional_pay_family_events latest
+        where latest.family_id=protected_event.family_id
+          and latest.durable_work_event_id=protected_event.durable_work_event_id)
+  ) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_PROTECTED_PAY_REQUIRED' using errcode='55000';
+  end if;
+  update private.weekly_source_manual_reviews
+    set state='RESOLVED',resolved_by_user_id=v_actor,
+      resolved_at_utc=pg_catalog.transaction_timestamp(),resolution_kind=v_kind
+    where id=v_review.id;
+  perform public._audit_insert('weekly_source_manual_review',v_review.id::text,
+    'WEEKLY_SOURCE_MANUAL_REVIEW_RESOLVED',null,
+    pg_catalog.jsonb_build_object('resolution_kind',v_kind,'work_event_id',v_review.work_event_id,
+      'accepted_source_row_id',v_current_row.id),
+    'Office resolved imported-shift review',v_actor);
+  return pg_catalog.jsonb_build_object('ok',true,'review_id',v_review.id,
+    'resolution_kind',v_kind);
+end;
+$function$;
+
+create or replace function private.weekly_source_accepted_publication_context_v1(
+  p_canonical jsonb
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_canonical jsonb;
+  v_origin jsonb;
+  v_bundle public.weekly_source_entitlement_decision_bundles%rowtype;
+  v_root public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_inventory jsonb;
+  v_basis jsonb;
+  v_before_ids jsonb;
+  v_control jsonb;
+begin
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(
+    p_canonical,'IMMEDIATE',null::uuid);
+  v_origin:=v_canonical#>'{financial_request,source_revision}';
+  if v_origin->>'origin_kind' is distinct from 'CURRENT_FINAL_SOURCE_V1'
+     or jsonb_array_length(v_canonical->'member_root_ids')<>1
+     or v_canonical#>>'{financial_request,member_entitlements,0,authority_kind}'
+          is distinct from 'LOCKED_FINAL_SOURCE' then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ACTION_INVALID' using errcode='22023';
+  end if;
+  select * into v_bundle from public.weekly_source_entitlement_decision_bundles b
+    where b.decision_bundle_id=(v_canonical->>'decision_bundle_id')::uuid
+      and b.bundle_revision=(v_canonical->>'bundle_revision')::bigint;
+  if not found or v_bundle.state not in ('PROPOSED','COMMITTED')
+     or v_bundle.bundle_kind<>'SINGLE_ROOT'
+     or v_bundle.publication_mode<>'IMMEDIATE'
+     or v_bundle.target_root_timesheet_id is not null
+     or v_bundle.whole_root_review_required
+     or cardinality(v_bundle.proposed_head_ids)<>1
+     or to_jsonb(v_bundle.proposed_head_ids) is distinct from v_canonical->'head_ids'
+     or v_bundle.decision_id is distinct from (v_canonical->>'decision_id')::uuid
+     or v_bundle.candidate_id is distinct from (v_canonical->>'candidate_id')::uuid
+     or v_bundle.source_root_timesheet_id is distinct from
+          (v_canonical#>>'{member_root_ids,0}')::uuid
+     or v_bundle.source_root_family_booking_id is distinct from
+          v_canonical#>>'{member_family_booking_ids,0}'
+     or v_bundle.request_digest is distinct from
+          private.weekly_source_publication_request_digest_v1(v_canonical)
+     or v_bundle.source_revision_digest is distinct from
+          private.weekly_source_publication_request_digest_v1(v_origin)
+     or v_bundle.contract_choice_digest is distinct from
+          private.weekly_source_publication_request_digest_v1(
+            v_canonical#>'{financial_request,contract_choices}')
+     then
+    return null;
+  end if;
+  select * into v_root from public.timesheets t where t.timesheet_id=v_bundle.source_root_timesheet_id;
+  if not found or not v_root.is_current
+     or v_root.version is distinct from (v_canonical#>>'{member_root_versions,0}')::bigint
+     or v_root.booking_id is distinct from v_bundle.source_root_family_booking_id
+     or v_root.contract_id is distinct from v_bundle.source_contract_id
+     or v_root.week_ending_date is distinct from v_bundle.week_ending_date then return null; end if;
+  select * into v_contract from public.contracts c where c.id=v_root.contract_id;
+  if not found or v_contract.candidate_id is distinct from v_bundle.candidate_id
+     or v_contract.id is distinct from (v_canonical#>>'{financial_request,contract_choices,0,contract_id}')::uuid
+     or v_root.week_ending_date is distinct from
+          (v_canonical#>>'{financial_request,contract_choices,0,week_ending_date}')::date then return null; end if;
+  select * into v_final from public.weekly_source_final_revisions f
+    where f.id=(v_origin->>'final_revision_id')::uuid;
+  if not found or v_final.state<>'CURRENT'
+     or v_final.source_cycle_id is distinct from (v_origin->>'source_cycle_id')::uuid
+     or v_final.revision_number is distinct from (v_origin->>'revision_number')::integer
+     or encode(v_final.manifest_hash,'hex') is distinct from v_origin->>'manifest_hash'
+     or encode(v_final.policy_fingerprint,'hex') is distinct from v_origin->>'policy_fingerprint' then return null; end if;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_final.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;
+  if v_group.agency_id is distinct from v_bundle.agency_id then return null; end if;
+  -- Final scope remains report/cutoff based, never substituted by workweek.
+  if not exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=v_final.id and m.source_cycle_id=v_cycle.id
+        and m.client_id=v_contract.client_id) then return null; end if;
+  v_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);
+  v_basis:=v_inventory->'approval_basis';
+  if (v_inventory->>'ok') is distinct from 'true'
+     or (v_basis->>'coverage_complete') is distinct from 'true'
+     or v_basis#>>'{origin,kind}' not in ('INITIAL_AUTHORISED_TSFIN_V1','COMMITTED_SOURCE_HEAD_V1')
+     or v_basis#>>'{scope,root_timesheet_id}' is distinct from v_root.timesheet_id::text then return null; end if;
+  select coalesce(jsonb_agg(c.value->'component_id' order by c.value->>'component_id'),'[]'::jsonb)
+    into v_before_ids from jsonb_array_elements(v_inventory->'components') c(value);
+  v_control:=jsonb_build_object('bundle_kind','SINGLE_ROOT','reason','WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION',
+    'expected_current_head_ids',jsonb_build_array(coalesce(v_inventory->'head_id','null'::jsonb)),
+    'before_positions',jsonb_build_array(jsonb_build_object('root_ordinal',1,
+      'component_ids',v_before_ids,'inventory_digest',v_basis->>'inventory_digest')),
+    'moved_component_ids','[]'::jsonb,'target_root_authorisation',null,'whole_root_office_review',null);
+  if v_bundle.before_inventory_digest is distinct from private.weekly_source_publication_request_digest_v1(
+      private.weekly_source_publication_before_inventory_v1(v_control,1)) then return null; end if;
+  -- The existing eleven-field canonical encoder excludes control. Do not
+  -- change its receipt hash domain. The complete before-origin/content digest
+  -- is stored separately, and the live publisher compares its own controls.
+  -- At first acceptance we also require the actual constructor's controls.
+  if p_canonical ? 'control' and p_canonical->'control' is distinct from v_control then return null; end if;
+  perform private.weekly_source_office_authority_v1(v_bundle.decided_by_user_id,
+    'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,v_cycle.finalisation_week_ending);
+  return jsonb_build_object('canonical',v_canonical,'basis',v_basis,
+    'actor_user_id',v_bundle.decided_by_user_id,'agency_id',v_bundle.agency_id,
+    'finalisation_week_ending',v_cycle.finalisation_week_ending);
+end;
+$function$;
+
+create or replace function private.weekly_source_manual_review_source_v2(p_source_row_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_report_scope public.weekly_source_report_scopes%rowtype;
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_projection public.weekly_source_projection_publications%rowtype;
+  v_mapping public.weekly_source_row_resolutions%rowtype;
+  v_contract public.contracts%rowtype;
+  v_count integer; v_resolution_id uuid; v_week date; v_generation integer;
+begin
+  select r.* into v_row from public.weekly_source_upload_rows r where r.id=p_source_row_id;
+  if not found or v_row.row_finalisation_state not in ('NOT_APPLICABLE','SOURCE_WORKED') then return null; end if;
+  select u.* into strict v_upload from public.weekly_source_uploads u where u.id=v_row.upload_id;
+  select c.* into strict v_cycle from public.weekly_source_cycles c where c.id=v_upload.source_cycle_id;
+  if v_upload.report_scope_id is not null then
+    select s.* into v_report_scope from public.weekly_source_report_scopes s
+      where s.id=v_upload.report_scope_id and s.source_cycle_id=v_cycle.id
+        and s.source_group_id=v_cycle.source_group_id and s.cutoff_at_utc=v_cycle.cutoff_at_utc;
+    if not found then return null; end if;
+  end if;
+  select count(*) into v_count from public.weekly_source_final_revisions f
+    where f.source_cycle_id=v_cycle.id and f.report_scope_id is not distinct from v_upload.report_scope_id
+      and f.state='CURRENT';
+  if v_count>1 then raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_AUTHORITY_AMBIGUOUS' using errcode='55000'; end if;
+  if v_count=1 then
+    select f.* into strict v_final from public.weekly_source_final_revisions f
+      where f.source_cycle_id=v_cycle.id and f.report_scope_id is not distinct from v_upload.report_scope_id
+        and f.state='CURRENT';
+    if v_final.upload_id is distinct from v_upload.id or v_final.finalised_at_utc is null
+       or not isfinite(v_final.finalised_at_utc) then return null; end if;
+    if (v_final.authority_scope_kind='CYCLE' and (v_final.report_scope_id is not null
+          or v_cycle.current_final_revision_id is distinct from v_final.id))
+      or (v_final.authority_scope_kind='NHSP_REPORT_SCOPE' and (v_report_scope.id is null
+          or v_report_scope.current_final_revision_id is distinct from v_final.id))
+      or v_final.authority_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE') then return null; end if;
+    select count(*),(array_agg(s.row_resolution_id))[1] into v_count,v_resolution_id
+      from private.weekly_source_manual_review_final_rows_v2(v_final.id) s
+      where s.upload_row_id=v_row.id;
+    if v_count<>1 then return null; end if;
+    select r.* into strict v_mapping from public.weekly_source_row_resolutions r where r.id=v_resolution_id;
+  else
+    if (v_upload.report_scope_id is null and v_cycle.current_final_revision_id is not null)
+      or (v_upload.report_scope_id is not null and v_report_scope.current_final_revision_id is not null) then
+      return null; end if;
+    select count(*) into v_count from public.weekly_source_projection_publications p
+      where p.source_cycle_id=v_cycle.id and p.report_scope_id is not distinct from v_upload.report_scope_id
+        and p.upload_id=v_upload.id and p.state='CURRENT';
+    if v_count<>1 then return null; end if;
+    select p.* into strict v_projection from public.weekly_source_projection_publications p
+      where p.source_cycle_id=v_cycle.id and p.report_scope_id is not distinct from v_upload.report_scope_id
+        and p.upload_id=v_upload.id and p.state='CURRENT';
+    if v_upload.state is distinct from 'CURRENT'
+      or (v_projection.authority_scope_kind='CYCLE' and (v_projection.report_scope_id is not null
+        or v_cycle.current_complete_upload_id is distinct from v_upload.id
+        or v_cycle.current_projection_publication_id is distinct from v_projection.id
+        or v_cycle.version is distinct from v_projection.authority_scope_version
+        or v_cycle.projection_state is distinct from 'CURRENT'))
+      or (v_projection.authority_scope_kind='NHSP_REPORT_SCOPE' and (v_report_scope.id is null
+        or v_report_scope.current_complete_upload_id is distinct from v_upload.id
+        or v_report_scope.current_projection_publication_id is distinct from v_projection.id
+        or v_report_scope.version is distinct from v_projection.authority_scope_version
+        or v_report_scope.projection_state is distinct from 'CURRENT'))
+      or v_projection.authority_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE') then return null; end if;
+    if v_projection.authority_scope_version>2147483647
+       or coalesce(v_projection.projection_generation,0)>2147483647 then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_GENERATION_OVERFLOW' using errcode='22003'; end if;
+    v_generation:=coalesce(v_projection.projection_generation,v_projection.authority_scope_version::integer);
+    if v_generation is null or v_projection.published_at_utc is null
+       or not isfinite(v_projection.published_at_utc) then return null; end if;
+    select r.* into v_mapping from public.weekly_source_row_resolutions r
+      where r.upload_row_id=v_row.id and r.generation=v_generation;
+    if not found then return null; end if;
+  end if;
+  if v_mapping.mapping_state is distinct from 'RESOLVED'
+     or v_mapping.upload_row_id is distinct from v_row.id then return null; end if;
+  select c.* into strict v_contract from public.contracts c where c.id=v_mapping.contract_id;
+  if v_contract.candidate_id is distinct from v_mapping.candidate_id
+     or v_contract.client_id is distinct from v_mapping.client_id
+     or v_contract.week_ending_weekday_snapshot is null
+     or v_contract.week_ending_weekday_snapshot not between 0 and 6 then return null; end if;
+  v_week:=v_row.work_date+((v_contract.week_ending_weekday_snapshot-extract(dow from v_row.work_date)::integer+7)%7);
+  if not exists(select 1 from public.weekly_work_events e where e.id=v_mapping.work_event_id
+    and e.candidate_id=v_mapping.candidate_id and e.client_id=v_mapping.client_id and e.work_date=v_row.work_date)
+    or (v_final.id is not null and not exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=v_final.id and m.client_id=v_mapping.client_id
+        and m.source_group_id=v_cycle.source_group_id and m.source_cycle_id=v_cycle.id)) then return null; end if;
+  return jsonb_build_object('source_group_id',v_cycle.source_group_id,'source_cycle_id',v_cycle.id,
+    'upload_row_id',v_row.id,'row_resolution_id',v_mapping.id,'source_row_hash',encode(v_row.normalised_row_hash,'hex'),
+    'work_event_id',v_mapping.work_event_id,'candidate_id',v_mapping.candidate_id,
+    'client_id',v_mapping.client_id,'contract_id',v_mapping.contract_id,
+    'work_date',to_char(v_row.work_date,'YYYY-MM-DD'),'week_ending_date',to_char(v_week,'YYYY-MM-DD'),
+    'final_revision_id',v_final.id,'projection_publication_id',v_projection.id);
+end;
+$function$;
+
+create or replace function private.weekly_source_manual_reviews_finalised_v1(p_final_revision_id uuid,p_actor_user_id uuid)
+returns integer language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_review private.weekly_source_manual_reviews%rowtype;
+  v_anchor private.weekly_source_manual_review_commands%rowtype;
+  v_opening_upload_id uuid;
+  v_count integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select f.* into strict v_final from public.weekly_source_final_revisions f where f.id=p_final_revision_id;
+  select c.* into strict v_cycle from public.weekly_source_cycles c where c.id=v_final.source_cycle_id;
+  if p_actor_user_id is null or v_final.state is distinct from 'CURRENT' or v_final.finalised_by_user_id is distinct from p_actor_user_id
+     or v_final.finalised_at_utc is null or not isfinite(v_final.finalised_at_utc) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_FINAL_AUTHORITY_INVALID' using errcode='55000'; end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  -- The sole reviewed Final/Correct mutation callers invoke this private hook
+  -- after their successful CURRENT CAS, never on preparation or replay. Do not
+  -- compare preparation timestamps, nor xmin to the top xid: the real owner
+  -- may write in a PL/pgSQL exception subtransaction. Validate its actual CAS
+  -- result here; caller closure and genuine-owner native proof are mandatory.
+  if (v_final.authority_scope_kind='CYCLE' and v_cycle.current_final_revision_id is distinct from v_final.id)
+    or (v_final.authority_scope_kind='NHSP_REPORT_SCOPE' and not exists(
+      select 1 from public.weekly_source_report_scopes s where s.id=v_final.report_scope_id
+        and s.source_cycle_id=v_cycle.id and s.current_final_revision_id=v_final.id)) then
+    raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_FINAL_AUTHORITY_INVALID' using errcode='55000'; end if;
+  for v_review in
+    with contained as materialized (
+      select distinct s.work_event_id,s.candidate_id,s.client_id,s.contract_id,s.work_date
+      from private.weekly_source_manual_review_final_rows_v2(v_final.id) s
+    )
+    select r.* from contained s join private.weekly_source_manual_reviews r
+      on r.source_group_id=v_cycle.source_group_id and r.work_event_id=s.work_event_id and r.state='OPEN'
+      and r.candidate_id=s.candidate_id and r.client_id=s.client_id
+      and r.contract_id=s.contract_id and r.work_date=s.work_date
+    order by r.id for update of r
+  loop
+    select c.* into v_anchor from private.weekly_source_manual_review_commands c where c.review_id=v_review.id
+      and (c.opening_final_revision_id is not null or c.opening_projection_publication_id is not null);
+    -- A legacy review without captured opening provenance needs an explicit
+    -- Office remedy. Never manufacture an anchor using today's report.
+    if not found or v_anchor.opening_final_revision_id=p_final_revision_id
+       or not exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=v_final.id
+         and m.source_group_id=v_cycle.source_group_id and m.source_cycle_id=v_cycle.id and m.client_id=v_review.client_id) then continue; end if;
+    -- A new Final for the report already queried is not a new imported report.
+    -- Resolve the immutable opening authority, not preparation timestamps or
+    -- the currently displayed row; rebuilt projections of that upload also
+    -- remain the same report. Missing opening evidence is never a remedy.
+    if v_anchor.opening_final_revision_id is not null then
+      select f.upload_id into v_opening_upload_id from public.weekly_source_final_revisions f
+        where f.id=v_anchor.opening_final_revision_id;
+    else
+      select p.upload_id into v_opening_upload_id from public.weekly_source_projection_publications p
+        where p.id=v_anchor.opening_projection_publication_id;
+    end if;
+    if v_opening_upload_id is null or v_opening_upload_id=v_final.upload_id then continue; end if;
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'ACCEPT_SYSTEM_HOURS',
+      v_cycle.source_group_id,v_review.client_id,v_cycle.finalisation_week_ending);
+    update private.weekly_source_manual_reviews set state='RESOLVED',resolved_by_user_id=p_actor_user_id,
+      resolved_at_utc=statement_timestamp(),resolution_kind='OFFICE_ACCEPTED_SOURCE' where id=v_review.id;
+    perform public._audit_insert('weekly_source_manual_review',v_review.id::text,'WEEKLY_SOURCE_MANUAL_REVIEW_RESOLVED',null,
+      jsonb_build_object('resolution_kind','OFFICE_ACCEPTED_SOURCE','work_event_id',v_review.work_event_id,
+        'final_revision_id',v_final.id,'reason','A later finalised report contains this shift'),
+      'Later finalised source report resolved imported-shift review',p_actor_user_id);
+    v_count:=v_count+1;
+  end loop;
+  return v_count;
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_root public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_scope jsonb; v_ids uuid[]; v_groups uuid[]; v_invoices uuid[];
+  v_movement public.weekly_source_billing_movements%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_operation public.invoice_operations%rowtype;
+  v_chunk public.invoice_operation_chunks%rowtype;
+  v_member jsonb; v_members jsonb; v_context jsonb; v_guard jsonb; v_policy jsonb;
+  v_basis jsonb:='[]'::jsonb; v_observation boolean;
+  v_present boolean:=false; v_unknown boolean:=false;
+  v_generation integer; v_count integer; v_invoice_id uuid; v_member_id uuid;
+  v_linked_root uuid; v_text text; v_week date; v_relevant boolean;
+  v_prior record;
+begin
+  select * into v_root from public.timesheets where timesheet_id=p_root_timesheet_id;
+  if not found then return null; end if;
+  select * into strict v_contract from public.contracts where id=v_root.contract_id;
+  v_scope:=private.weekly_source_pay_query_scope_v1(p_root_timesheet_id);
+  v_ids:=private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id);
+  if v_scope is null or cardinality(v_ids) is null or cardinality(v_ids)=0 then return null; end if;
+  select array_agg(distinct source_group_id) filter(where source_group_id is not null) into v_groups from (
+    select c.source_group_id from public.weekly_source_row_timesheet_lineages l
+      join public.weekly_source_cycles c on c.id=l.source_cycle_id where l.timesheet_id=any(v_ids)
+    union select e.first_source_group_id from public.weekly_exceptional_pay_family_events fe
+      join public.weekly_work_events e on e.id=fe.durable_work_event_id
+      where fe.family_id=(v_scope->>'target_family_id')::uuid
+    union select membership.source_group_id from public.weekly_source_group_clients membership
+      where membership.client_id=v_contract.client_id
+        and membership.valid_from<=v_root.week_ending_date
+        and coalesce(membership.valid_to,'infinity'::date)>=v_root.week_ending_date-6
+  ) groups;
+  if cardinality(v_groups) is null or cardinality(v_groups)=0 then return null; end if;
+  v_basis:=jsonb_build_array(jsonb_build_object('lane','DISCOVERY','groups',to_jsonb(v_groups),
+    'scope',v_scope,'family_timesheet_ids',to_jsonb(v_ids)));
+  select coalesce(array_agg(distinct l.invoice_id),'{}'::uuid[]) into v_invoices
+    from public.invoice_lines l where l.timesheet_id=any(v_ids);
+
+  -- Incomplete publication is not an empty invoice census. Discover across
+  -- all cutoffs using client/group and actual work-date coverage, not the
+  -- report's week. Nullable/unparsed date coverage remains relevant unknown.
+  for v_upload in select u.* from public.weekly_source_uploads u
+    join public.weekly_source_cycles c on c.id=u.source_cycle_id
+    left join public.weekly_source_report_scopes s on s.id=u.report_scope_id
+    where c.source_group_id=any(v_groups) and u.state not in ('CURRENT','SUPERSEDED','REJECTED')
+      and (c.scope_client_id is null or c.scope_client_id=v_contract.client_id)
+      and (s.client_id is null or s.client_id=v_contract.client_id)
+      and (u.confirmed_coverage_start_local_date is null or u.confirmed_coverage_end_local_date is null
+        or daterange(u.confirmed_coverage_start_local_date,u.confirmed_coverage_end_local_date+1,'[)')
+          && daterange(v_root.week_ending_date-6,v_root.week_ending_date+1,'[)')
+        or exists(select 1 from public.weekly_source_upload_rows r where r.upload_id=u.id
+          and (r.work_date is null or r.work_date between v_root.week_ending_date-6 and v_root.week_ending_date)))
+    order by u.id loop
+    -- Prepared corrections have their complete old/new census below; they
+    -- must not be permanently made unknown by their own CORRECTION_READY row.
+    if v_upload.state='CORRECTION_READY' and exists(select 1 from public.weekly_final_source_correction_sessions s
+      where s.id=v_upload.correction_session_id and s.replacement_correction_upload_id=v_upload.id
+        and s.state in ('PREPARING','PREPARED','COMMITTING')) then continue; end if;
+    v_unknown:=true;
+    v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','INCOMPLETE_IMPORT',
+      'upload',to_jsonb(v_upload),'present',null));
+  end loop;
+
+  -- Placement remains a duty across report cutoffs. A historical issued
+  -- document alone is not work waiting to be invoiced again.
+  for v_movement in select * from public.weekly_source_billing_movements where invoice_timesheet_id=any(v_ids)
+    order by id loop
+    v_observation:=null;
+    if v_movement.candidate_id=v_contract.candidate_id and v_movement.contract_id=v_contract.id
+       and v_movement.actual_client_id=v_contract.client_id then
+      if v_movement.placement_state in ('UNPLACED','PLACED') then
+        -- Prepared replacements are not yet admitted invoice movements. Their
+        -- complete union and current seals are qualified in CORRECTION below.
+        if exists(select 1 from public.weekly_source_final_revisions f
+          where f.id=v_movement.final_revision_id and f.state='PREPARED') then
+          if exists(select 1 from public.weekly_final_source_correction_sessions s
+            where s.prepared_final_revision_id=v_movement.final_revision_id
+              and s.state in ('PREPARING','PREPARED','COMMITTING')) then continue; end if;
+        end if;
+        if exists(select 1 from public.weekly_source_final_revisions f
+          where f.id=v_movement.final_revision_id and f.state='CURRENT'
+            and f.finalised_at_utc is not null and isfinite(f.finalised_at_utc)) then v_observation:=true; end if;
+      elsif v_movement.placement_state='VOIDED_BY_CORRECT_FINAL' then
+        if not exists(select 1 from public.weekly_source_invoice_line_bindings b
+          where b.billing_movement_id=v_movement.id and b.state='CURRENT') then v_observation:=false; end if;
+      elsif v_movement.placement_state='ISSUED' and exists(
+        select 1 from public.weekly_source_invoice_line_bindings b
+        join public.invoice_lines l on l.id=b.invoice_line_id and l.invoice_id=b.invoice_id
+        join public.invoices i on i.id=b.invoice_id
+        where b.billing_movement_id=v_movement.id and b.state='CURRENT'
+          and b.client_id=v_movement.actual_client_id and i.client_id=v_movement.actual_client_id
+          and l.timesheet_id=v_movement.invoice_timesheet_id
+          and (i.status::text='ISSUED' or i.issue_state='ISSUED')) then v_observation:=false; end if;
+    end if;
+    v_present:=v_present or v_observation is true; v_unknown:=v_unknown or v_observation is null;
+    v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','MOVEMENT','id',v_movement.id,
+      'hash',encode(v_movement.movement_economic_hash,'hex'),'placement',v_movement.placement_state,'present',v_observation));
+  end loop;
+
+  -- Actual current imports, independent of their report/cutoff week. A
+  -- checking-only NHSP import is positively excluded, not invoice authority.
+  for v_upload in select u.* from public.weekly_source_uploads u
+    join public.weekly_source_cycles c on c.id=u.source_cycle_id
+    left join public.weekly_source_report_scopes s on s.id=u.report_scope_id
+    where c.source_group_id=any(v_groups) and u.state='CURRENT'
+      and (c.scope_client_id is null or c.scope_client_id=v_contract.client_id)
+      and (s.client_id is null or s.client_id=v_contract.client_id) order by u.id
+  loop
+    v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','CURRENT_IMPORT',
+      'upload',to_jsonb(v_upload),'cycle',(select to_jsonb(c) from public.weekly_source_cycles c where c.id=v_upload.source_cycle_id),
+      'report_scope',(select to_jsonb(s) from public.weekly_source_report_scopes s where s.id=v_upload.report_scope_id)));
+    select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+    if v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1' or v_profile.profile_json->>'purpose'='PREFINAL_CHECKING'
+       or v_profile.row_finalisation_capability='CHECKING_ONLY' then continue; end if;
+    -- A genuinely consumed Final already has its placement census above.
+    if exists(select 1 from public.weekly_source_final_revisions f
+      join public.weekly_source_cycles c on c.id=f.source_cycle_id
+      left join public.weekly_source_report_scopes s on s.id=f.report_scope_id
+      where f.upload_id=v_upload.id and f.source_cycle_id=v_upload.source_cycle_id
+        and f.report_scope_id is not distinct from v_upload.report_scope_id
+        and f.state='CURRENT' and f.finalised_at_utc is not null and isfinite(f.finalised_at_utc)
+        and ((f.authority_scope_kind='CYCLE' and s.id is null and c.current_final_revision_id=f.id)
+          or (f.authority_scope_kind='NHSP_REPORT_SCOPE' and s.current_final_revision_id=f.id))) then continue; end if;
+    select count(*) into v_count from public.weekly_source_projection_publications p
+      where p.upload_id=v_upload.id and p.source_cycle_id=v_upload.source_cycle_id
+        and p.report_scope_id is not distinct from v_upload.report_scope_id and p.state='CURRENT';
+    if v_count<>1 then v_unknown:=true; continue; end if;
+    select * into strict v_publication from public.weekly_source_projection_publications p
+      where p.upload_id=v_upload.id and p.source_cycle_id=v_upload.source_cycle_id
+        and p.report_scope_id is not distinct from v_upload.report_scope_id and p.state='CURRENT';
+    begin
+      v_guard:=private.weekly_source_current_publication_guard_v1(v_upload.source_cycle_id,
+        v_publication.authority_scope_kind,v_upload.report_scope_id,v_upload.id,v_publication.id,v_publication.authority_scope_version);
+    exception when sqlstate '55000' or sqlstate '22023' then v_unknown:=true; continue; end;
+    if v_publication.authority_scope_version>2147483647 or coalesce(v_publication.projection_generation,0)>2147483647
+       or v_publication.published_at_utc is null or not isfinite(v_publication.published_at_utc) then
+      v_unknown:=true; continue; end if;
+    v_generation:=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer);
+    -- Match the genuine roster Final owner's complete prior/current union.
+    -- A prior root may own a reversal when its event is omitted inside coverage
+    -- OR retained by a current row that moves it to another root/work week.
+    -- NHSP NO_INFERENCE does not use roster omission authority.
+    if v_profile.final_authority_kind in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS')
+       and v_profile.omission_meaning='CANCEL_INSIDE_CONFIRMED_COVERAGE' then
+      for v_prior in
+        with prior_states as (
+          select distinct on(t.work_event_id) t.new_snapshot_line_id,t.id as transition_id
+          from public.weekly_source_state_transitions t
+          join public.weekly_source_final_revisions f on f.id=t.final_revision_id and f.state='CURRENT'
+          join public.weekly_source_cycles c on c.id=t.finalisation_cycle_id
+          join public.weekly_source_client_manifests m on coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=f.id and m.client_id=v_contract.client_id
+          where t.source_profile_kind=v_profile.final_authority_kind
+            and c.source_group_id=(select source_group_id from public.weekly_source_cycles where id=v_upload.source_cycle_id)
+            and c.finalisation_week_ending<(select finalisation_week_ending from public.weekly_source_cycles where id=v_upload.source_cycle_id)
+          order by t.work_event_id,c.finalisation_week_ending desc,f.finalised_at_utc desc,
+            f.revision_number desc,t.created_at_utc desc,t.id desc
+        ) select line.*,s.transition_id,
+            exists(select 1 from public.weekly_source_row_resolutions r
+              join public.weekly_source_upload_rows current_row on current_row.id=r.upload_row_id
+              where current_row.upload_id=v_upload.id and r.generation=v_generation
+                and r.work_event_id=line.work_event_id) as has_current_replacement
+          from prior_states s
+          join public.weekly_source_final_snapshot_lines line on line.id=s.new_snapshot_line_id
+          where line.candidate_id=v_contract.candidate_id and line.contract_id=v_contract.id
+            and line.client_id=v_contract.client_id
+            and line.work_date between v_root.week_ending_date-6 and v_root.week_ending_date
+          order by line.id
+      loop
+        v_observation:=null;
+        if v_upload.coverage_state='COMPLETE' and v_upload.coverage_confirmed_by_user_id is not null
+           and v_upload.coverage_confirmed_at_utc is not null and isfinite(v_upload.coverage_confirmed_at_utc)
+           and v_upload.coverage_timezone='Europe/London'
+           and v_upload.confirmed_coverage_start_local_date is not null
+           and v_upload.confirmed_coverage_end_local_date is not null
+           and (v_prior.work_date between v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date
+             or v_prior.has_current_replacement) then
+          begin
+            v_policy:=private._weekly_source_effective_policy_v1(v_contract.client_id,v_contract.id,v_prior.work_date);
+            v_linked_root:=private.weekly_source_finalisation_lineage_assert_v1(v_prior.row_resolution_id,
+              (select source_cycle_id from public.weekly_source_final_revisions where id=v_prior.final_revision_id));
+            if v_linked_root=p_root_timesheet_id and v_policy->>'authority_mode'='SOURCE_AUTHORITY'
+               and v_policy->>'self_bill_enabled'='true'
+               and v_policy->>'source_group_id'=(select source_group_id::text from public.weekly_source_cycles where id=v_upload.source_cycle_id)
+              then v_observation:=true; end if;
+          exception when sqlstate '55000' or sqlstate '40001' or sqlstate '22023' then null; end;
+        elsif v_upload.coverage_state='COMPLETE'
+           and v_upload.confirmed_coverage_start_local_date is not null
+           and v_upload.confirmed_coverage_end_local_date is not null
+           and not v_prior.has_current_replacement
+           and v_prior.work_date not between v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date
+          then v_observation:=false;
+        end if;
+        v_present:=v_present or v_observation is true; v_unknown:=v_unknown or v_observation is null;
+        v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','PREFINAL_ROSTER_PRIOR_CURRENT_UNION',
+          'prior_snapshot',to_jsonb(v_prior),'publication',to_jsonb(v_publication),'present',v_observation));
+      end loop;
+    end if;
+    for v_row in select * from public.weekly_source_upload_rows where upload_id=v_upload.id
+      and (work_date is null or work_date between v_root.week_ending_date-6 and v_root.week_ending_date) order by id loop
+      select * into v_resolution from public.weekly_source_row_resolutions
+        where upload_row_id=v_row.id and generation=v_generation;
+      v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','CURRENT_ROW_DISCOVERY',
+        'row_id',v_row.id,'row_hash',encode(v_row.normalised_row_hash,'hex'),
+        'resolution',to_jsonb(v_resolution),'publication',to_jsonb(v_publication)));
+      if not found then v_unknown:=true; continue; end if;
+      if v_resolution.candidate_id is not null and v_resolution.candidate_id<>v_contract.candidate_id
+         or v_resolution.client_id is not null and v_resolution.client_id<>v_contract.client_id
+         or v_resolution.contract_id is not null and v_resolution.contract_id<>v_contract.id then continue; end if;
+      if v_resolution.mapping_state<>'RESOLVED' or v_row.work_date is null
+         or v_contract.week_ending_weekday_snapshot is null
+         or v_contract.week_ending_weekday_snapshot not between 0 and 6
+         or v_row.work_date<v_contract.start_date
+         or (v_contract.end_date is not null and v_row.work_date>v_contract.end_date)
+         or v_root.submission_mode is distinct from 'MANUAL' then v_unknown:=true; continue; end if;
+      begin
+        v_policy:=private._weekly_source_effective_policy_v1(v_contract.client_id,v_contract.id,v_row.work_date);
+      exception when sqlstate '55000' or sqlstate '22023' then v_unknown:=true; continue; end;
+      if v_policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY'
+         or v_policy->>'self_bill_enabled' is distinct from 'true'
+         or v_policy->>'source_group_id' is distinct from (
+           select c.source_group_id::text from public.weekly_source_cycles c where c.id=v_upload.source_cycle_id)
+         or encode(v_resolution.effective_policy_fingerprint,'hex') is distinct from v_policy->>'policy_sha256'
+         then v_unknown:=true; continue; end if;
+      v_week:=v_row.work_date+((v_contract.week_ending_weekday_snapshot-extract(dow from v_row.work_date)::integer+7)%7);
+      if v_week<>v_root.week_ending_date then continue; end if;
+      v_linked_root:=null;
+      if exists(select 1 from public.weekly_source_row_timesheet_lineages where row_resolution_id=v_resolution.id) then
+        begin
+          v_linked_root:=private.weekly_source_finalisation_lineage_assert_v1(v_resolution.id,v_upload.source_cycle_id);
+        exception when sqlstate '55000' or sqlstate '40001' then v_unknown:=true; continue; end;
+      else
+        select cw.timesheet_id into v_linked_root from public.contract_weeks cw
+          where cw.contract_id=v_contract.id and cw.week_ending_date=v_week and cw.additional_seq=0
+            and not cw.is_adjustment and cw.status<>'CANCELLED'
+            and cw.submission_mode_snapshot='MANUAL';
+      end if;
+      if v_linked_root is distinct from p_root_timesheet_id
+         or not v_root.is_current or v_root.is_adjustment or v_root.revoked_at is not null
+         or v_root.archived_at_utc is not null or v_root.sheet_scope<>'WEEKLY' or v_root.line_type<>'HOURS' then
+        v_unknown:=true; continue; end if;
+      v_present:=true;
+      v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','PREFINAL','row_id',v_row.id,
+        'resolution_id',v_resolution.id,'generation',v_generation,'publication_guard',v_guard));
+    end loop;
+  end loop;
+
+  -- Correct Final's full old/new union includes removal of its last movement.
+  -- Unprepared or stale relevant replacements stay unknown, not empty.
+  for v_session in select s.* from public.weekly_final_source_correction_sessions s
+    join public.weekly_source_cycles c on c.id=s.source_cycle_id
+    where c.source_group_id=any(v_groups) and s.state in ('DRAFT','STAGING','READY','REVIEWED','PREPARING','PREPARED','COMMITTING')
+      and exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=s.expected_current_final_revision_id and m.client_id=v_contract.client_id) order by s.id
+  loop
+    v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','CORRECTION_DISCOVERY','session',to_jsonb(v_session)));
+    if exists(select 1 from public.weekly_source_ordinary_pay_projection_receipts r
+      where r.final_revision_id=v_session.expected_current_final_revision_id and r.root_timesheet_id=any(v_ids)
+        and r.outcome in ('PREPARED_FOR_AUTHORISATION','PROPOSED')) then
+      if v_session.prepared_final_revision_id is null then v_unknown:=true; continue; end if;
+    elsif v_session.prepared_final_revision_id is null then v_unknown:=true; continue; end if;
+    begin v_context:=private.weekly_source_correct_final_prepared_context_v1(v_session.id);
+    exception when sqlstate '55000' then v_unknown:=true; continue; end;
+    if v_session.prepare_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+         'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_RESULT_V1',v_session.prepare_result_json)
+       or v_context->'root_contexts' is distinct from v_session.prepare_result_json->'root_contexts'
+       or not exists(select 1 from public.weekly_source_final_revisions f
+         join public.weekly_source_cycles c on c.id=f.source_cycle_id
+         left join public.weekly_source_report_scopes s on s.id=f.report_scope_id
+         where f.id=v_session.expected_current_final_revision_id and f.state='CURRENT'
+           and f.manifest_hash=v_session.expected_final_manifest_hash
+           and f.finalised_at_utc is not null and isfinite(f.finalised_at_utc)
+           and f.source_cycle_id=v_session.source_cycle_id and f.report_scope_id is not distinct from v_session.report_scope_id
+           and ((f.authority_scope_kind='CYCLE' and c.current_final_revision_id=f.id)
+             or (f.authority_scope_kind='NHSP_REPORT_SCOPE' and s.current_final_revision_id=f.id)))
+       or not exists(select 1 from public.weekly_source_projection_publications p
+         join public.weekly_source_uploads u on u.id=p.upload_id
+         join public.weekly_source_final_revisions f on f.id=v_session.prepared_final_revision_id
+         join public.weekly_source_format_profiles profile on profile.id=u.source_format_profile_id
+         join public.weekly_source_final_revisions prior on prior.id=v_session.expected_current_final_revision_id
+         join public.weekly_source_uploads prior_upload on prior_upload.id=prior.upload_id
+         join public.weekly_source_format_profiles prior_profile on prior_profile.id=prior_upload.source_format_profile_id
+         join public.weekly_source_cycles cycle on cycle.id=v_session.source_cycle_id
+         join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+         left join public.weekly_source_report_scopes report_scope on report_scope.id=v_session.report_scope_id
+         where p.id=v_session.replacement_projection_publication_id and u.id=v_session.replacement_correction_upload_id
+           and p.state='CORRECTION_READY' and u.state='CORRECTION_READY'
+           and p.correction_session_id=v_session.id and u.correction_session_id=v_session.id
+           and p.source_cycle_id=v_session.source_cycle_id and u.source_cycle_id=v_session.source_cycle_id
+           and p.report_scope_id is not distinct from v_session.report_scope_id
+           and u.report_scope_id is not distinct from v_session.report_scope_id
+           and u.purpose='FINAL_SOURCE_CORRECTION'
+           and p.authority_scope_kind=v_session.authority_scope_kind
+           and u.row_manifest_hash is not null and p.comparison_manifest_hash is not null and p.issue_set_hash is not null
+           and p.authority_scope_version=case when v_session.authority_scope_kind='NHSP_REPORT_SCOPE'
+             then report_scope.version else cycle.version end
+           and prior_upload.state='CURRENT'
+           and exists(select 1 from public.weekly_source_projection_publications current_publication
+             where current_publication.id=case when v_session.authority_scope_kind='NHSP_REPORT_SCOPE'
+               then report_scope.current_projection_publication_id else cycle.current_projection_publication_id end
+               and current_publication.state='CURRENT' and current_publication.upload_id=prior_upload.id)
+           and profile.final_authority_kind=prior_profile.final_authority_kind
+           and (profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT')=(source_group.source_family='NHSP')
+           and f.state='PREPARED' and f.reason='CORRECT_FINAL_SOURCE'
+           and f.upload_id=u.id and f.source_cycle_id=cycle.id
+           and f.report_scope_id is not distinct from v_session.report_scope_id
+           and f.predecessor_revision_id=prior.id
+           and v_session.prepare_result_json->>'final_revision_id'=f.id::text
+           and f.manifest_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINAL_REVISION_MANIFEST_V1',
+             jsonb_build_object('source_cycle_id',cycle.id,'authority_scope_kind',v_session.authority_scope_kind,
+               'report_scope_id',v_session.report_scope_id,'revision_number',f.revision_number,'upload_id',u.id,
+               'authority_scope_version',p.authority_scope_version,'row_manifest_hash',encode(u.row_manifest_hash,'hex'),
+               'comparison_manifest_hash',encode(p.comparison_manifest_hash,'hex'),'issue_set_hash',encode(p.issue_set_hash,'hex'),
+               'profile_code',profile.profile_code,'profile_version',profile.version,
+               'coverage_start_local_date',f.coverage_start_local_date,'coverage_end_local_date',f.coverage_end_local_date,
+               'reason',f.reason,'predecessor_revision_id',f.predecessor_revision_id,
+               'prior_state_cutoff_revision_id',f.prior_state_cutoff_revision_id,
+               'policy_fingerprint',encode(f.policy_fingerprint,'hex')))) then
+      v_unknown:=true; continue; end if;
+    v_guard:=private.weekly_source_correct_final_office_preview_v1(v_session.id);
+    if v_session.prepare_result_json->'office_preview' is distinct from v_guard
+       or v_session.review_result_json->'office_preview' is distinct from v_guard
+       or jsonb_array_length(v_guard->'blockers')<>0 then v_unknown:=true; continue; end if;
+    if not exists(select 1 from jsonb_array_elements(v_context->'root_contexts') r
+      where (r->>'root_timesheet_id')::uuid=any(v_ids)) then continue; end if;
+    v_present:=true;
+    v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','CORRECTION','session_id',v_session.id,
+      'prepared_context',v_context,'prepare_result_hash',encode(v_session.prepare_result_hash,'hex')));
+  end loop;
+
+  -- Use actual committed member chunks, not a client-wide fence. Ordinary
+  -- selection expanders already exclude Source-owned roots in their owner.
+  for v_chunk in select c.* from public.invoice_operation_chunks c
+    join public.invoice_operations o on o.id=c.operation_id
+    where o.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+      and c.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+      and (not c.is_manifest_member or c.manifest_committed)
+      and coalesce(c.payload_json->>'is_selection_expander','false')<>'true'
+      and (not c.is_manifest_member or coalesce(c.entity_type,'')<>'OPERATION') order by c.id
+  loop
+    select * into strict v_operation from public.invoice_operations where id=v_chunk.operation_id;
+    v_observation:=false;
+    v_relevant:=(v_chunk.entity_type='TIMESHEET' and v_chunk.entity_id=any(v_ids))
+      or (v_chunk.entity_type='INVOICE' and v_chunk.entity_id=any(v_invoices))
+      or (v_operation.entity_type='TIMESHEET' and v_operation.entity_id=any(v_ids))
+      or (v_operation.entity_type='INVOICE' and v_operation.entity_id=any(v_invoices));
+    if v_chunk.entity_type='TIMESHEET' and v_chunk.entity_id=any(v_ids) then
+      if v_operation.operation_type in ('GENERATE_INVOICES','ISSUE_INVOICES','RECONCILE_INVOICE_WORK') then v_observation:=true;
+      elsif v_operation.operation_type='BUILD_DOCUMENT' then v_observation:=null; end if;
+    end if;
+    if v_chunk.payload_json->>'command_type'='GENERATE_CREDIT_NOTE' then
+      v_text:=coalesce(v_chunk.payload_json->>'source_invoice_id',v_chunk.entity_id::text);
+      if coalesce(v_text,'')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        if v_relevant then v_observation:=null; end if;
+      else
+        v_invoice_id:=v_text::uuid;
+        if (v_chunk.entity_type='INVOICE' and v_chunk.entity_id=any(v_invoices)
+          and v_chunk.entity_id is distinct from v_invoice_id) then
+          v_observation:=null;
+        elsif v_invoice_id=any(v_invoices) then
+          v_relevant:=true;
+          if v_chunk.entity_id is not null and v_chunk.entity_id<>v_invoice_id then v_observation:=null;
+          else v_observation:=true; end if;
+        end if;
+      end if;
+    elsif v_operation.operation_type='GENERATE_INVOICES' then
+      v_members:=v_chunk.payload_json->'canonical_source_members';
+      if v_chunk.payload_json ? 'canonical_source_members' and jsonb_typeof(v_members) is distinct from 'array' then
+        -- A malformed primary manifest must not be replaced by fallback IDs.
+        -- Fallback membership is discovery only, to qualify the relevant NULL.
+        v_members:=coalesce(v_chunk.payload_json->'canonical_source_ids',v_chunk.payload_json->'source_ids','[]'::jsonb);
+        if jsonb_typeof(v_members)='array' and exists(select 1 from jsonb_array_elements_text(v_members) s(value)
+          where lower(s.value)=any(select id::text from unnest(v_ids) id)) then v_relevant:=true; end if;
+        if v_relevant then v_observation:=null; end if;
+        v_members:='[]'::jsonb;
+      elsif v_members is null or jsonb_array_length(v_members)=0 then
+        v_members:=coalesce(v_chunk.payload_json->'canonical_source_ids',v_chunk.payload_json->'source_ids','[]'::jsonb);
+        if jsonb_typeof(v_members) is distinct from 'array' then
+          if v_relevant then v_observation:=null; end if;
+          v_members:='[]'::jsonb;
+        else
+          select coalesce(jsonb_agg(jsonb_build_object('source_type','TIMESHEET','source_id',s.value,
+            'related_timesheet_id',s.value) order by s.ordinality),'[]'::jsonb) into v_members
+            from jsonb_array_elements_text(v_members) with ordinality s(value,ordinality);
+        end if;
+      end if;
+      -- Discover actual membership before validating ANY member, so malformed
+      -- earlier evidence cannot disappear merely because the owned root is last.
+      if exists(select 1 from jsonb_array_elements(v_members) m(value)
+        where lower(m.value->>'related_timesheet_id')=any(select id::text from unnest(v_ids) id)
+          or lower(m.value->>'source_id')=any(select id::text from unnest(v_ids) id)) then v_relevant:=true; end if;
+      for v_member in select value from jsonb_array_elements(v_members) loop
+        -- Canonical TIMESHEET members carry both independently valid identities.
+        -- COALESCE cannot let a valid related ID conceal a malformed source ID.
+        if upper(coalesce(v_member->>'source_type','TIMESHEET'))='TIMESHEET' then
+          if coalesce(v_member->>'source_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             or coalesce(v_member->>'related_timesheet_id','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+            if v_relevant then v_observation:=null; end if;
+            continue;
+          end if;
+          if (v_member->>'source_id')::uuid is distinct from (v_member->>'related_timesheet_id')::uuid then
+            if v_relevant then v_observation:=null; end if;
+            continue;
+          end if;
+        end if;
+        v_text:=coalesce(v_member->>'related_timesheet_id',v_member->>'source_id');
+        if coalesce(v_text,'')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+          if v_relevant then v_observation:=null; end if;
+          continue; end if;
+        v_member_id:=v_text::uuid;
+        if v_member_id=any(v_ids) then
+          v_relevant:=true;
+          if upper(coalesce(v_member->>'source_type','TIMESHEET'))='TIMESHEET' then
+            if v_observation is not null then v_observation:=true; end if;
+          else v_observation:=null; end if;
+        end if;
+      end loop;
+    else
+      v_text:=coalesce(v_chunk.payload_json->>'invoice_id',case when v_chunk.entity_type='INVOICE' then v_chunk.entity_id::text end);
+      if v_chunk.entity_type='INVOICE' and v_chunk.entity_id=any(v_invoices)
+         and v_text is distinct from v_chunk.entity_id::text then v_observation:=null;
+      elsif v_text ~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' and v_text::uuid=any(v_invoices) then
+        v_relevant:=true;
+        if v_operation.operation_type='ISSUE_INVOICES' then v_observation:=true;
+        elsif v_operation.operation_type='BUILD_DOCUMENT' then v_observation:=null; end if;
+      end if;
+    end if;
+    if v_relevant then
+      v_present:=v_present or v_observation is true; v_unknown:=v_unknown or v_observation is null;
+      v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','OPERATION_CHUNK',
+        'operation',to_jsonb(v_operation),'chunk',to_jsonb(v_chunk),'present',v_observation));
+    end if;
+  end loop;
+  -- ISSUE can be queued before its exact invoice chunks have been expanded.
+  for v_operation in select * from public.invoice_operations where operation_type='ISSUE_INVOICES'
+    and status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED') order by id loop
+    v_relevant:=v_operation.entity_type='INVOICE' and v_operation.entity_id=any(v_invoices);
+    v_observation:=case when v_relevant then true else false end;
+    if v_operation.input_json ? 'invoice_ids' then
+      if jsonb_typeof(v_operation.input_json->'invoice_ids') is distinct from 'array' then
+        if v_relevant then v_observation:=null; end if;
+      else
+        v_members:=v_operation.input_json->'invoice_ids';
+        if exists(select 1 from jsonb_array_elements_text(v_members) s(value)
+          where lower(s.value)=any(select id::text from unnest(v_invoices) id)) then v_relevant:=true; end if;
+        if v_relevant then
+          if exists(select 1 from jsonb_array_elements_text(v_members) s(value)
+            where coalesce(s.value,'')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            then v_observation:=null; else v_observation:=true; end if;
+        end if;
+      end if;
+    end if;
+    if v_relevant then
+      v_present:=v_present or v_observation is true; v_unknown:=v_unknown or v_observation is null;
+      v_basis:=v_basis||jsonb_build_array(jsonb_build_object('lane','QUEUED_ISSUE',
+        'operation',to_jsonb(v_operation),'present',v_observation));
+    end if;
+  end loop;
+  return jsonb_build_object('scope',v_scope,'present',case when v_present then true when v_unknown then null else false end,
+    'discovery_complete',not v_unknown,'basis',v_basis);
+end;
+$function$;

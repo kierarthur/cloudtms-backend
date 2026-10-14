@@ -1,0 +1,86 @@
+{
+  "accepted": false,
+  "database": "cloudtms_test_clone",
+  "label": "HR_REPORT_M1_FIXED_PROJECTION_DEFINITION_NULL_ONLY",
+  "sqlSha256": "295d3535f226141bc5ecb72099db810cb832feed8c22993fdbe0768df794aab7",
+  "statementCount": 9,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "error": {
+        "message": "missing \"THEN\" at end of SQL expression",
+        "code": "42601",
+        "position": "55110",
+        "routine": "read_sql_construct"
+      }
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "installed_definition_restored",
+          "identity_test",
+          "module"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "installed_definition_restored": true,
+            "identity_test": true,
+            "module": "LEGACY:1"
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+  ],
+  "fatalError": {
+    "message": "missing \"THEN\" at end of SQL expression",
+    "code": "42601",
+    "position": "55110",
+    "routine": "read_sql_construct"
+  },
+  "sourceCommit": "b9e2cbfcdf061a4e8fe07044e658c2daf043a362",
+  "reviewedSourceHead": "5d334f47ba5ec788c98e498f1c564fa759c180c5",
+  "turnBackendPid": 472452,
+  "status": "REPORT_DEFINITION_COMPILE_FAILED_M1_NOT_REACHED",
+  "sourceCandidateSha256": "70ea12dfe3ded9ceb9f136208a9316ef54905c66f5cb57064ef034c89e4929b6",
+  "nativeAcceptance": "No rows/financial/API/app acceptance; full rehearsal paused."
+}

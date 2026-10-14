@@ -1,0 +1,28 @@
+{
+  "status": "PREPARED_NOT_EXECUTED_SHARED_TURN_REQUIRED",
+  "sourceCommit": "c82efd3f6ad2cb8afc4a80464fc7541df5f01ae4",
+  "sourceBranch": "codex/healthroster-v2-backend-13102026",
+  "physicalDatabase": "cloudtms_test_clone",
+  "label": "HR_REPORT_M1_FIXED_PROJECTION_DEFINITION_NULL_ONLY",
+  "scope": "Exactly two complete committed native projection definitions and native NULL22023 probes; no business rows, financial actions, new capability, API or install.",
+  "sqlSha256": "67d6be33c4099036b8be0295fabc6d4073b690b8305cf8e05baf82a4c3869f88",
+  "bytes": 136422,
+  "inputs": [
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "wholeCommittedBlobSha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "definitionSourceSha256": "67f9f66eef4730ae3f096382450cd73284d978a0abc6f6d6ecc2ccc2d21a2880"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "wholeCommittedBlobSha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "definitionSourceSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc"
+    }
+  ],
+  "execution": {
+    "before": "Obtain exact current installed function definition only after shared turn is taken; verify exact definition hash before replacement in same sql.",
+    "trial": "Arthur rollback lab one short trial, statement5s/lock500ms, continue_on_error=false",
+    "after": "Fresh read-only exact installed definition restoration, physical database and no durable writes; retain shared turn until returned.",
+    "noFullRehearsal": true
+  }
+}

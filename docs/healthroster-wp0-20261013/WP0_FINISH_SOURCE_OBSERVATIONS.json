@@ -1,0 +1,12 @@
+{
+  "auditedBackend": "77ffc9d7d15d19b6453ae25441eee8c1bff58c90",
+  "observedRemoteTest": "bea9021895e252e60ec51892e92b5a43a8abe035",
+  "backendDelta": "7files180additions6deletions; metadata only; unreviewed bodies",
+  "auditedMyTMS": "3d26ed757bc5fed8208e3534abb7ad50a8bd45d3",
+  "observedRemoteApprovedHours": "d021e6aac2e7fe0323b1f2d6cdd0c3499c815328",
+  "MyTMSdelta": "10files220additions38deletions includingappsession/Rota; unreviewed",
+  "Office": "887e7af7cd15d9f4034ad73806b44344f3eb0791",
+  "NEXT": "497fb059f186de97ae7df4d5fc7558ff229c0b9f",
+  "atUtc": "2026-10-13T09:30:43.005987+00:00",
+  "disposition": "STOP/report; no successor adoption or proof rerun"
+}

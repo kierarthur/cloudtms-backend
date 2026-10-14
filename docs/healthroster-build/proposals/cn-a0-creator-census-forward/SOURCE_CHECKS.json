@@ -1,0 +1,91 @@
+{
+  "contract": "HEALTHROSTER_A0_CENSUS_FORWARD_SOURCE_CHECKS_V1",
+  "status": "PASS_SOURCE_ONLY_NATIVE_HELD",
+  "rootInputGitHead": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "inputs": {
+    "count": 1319,
+    "allExact": true
+  },
+  "tests": {
+    "suites": [
+      "tests/healthroster-cn-a0-callbacks.test.mjs",
+      "tests/healthroster-cn-a0-producers.test.mjs",
+      "tests/healthroster-cn-a0-clock-scope.test.mjs",
+      "tests/healthroster-cn-a0-lock-fence.test.mjs",
+      "tests/healthroster-cn-a0-phantom-writers.test.mjs",
+      "tests/healthroster-cn-a0-creator-census-forward.test.mjs"
+    ],
+    "tests": 112,
+    "pass": 112,
+    "fail": 0,
+    "new": 20
+  },
+  "syntax": {
+    "files": [
+      "build-creator-audit.mjs",
+      "build-review-fixtures.mjs",
+      "census-first-creators.mjs",
+      "freeze-forward-packet.mjs",
+      "sql-function-source-index.mjs"
+    ],
+    "count": 5,
+    "pass": true
+  },
+  "preservation": {
+    "priorOutputs": 170,
+    "frozenCreatorOutputs": 19,
+    "frozenCreatorManifest": true,
+    "all189OutputsByteEqual": true,
+    "fiveManifestPinsByteEqual": true,
+    "nativeHelperBodies": 25,
+    "firstCreatorBodies": 30
+  },
+  "critic": {
+    "sha256": "f2887142f109c35c0861eaed4e43a3b46429dcae5ec3eebba6a87e0812e81b9f",
+    "byteEqual": true
+  },
+  "correctedEvidence": {
+    "liveTopLevelFunctions": 2270,
+    "controllingWriters": 70,
+    "firstCreators": 30,
+    "historicalWriterOccurrences": 233,
+    "removedStaleWriters": 3,
+    "beforeTriggerOwners": 16,
+    "trueTriggerOrderChecks": 28,
+    "counterexampleFailures": 2
+  },
+  "noRootEdits": true,
+  "noSqlChanges": true,
+  "noSqlCompile": true,
+  "noDatabaseCalls": true,
+  "noRuntimeBuildDeploy": true,
+  "noNativeAcceptance": true,
+  "holds": [
+    {
+      "kind": "VALIDATION_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "INVOICE_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "CANDIDATE_ALIAS_RANK",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "RAW_BOOKING_SIBLING",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    },
+    {
+      "kind": "NATIVE_FIN_LATE_HOOKS",
+      "status": "HELD_NATIVE_PROOF_REQUIRED"
+    }
+  ],
+  "isolation": {
+    "savedSourceEnforcesRc": false,
+    "qualifiedRuntimeIsolation": null,
+    "hiddenRequestStatus": "HELD: earlier RR can hide later P0/WAITING; row intent is not a row-version change or visibility refresh.",
+    "ordinaryRrPreserved": true
+  }
+}

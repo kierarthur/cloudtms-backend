@@ -1,0 +1,116 @@
+-- One closed DTO is used before report registration, during staging and again
+-- from persisted rows at seal. Money is literal evidence; arithmetic is not
+-- corrected here. Start/end are source facts and never pay duration authority.
+create or replace function private.weekly_source_self_bill_report_row_dto_v1(p_row jsonb)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_row public.weekly_source_upload_rows%rowtype; v_raw jsonb; v_component jsonb;
+  v_kind text; v_expected bigint; v_start timestamp; v_end timestamp;
+begin
+  if p_row is null or jsonb_typeof(p_row)<>'object' or exists(
+    select 1 from jsonb_object_keys(p_row) k where k not in (
+      'source_row_ordinal','external_source_key','source_candidate_identity','source_client_identity',
+      'work_date','start_at_local','end_at_local','source_shift_charge_pence','source_vat_pence',
+      'source_gross_pence','bounded_raw_columns_json')) then
+    raise exception 'WEEKLY_SOURCE_REPORT_ROW_UNKNOWN_OR_MISSING_FIELD' using errcode='22023';
+  end if;
+  begin v_row:=jsonb_populate_record(null::public.weekly_source_upload_rows,p_row);
+  exception when others then raise exception 'WEEKLY_SOURCE_REPORT_ROW_TYPE_INVALID' using errcode='22023'; end;
+  v_raw:=v_row.bounded_raw_columns_json;
+  if v_row.source_row_ordinal is null or v_row.source_row_ordinal<1
+    or char_length(coalesce(v_row.external_source_key,'')) not between 1 and 160
+    or v_row.external_source_key<>btrim(v_row.external_source_key)
+    or char_length(coalesce(v_row.source_candidate_identity,'')) not between 1 and 200
+    or char_length(coalesce(v_row.source_client_identity,'')) not between 1 and 200
+    or v_row.work_date is null or v_row.start_at_local is null or v_row.end_at_local is null
+    or v_row.source_shift_charge_pence is null or v_row.source_vat_pence is null or v_row.source_gross_pence is null
+    or greatest(abs(v_row.source_shift_charge_pence::numeric),abs(v_row.source_vat_pence::numeric),abs(v_row.source_gross_pence::numeric))>999999999999
+    or jsonb_typeof(v_raw) is distinct from 'object'
+    or exists(select 1 from jsonb_object_keys(v_raw) k where k not in ('reportTimes','requestedOn','components'))
+    or jsonb_typeof(v_raw->'reportTimes') is distinct from 'object'
+    or exists(select 1 from jsonb_object_keys(v_raw->'reportTimes') k where k not in ('start','end','overnight'))
+    or coalesce(v_raw#>>'{reportTimes,start}','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    or coalesce(v_raw#>>'{reportTimes,end}','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    or jsonb_typeof(v_raw#>'{reportTimes,overnight}') is distinct from 'boolean'
+    or coalesce(v_raw->>'requestedOn','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$'
+    or jsonb_typeof(v_raw->'components') is distinct from 'object'
+    or exists(select 1 from jsonb_object_keys(v_raw->'components') k where k not in ('net','vat','gross')) then
+    raise exception 'WEEKLY_SOURCE_REPORT_ROW_FACTS_INVALID' using errcode='22023';
+  end if;
+  perform (v_raw->>'requestedOn')::timestamp;
+  v_start:=v_row.work_date+(v_raw#>>'{reportTimes,start}')::time;
+  v_end:=v_row.work_date+(v_raw#>>'{reportTimes,end}')::time;
+  if v_end<=v_start then v_end:=v_end+interval '1 day'; end if;
+  if v_row.start_at_local is distinct from v_start or v_row.end_at_local is distinct from v_end
+    or (v_raw#>>'{reportTimes,overnight}')::boolean is distinct from (v_end::date>v_start::date) then
+    raise exception 'WEEKLY_SOURCE_REPORT_TIMES_INVALID' using errcode='22023';
+  end if;
+  foreach v_kind in array array['net','vat','gross'] loop
+    v_component:=v_raw->'components'->v_kind;
+    v_expected:=case v_kind when 'net' then v_row.source_shift_charge_pence when 'vat' then v_row.source_vat_pence else v_row.source_gross_pence end;
+    if jsonb_typeof(v_component) is distinct from 'object' or exists(
+      select 1 from jsonb_object_keys(v_component) k where k not in (
+        'coordinate','sourceKind','cellKind','formulaPresent','originalToken','decodedToken','tokenTruncated',
+        'parseState','parsedPence','normalisation','rounding'))
+      or coalesce(v_component->>'coordinate','') !~ '^[A-Z]{1,3}[1-9][0-9]{0,6}$'
+      or coalesce(v_component->>'sourceKind','') not in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN')
+      or coalesce(v_component->>'cellKind','') not in ('NUMBER','STRING')
+      or v_component->'formulaPresent' is distinct from 'false'::jsonb
+      or jsonb_typeof(v_component->'tokenTruncated') is distinct from 'boolean'
+      or jsonb_typeof(v_component->'originalToken') is distinct from 'string'
+      or jsonb_typeof(v_component->'decodedToken') is distinct from 'string'
+      or char_length(v_component->>'originalToken')>128 or char_length(v_component->>'decodedToken')>128
+      or v_component->>'parseState' is distinct from 'PARSED'
+      or coalesce(v_component->>'parsedPence','') !~ '^-?[0-9]{1,12}$'
+      or (v_component->>'parsedPence')::bigint is distinct from v_expected
+      or (v_component ? 'normalisation' and (jsonb_typeof(v_component->'normalisation')<>'string' or char_length(v_component->>'normalisation')>200))
+      or (v_component ? 'rounding' and (jsonb_typeof(v_component->'rounding')<>'string' or char_length(v_component->>'rounding')>200)) then
+      raise exception 'WEEKLY_SOURCE_REPORT_COMPONENT_EVIDENCE_INVALID' using errcode='22023',detail=v_kind;
+    end if;
+  end loop;
+  return jsonb_build_object('source_row_ordinal',v_row.source_row_ordinal,'external_source_key',v_row.external_source_key,
+    'source_candidate_identity',v_row.source_candidate_identity,'source_client_identity',v_row.source_client_identity,
+    'work_date',to_char(v_row.work_date,'YYYY-MM-DD'),'start_at_local',to_char(v_start,'YYYY-MM-DD"T"HH24:MI:SS'),
+    'end_at_local',to_char(v_end,'YYYY-MM-DD"T"HH24:MI:SS'),'source_shift_charge_pence',v_row.source_shift_charge_pence,
+    'source_vat_pence',v_row.source_vat_pence,'source_gross_pence',v_row.source_gross_pence,'bounded_raw_columns_json',v_raw);
+end;
+$function$;
+
+create or replace function private.weekly_source_self_bill_report_row_hash_v1(p_row jsonb)
+returns bytea language sql immutable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SELF_BILL_REPORT_ROW_V1',
+    private.weekly_source_self_bill_report_row_dto_v1(p_row))
+$function$;
+
+create or replace function private.weekly_source_self_bill_report_manifest_v1(p_rows jsonb)
+returns jsonb language plpgsql immutable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_rows jsonb; v_count integer; v_net numeric; v_vat numeric; v_gross numeric;
+begin
+  if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) not between 1 and 100000 then
+    raise exception 'WEEKLY_SOURCE_REPORT_LINE_COUNT_INVALID' using errcode='22023'; end if;
+  select jsonb_agg(private.weekly_source_self_bill_report_row_dto_v1(x) order by (x->>'source_row_ordinal')::integer),
+    count(*),sum((x->>'source_shift_charge_pence')::numeric),sum((x->>'source_vat_pence')::numeric),sum((x->>'source_gross_pence')::numeric)
+    into v_rows,v_count,v_net,v_vat,v_gross from jsonb_array_elements(p_rows) x;
+  if exists(select 1 from jsonb_array_elements(v_rows) x group by x->>'external_source_key' having count(*)<>1)
+    or exists(select 1 from jsonb_array_elements(v_rows) x group by x->>'source_row_ordinal' having count(*)<>1)
+    or greatest(abs(v_net),abs(v_vat),abs(v_gross))>999999999999 then
+    raise exception 'WEEKLY_SOURCE_REPORT_DUPLICATE_OR_TOTAL_OVERFLOW' using errcode='22023'; end if;
+  return jsonb_build_object('line_count',v_count,'net_pence',v_net::bigint,'vat_pence',v_vat::bigint,'gross_pence',v_gross::bigint,
+    'row_manifest_hash',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_SELF_BILL_REPORT_MANIFEST_V1',v_rows),'hex'));
+end;
+$function$;
+
+create or replace function private.weekly_source_self_bill_report_stored_rows_v1(p_upload_id uuid)
+returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select coalesce(jsonb_agg(jsonb_build_object('source_row_ordinal',r.source_row_ordinal,'external_source_key',r.external_source_key,
+    'source_candidate_identity',r.source_candidate_identity,'source_client_identity',r.source_client_identity,
+    'work_date',r.work_date,'start_at_local',r.start_at_local,'end_at_local',r.end_at_local,
+    'source_shift_charge_pence',r.source_shift_charge_pence,'source_vat_pence',r.source_vat_pence,
+    'source_gross_pence',r.source_gross_pence,'bounded_raw_columns_json',r.bounded_raw_columns_json) order by r.source_row_ordinal),'[]'::jsonb)
+  from public.weekly_source_upload_rows r where r.upload_id=p_upload_id
+$function$;

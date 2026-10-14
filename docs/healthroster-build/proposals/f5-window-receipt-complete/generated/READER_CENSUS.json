@@ -1,0 +1,895 @@
+{
+  "contract": "WEEKLY_SOURCE_WINDOW_READER_CENSUS_V1",
+  "includes_historical_definitions": true,
+  "root_latest_installed_census_pending": true,
+  "rows": [
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_protected_editor_context_v1",
+      "sha256": "8e34120c654ff1e71876b65a6e7738ee28451ce67102e7c9c89c3df0ac5a9460",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_workspace_scopes_v1",
+      "sha256": "cd24542b51718cd6fccc2a0c1577b100a864223188c6a61bdce63be561a76ed4",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "4ab15fc6c8b72c0cf8d445e63130b449f77c607c45135baf5cbc5abf42200386",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_report_history_v1",
+      "sha256": "425e2b194d23ac933cabcc903e59ee2b62d67f2fb0b23d8acb960db5e3eb4bcc",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "function": "private.weekly_source_invoice_issue_validate_v1",
+      "sha256": "e6f4c5e1d099c80c6ead86812e86d16c11ab14219f9f54e305db08a30feeabf1",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
+      "function": "public.weekly_source_manual_review_open_v1",
+      "sha256": "ed3408c2a56ef82e7478dad2069e2709522ea343b72a2535beee0892e2a8661f",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
+      "function": "public.weekly_source_manual_review_resolve_v1",
+      "sha256": "81c8f3d79a8f26876345f81c487816d9b9f4eb6827c4727fa8170c706dbb2387",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "function": "private.bpay_next_source_current_lock_recheck_v1",
+      "sha256": "c6ca5cd7337eff571ef7d5024ad3a58693a37686cf19fbf72ec3022792712221",
+      "references": 1,
+      "decision": "RETAIN_BANK_OWNER_ROOT_REVIEW",
+      "successor": null
+    },
+    {
+      "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "function": "private.bpay_next_source_current_observe_expense_row_v1",
+      "sha256": "ca2ddac3e32ec762879b5422efb7064ffea1cfdd4a08351e7155e282a063fdbe",
+      "references": 1,
+      "decision": "RETAIN_BANK_OWNER_ROOT_REVIEW",
+      "successor": null
+    },
+    {
+      "file": "supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "function": "private.weekly_source_accepted_publication_context_v1",
+      "sha256": "969e5d04b6c25418bd1e29175c1f4410efc3e0cf4808a1be2b336d5a84f0d779",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "function": "private.weekly_source_manual_review_source_v2",
+      "sha256": "35acecb9e0b49101720c0d908ceb33d7b80d39b50ad54dccb5f2659bcc7d66c5",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "function": "private.weekly_source_manual_reviews_finalised_v1",
+      "sha256": "0e67fd6a74fdf3f077b972605bb78862e005d5fff3673342dd7a41eaf5828172",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "function": "private.weekly_source_selected_source_witness_v1",
+      "sha256": "34135dffe013aa88a6aef1175298c9ab92f9248ff6fc35f6a38dcaba0d463958",
+      "references": 7,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "function": "private.weekly_source_invoice_duty_v1",
+      "sha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+      "references": 2,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "4ab15fc6c8b72c0cf8d445e63130b449f77c607c45135baf5cbc5abf42200386",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "ac877db6c95d2d91b0eb60342352cae03d36f11fde662be1925451d4f746cf52",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "function": "private.weekly_source_finalise_engine_v1",
+      "sha256": "563f866d77a4ab3248cd652769c2abd36324b3025d790a0d3df1dbb8d1dc7a43",
+      "references": 4,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "04_complete_fin.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "private.weekly_source_invoice_allocation_assert_v1",
+      "sha256": "087db88a2a100e4193906bf8d53f8dccad4b7c16a7dc0d77e42a108a6cbdde05",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "public.weekly_source_invoice_admit_atomic_v1",
+      "sha256": "72ee952489e5d95b6807965277dc2425b81ee22e89905400551cfc3f247ba1ff",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "05_complete_admission.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "public.weekly_source_invoice_move_atomic_v1",
+      "sha256": "091561cbb97b6f04c84991785d4e195e36e52da53127519835d02b99b18d724f",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "private.weekly_source_invoice_issue_validate_v1",
+      "sha256": "ee602296782c29714da13d1cb2f2d950f5c0278432c17321fdebd4fad6b0808c",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "sha256": "96696fae39c61a7809fcc6ce1b74a4cd2dcd0b5b3c6104274c76135d2b719cec",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_ordinary_projection_source_units_v1",
+      "sha256": "26a2c61d782957d73023cde85cfcff270316f1074e7add70262fb09572b99db4",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_selected_source_witness_v1",
+      "sha256": "5f5ed913f85e9f8004feb70c6e9a367fc7488726ef89933c31fe7872e64df9b5",
+      "references": 7,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_finalisation_pay_context_v1",
+      "sha256": "90859230e2aa4e25afbeefeb10c61971db4e9669728ea7daf6225eb343da9ca3",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_correct_final_prepared_context_v1",
+      "sha256": "4f3a538214898766d0d92fbb61eb72e055bb0ac88f30f5152025ef7d1ba5c3e6",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "private.weekly_source_correct_final_preconditions_v1",
+      "sha256": "f1d578639440c3d24c1b067d560b05ffb97e08171a0f3caee6c1b941df8b5676",
+      "references": 4,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_open_atomic_v1",
+      "sha256": "818966788b5427dc4432b926aa9906c8ac3b08ecbf4eee0a2ec82984fad33367",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "private.weekly_source_correct_final_prepared_context_v1",
+      "sha256": "78fb052325ec470e57a1f10faa1ae7f042abb1ed7393dd2f8e8c3ac39fe7d218",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_review_atomic_v1",
+      "sha256": "e3a530f8c0f1a4f08ad7da2b2700b93f898152c77b7771cd86a7f277a1007abd",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "sha256": "812e9f34a6f54932c138a3d77437dabbf9a68a34e5e84a8e46931a69cf18019e",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_apply_atomic_v1",
+      "sha256": "19f5bccf22593dc2a6c9969e21d50adca4437f06f1c52f7975eead9f79b2366a",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "function": "private.weekly_source_finalise_engine_v1",
+      "sha256": "85da216aa9bdb410d81938f29fb809059717323433ec710f1f5df589de2f6fe2",
+      "references": 4,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "04_complete_fin.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "private.weekly_source_invoice_allocation_assert_v1",
+      "sha256": "8a15f3807935453faf4990b33373a1304d11f8cb68310889c29d906f4408900d",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "private.weekly_source_invoice_header_refresh_v1",
+      "sha256": "fb4b671692d6b18229dc2395c372b9881df7e38fb4e09713a775e6f01f4b273e",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "public.weekly_source_invoice_admit_atomic_v1",
+      "sha256": "0ac5de10076de3b9062e531fbfc433f8bd54b34a1efa6f33de2b493b4d23fbd6",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "05_complete_admission.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "public.weekly_source_invoice_move_atomic_v1",
+      "sha256": "1736ca2c1ed4fb921aaee80b09cb1578d46bc73f412d1617a6f9c1c072868257",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "private.weekly_source_invoice_batch_snapshot_v1",
+      "sha256": "f2a86b0339a78b81b124e82cc7afd9887e34a77661d79a2bfdcc2ca9ecfe68c5",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "private.weekly_source_invoice_batch_rows_v1",
+      "sha256": "62abdca6b3ab80e6b7be8276f37bad9e83d7a72c2895c8148dd7eabf1de1bb00",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "public.weekly_source_invoice_batch_admit_atomic_v1",
+      "sha256": "4cfdcde3eb8b107dbb28b3dc6c25a97e70a75c52ca8d5b9aa914b6609bfd86c9",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "public.weekly_source_invoice_edit_context_v1",
+      "sha256": "232ba66a6c7170ca0f59cc74d796370cedd4d8b4ffb0077a7165cab89f3ad8bc",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "function": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "sha256": "36cfcde34ce1d0c04fc5b61d3ffaf268f393d099140101cdea0d525e61d8e416",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "function": "private.weekly_source_ordinary_projection_source_units_v1",
+      "sha256": "4bef0032fd86175c922972054c0596cd5f42c0838c855f5d46111e718371e2b1",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "function": "private.weekly_source_office_query_groups_v1",
+      "sha256": "e16bc3a188abd71371ba0fbc0b496fb19e4c5db1e0577b4a5bbe97d407b97d30",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "function": "private.weekly_source_finalisation_pay_context_v1",
+      "sha256": "222d85698f82cbb0ceafefc3154ef6503b7865996f0a16b8ef7d278a1258d436",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "function": "public.weekly_source_invoice_report_rows_v1",
+      "sha256": "7a2f4ef8bf2ba83a2a767ba7ffeb325983ce383f0d94c2efc7d0e80e5b7290ef",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "function": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "sha256": "7857028fe66ff5ec380629dfc245f34a286f663b948b250f8fb46e63ca909fee",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/24092026_1440_weekly_source_invoice_evidence_lookup_v1.sql",
+      "function": "public.weekly_source_invoice_evidence_v1",
+      "sha256": "e4db83df3945a62390f41088432bdff4f1a34e93bf8899567cdb1dfd3fe43208",
+      "references": 2,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_protected_editor_context_v1",
+      "sha256": "8e34120c654ff1e71876b65a6e7738ee28451ce67102e7c9c89c3df0ac5a9460",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_workspace_scopes_v1",
+      "sha256": "cd24542b51718cd6fccc2a0c1577b100a864223188c6a61bdce63be561a76ed4",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "4ab15fc6c8b72c0cf8d445e63130b449f77c607c45135baf5cbc5abf42200386",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "function": "public.weekly_source_report_history_v1",
+      "sha256": "425e2b194d23ac933cabcc903e59ee2b62d67f2fb0b23d8acb960db5e3eb4bcc",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "function": "private.weekly_source_invoice_issue_validate_v1",
+      "sha256": "e6f4c5e1d099c80c6ead86812e86d16c11ab14219f9f54e305db08a30feeabf1",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
+      "function": "public.weekly_source_manual_review_open_v1",
+      "sha256": "ed3408c2a56ef82e7478dad2069e2709522ea343b72a2535beee0892e2a8661f",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/02102026_1601_weekly_source_manual_review_v1.sql",
+      "function": "public.weekly_source_manual_review_resolve_v1",
+      "sha256": "81c8f3d79a8f26876345f81c487816d9b9f4eb6827c4727fa8170c706dbb2387",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "function": "private.bpay_next_source_current_lock_recheck_v1",
+      "sha256": "c6ca5cd7337eff571ef7d5024ad3a58693a37686cf19fbf72ec3022792712221",
+      "references": 1,
+      "decision": "RETAIN_BANK_OWNER_ROOT_REVIEW",
+      "successor": null
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+      "function": "private.bpay_next_source_current_observe_expense_row_v1",
+      "sha256": "ca2ddac3e32ec762879b5422efb7064ffea1cfdd4a08351e7155e282a063fdbe",
+      "references": 1,
+      "decision": "RETAIN_BANK_OWNER_ROOT_REVIEW",
+      "successor": null
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "function": "private.weekly_source_accepted_publication_context_v1",
+      "sha256": "969e5d04b6c25418bd1e29175c1f4410efc3e0cf4808a1be2b336d5a84f0d779",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "function": "private.weekly_source_manual_review_source_v2",
+      "sha256": "35acecb9e0b49101720c0d908ceb33d7b80d39b50ad54dccb5f2659bcc7d66c5",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "function": "private.weekly_source_manual_reviews_finalised_v1",
+      "sha256": "0e67fd6a74fdf3f077b972605bb78862e005d5fff3673342dd7a41eaf5828172",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+      "function": "private.weekly_source_selected_source_witness_v1",
+      "sha256": "34135dffe013aa88a6aef1175298c9ab92f9248ff6fc35f6a38dcaba0d463958",
+      "references": 7,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+      "function": "private.weekly_source_invoice_duty_v1",
+      "sha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+      "references": 2,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "4ab15fc6c8b72c0cf8d445e63130b449f77c607c45135baf5cbc5abf42200386",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "ac877db6c95d2d91b0eb60342352cae03d36f11fde662be1925451d4f746cf52",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "function": "public.weekly_source_workspace_scopes_v1",
+      "sha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "function": "public.weekly_source_combined_review_workspace_v1",
+      "sha256": "5d8b766785991b508a582b7ca80f82ac41a959f2866341e1ffcebd0891474b85",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10b_complete_remaining_manifest_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+      "function": "private.weekly_source_finalise_engine_v1",
+      "sha256": "2276e6dddd2f417acf4090992efe9d658d956b77e28d38e5bce291cf4f1862b9",
+      "references": 4,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "04_complete_fin.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "public.weekly_source_correct_final_open_atomic_v1",
+      "sha256": "aacac487a313e5b76f87adcc37c28ff8c9b9c0433f3ea300f7d7d82af40a2b49",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "public.weekly_source_correct_final_review_atomic_v1",
+      "sha256": "13bedaa2eb4a45e04de9432ac818e3676342b184f956d80df6179fa6328a8f9f",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "sha256": "26519de420a3d112fed86059c48d4257f2866f73e4d950f4b03fd7c0f8df8446",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "public.weekly_source_correct_final_apply_atomic_v1",
+      "sha256": "70d4a68db8e19e8eb6af6cdebccd661d42f93a5de2e46db135e72027b8ad12aa",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "sha256": "2054310b5554ce32ced352191e6b7710af09d289d61c32fdc98c0b87a056fad9",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "function": "private.weekly_source_correct_final_preconditions_v1",
+      "sha256": "ca3e8e3db851705cc15ee49252d9d05c22d3e38a46a263e512f80dc06a28dc24",
+      "references": 4,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "function": "private.weekly_source_self_bill_report_finalise_v1",
+      "sha256": "809d397baaa958446ee00683d38ce6e9f7d3001811f65e24639f328712ed2f27",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10d_retained_report_and_date_boundaries.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+      "function": "private.weekly_source_invoice_duty_v1",
+      "sha256": "6bbf294a956d0e2d9ac8076442831580e27aba360edcdad9b071eb24e2dee9be",
+      "references": 2,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "function": "public.weekly_source_workspace_scopes_v1",
+      "sha256": "48c48b34d9375c5418f60957a0906a2ce91b38d218dcb530f7bda46f611445c1",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10c_complete_root_report_consumer_union.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "function": "private.weekly_source_rule_coverage_floor_v1",
+      "sha256": "2b82f2199c44918cf710cbd7df6acdbee7b820ae55b5b2a82b22e1d2645426df",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10d_retained_report_and_date_boundaries.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "function": "private.weekly_source_upload_coverage_context_v1",
+      "sha256": "7a271cd2ffad382e6fb87debfa31713b5a51d8258f4ec01048c38e3e7fa373ff",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10d_retained_report_and_date_boundaries.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "function": "public.weekly_source_client_settings_save_atomic_v1",
+      "sha256": "4f22a0b74df069c394fd119c86b9654abcd3d81b0a7b765aec921bbba0296fbd",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10d_retained_report_and_date_boundaries.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "function": "private.weekly_source_finalise_engine_v1",
+      "sha256": "563f866d77a4ab3248cd652769c2abd36324b3025d790a0d3df1dbb8d1dc7a43",
+      "references": 4,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "04_complete_fin.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "private.weekly_source_invoice_allocation_assert_v1",
+      "sha256": "087db88a2a100e4193906bf8d53f8dccad4b7c16a7dc0d77e42a108a6cbdde05",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "public.weekly_source_invoice_admit_atomic_v1",
+      "sha256": "72ee952489e5d95b6807965277dc2425b81ee22e89905400551cfc3f247ba1ff",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "05_complete_admission.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "public.weekly_source_invoice_move_atomic_v1",
+      "sha256": "091561cbb97b6f04c84991785d4e195e36e52da53127519835d02b99b18d724f",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "function": "private.weekly_source_invoice_issue_validate_v1",
+      "sha256": "ee602296782c29714da13d1cb2f2d950f5c0278432c17321fdebd4fad6b0808c",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "sha256": "96696fae39c61a7809fcc6ce1b74a4cd2dcd0b5b3c6104274c76135d2b719cec",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_ordinary_projection_source_units_v1",
+      "sha256": "26a2c61d782957d73023cde85cfcff270316f1074e7add70262fb09572b99db4",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_selected_source_witness_v1",
+      "sha256": "5f5ed913f85e9f8004feb70c6e9a367fc7488726ef89933c31fe7872e64df9b5",
+      "references": 7,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_finalisation_pay_context_v1",
+      "sha256": "90859230e2aa4e25afbeefeb10c61971db4e9669728ea7daf6225eb343da9ca3",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "function": "private.weekly_source_correct_final_prepared_context_v1",
+      "sha256": "4f3a538214898766d0d92fbb61eb72e055bb0ac88f30f5152025ef7d1ba5c3e6",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "private.weekly_source_correct_final_preconditions_v1",
+      "sha256": "f1d578639440c3d24c1b067d560b05ffb97e08171a0f3caee6c1b941df8b5676",
+      "references": 4,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_open_atomic_v1",
+      "sha256": "818966788b5427dc4432b926aa9906c8ac3b08ecbf4eee0a2ec82984fad33367",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "private.weekly_source_correct_final_prepared_context_v1",
+      "sha256": "78fb052325ec470e57a1f10faa1ae7f042abb1ed7393dd2f8e8c3ac39fe7d218",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_review_atomic_v1",
+      "sha256": "e3a530f8c0f1a4f08ad7da2b2700b93f898152c77b7771cd86a7f277a1007abd",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_prepare_atomic_v1",
+      "sha256": "812e9f34a6f54932c138a3d77437dabbf9a68a34e5e84a8e46931a69cf18019e",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "function": "public.weekly_source_correct_final_apply_atomic_v1",
+      "sha256": "19f5bccf22593dc2a6c9969e21d50adca4437f06f1c52f7975eead9f79b2366a",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "function": "private.weekly_source_finalise_engine_v1",
+      "sha256": "85da216aa9bdb410d81938f29fb809059717323433ec710f1f5df589de2f6fe2",
+      "references": 4,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "04_complete_fin.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "private.weekly_source_invoice_allocation_assert_v1",
+      "sha256": "8a15f3807935453faf4990b33373a1304d11f8cb68310889c29d906f4408900d",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "06_complete_allocation_issue.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "private.weekly_source_invoice_header_refresh_v1",
+      "sha256": "fb4b671692d6b18229dc2395c372b9881df7e38fb4e09713a775e6f01f4b273e",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "public.weekly_source_invoice_admit_atomic_v1",
+      "sha256": "0ac5de10076de3b9062e531fbfc433f8bd54b34a1efa6f33de2b493b4d23fbd6",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "05_complete_admission.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "function": "public.weekly_source_invoice_move_atomic_v1",
+      "sha256": "1736ca2c1ed4fb921aaee80b09cb1578d46bc73f412d1617a6f9c1c072868257",
+      "references": 4,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "07_complete_header_move.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "private.weekly_source_invoice_batch_snapshot_v1",
+      "sha256": "f2a86b0339a78b81b124e82cc7afd9887e34a77661d79a2bfdcc2ca9ecfe68c5",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "private.weekly_source_invoice_batch_rows_v1",
+      "sha256": "62abdca6b3ab80e6b7be8276f37bad9e83d7a72c2895c8148dd7eabf1de1bb00",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "public.weekly_source_invoice_batch_admit_atomic_v1",
+      "sha256": "4cfdcde3eb8b107dbb28b3dc6c25a97e70a75c52ca8d5b9aa914b6609bfd86c9",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "function": "public.weekly_source_invoice_edit_context_v1",
+      "sha256": "232ba66a6c7170ca0f59cc74d796370cedd4d8b4ffb0077a7165cab89f3ad8bc",
+      "references": 3,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "08_complete_batch_detail.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "function": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "sha256": "36cfcde34ce1d0c04fc5b61d3ffaf268f393d099140101cdea0d525e61d8e416",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "function": "private.weekly_source_ordinary_projection_source_units_v1",
+      "sha256": "4bef0032fd86175c922972054c0596cd5f42c0838c855f5d46111e718371e2b1",
+      "references": 1,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "function": "private.weekly_source_office_query_groups_v1",
+      "sha256": "e16bc3a188abd71371ba0fbc0b496fb19e4c5db1e0577b4a5bbe97d407b97d30",
+      "references": 3,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "function": "private.weekly_source_finalisation_pay_context_v1",
+      "sha256": "222d85698f82cbb0ceafefc3154ef6503b7865996f0a16b8ef7d278a1258d436",
+      "references": 2,
+      "decision": "CANONICAL_SOURCE_WINDOW_REQUIRED",
+      "successor": "09_complete_pay_consumers.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "function": "public.weekly_source_invoice_report_rows_v1",
+      "sha256": "7a2f4ef8bf2ba83a2a767ba7ffeb325983ce383f0d94c2efc7d0e80e5b7290ef",
+      "references": 1,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "function": "public.weekly_source_correct_final_cancel_atomic_v1",
+      "sha256": "7857028fe66ff5ec380629dfc245f34a286f663b948b250f8fb46e63ca909fee",
+      "references": 2,
+      "decision": "ALL_PARTITIONS_OR_ORIGINAL_SOURCE_READER_REVIEW",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/24092026_1440_weekly_source_invoice_evidence_lookup_v1.sql",
+      "function": "public.weekly_source_invoice_evidence_v1",
+      "sha256": "e4db83df3945a62390f41088432bdff4f1a34e93bf8899567cdb1dfd3fe43208",
+      "references": 2,
+      "decision": "ORIGINAL_SOURCE_AUTHORITY_ACTUAL_MANIFEST_INVOICE_WEEK",
+      "successor": "10_complete_source_readers_correction.sqlinc"
+    }
+  ]
+}

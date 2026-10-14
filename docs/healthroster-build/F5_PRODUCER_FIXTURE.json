@@ -1,0 +1,588 @@
+{
+  "contract": "HEALTHROSTER_F5_PRODUCER_FIXTURE_V1",
+  "fixture_prefix": "f5510000-0000-4000-8000-",
+  "fixed_week_ending": "2026-11-01",
+  "generated_from": "Actual synthetic XLSX bytes through parseWeeklySourceFile and adaptWeeklySourceParserOutput",
+  "source_sha256": "4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d",
+  "byte_count": 16924,
+  "scope": {
+    "environment": "TEST",
+    "agency_id": "f5510000-0000-4000-8000-000000000099",
+    "source_group_id": "f5510000-0000-4000-8000-000000000050",
+    "source_cycle_id": "f5510000-0000-4000-8000-000000000080",
+    "client_id": "f5510000-0000-4000-8000-000000000010"
+  },
+  "rule_values": {
+    "checking_profile_kind": "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1",
+    "invoice_sender": "CLIENT_SELF_BILL",
+    "invoice_amount_basis": "SOURCE_AMOUNT",
+    "source_amount_basis": "EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY",
+    "invoice_membership": "FINALISED_IN_CYCLE_WINDOW",
+    "line_vat_method": "LINE_GROSS_MINUS_NET_FROM_SOURCE",
+    "rate_difference_policy": "FLAG_ALLOW_IGNORE"
+  },
+  "begin_request": {
+    "actor_user_id": "f5510000-0000-4000-8000-000000000001",
+    "environment": "TEST",
+    "agency_id": "f5510000-0000-4000-8000-000000000099",
+    "source_group_id": "f5510000-0000-4000-8000-000000000050",
+    "source_cycle_id": "f5510000-0000-4000-8000-000000000080",
+    "report_scope_id": null,
+    "client_id": "f5510000-0000-4000-8000-000000000010",
+    "original_filename": "f5-verify-money.xlsx",
+    "content_sha256": "4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d",
+    "byte_count": 16924,
+    "profile_code": "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1",
+    "profile_version": "1",
+    "parser_version": "WEEKLY_SOURCE_STRICT_V1",
+    "normaliser_version": "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1:1:WEEKLY_SOURCE_UPLOAD_ADAPTER_V1",
+    "workbook_part_and_sheet_fingerprint": "eed8437846c189d5ea34040dff4521c8ace2e30984d8a52d45cbd91fd17ac7fe",
+    "header_coordinate_map_json": {
+      "requestId": {
+        "column_index": 1,
+        "column": "A",
+        "coordinate": "A1"
+      },
+      "workerName": {
+        "column_index": 2,
+        "column": "B",
+        "coordinate": "B1"
+      },
+      "date": {
+        "column_index": 3,
+        "column": "C",
+        "coordinate": "C1"
+      },
+      "plannedStart": {
+        "column_index": 4,
+        "column": "D",
+        "coordinate": "D1"
+      },
+      "plannedEnd": {
+        "column_index": 5,
+        "column": "E",
+        "coordinate": "E1"
+      },
+      "plannedBreak": {
+        "column_index": 6,
+        "column": "F",
+        "coordinate": "F1"
+      },
+      "actualStart": {
+        "column_index": 7,
+        "column": "G",
+        "coordinate": "G1"
+      },
+      "actualEnd": {
+        "column_index": 8,
+        "column": "H",
+        "coordinate": "H1"
+      },
+      "actualBreak": {
+        "column_index": 9,
+        "column": "I",
+        "coordinate": "I1"
+      },
+      "actualTotal": {
+        "column_index": 10,
+        "column": "J",
+        "coordinate": "J1"
+      },
+      "finalisedDate": {
+        "column_index": 11,
+        "column": "K",
+        "coordinate": "K1"
+      },
+      "finalisedBy": {
+        "column_index": 12,
+        "column": "L",
+        "coordinate": "L1"
+      },
+      "sourceNet": {
+        "column_index": 13,
+        "column": "M",
+        "coordinate": "M1"
+      },
+      "sourceGross": {
+        "column_index": 14,
+        "column": "N",
+        "coordinate": "N1"
+      }
+    },
+    "money_lexical_authority_version": null,
+    "purpose": "ORDINARY",
+    "correction_session_id": null,
+    "suggested_coverage_start_local_date": "2026-10-26",
+    "suggested_coverage_end_local_date": "2026-10-26",
+    "confirmed_coverage_start_local_date": "2026-10-26",
+    "confirmed_coverage_end_local_date": "2026-11-01",
+    "coverage_timezone": "Europe/London",
+    "coverage_confirmation_version": "WEEKLY_SOURCE_OFFICE_COVERAGE_CONFIRMATION_V1",
+    "coverage_confirmed_at_utc": "2026-10-13T12:00:00Z",
+    "coverage_shrink_acknowledged": false,
+    "coverage_state": "COMPLETE",
+    "coverage_proof_kind": "HEALTHROSTER_COMPLETE_EXPORT_ATTESTATION",
+    "physical_row_count": 2,
+    "header_count": 1,
+    "trailer_count": 0,
+    "continuation_count": 0,
+    "accepted_count": 1,
+    "blocking_economic_duplicate_count": 0,
+    "malformed_count": 0,
+    "blocked_count": 0,
+    "file_metadata_json": {
+      "client_id": "f5510000-0000-4000-8000-000000000010",
+      "import_use": "CHECKING",
+      "source_file_r2_key": null,
+      "saved_finalisation_profile_map": {
+        "requestId": {
+          "column_index": 1,
+          "column": "A",
+          "header_coordinate": "A1"
+        },
+        "workerName": {
+          "column_index": 2,
+          "column": "B",
+          "header_coordinate": "B1"
+        },
+        "date": {
+          "column_index": 3,
+          "column": "C",
+          "header_coordinate": "C1"
+        },
+        "plannedStart": {
+          "column_index": 4,
+          "column": "D",
+          "header_coordinate": "D1"
+        },
+        "plannedEnd": {
+          "column_index": 5,
+          "column": "E",
+          "header_coordinate": "E1"
+        },
+        "plannedBreak": {
+          "column_index": 6,
+          "column": "F",
+          "header_coordinate": "F1"
+        },
+        "actualStart": {
+          "column_index": 7,
+          "column": "G",
+          "header_coordinate": "G1"
+        },
+        "actualEnd": {
+          "column_index": 8,
+          "column": "H",
+          "header_coordinate": "H1"
+        },
+        "actualBreak": {
+          "column_index": 9,
+          "column": "I",
+          "header_coordinate": "I1"
+        },
+        "actualTotal": {
+          "column_index": 10,
+          "column": "J",
+          "header_coordinate": "J1"
+        },
+        "finalisedDate": {
+          "column_index": 11,
+          "column": "K",
+          "header_coordinate": "K1"
+        },
+        "finalisedBy": {
+          "column_index": 12,
+          "column": "L",
+          "header_coordinate": "L1"
+        },
+        "sourceNet": {
+          "column_index": 13,
+          "column": "M",
+          "header_coordinate": "M1"
+        },
+        "sourceGross": {
+          "column_index": 14,
+          "column": "N",
+          "header_coordinate": "N1"
+        }
+      }
+    },
+    "parser_summary_json": {
+      "parser_version": "WEEKLY_SOURCE_STRICT_V1",
+      "adapter_version": "WEEKLY_SOURCE_UPLOAD_ADAPTER_V1",
+      "source_kind": "XLSX",
+      "selected_worksheet": {
+        "name": "Export",
+        "index": 0,
+        "partPath": "xl/worksheets/sheet1.xml",
+        "physicalRowCount": 2,
+        "physicalOrdinalSpan": 2,
+        "physicalCellCount": 30,
+        "firstPhysicalRow": 1,
+        "lastPhysicalRow": 2,
+        "workbookPartAndSheetFingerprint": "eed8437846c189d5ea34040dff4521c8ace2e30984d8a52d45cbd91fd17ac7fe"
+      },
+      "row_counts": {
+        "total": 1,
+        "finalisedWorked": 1,
+        "unfinalised": 0,
+        "explicitZero": 0,
+        "blocked": 0
+      },
+      "warning_count": 1
+    }
+  },
+  "stage_request": {
+    "physical_rows": [
+      {
+        "source_row_ordinal": 1,
+        "bounded_raw_cells_json": {
+          "A": {
+            "coordinate": "A1",
+            "kind": "STRING",
+            "originalToken": "Request Id",
+            "decodedToken": "Request Id",
+            "tokenTruncated": false
+          },
+          "B": {
+            "coordinate": "B1",
+            "kind": "STRING",
+            "originalToken": "Staff",
+            "decodedToken": "Staff",
+            "tokenTruncated": false
+          },
+          "C": {
+            "coordinate": "C1",
+            "kind": "STRING",
+            "originalToken": "Date",
+            "decodedToken": "Date",
+            "tokenTruncated": false
+          },
+          "D": {
+            "coordinate": "D1",
+            "kind": "STRING",
+            "originalToken": "From",
+            "decodedToken": "From",
+            "tokenTruncated": false
+          },
+          "E": {
+            "coordinate": "E1",
+            "kind": "STRING",
+            "originalToken": "To",
+            "decodedToken": "To",
+            "tokenTruncated": false
+          },
+          "F": {
+            "coordinate": "F1",
+            "kind": "STRING",
+            "originalToken": "Break",
+            "decodedToken": "Break",
+            "tokenTruncated": false
+          },
+          "G": {
+            "coordinate": "G1",
+            "kind": "STRING",
+            "originalToken": "Start",
+            "decodedToken": "Start",
+            "tokenTruncated": false
+          },
+          "H": {
+            "coordinate": "H1",
+            "kind": "STRING",
+            "originalToken": "End",
+            "decodedToken": "End",
+            "tokenTruncated": false
+          },
+          "I": {
+            "coordinate": "I1",
+            "kind": "STRING",
+            "originalToken": "Actual Break",
+            "decodedToken": "Actual Break",
+            "tokenTruncated": false
+          },
+          "J": {
+            "coordinate": "J1",
+            "kind": "STRING",
+            "originalToken": "Hours",
+            "decodedToken": "Hours",
+            "tokenTruncated": false
+          },
+          "K": {
+            "coordinate": "K1",
+            "kind": "STRING",
+            "originalToken": "Finalised Date",
+            "decodedToken": "Finalised Date",
+            "tokenTruncated": false
+          },
+          "L": {
+            "coordinate": "L1",
+            "kind": "STRING",
+            "originalToken": "Timesheet Finalised By",
+            "decodedToken": "Timesheet Finalised By",
+            "tokenTruncated": false
+          },
+          "M": {
+            "coordinate": "M1",
+            "kind": "STRING",
+            "originalToken": "Agency Worker Pay",
+            "decodedToken": "Agency Worker Pay",
+            "tokenTruncated": false
+          },
+          "N": {
+            "coordinate": "N1",
+            "kind": "STRING",
+            "originalToken": "Actual Cost",
+            "decodedToken": "Actual Cost",
+            "tokenTruncated": false
+          },
+          "O": {
+            "coordinate": "O1",
+            "kind": "STRING",
+            "originalToken": "Agency Commission Amount",
+            "decodedToken": "Agency Commission Amount",
+            "tokenTruncated": false
+          }
+        },
+        "classification": "HEADER"
+      },
+      {
+        "source_row_ordinal": 2,
+        "bounded_raw_cells_json": {
+          "A": {
+            "coordinate": "A2",
+            "kind": "STRING",
+            "originalToken": "F5-000123",
+            "decodedToken": "F5-000123",
+            "tokenTruncated": false
+          },
+          "B": {
+            "coordinate": "B2",
+            "kind": "STRING",
+            "originalToken": "F5 Worker",
+            "decodedToken": "F5 Worker",
+            "tokenTruncated": false
+          },
+          "C": {
+            "coordinate": "C2",
+            "kind": "STRING",
+            "originalToken": "2026-10-26",
+            "decodedToken": "2026-10-26",
+            "tokenTruncated": false
+          },
+          "D": {
+            "coordinate": "D2",
+            "kind": "STRING",
+            "originalToken": "09:00",
+            "decodedToken": "09:00",
+            "tokenTruncated": false
+          },
+          "E": {
+            "coordinate": "E2",
+            "kind": "STRING",
+            "originalToken": "17:00",
+            "decodedToken": "17:00",
+            "tokenTruncated": false
+          },
+          "F": {
+            "coordinate": "F2",
+            "kind": "NUMBER",
+            "originalToken": "0",
+            "decodedToken": "0",
+            "tokenTruncated": false
+          },
+          "G": {
+            "coordinate": "G2",
+            "kind": "STRING",
+            "originalToken": "09:00",
+            "decodedToken": "09:00",
+            "tokenTruncated": false
+          },
+          "H": {
+            "coordinate": "H2",
+            "kind": "STRING",
+            "originalToken": "17:00",
+            "decodedToken": "17:00",
+            "tokenTruncated": false
+          },
+          "I": {
+            "coordinate": "I2",
+            "kind": "NUMBER",
+            "originalToken": "0",
+            "decodedToken": "0",
+            "tokenTruncated": false
+          },
+          "J": {
+            "coordinate": "J2",
+            "kind": "STRING",
+            "originalToken": "8:00",
+            "decodedToken": "8:00",
+            "tokenTruncated": false
+          },
+          "K": {
+            "coordinate": "K2",
+            "kind": "STRING",
+            "originalToken": "28/10/2026 23:59",
+            "decodedToken": "28/10/2026 23:59",
+            "tokenTruncated": false
+          },
+          "L": {
+            "coordinate": "L2",
+            "kind": "STRING",
+            "originalToken": "F5 Manager",
+            "decodedToken": "F5 Manager",
+            "tokenTruncated": false
+          },
+          "M": {
+            "coordinate": "M2",
+            "kind": "STRING",
+            "originalToken": "100.00",
+            "decodedToken": "100.00",
+            "tokenTruncated": false
+          },
+          "N": {
+            "coordinate": "N2",
+            "kind": "STRING",
+            "originalToken": "120.02",
+            "decodedToken": "120.02",
+            "tokenTruncated": false
+          },
+          "O": {
+            "coordinate": "O2",
+            "kind": "STRING",
+            "originalToken": "DO NOT MAP FEES",
+            "decodedToken": "DO NOT MAP FEES",
+            "tokenTruncated": false
+          }
+        },
+        "classification": "ACCEPTED_SHIFT"
+      }
+    ],
+    "normalised_rows": [
+      {
+        "source_row_ordinal": 2,
+        "external_source_key": "F5-000123",
+        "source_candidate_identity": "F5 Worker",
+        "source_client_identity": "f5510000-0000-4000-8000-000000000010",
+        "work_date": "2026-10-26",
+        "start_at_local": "2026-10-26T09:00:00",
+        "end_at_local": "2026-10-26T17:00:00",
+        "break_minutes": 0,
+        "actual_net_minutes": 480,
+        "row_finalisation_state": "SOURCE_WORKED",
+        "finalised_by": "F5 Manager",
+        "role_band_source": null,
+        "source_commission_pence": null,
+        "source_total_cost_pence": null,
+        "source_shift_charge_pence": "10000",
+        "source_money_parse_state": "VALID",
+        "source_qualification_profile_version": "SOURCE_INVOICE_MONEY_PENCE_V1",
+        "source_gross_pence": "12002",
+        "source_vat_pence": "2002",
+        "finalised_at_utc": "2026-10-28T23:59:00.000Z",
+        "source_expense_pence": null,
+        "source_expense_parse_state": "NOT_APPLICABLE",
+        "bounded_raw_columns_json": {
+          "worker_name": "F5 Worker",
+          "request_id": "F5-000123",
+          "finalised_by": "F5 Manager",
+          "source_invoice_money": {
+            "netPence": "10000",
+            "grossPence": "12002",
+            "vatPence": "2002",
+            "vatFit": false,
+            "normalisations": [],
+            "evidence": {
+              "net": {
+                "coordinate": "M2",
+                "sourceKind": "XLSX",
+                "cellKind": "STRING",
+                "formulaPresent": false,
+                "originalToken": "100.00",
+                "decodedToken": "100.00",
+                "tokenTruncated": false
+              },
+              "gross": {
+                "coordinate": "N2",
+                "sourceKind": "XLSX",
+                "cellKind": "STRING",
+                "formulaPresent": false,
+                "originalToken": "120.02",
+                "decodedToken": "120.02",
+                "tokenTruncated": false
+              }
+            }
+          }
+        }
+      }
+    ],
+    "money_evidence": [
+      {
+        "source_row_ordinal": 2,
+        "source_column_index": 13,
+        "cell_coordinate": "M2",
+        "source_kind": "XLSX_STRING_TOKEN",
+        "original_token": "100.00",
+        "decoded_token": "100.00",
+        "cell_type_marker": "STRING",
+        "formula_present": false,
+        "parse_state": "VALID",
+        "parsed_pence": "10000",
+        "source_file_sha256": "4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d",
+        "money_field_kind": "SOURCE_NET"
+      },
+      {
+        "source_row_ordinal": 2,
+        "source_column_index": 14,
+        "cell_coordinate": "N2",
+        "source_kind": "XLSX_STRING_TOKEN",
+        "original_token": "120.02",
+        "decoded_token": "120.02",
+        "cell_type_marker": "STRING",
+        "formula_present": false,
+        "parse_state": "VALID",
+        "parsed_pence": "12002",
+        "source_file_sha256": "4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d",
+        "money_field_kind": "SOURCE_GROSS"
+      }
+    ],
+    "expense_evidence": []
+  },
+  "parser_money": {
+    "netPence": "10000",
+    "grossPence": "12002",
+    "vatPence": "2002",
+    "vatFit": false,
+    "normalisations": [],
+    "evidence": {
+      "net": {
+        "coordinate": "M2",
+        "sourceKind": "XLSX",
+        "cellKind": "STRING",
+        "formulaPresent": false,
+        "originalToken": "100.00",
+        "decodedToken": "100.00",
+        "tokenTruncated": false
+      },
+      "gross": {
+        "coordinate": "N2",
+        "sourceKind": "XLSX",
+        "cellKind": "STRING",
+        "formulaPresent": false,
+        "originalToken": "120.02",
+        "decodedToken": "120.02",
+        "tokenTruncated": false
+      }
+    }
+  },
+  "parser_finalised_at_utc": "2026-10-28T23:59:00.000Z",
+  "financial_proof": false,
+  "native_database_calls": [
+    "rule version save",
+    "dated assignment",
+    "bounded feature gate",
+    "stage begin",
+    "stage rows",
+    "seal",
+    "invoice hold release"
+  ]
+}

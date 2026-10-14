@@ -1,0 +1,130 @@
+{
+  "status": "INTERRUPTED_TRANSACTION_ABSENCE_AND_RESTORATION_PROVED",
+  "started": "2026-10-13T19:33:00.279Z",
+  "finished": "2026-10-13T19:33:01.689Z",
+  "connectedFresh": true,
+  "marker": "hr_rehearsal_547c74da5f0a_b08130b39f",
+  "markerAbsent": true,
+  "physicalDatabase": "cloudtms_test_clone",
+  "restorationProved": true,
+  "mismatches": [],
+  "before": {
+    "module": "LEGACY:1",
+    "state0": {
+      "policies_hash": "3d46c24766a7a69b19fd9eb504bf54b5",
+      "triggers_hash": "61ab0139de5e90bdb78f1eec12c694ac",
+      "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+      "tables_acl_hash": "7c7433ff59d513a4c37eb1e9bf636536",
+      "physical_database": "cloudtms_test_clone"
+    },
+    "state1": {
+      "rules_absent": true,
+      "invoice_count": 46,
+      "financial_count": 577,
+      "timesheet_count": 120,
+      "pp_helper_absent": true,
+      "mail_outbox_count": 332,
+      "physical_database": "cloudtms_test_clone",
+      "assignments_absent": true,
+      "rule_column_absent": true,
+      "request_table_absent": true,
+      "rule_versions_absent": true,
+      "support_column_absent": true,
+      "financial_outbox_count": 20
+    },
+    "state2": {
+      "f8_helpers_absent": true
+    },
+    "state3": {
+      "active_profile_count": 5,
+      "report_bindings_absent": true,
+      "report_metadata_absent": true,
+      "report_scope_column_absent": true
+    },
+    "state4": {
+      "money_columns_absent": true,
+      "invoice_hold_releases_absent": true
+    },
+    "state5": {
+      "window_columns_absent": true,
+      "window_round_index_absent": true,
+      "due_comparison_column_absent": true,
+      "window_manifest_index_absent": true,
+      "automatic_actor_column_absent": true,
+      "original_manifest_unique_count": 1,
+      "rounding_authority_column_absent": true
+    },
+    "indexes": "b2909a60876bb066e3fbe0de3ce4dbde",
+    "applying": 0,
+    "structure": "e56aaf48468d4da966f88bc537194c1e",
+    "constraints": "bce9e3dcd9a09d36d468f6578f9037f5",
+    "default_acl": "d1a01015cb4faf36bf1b0845e6dc96ab",
+    "module_hash": "bbc266bc4da3bb3112e9679bf0ad6cd1",
+    "identity_test": true,
+    "ledger_releases": "ec89117b62777418ad33df81dd4dbbc0",
+    "other_rehearsals": 0,
+    "ledger_migrations": "ec7fe4db15fc70666cfa8ed8581b6135",
+    "ledger_repeatables": "6760aae758ed6285c6719e44e00a4821"
+  },
+  "after": {
+    "module": "LEGACY:1",
+    "state0": {
+      "policies_hash": "3d46c24766a7a69b19fd9eb504bf54b5",
+      "triggers_hash": "61ab0139de5e90bdb78f1eec12c694ac",
+      "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+      "tables_acl_hash": "7c7433ff59d513a4c37eb1e9bf636536",
+      "physical_database": "cloudtms_test_clone"
+    },
+    "state1": {
+      "rules_absent": true,
+      "invoice_count": 46,
+      "financial_count": 577,
+      "timesheet_count": 120,
+      "pp_helper_absent": true,
+      "mail_outbox_count": 332,
+      "physical_database": "cloudtms_test_clone",
+      "assignments_absent": true,
+      "rule_column_absent": true,
+      "request_table_absent": true,
+      "rule_versions_absent": true,
+      "support_column_absent": true,
+      "financial_outbox_count": 20
+    },
+    "state2": {
+      "f8_helpers_absent": true
+    },
+    "state3": {
+      "active_profile_count": 5,
+      "report_bindings_absent": true,
+      "report_metadata_absent": true,
+      "report_scope_column_absent": true
+    },
+    "state4": {
+      "money_columns_absent": true,
+      "invoice_hold_releases_absent": true
+    },
+    "state5": {
+      "window_columns_absent": true,
+      "window_round_index_absent": true,
+      "due_comparison_column_absent": true,
+      "window_manifest_index_absent": true,
+      "automatic_actor_column_absent": true,
+      "original_manifest_unique_count": 1,
+      "rounding_authority_column_absent": true
+    },
+    "indexes": "b2909a60876bb066e3fbe0de3ce4dbde",
+    "applying": 0,
+    "structure": "e56aaf48468d4da966f88bc537194c1e",
+    "constraints": "bce9e3dcd9a09d36d468f6578f9037f5",
+    "default_acl": "d1a01015cb4faf36bf1b0845e6dc96ab",
+    "module_hash": "bbc266bc4da3bb3112e9679bf0ad6cd1",
+    "identity_test": true,
+    "ledger_releases": "ec89117b62777418ad33df81dd4dbbc0",
+    "other_rehearsals": 1,
+    "ledger_migrations": "ec7fe4db15fc70666cfa8ed8581b6135",
+    "ledger_repeatables": "6760aae758ed6285c6719e44e00a4821"
+  },
+  "explicitOriginalRollbackMarkerObserved": false,
+  "fullRehearsalResumed": false,
+  "comparisonScope": "All original ledger/catalogue/business count keys except transient other_rehearsals coordination count; original receipt preserved unchanged."
+}

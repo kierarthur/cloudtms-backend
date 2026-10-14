@@ -1,0 +1,50 @@
+{
+  "input": {
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/invoice-batch-modal.js",
+    "sha256": "dbcbe229ce2995c35b032db679b78547c9b447927c2e55987e05fc85669c5f7a"
+  },
+  "output": {
+    "path": "invoice-batch-modal.complete-proposed.js",
+    "sha256": "395c4fe259e154fe69b827be026f16dee5f5cde8d8c4475dba7cb5afffd4bdda"
+  },
+  "mount": "UNMOUNTED",
+  "requiredScriptBeforeBatch": "js/weekly-source/agency-invoice-credit-ui.js",
+  "hunks": [
+    {
+      "anchor": "      weekly_source_rows: [],",
+      "replacement": "      weekly_source_rows: [],\n      healthroster_credit_notes: null,\n      credit_note_results: [],"
+    },
+    {
+      "anchor": "      state.candidate_page = payload;",
+      "replacement": "      state.candidate_page = payload;\n      if(state.mode==='GENERATE') {\n        state.healthroster_credit_notes=payload.healthroster_credit_notes||null;\n        window.CloudTmsAutomaticCreditNotes?.rows(state.healthroster_credit_notes);\n      }"
+    },
+    {
+      "anchor": "    if (!ordinary && !source) return '<div class=\"invbatch-empty\">No matching items.</div>';\n    return `${source}${ordinary}`;",
+      "replacement": "    const credits=state.mode==='GENERATE'?window.CloudTmsAutomaticCreditNotes?.render(state.healthroster_credit_notes,escapeHtml)||'':'';\n    if (!ordinary && !source && !credits) return '<div class=\"invbatch-empty\">No matching items.</div>';\n    return `${credits}${source}${ordinary}`;"
+    },
+    {
+      "anchor": "${(selected.exact && selected.count > 0 && !state.submitting) ? '' : 'disabled'}",
+      "replacement": "${(selected.exact && (selected.count > 0 || (state.mode==='GENERATE' && window.CloudTmsAutomaticCreditNotes?.rows(state.healthroster_credit_notes).length>0)) && !state.submitting) ? '' : 'disabled'}"
+    },
+    {
+      "anchor": "      <h3>Generate selected items?</h3>",
+      "replacement": "      <h3>Generate selected items?</h3>\n      ${state.healthroster_credit_notes?`<p>${window.CloudTmsAutomaticCreditNotes.rows(state.healthroster_credit_notes).length.toLocaleString('en-GB')} credit notes will also be prepared automatically. Any blocked credit remains visible in the invoice Outbox.</p>`:''}"
+    },
+    {
+      "anchor": "    if (state.source_submission_complete && !state.root_operation_id) body = renderWeeklySourceSubmissionResults(state, { close: true });",
+      "replacement": "    if (state.credit_note_results?.length && !state.root_operation_id && !state.weekly_source_submission_results?.length)\n      body=window.CloudTmsAutomaticCreditNotes.renderResults(state.credit_note_results,escapeHtml)+'<button type=\"button\" class=\"btn btn-outline\" data-batch-action=\"close\">Close</button>';\n    else if (state.source_submission_complete && !state.root_operation_id) body = renderWeeklySourceSubmissionResults(state, { close: true });"
+    },
+    {
+      "anchor": "    root.innerHTML = body;",
+      "replacement": "    root.innerHTML = body+(state.root_operation_id?window.CloudTmsAutomaticCreditNotes?.renderResults(state.credit_note_results,escapeHtml)||'':'');"
+    },
+    {
+      "anchor": "    state.weekly_source_rows = [];",
+      "replacement": "    state.weekly_source_rows = [];\n    state.healthroster_credit_notes=null;\n    state.credit_note_results=[];"
+    },
+    {
+      "anchor": "      state.weekly_source_submission_results = asArray(payload.weekly_source_per_row_results);\n      state.source_submission_complete = state.weekly_source_submission_results.length > 0 && !state.root_operation_id;",
+      "replacement": "      state.credit_note_results=asArray(payload.credit_note_results);\n      window.CloudTmsAutomaticCreditNotes?.register(state.credit_note_results,window.registerInvoiceOperationsFromResponse,{modal_identity:state.id});\n      state.weekly_source_submission_results = asArray(payload.weekly_source_per_row_results);\n      state.source_submission_complete = state.weekly_source_submission_results.length > 0 && !state.root_operation_id;"
+    }
+  ]
+}

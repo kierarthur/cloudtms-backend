@@ -1,0 +1,46 @@
+// New imports adjacent to the current CN module / DAILY canonical imports.
+import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';
+import { buildExactRequestA0WeeklyClockSnapshot } from './exact-request-a0-weekly-clock-arm.mjs';
+import { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';
+
+// Complete caller-side producer binding. Root mounts it only with the existing
+// qualified Office actor/RPC/cleanup/lifecycle adapters and compatible release.
+// The function contains actual existing read transports/calculator references.
+function createTimesheetCorrectionNativeFinancialCallbacks(env) {
+  return createNativeCorrectionSnapshotProducers({
+    env,
+    readContext: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),
+    readWeeklyContext: timesheetIds => sbRpc(env, 'tsfin_load_weekly_context_batch', { p_timesheet_ids: timesheetIds }),
+    readShifts: timesheetIds => sbRpc(env, 'tsfin_load_nhsp_shifts_batch', { p_timesheet_ids: timesheetIds }),
+    readWeeklyValidation: async timesheetId => {
+      const { rows } = await sbFetch(env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+        '&select=timesheet_id,status,reason_code,validated_at_utc,updated_at' +
+        '&order=updated_at.desc&limit=2');
+      return rows;
+    },
+    resolveRates: items => rpcTsfinResolveRatesBatch(env, { items }),
+    buildWeekly: input => buildExactRequestA0WeeklyClockSnapshot(input, {
+      buildWeeklyScheduleSegmentsSnapshot,
+      buildNhspWeeklySnapshotCached,
+      rebuildFromExistingSegmentsEvidence,
+      enrichTsfinWithHrCrosscheck
+    }),
+    deriveDaily: deriveCanonicalDailyFinancialContext,
+    buildDaily: buildCanonicalDailyFinancialSnapshot,
+    toLocalParts, subtractBreak, classifyMinutes, resolveEffectivePayChannel, anyMissingRates
+  });
+}
+
+function createTimesheetCorrectionNativeOrchestrator(env, dependencies) {
+  return createTimesheetCorrectionOrchestrator({
+    ...dependencies,
+    ...createTimesheetCorrectionNativeFinancialCallbacks(env)
+  });
+}
+
+// Root's guarded route mounting supplies its existing qualified Office actor,
+// RPC, request-read, cleanup and ordinary lifecycle dependencies to this factory.
+// They remain exactly the original adapter dependencies; no new route/auth is
+// mounted by this source proposal.

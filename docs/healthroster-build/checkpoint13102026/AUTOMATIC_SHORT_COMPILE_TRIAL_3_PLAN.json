@@ -1,0 +1,89 @@
+{
+  "status": "PREPARED_ONLY_TURN_AND_EXACT_INSTALLED_OWNER_FENCES_REQUIRED",
+  "commit": "d67f94e19000a612ee4f1099c14429d8a8b4bee1",
+  "physicalDatabase": "cloudtms_test_clone",
+  "sqlSha256": "dd5e19dea83a8b5e7c4335dea27e775a1cbc1c2a8bf16f9d1273138d0c63cb95",
+  "bytes": 179477,
+  "statements": 78,
+  "inputs": [
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "committedBlobSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "committedBlobSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "committedBlobSha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "committedBlobSha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "committedBlobSha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "committedBlobSha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "committedBlobSha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "committedBlobSha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "committedBlobSha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "committedBlobSha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "committedBlobSha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "committedBlobSha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c"
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "committedBlobSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273"
+    }
+  ],
+  "newPrivateSignatures": [
+    "private.weekly_source_staged_source_documents_v1(uuid)",
+    "private.weekly_source_staged_publication_context_v1(uuid,uuid)",
+    "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)",
+    "private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)",
+    "private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)",
+    "private.weekly_source_staged_entitlement_components_v1(uuid,uuid)",
+    "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)"
+  ],
+  "dependencyOwners": [
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "name": "private.weekly_source_bulk_source_cas_assert_v1",
+      "identity_types": "uuid,uuid[]"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "name": "private.weekly_source_automatic_reconcile_capability_assert_v1",
+      "identity_types": "uuid"
+    }
+  ],
+  "scope": "Exact committed definitions/ACL/data-free2206 only; omits both complete central ACL pages because final105-table schema is not installed. No table/business/financial/queue/activation/API action. This is not the full2205closure or generated contract proof.",
+  "freshVerification": "Fingerprint from the pre-DDL SELECT must equal the fresh identical SELECT; automatic_helper_count must return0, physicalTEST/LEGACY:1. Exact prior named definitions also fenced under held turn before replacement."
+}

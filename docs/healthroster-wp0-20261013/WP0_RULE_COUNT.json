@@ -1,0 +1,8 @@
+{
+  "catalogue": 204,
+  "mapping": 204,
+  "literalSpecifiedIDs": 509,
+  "expandedSpecifiedIDs": 513,
+  "method": "07 exact two mapping columns/distinct tokens/R0-rerun/inclusive same-prefix ranges",
+  "executionProof": false
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "REPORT_PREPARED_OUTPUT_ARRAY_FORWARD_V1",
+  "status": "SOURCE_ONLY_NATIVE_ARRAY_ROUNDTRIP_HELD",
+  "frozenPreparedCommit": "54e06721ab030e5060272ec6a0a58bf47a17587d",
+  "frozenPreparedManifestSha256": "80a2577cbf5016f1a76e323717809c5553070e47b0b9a80e11b1ef3a0af34c70",
+  "frozenPreparedPackageSha256": "f196d1f0b089307333c17458b7502d28a02023228caab070c384f8827cce10c1",
+  "criticSha256": "180167ebb3f3979b97056668ef5de46ee96447bc61edd85a4158f23899ef4284",
+  "finding": "P2 valid native multidimensional text[] was narrowed to flat JSON array",
+  "sourceVersionUnchanged": "WEEKLY_SOURCE_REPORT_PREPARED_WRITER_OUTPUT_V1",
+  "fieldNames": 90,
+  "numericStringFields": 39,
+  "jsonTextFields": 9,
+  "arrayFields": {
+    "hr_crosscheck_issues": "Native PostgreSQL canonical text[] array_out string or SQL NULL; not flattened JSON."
+  },
+  "wholeNativeRowColumns": 95,
+  "wholeNativeRowFingerprintDomainUnchanged": true,
+  "lowerBoundEffect": "The unchanged to_jsonb(whole row) fingerprint cannot distinguish array lower bounds. Closed codec text equality now retains/fences those bounds independently.",
+  "newFunctions": 0,
+  "newPermanentColumns": 0,
+  "oldCombinedACLNotReplaced": true,
+  "reverseProofs": [
+    {
+      "path": "02_complete_codec_array_forward.sqlinc",
+      "originalSha256": "dd735cdeabd778609eb30a4da2e852f57ba555e2fc029606966b699d14510008",
+      "reverseSha256": "dd735cdeabd778609eb30a4da2e852f57ba555e2fc029606966b699d14510008"
+    },
+    {
+      "path": "05_complete_retained_amount_array_forward.sqlinc",
+      "originalSha256": "7ed19c7ceab15a98d0e9ec75c7fd3f969d2dfa11e2625bbe873913a1889057fb",
+      "reverseSha256": "7ed19c7ceab15a98d0e9ec75c7fd3f969d2dfa11e2625bbe873913a1889057fb"
+    },
+    {
+      "path": "build-proposal.complete-array-forward.mjs",
+      "originalSha256": "4efb27933b4b305d15ca97c2a0b21ce40916d9b217cca1d6a59e5afe72b4012f",
+      "reverseSha256": "4efb27933b4b305d15ca97c2a0b21ce40916d9b217cca1d6a59e5afe72b4012f"
+    }
+  ],
+  "frozenArtifactsVerified": 29,
+  "databaseCalls": false,
+  "rootWrites": false,
+  "bankingSourceReads": false,
+  "nativeProof": false,
+  "remainingGates": [
+    "Independent critic review of exact complete forward and fixed array parser configuration.",
+    "Root native 2D/non-1 lower bound/quoted NULL/backslash/SQL NULL actual codec cases under SEND_7.",
+    "Original capture/receipt/financial/transport/contract/combined ACL/date/API gates remain unchanged and held."
+  ]
+}

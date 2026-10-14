@@ -1539,12 +1539,48 @@
       "sha256": "faa8f3c99658fb38f474e08c393a2b32d85d97333f796bd76a035b6ec1892972"
     },
     {
+      "path": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "path": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6"
+    },
+    {
+      "path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+    },
+    {
+      "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
       "path": "supabase/migrations/13102026_1452_banking_pay_next_stored_credit_sort_indexes.sql",
       "sha256": "82dbd7a3c4697491ceb896296d4eafc3ee98386ef9e65595e9c90205b495674b"
     },
     {
+      "path": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+    },
+    {
+      "path": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+    },
+    {
       "path": "supabase/migrations/13102026_1626_banking_pay_next_paye_net_audit.sql",
       "sha256": "803c4ab3c1f656975962e07d8b1e101b2e9bcaaae7b09574b141a7a5f481159a"
+    },
+    {
+      "path": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0"
     },
     {
       "path": "supabase/migrations/13102026_1706_banking_pay_next_paye_net_preview_version.sql",

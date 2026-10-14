@@ -1,0 +1,44 @@
+{
+  "schema_version": "PROTECTED_SOURCE_STRICT_GATE_ROOT_PIN_FORWARD_REVIEW_V1",
+  "status": "FROZEN_SOURCE_PIN_FORWARD_NATIVE_OPERATIONAL_ACCEPTANCE_UNEXECUTED",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/generate-pin-forward.mjs",
+      "bytes": 7360,
+      "sha256": "2e3adb961bb38618ee66c793732cf4ba76a437067e7190beb710ea8f74fa72f4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/README.md",
+      "bytes": 1940,
+      "sha256": "4188fe616b098f5cde9342d2ab5215da1d3a61b648b8442c181a2c7304d8f464"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/ROOT_B65_TO_CDAF_FULL_DIFF.patch",
+      "bytes": 482721,
+      "sha256": "67c7e507d020575a795c2d516f82ca22550803cad70ff2889a11a93c56c5e6b1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/ROOT_PIN_FORWARD.json",
+      "bytes": 10559,
+      "sha256": "736ecadaeb43a13f668c07e2c7a9291d8d6de67abda31bce90c82d143a619fa3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/VERIFIER_2206_ALIAS_FORWARD.patch",
+      "bytes": 1402,
+      "sha256": "f151ac8ae4a4886f1bf794edad78c3a6bd4eff7ae2adc869be00c7bb55d5a150"
+    }
+  ],
+  "root_source_commit": "cdaf300c62a0d94b0fd0f5a57b41a42d1c7f2b83",
+  "frozen_predecessor_backup": "adec5f8b8a3955ac725c0da15ee344ac891b7674",
+  "frozen_predecessor_manifest_sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+  "source_generator_assertions_pass": true,
+  "frozen45_unchanged": true,
+  "reverse_alias_matches_entire_prior_verifier": true,
+  "preserved_root232": true,
+  "planned_complete_private_union": 258,
+  "actual_sql_acceptance": false,
+  "actual_financial_acceptance": false,
+  "actual_api_ui_phone_acceptance": false,
+  "actual_activation": false,
+  "lane_database_calls": 0
+}

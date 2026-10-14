@@ -1,0 +1,76 @@
+{
+  "backend": {
+    "remoteBranch": "test",
+    "remoteHEAD": "77ffc9d7d15d19b6453ae25441eee8c1bff58c90",
+    "fetchExitCode": 0,
+    "saved": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend",
+      "HEAD": "3ae9c929f1b9e94f406958bf75da10daa84bc275",
+      "branch": "codex/delete-guard-dbfix-release-20260905",
+      "statusSHA256": "c8efb7a64bf37dd0c8707dfe956f09431870dfd91b9d5156f2cebd29080bf902",
+      "statusEntries": 116,
+      "trackedDirtyPaths": 10,
+      "untrackedEntries": 106
+    },
+    "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-backend-13102026",
+    "featureBranch": "codex/healthroster-v2-backend-13102026",
+    "baseCommit": "77ffc9d7d15d19b6453ae25441eee8c1bff58c90",
+    "worktreeCreateExitCode": 0
+  },
+  "office": {
+    "remoteBranch": "main",
+    "remoteHEAD": "887e7af7cd15d9f4034ad73806b44344f3eb0791",
+    "fetchExitCode": 0,
+    "saved": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\TEST-Frontend",
+      "HEAD": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "branch": "codex/office-paper-evidence-fix-20260906",
+      "statusSHA256": "70a60d9912116cda0c3f24f6938ed41007a0998510d35ab2feab5005bb0a6de3",
+      "statusEntries": 1,
+      "trackedDirtyPaths": 1,
+      "untrackedEntries": 0
+    },
+    "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026",
+    "featureBranch": "codex/healthroster-v2-office-13102026",
+    "baseCommit": "887e7af7cd15d9f4034ad73806b44344f3eb0791",
+    "worktreeCreateExitCode": 0
+  },
+  "mytms": {
+    "remoteBranch": "main",
+    "remoteHEAD": "18f07fcc77b50542733876dc367f673528f53f69",
+    "fetchExitCode": 0,
+    "saved": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\mytms-app",
+      "HEAD": "2f9beb4fd820ce1dfe2460e3713a4ebe21b0063c",
+      "branch": "main",
+      "statusSHA256": "ebaeb353180b3e2c852fe2ce470639428f80131ef446e021ed34e42a1660d7ad",
+      "statusEntries": 67,
+      "trackedDirtyPaths": 38,
+      "untrackedEntries": 29
+    },
+    "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-mytms-13102026",
+    "featureBranch": "codex/healthroster-v2-mytms-13102026",
+    "baseCommit": "3d26ed757bc5fed8208e3534abb7ad50a8bd45d3",
+    "worktreeCreateExitCode": 0,
+    "implementationSourceBranch": "codex/candidate-approved-hours-20261003",
+    "sourceSelection": "Canonical main18f07 is ancestor12commits behind complete published approved-hours3d26. New clean task branch non-forced fast-forwarded to that existing published source, with no authored product code or canonical promotion."
+  },
+  "nextCommitted": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+    "HEAD": "497fb059f186de97ae7df4d5fc7558ff229c0b9f",
+    "branch": "codex/bpay-next-build-20261009",
+    "statusSHA256": "be703a22e96c68a53c4736c4adb4c6b94ad6f89f8f7dfcc89fd2aa3d21587524",
+    "statusEntries": 23,
+    "trackedDirtyPaths": 7,
+    "untrackedEntries": 16
+  },
+  "mytmsAuthorCommitted": {
+    "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\candidate-approved-hours-20261003",
+    "HEAD": "3d26ed757bc5fed8208e3534abb7ad50a8bd45d3",
+    "branch": "codex/candidate-approved-hours-20261003",
+    "statusSHA256": "fdb78096660e54934bbc5bffcbf70e5ead661b7d504b50e7cc7b2fec01428ad2",
+    "statusEntries": 11,
+    "trackedDirtyPaths": 10,
+    "untrackedEntries": 1
+  }
+}

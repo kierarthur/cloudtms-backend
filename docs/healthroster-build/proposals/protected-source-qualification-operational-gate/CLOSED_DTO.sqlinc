@@ -1,0 +1,6 @@
+create or replace function private.weekly_source_qualification_closed_object_v1(p_value jsonb,p_keys text[])
+returns boolean language sql immutable security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select coalesce(jsonb_typeof(p_value)='object' and p_value ?& p_keys
+    and private.weekly_exceptional_json_keys_exact_v1(p_value,p_keys),false)
+$function$;

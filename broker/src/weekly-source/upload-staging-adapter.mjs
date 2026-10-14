@@ -1,4 +1,6 @@
+import { REPORT_PROFILE, assertReportUploadRequest, selfBillReportRows } from './report-upload-provenance.mjs';
 import { XLSX_BINARY64_SAME_VALUE_PENCE_V1 } from './money.js';
+import { assertWeeklySourceCoverageFloor } from './coverage-warnings.mjs';
 
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
 const HEALTHROSTER = new Set([
@@ -146,6 +148,16 @@ function boundedRawRoster(row) {
 }
 
 function normalisedRow(parsed, row, context) {
+  if (parsed.profileId === REPORT_PROFILE) {
+    const dto = selfBillReportRows({ ...parsed, rows: [row], report: { ...parsed.report,
+      lineCount: 1, netPence: row.pricingEvidence.netPence, vatPence: row.pricingEvidence.vatPence,
+      grossPence: row.pricingEvidence.grossPence } }, context)[0];
+    return { ...dto, break_minutes: null, actual_net_minutes: null, row_finalisation_state: 'SOURCE_REPORT_LINE',
+      finalised_by: null, role_band_source: null, source_commission_pence: null, source_total_cost_pence: null,
+      source_money_parse_state: 'VALID', source_qualification_profile_version: 'SOURCE_INVOICE_MONEY_PENCE_V1',
+      source_expense_pence: null, source_expense_parse_state: 'NOT_APPLICABLE' };
+  }
+
   if (NHSP.has(parsed.profileId)) {
     return {
       source_row_ordinal: row.physicalRow,
@@ -192,15 +204,21 @@ function normalisedRow(parsed, row, context) {
       role_band_source: null,
       source_commission_pence: null,
       source_total_cost_pence: null,
-      source_shift_charge_pence: null,
-      source_money_parse_state: 'NOT_APPLICABLE',
-      source_qualification_profile_version: null,
+      source_shift_charge_pence: row.invoiceMoney?.netPence ?? null,
+      source_money_parse_state: row.invoiceMoney ? 'VALID' : 'NOT_APPLICABLE',
+      source_qualification_profile_version: row.invoiceMoney ? 'SOURCE_INVOICE_MONEY_PENCE_V1' : null,
+      ...(Object.hasOwn(row, 'invoiceMoney') ? {
+        source_gross_pence: row.invoiceMoney?.grossPence ?? null,
+        source_vat_pence: row.invoiceMoney?.vatPence ?? null,
+      } : {}),
+      ...(Object.hasOwn(row, 'finalisedAtUtc') ? { finalised_at_utc: row.finalisedAtUtc } : {}),
       source_expense_pence: null,
       source_expense_parse_state: 'NOT_APPLICABLE',
       bounded_raw_columns_json: {
         worker_name: row.workerName,
         request_id: row.requestId,
         finalised_by: row.finalisedBy ?? null,
+        ...(row.invoiceMoney ? { source_invoice_money: row.invoiceMoney } : {}),
       },
     };
   }
@@ -258,6 +276,13 @@ function healthRosterFinalisationMap(parsed) {
 }
 
 function coverage(parsed, body) {
+  if (parsed.profileId === REPORT_PROFILE) return {
+    suggested_coverage_start_local_date: null, suggested_coverage_end_local_date: null,
+    confirmed_coverage_start_local_date: null, confirmed_coverage_end_local_date: null,
+    coverage_timezone: null, coverage_confirmation_version: null, coverage_confirmed_at_utc: null,
+    coverage_shrink_acknowledged: null, coverage_state: 'COMPLETE', coverage_proof_kind: 'SELF_BILL_REPORT_SCOPE',
+  };
+
   if (parsed.profileId === 'NHSP_FINAL_BACKING_V1') {
     return {
       suggested_coverage_start_local_date: null,
@@ -319,13 +344,20 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       fatalErrors: parsed?.fatalErrors ?? [],
     });
   }
+
+  if (parsed.profileId === REPORT_PROFILE) {
+    // actor_user_id was injected by the authenticated owner before this pure adapter.
+    assertReportUploadRequest(Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'actor_user_id')));
+    selfBillReportRows(parsed, context);
+  }
+  assertWeeklySourceCoverageFloor(parsed, body, context);
   const physicalRows = classifications(parsed);
   if (physicalRows.length !== Number(parsed.selectedWorksheet?.physicalOrdinalSpan ?? 0)) {
     fail('WEEKLY_SOURCE_PHYSICAL_CENSUS_INCOMPLETE', 'The source row census is incomplete.');
   }
   const normalisedRows = (parsed.rows ?? []).map((row) => normalisedRow(parsed, row, context));
   const count = (classification) => physicalRows.filter((row) => row.classification === classification).length;
-  const importUse = body.import_use ?? (parsed.profileId === 'NHSP_FINAL_BACKING_V1'
+  const importUse = body.import_use ?? (parsed.profileId === REPORT_PROFILE || parsed.profileId === 'NHSP_FINAL_BACKING_V1'
     || body.purpose === 'FINAL_SOURCE_CORRECTION' ? 'PREPARE_FINALISATION' : 'CHECKING');
   if (!['CHECKING', 'PREPARE_FINALISATION'].includes(importUse)
       || parsed.profileId === 'NHSP_PREFINAL_RELEASED_V1' && importUse !== 'CHECKING') {
@@ -345,6 +377,11 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       saved_finalisation_profile_map: healthRosterFinalisationMap(parsed),
     } : {}),
   };
+
+  if (parsed.profileId === REPORT_PROFILE) Object.assign(metadata, {
+    self_bill_report_id: context.self_bill_report_id, report_number: parsed.report.reportNumber,
+    invoice_date: parsed.report.invoiceDate, report_layout: parsed.report.layout,
+  });
   const headerMap = Object.fromEntries(Object.entries(parsed.resolvedColumnMap ?? {}).map(([key, value]) => [key, {
     column_index: value.index,
     column: value.column,
@@ -368,7 +405,8 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       normaliser_version: `${parsed.profileId}:${parsed.profileVersion}:${WEEKLY_SOURCE_UPLOAD_ADAPTER_VERSION}`,
       workbook_part_and_sheet_fingerprint: parsed.selectedWorksheet.workbookPartAndSheetFingerprint,
       header_coordinate_map_json: headerMap,
-      money_lexical_authority_version: NHSP.has(parsed.profileId) ? XLSX_BINARY64_SAME_VALUE_PENCE_V1 : null,
+      money_lexical_authority_version: parsed.profileId === REPORT_PROFILE ? 'SOURCE_INVOICE_MONEY_PENCE_V1'
+        : NHSP.has(parsed.profileId) ? XLSX_BINARY64_SAME_VALUE_PENCE_V1 : null,
       purpose: body.purpose ?? 'ORDINARY',
       correction_session_id: body.correction_session_id ?? null,
       ...(body.expected_correction_session_version == null ? {} : {
@@ -397,7 +435,17 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
     },
     physicalRows,
     normalisedRows,
-    moneyEvidence: NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed) : [],
+
+    moneyEvidence: parsed.profileId === REPORT_PROFILE ? (parsed.rows ?? []).flatMap(row => [
+      ['SOURCE_NET', 'net', row.pricingEvidence.netPence], ['SOURCE_VAT', 'vat', row.pricingEvidence.vatPence],
+      ['SOURCE_GROSS', 'gross', row.pricingEvidence.grossPence],
+    ].map(([kind, field, money]) => ({ ...evidenceRecord(parsed, row.physicalRow, field,
+      row.pricingEvidence.components[field], money, 'VALID'), money_field_kind: kind })))
+      : NHSP.has(parsed.profileId) ? nhspMoneyEvidence(parsed)
+      : (parsed.rows ?? []).flatMap((row) => !row.invoiceMoney ? [] : [
+        { ...evidenceRecord(parsed, row.physicalRow, 'sourceNet', row.invoiceMoney.evidence.net, row.invoiceMoney.netPence, 'VALID'), money_field_kind: 'SOURCE_NET' },
+        { ...evidenceRecord(parsed, row.physicalRow, 'sourceGross', row.invoiceMoney.evidence.gross, row.invoiceMoney.grossPence, 'VALID'), money_field_kind: 'SOURCE_GROSS' },
+      ]),
     expenseEvidence: parsed.profileId === 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
       ? rosterExpenseEvidence(parsed) : [],
   });

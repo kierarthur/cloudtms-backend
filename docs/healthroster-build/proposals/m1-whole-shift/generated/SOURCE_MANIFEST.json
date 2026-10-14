@@ -1,0 +1,49 @@
+{
+  "contract": "HEALTHROSTER_M1_SOURCE_PROPOSAL_V1",
+  "frozen28_unchanged": true,
+  "source_inputs": [
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "bytes": 48438,
+      "sha256": "7d2834596ddee22522429c2872eae888dd27deb1b907b350f583ee9be2ecb0ad"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101268,
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+      "bytes": 168559,
+      "sha256": "3e95883d721b0d977d8874d8ff508a27b178b1d4492b362776928dcee99c4c7c"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "bytes": 154709,
+      "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/COMPLETE_SOURCE_OWNERS.sqlinc",
+      "bytes": 88937,
+      "sha256": "127097c3e3a86b3c7b0d0922f42668a0c46cb2607515897ca849e77da78e3a6c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/magnit-contract-price-admission.js",
+      "bytes": 3114,
+      "sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/generated/upload-publication-owner.mjs",
+      "bytes": 48835,
+      "sha256": "45baaacb23a3b0242bda76ea2ed4bcc8fce399eb3a93ccbfa7c8283bec46f742"
+    }
+  ],
+  "existing_sp20_guard": "Unchanged F1 R7 refusal; actual published installed/joined expense proof remains root gate.",
+  "native_calculator_changed": false,
+  "new_tables": 0,
+  "new_service_rpcs": 0,
+  "hosted_compile": false,
+  "financial_acceptance": false
+}

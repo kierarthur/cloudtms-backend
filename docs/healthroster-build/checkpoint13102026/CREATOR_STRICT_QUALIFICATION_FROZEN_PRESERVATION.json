@@ -1,0 +1,20 @@
+{
+  "status": "FROZEN_SOURCE_EVIDENCE_PRESERVED_NO_RUNTIME_INTEGRATION",
+  "runtimeFilesChanged": 0,
+  "files": 65,
+  "packets": [
+    {
+      "folder": "cn-a0-phantom-writers",
+      "manifestSha256": "762f65ac35f11f1c33b779799854c1373eb0ccf9c624e44e6cebc70266cdb33e",
+      "fileCount": 20,
+      "status": "FOCUSED_CRITIC_TWO_P2_EVIDENCE_DEFECTS_ACCEPTED_FORWARD_UNMOUNTED_NATIVE_HELD"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate",
+      "manifestSha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+      "fileCount": 45,
+      "status": "FROZEN_SOURCE_PROPOSAL_PENDING_FULL_ROOT_AND_INDEPENDENT_REVIEW"
+    }
+  ],
+  "scope": "Immutable proposal evidence only. Current root2205/2206/registry/runtime owners untouched; canonical2206 forward and separate pin-forward receipts remain distinct. No native acceptance or final PartB."
+}

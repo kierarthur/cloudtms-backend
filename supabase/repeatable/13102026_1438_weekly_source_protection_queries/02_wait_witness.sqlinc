@@ -1,0 +1,144 @@
+-- Read-only event witness for report membership and projection placement.
+-- A target-family flag or saved/pending decision is never accepted authority.
+create or replace function private.weekly_source_protected_wait_witness_v1(
+  p_work_event_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_work public.weekly_work_events%rowtype; v_cycle public.weekly_source_cycles%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_event public.weekly_exceptional_pay_family_events%rowtype;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_generation public.weekly_exceptional_pay_generations%rowtype;
+  v_count integer; v_event_id uuid; v_scope jsonb; v_receipt jsonb; v_clocks jsonb;
+  v_result jsonb; v_schedule jsonb;
+begin
+  if p_work_event_id is null or p_source_cycle_id is null then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_SCOPE_REQUIRED' using errcode='22023'; end if;
+  select * into strict v_work from public.weekly_work_events where id=p_work_event_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  if v_work.first_source_group_id is distinct from v_cycle.source_group_id
+    or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_work.client_id) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_SCOPE_INVALID' using errcode='55000'; end if;
+  select count(*),min(event.id::text)::uuid into v_count,v_event_id
+  from public.weekly_exceptional_pay_family_events event
+  join public.weekly_exceptional_pay_target_families family on family.id=event.family_id
+    and family.candidate_id=v_work.candidate_id and v_work.work_date between family.week_start_date and family.week_ending_date
+  join public.contracts contract on contract.id=family.contract_id and contract.client_id=v_work.client_id
+  where event.durable_work_event_id=v_work.id and event.state='WAIT'
+    and not exists(select 1 from public.weekly_exceptional_pay_family_events newer
+      where newer.family_id=event.family_id and newer.durable_work_event_id=event.durable_work_event_id
+        and newer.event_sequence>event.event_sequence);
+  if v_count=0 then
+    -- An unaccepted RECONCILE stage can append ACCEPTED_SOURCE before native
+    -- completion. It must not erase a WAIT still present in the genuinely
+    -- published complete vector. This is contradictory authority, not a
+    -- cleared position; only an exact accepted native receipt can clear it.
+    if exists(select 1
+      from public.weekly_exceptional_pay_target_families family
+      join public.contracts contract on contract.id=family.contract_id and contract.client_id=v_work.client_id
+      join public.weekly_exceptional_pay_generations generation
+        on generation.id=family.current_generation_id and generation.family_id=family.id
+      where family.candidate_id=v_work.candidate_id
+        and v_work.work_date between family.week_start_date and family.week_ending_date
+        and generation.lifecycle_state='PUBLISHED'
+        and ((generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_TARGET_VECTOR_V1'
+          and exists(select 1 from jsonb_array_elements(case
+            when jsonb_typeof(generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}')='array'
+            then generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}' else '[]'::jsonb end) item
+            where item->>'work_event_id'=v_work.id::text and item->>'protected_target_state'='WAIT'))
+          or (generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_NEXT_TARGET_V1'
+          and exists(select 1 from jsonb_array_elements(case
+            when jsonb_typeof(generation.complete_next_vector_json->'components')='array'
+            then generation.complete_next_vector_json->'components' else '[]'::jsonb end) item
+            where item->>'kind'='WORK' and item->>'work_event_id'=v_work.id::text and item->'protected'='true'::jsonb)))
+    ) then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+    return null;
+  end if;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict v_event from public.weekly_exceptional_pay_family_events where id=v_event_id;
+  select * into strict v_family from public.weekly_exceptional_pay_target_families where id=v_event.family_id;
+  v_scope:=private.weekly_source_pay_query_scope_v1(v_family.root_timesheet_id);
+  if v_scope is null or v_scope->>'target_family_id' is distinct from v_family.id::text
+    or v_scope->>'candidate_id' is distinct from v_work.candidate_id::text
+    or v_scope->>'client_id' is distinct from v_work.client_id::text
+    or v_scope->>'contract_id' is distinct from v_family.contract_id::text
+    or v_family.ownership_state is distinct from 'TARGET_MANAGED' then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict v_approval from public.weekly_exceptional_payment_approvals where id=v_event.evidence_approval_id;
+  if v_approval.withdrawn_at_utc is not null or v_approval.pay_target_family_id<>v_family.id
+    or v_approval.work_event_id<>v_work.id or v_approval.candidate_id<>v_work.candidate_id
+    or v_approval.client_id<>v_work.client_id or v_approval.contract_id<>v_family.contract_id
+    or v_approval.protected_work_date<>v_work.work_date or v_approval.week_ending<>v_family.week_ending_date
+    or not exists(select 1 from public.weekly_source_cycles origin
+      where origin.id=v_approval.source_cycle_id and origin.source_group_id=v_cycle.source_group_id) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  v_receipt:=private.weekly_source_protected_wait_receipt_v1(v_family.root_timesheet_id,v_event.id);
+  if v_receipt is null or v_receipt#>>'{accepted_receipt,receipt_state}' is null
+    or v_receipt#>>'{accepted_receipt,receipt_state}' not in ('COMPLETE','PUBLISHED') then
+    -- PENDING_FREEZE is a saved decision; it never qualifies a new S25 position.
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict v_generation from public.weekly_exceptional_pay_generations
+    where id=v_family.current_generation_id and family_id=v_family.id;
+  if v_generation.lifecycle_state is distinct from 'PUBLISHED' or v_generation.published_at_utc is null
+    or not isfinite(v_generation.published_at_utc) or v_generation.result_hash is null
+    or v_generation.generation_number is distinct from v_family.current_generation_number
+    or v_generation.complete_next_vector_hash is distinct from v_family.current_complete_target_vector_hash
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',
+      v_generation.complete_next_vector_json) is distinct from v_generation.complete_next_vector_hash then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  if v_receipt#>>'{accepted_receipt,generation_id}' is null
+    or v_family.bound_version is null or v_generation.generation_number is null
+    or v_approval.protected_start_at_local is null or v_approval.protected_end_at_local is null
+    or not isfinite(v_approval.protected_start_at_local) or not isfinite(v_approval.protected_end_at_local)
+    or v_approval.protected_break_minutes is null or v_approval.protected_break_minutes<0
+    or v_approval.protected_end_at_local<=v_approval.protected_start_at_local
+    or extract(epoch from (v_approval.protected_end_at_local-v_approval.protected_start_at_local))/60
+      <=v_approval.protected_break_minutes then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  -- Current complete-vector membership is exact durable identity, never only
+  -- same date/duration. A sibling can supersede the accepted approval generation.
+  if v_generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_NEXT_TARGET_V1' then
+    v_schedule:=v_generation.complete_next_vector_json->'components';
+    if jsonb_typeof(v_schedule) is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+    select count(*),jsonb_agg(item)->0 into v_count,v_clocks from jsonb_array_elements(v_schedule) item
+      where item->>'kind'='WORK' and item->>'work_event_id'=v_work.id::text and item->'protected'='true'::jsonb;
+  elsif v_generation.complete_next_vector_json->>'schema_version'='WEEKLY_PROTECTED_TARGET_VECTOR_V1' then
+    v_schedule:=v_generation.complete_next_vector_json#>'{target_snapshot,actual_schedule_json}';
+    if jsonb_typeof(v_schedule) is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+    select count(*),jsonb_agg(item)->0 into v_count,v_clocks from jsonb_array_elements(v_schedule) item
+      where item->>'work_event_id'=v_work.id::text and item->>'protected_target_state'='WAIT';
+  else raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  if v_count<>1 or coalesce(v_clocks->>'date',v_clocks->>'work_date') is distinct from v_work.work_date::text
+    or v_clocks->>'start' is distinct from to_char(v_approval.protected_start_at_local,'HH24:MI')
+    or v_clocks->>'end' is distinct from to_char(v_approval.protected_end_at_local,'HH24:MI')
+    or coalesce(v_clocks->>'break_mins',v_clocks->>'break_minutes')::integer is distinct from v_approval.protected_break_minutes
+    or (v_event.start_at_local,v_event.end_at_local,v_event.break_minutes)
+      is distinct from (v_approval.protected_start_at_local,v_approval.protected_end_at_local,v_approval.protected_break_minutes)
+    or v_event.fixed_office_target_hash is distinct from v_approval.signed_schedule_fact_hash
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_SCHEDULE_V1',
+      v_event.fixed_office_target_snapshot_json) is distinct from v_approval.signed_schedule_fact_hash then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000'; end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_V1','state','QUALIFIED_WAIT',
+    'work_event_id',v_work.id,'source_cycle_id',v_cycle.id,'source_group_id',v_cycle.source_group_id,
+    'candidate_id',v_work.candidate_id,'client_id',v_work.client_id,'contract_id',v_family.contract_id,
+    'root_timesheet_id',v_family.root_timesheet_id,'family_id',v_family.id,'family_bound_version',v_family.bound_version::text,
+    'event_id',v_event.id,'event_sequence',v_event.event_sequence::text,'approval_id',v_approval.id,
+    'approval_source_cycle_id',v_approval.source_cycle_id,
+    'accepted_generation_id',v_receipt#>'{accepted_receipt,generation_id}',
+    'current_generation_id',v_generation.id,'current_generation_number',v_generation.generation_number,
+    'protected_work_date',v_approval.protected_work_date,'protected_start_at_local',v_approval.protected_start_at_local,
+    'protected_end_at_local',v_approval.protected_end_at_local,'protected_break_minutes',v_approval.protected_break_minutes,
+    'protected_net_minutes',(extract(epoch from (v_approval.protected_end_at_local-v_approval.protected_start_at_local))/60)::integer-v_approval.protected_break_minutes,
+    'accepted_receipt',v_receipt->'accepted_receipt');
+  return v_result||jsonb_build_object('qualification_sha256',encode(
+    private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_V1',v_result),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_WAIT_WITNESS_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_protected_wait_witness_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_wait_witness_v1(uuid,uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,101 @@
+-- Publication-time manager-only dispatch on the existing secure QD queue.
+-- Deferred questions create audit evidence only; no future-due mail is staged.
+create or replace function private.weekly_source_not_finalised_dispatch_v1(p_publication_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype; v_row record; v_context jsonb; v_generation jsonb;
+  v_week date; v_count integer; v_monday timestamptz; v_key text; v_trigger bytea;
+  v_route uuid; v_generation_id uuid; v_due_id uuid; v_intent uuid;
+  v_deferred integer:=0; v_queued integer:=0; v_no_route integer:=0;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_publication from public.weekly_source_projection_publications
+    where id=p_publication_id and state='CURRENT' and authority_scope_kind='CYCLE' and correction_session_id is null;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id for update;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
+  if v_publication.published_at_utc is null or not isfinite(v_publication.published_at_utc) then
+    raise exception 'WEEKLY_SOURCE_NOT_FINALISED_PUBLICATION_CLOCK_INVALID' using errcode='55000'; end if;
+  for v_row in
+    select incident.*,comparison.id as comparison_id,comparison.contract_id,comparison.candidate_timesheet_id,
+      comparison.material_comparison_fingerprint,work.work_date,sheet.week_ending_date as signed_week_ending
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+      and (comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=incident.source_group_id
+    left join public.timesheets sheet on sheet.timesheet_id=comparison.candidate_timesheet_id
+      and sheet.contract_id=comparison.contract_id and work.work_date between sheet.week_ending_date-6 and sheet.week_ending_date
+    where incident.source_cycle_id=v_cycle.id and incident.state='OPEN'
+      and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work.work_date)
+      and (private.weekly_source_checking_client_scope_v1(v_publication.id) is null
+        or incident.client_id=private.weekly_source_checking_client_scope_v1(v_publication.id))
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+    order by incident.id for update of incident
+  loop
+    update public.weekly_discrepancy_incidents set candidate_action_state='NOT_REQUIRED' where id=v_row.id;
+    v_week:=v_row.signed_week_ending;
+    if v_row.candidate_timesheet_id is not null and v_week is null then
+      raise exception 'WEEKLY_SOURCE_NOT_FINALISED_WEEK_UNAVAILABLE' using errcode='55000'; end if;
+    if v_week is null then
+      select count(*),min(expected.week_ending_date) into v_count,v_week from public.contract_weeks expected
+        where expected.contract_id=v_row.contract_id and expected.additional_seq=0 and not coalesce(expected.is_adjustment,false)
+          and expected.status in ('PLANNED','OPEN','SUBMITTED')
+          and v_row.work_date between expected.week_ending_date-6 and expected.week_ending_date;
+      if v_count<>1 then raise exception 'WEEKLY_SOURCE_NOT_FINALISED_WEEK_UNAVAILABLE' using errcode='55000'; end if;
+    end if;
+    v_monday:=((v_week+(8-extract(isodow from v_week)::integer))::timestamp at time zone 'Europe/London');
+    v_key:='NOT_FINALISED_DISPATCH:'||v_row.id::text||':'||v_row.comparison_id::text;
+    if v_publication.published_at_utc<v_monday then
+      if not exists(select 1 from public.audit_events audit where audit.action='WEEKLY_SOURCE_NOT_FINALISED_DISPATCH_DEFERRED'
+        and audit.object_type='weekly_discrepancy_incident' and audit.object_id_text=v_row.id::text
+        and audit.after_json->>'idempotency_key'=v_key and audit.event_sequence_is_authoritative) then
+        perform public._audit_insert('weekly_discrepancy_incident',v_row.id::text,'WEEKLY_SOURCE_NOT_FINALISED_DISPATCH_DEFERRED',
+          null,jsonb_build_object('idempotency_key',v_key,'comparison_revision_id',v_row.comparison_id,
+            'projection_publication_id',v_publication.id,'week_ending_date',v_week,'first_monday_at_utc',v_monday),
+          'Manager question waits for the first checking file on or after Monday',null);
+      end if;
+      v_deferred:=v_deferred+1; continue;
+    end if;
+    v_context:=private.weekly_source_query_cohort_ensure_v1(v_cycle.id,v_row.candidate_id,v_row.client_id,v_row.contract_id,v_row.work_date);
+    if not coalesce((v_context->>'manager_queries_enabled')::boolean,false) or nullif(v_context->>'manager_route_id','') is null then
+      v_no_route:=v_no_route+1; continue; end if;
+    v_route:=(v_context->>'manager_route_id')::uuid;
+    if private.weekly_source_query_manager_row_owned_v1(v_route,v_row.id,v_row.episode_number) then continue; end if;
+    if exists(select 1 from public.weekly_route_activations activation where activation.source_cycle_id=v_cycle.id
+      and activation.candidate_id=v_row.candidate_id and activation.client_id=v_row.client_id
+      and activation.audience_route='MANAGER' and activation.route_mode in ('DISABLED','MANUAL_ONLY')) then
+      v_no_route:=v_no_route+1; continue; end if;
+    insert into public.weekly_route_activations(source_cycle_id,candidate_id,client_id,audience_route,route_mode,activated_at_utc,updated_at_utc)
+    values(v_cycle.id,v_row.candidate_id,v_row.client_id,'MANAGER','CANDIDATE_FIRST',transaction_timestamp(),transaction_timestamp())
+    on conflict(source_cycle_id,candidate_id,client_id,audience_route) do nothing;
+    v_generation:=private.weekly_source_query_manager_generation_v1(v_route,'EARLY_ALL',v_publication.published_at_utc,false);
+    v_generation_id:=nullif(v_generation->>'recipient_generation_id','')::uuid;
+    if v_generation_id is null then raise exception 'WEEKLY_SOURCE_NOT_FINALISED_GENERATION_UNAVAILABLE' using errcode='55000'; end if;
+    v_trigger:=private.weekly_source_sha256_jsonb_v1('WEEKLY_NOT_FINALISED_MANAGER_DUE_V1',
+      jsonb_build_object('incident_id',v_row.id,'comparison_revision_id',v_row.comparison_id,
+        'week_ending_date',v_week,'first_monday_at_utc',v_monday));
+    insert into public.weekly_manager_cohort_due_events(recipient_generation_id,candidate_cohort_id,event_kind,
+      cohort_started_at_utc,due_at_utc,state,trigger_hash,not_finalised_comparison_revision_id)
+    values(v_generation_id,(v_context->>'cohort_id')::uuid,'EARLY_ALL',v_publication.published_at_utc,
+      v_publication.published_at_utc,'PENDING',v_trigger,v_row.comparison_id)
+    on conflict(recipient_generation_id,candidate_cohort_id,event_kind,trigger_hash) do nothing;
+    select id into strict v_due_id from public.weekly_manager_cohort_due_events where recipient_generation_id=v_generation_id
+      and candidate_cohort_id=(v_context->>'cohort_id')::uuid and event_kind='EARLY_ALL' and trigger_hash=v_trigger;
+    if exists(select 1 from public.weekly_manager_cohort_due_events where id=v_due_id and state='CONSUMED') then continue; end if;
+    if not private.weekly_source_manager_due_event_covers_v1(v_due_id,v_row.id) then
+      raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_INVALID' using errcode='55000'; end if;
+    v_intent:=private.weekly_source_query_manager_intent_v1(v_route,v_generation_id,array[v_due_id],
+      'MANAGER_EARLY_ALL',1,v_publication.published_at_utc);
+    update public.weekly_manager_cohort_due_events set state='CONSUMED' where id=v_due_id;
+    update public.weekly_discrepancy_incidents set manager_action_state='DUE' where id=v_row.id and manager_action_state<>'RESPONDED';
+    v_queued:=v_queued+1;
+  end loop;
+  return jsonb_build_object('ok',true,'deferred',v_deferred,'manager_intents_queued',v_queued,'manager_route_unavailable',v_no_route);
+end;
+$function$;
+alter function private.weekly_source_not_finalised_dispatch_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_not_finalised_dispatch_v1(uuid) from public,anon,authenticated,service_role;

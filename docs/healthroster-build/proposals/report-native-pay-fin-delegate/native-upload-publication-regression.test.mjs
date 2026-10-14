@@ -1,0 +1,894 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import * as XLSX from 'xlsx';
+
+import {
+  parseWeeklySourceFile,
+  ROSTER_WEEKLY_SUMMARY_ACTUAL_V1_HEADERS,
+  WEEKLY_SOURCE_PROFILE_IDS,
+} from './worker/index.js';
+import { adaptWeeklySourceParserOutput } from './worker/upload-staging-adapter.mjs';
+import {
+  buildWeeklySourceProjectionRows,
+  createWeeklySourceUploadPublicationOwner,
+} from './worker/upload-publication-owner.mjs';
+
+const ID = Object.freeze({
+  actor: '10000000-0000-4000-8000-000000000001',
+  agency: '10000000-0000-4000-8000-000000000002',
+  group: '10000000-0000-4000-8000-000000000003',
+  cycle: '10000000-0000-4000-8000-000000000004',
+  client: '10000000-0000-4000-8000-000000000005',
+  upload: '10000000-0000-4000-8000-000000000006',
+  publication: '10000000-0000-4000-8000-000000000007',
+  rebuiltPublication: '10000000-0000-4000-8000-00000000000a',
+  uploadRow: '10000000-0000-4000-8000-000000000008',
+  correction: '10000000-0000-4000-8000-000000000009',
+});
+
+function workbookBytes(rows, name = 'Export') {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), name);
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function nhspRows(final) {
+  const rows = [
+    [final ? 'Agency Backing Report 123 for Exact Heading Agency' : 'Timesheets Previously Released'],
+    [
+      'Date', 'Ref Num', 'Agency Worker Name', 'Agency Worker Unique Id', 'Trust', 'Ward', 'Assignment',
+      'Contract', null, null, null, 'Actual', null, null, null, 'Commission',
+      ...(final ? ['FMC'] : []), 'Total Cost', ...(final ? ['Rate'] : []),
+    ],
+    [null, null, null, null, null, null, null, 'Start', 'End', 'Break In Minutes', 'Total', 'Start', 'End', 'Break In Minutes', 'Total'],
+  ];
+  const row = ['2026-09-01', 1001, 'Worker One', 'W1', 'Trust One', 'Ward', 'ROLE', null, null, null, null, '09:00', '17:00', 30, '7:30', 52.5];
+  if (final) row.push(0, 209.85, 'Basic'); else row.push(209.85);
+  rows.push(row);
+  if (final) {
+    rows.push(['FrameWork Management Charge', null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 0]);
+    rows.push(['Total', null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 209.85]);
+  }
+  return rows;
+}
+
+function csvBytes() {
+  const values = Object.fromEntries(ROSTER_WEEKLY_SUMMARY_ACTUAL_V1_HEADERS.map((header) => [header, '']));
+  Object.assign(values, {
+    grand_parent_business_unit_name: 'Group', parent_business_unit_name: 'Parent', business_unit_name: 'Unit',
+    Candidate: 'Worker', 'Candidate Uid': 'UID', 'Candidate Id': 'CID', 'Booking Id': 'B1',
+    'Timesheet Id': 'T1', Expenses: '12.50', 'Total Hours': '7.50', 'Line ID': 'L1',
+    'Business Unit ID': 'BU1', 'Booking Start': '2026-09-01 09:00:00', 'Booking End': '2026-09-01 17:00:00',
+  });
+  const escape = (value) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+  return new TextEncoder().encode(
+    `${ROSTER_WEEKLY_SUMMARY_ACTUAL_V1_HEADERS.map(escape).join(',')}\r\n${ROSTER_WEEKLY_SUMMARY_ACTUAL_V1_HEADERS.map((key) => escape(values[key])).join(',')}\r\n`,
+  );
+}
+
+const context = Object.freeze({
+  environment: 'TEST', agency_id: ID.agency, source_group_id: ID.group,
+  source_cycle_id: ID.cycle, report_scope_id: null, client_id: ID.client, client_name: 'Client A',
+});
+
+const body = Object.freeze({
+  actor_user_id: ID.actor, original_filename: 'source.xlsx',
+  coverage: { start_local_date: '2026-09-01', end_local_date: '2026-09-01' },
+});
+
+function protectedMatchProjection(overrides = {}) {
+  const contractId = '30000000-0000-4000-8000-000000000001';
+  return buildWeeklySourceProjectionRows({
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    rows: [{
+      upload_row_id: ID.uploadRow, source_row_ordinal: 2, candidate_match_count: 1,
+      candidate_id: ID.actor, client_id: ID.client, work_date: '2026-09-21',
+      row_finalisation_state: 'SOURCE_UNFINALISED', external_source_key: 'HR-1',
+      contracts: [{ contract_id: contractId, candidate_id: ID.actor, client_id: ID.client,
+        valid_from: '2026-01-01', valid_to: null, weekly_source_applicable: true,
+        effective_policy: { authority_mode: 'SOURCE_AUTHORITY', c1_source_mode: 'HEALTHROSTER_WEEKLY',
+          weekly_rate_classification_method: 'SPLIT_RATE_WINDOWS', policy_sha256: 'a'.repeat(64) },
+        settings_authority: { values: {} }, rates_json: {}, pay_type: 'PAYE' }],
+      ...overrides,
+    }],
+  })[0];
+}
+
+const protectedMatch = (suffix, extra = {}) => ({
+  work_event_id: `40000000-0000-4000-8000-00000000000${suffix}`,
+  contract_id: '30000000-0000-4000-8000-000000000001',
+  schedule_compatible: true, retained_source_identity: false, ...extra,
+});
+
+test('later source keeps a uniquely compatible protected identity without requiring equal hours', () => {
+  const match = protectedMatch(1, { start: '09:00', end: '16:00', break_minutes: 15 });
+  const result = protectedMatchProjection({ protected_matches: [match] });
+  assert.equal(result.mapping_state, 'RESOLVED');
+  assert.equal(result.prior_work_event_id, match.work_event_id);
+});
+
+test('two plausible protected shifts require Office selection, not first-row matching', () => {
+  const matches = [protectedMatch(1), protectedMatch(2)];
+  const blocked = protectedMatchProjection({ protected_matches: matches });
+  assert.equal(blocked.blocker_code, 'PROTECTED_SHIFT_MATCH_REQUIRED');
+  const selected = protectedMatchProjection({ protected_matches: matches,
+    office_selected_work_event_id: matches[1].work_event_id });
+  assert.equal(selected.mapping_state, 'RESOLVED');
+  assert.equal(selected.prior_work_event_id, matches[1].work_event_id);
+});
+
+test('retained source identity wins over a different overlapping protected shift', () => {
+  const retained = protectedMatch(1, { retained_source_identity: true, schedule_compatible: false });
+  const result = protectedMatchProjection({ protected_matches: [retained, protectedMatch(2)] });
+  assert.equal(result.prior_work_event_id, retained.work_event_id);
+});
+
+test('incompatible, stale and conflicting identities require review; explicit separate work stays separate', () => {
+  const match = protectedMatch(1, { schedule_compatible: false });
+  assert.equal(protectedMatchProjection({ protected_matches: [match] }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  assert.equal(protectedMatchProjection({ protected_matches: [match],
+    office_selected_work_event_id: protectedMatch(2).work_event_id }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  assert.equal(protectedMatchProjection({ protected_matches: [protectedMatch(1)],
+    prior_work_event_id: protectedMatch(2).work_event_id }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  const separate = protectedMatchProjection({ protected_matches: [match], office_separate_shift: true });
+  assert.equal(separate.mapping_state, 'RESOLVED');
+  assert.equal(separate.prior_work_event_id, undefined);
+});
+
+test('a protected shift on another contract cannot be silently attached', () => {
+  const match = protectedMatch(1, { contract_id: '30000000-0000-4000-8000-000000000099' });
+  const result = protectedMatchProjection({ protected_matches: [match] });
+  assert.equal(result.mapping_state, 'RESOLVED');
+  assert.equal(result.prior_work_event_id, undefined);
+  assert.equal(protectedMatchProjection({ protected_matches: [match],
+    office_selected_work_event_id: match.work_event_id }).blocker_code, 'PROTECTED_SHIFT_MATCH_REQUIRED');
+});
+
+test('Office recheck uses the authenticated actor and rebuilds only the saved upload', async () => {
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name, args) => {
+    calls.push([name, args]);
+    if (name === 'weekly_source_office_recheck_begin_v1') return { ok: true, status: 'BUILDING', upload_id: ID.upload, publication_id: ID.publication };
+    if (name === 'weekly_source_upload_context_v1') return { ok: true, ...context,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1, rows: [] };
+    return { ok: true, status: 'CURRENT' };
+  } });
+  await owner.recheckUpload({ actor: { id: ID.actor }, request: { request_id: ID.group, actor_user_id: ID.client } });
+  assert.deepEqual(calls.map(([name]) => name), ['weekly_source_office_recheck_begin_v1',
+    'weekly_source_upload_context_v1', 'weekly_source_projection_rows_apply_atomic_v1', 'weekly_source_projection_publish_atomic_v1']);
+  assert.equal(calls[0][1].p_request.actor_user_id, ID.actor);
+  assert.equal(calls[1][1].p_request.upload_id, ID.upload);
+  assert.equal(calls[2][1].p_publication_id, ID.publication);
+});
+
+test('completed Office recheck replay does not rebuild or repeat follow-up work', async () => {
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name) => {
+    calls.push(name); return { ok: true, status: 'CURRENT', idempotent: true };
+  } });
+  assert.equal((await owner.recheckUpload({ actor: { id: ID.actor }, request: {} })).idempotent, true);
+  assert.deepEqual(calls, ['weekly_source_office_recheck_begin_v1']);
+});
+
+test('failure after a committed recheck begin reports a saved choice, never failed linking', async () => {
+  for (const failedAt of ['weekly_source_upload_context_v1',
+    'weekly_source_projection_rows_apply_atomic_v1', 'weekly_source_projection_publish_atomic_v1']) {
+    const request = { request_id: ID.group, candidate_id: ID.actor };
+    const owner = createWeeklySourceUploadPublicationOwner({ rpc: async name => {
+      if (name === failedAt) throw new Error('WEEKLY_SOURCE_DURABLE_LINEAGE_UNPROVEN');
+      if (name === 'weekly_source_office_recheck_begin_v1') return {
+        ok: true, status: 'BUILDING', upload_id: ID.upload, publication_id: ID.publication };
+      if (name === 'weekly_source_upload_context_v1') return { ok: true, ...context,
+        profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1, rows: [] };
+      return { ok: true, status: 'CURRENT' };
+    } });
+    await assert.rejects(owner.recheckUpload({ actor: { id: ID.actor }, request }), error => {
+      assert.equal(error.code, 'WEEKLY_SOURCE_RECHECK_INCOMPLETE');
+      assert.equal(error.details.selection_saved, true);
+      assert.equal(error.details.request_id, request.request_id);
+      assert.equal(error.details.publication_id, ID.publication);
+      assert.match(error.message, /selection was saved/);
+      return true;
+    });
+  }
+});
+
+test('a refused recheck begin does not claim that a selection was saved', async () => {
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async () => {
+    throw new Error('WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING');
+  } });
+  await assert.rejects(owner.recheckUpload({ actor: { id: ID.actor }, request: {} }),
+    /WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING/);
+});
+
+async function parseCase(profileId) {
+  if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1) {
+    return parseWeeklySourceFile(workbookBytes(nhspRows(false)), { profileId });
+  }
+  if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1) {
+    return parseWeeklySourceFile(workbookBytes(nhspRows(true)), {
+      profileId, configuredNhspReportHeadingName: 'Exact Heading', expectedTrust: 'Trust One',
+    });
+  }
+  if (profileId === WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1) {
+    return parseWeeklySourceFile(workbookBytes([
+      ['Request Id', 'Staff', 'Date', 'From', 'To', 'Break', 'Start', 'End', 'Actual Break', 'Hours', 'Finalised Date', 'Timesheet Finalised By'],
+      ['A1', 'Worker', '2026-09-01', '09:00', '17:00', 30, '09:00', '17:00', 30, '7:30', '2026-09-02', 'Manager'],
+    ]), { profileId });
+  }
+  if (profileId === WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1) {
+    return parseWeeklySourceFile(workbookBytes([
+      ['Request Id', 'Status', 'Staff', 'Date', 'Start', 'End', 'Actual Start', 'Actual End', 'Actual Break', 'Actual Hours', 'Timesheet Finalised By'],
+      ['B1', 'Timesheet Finalised', 'Worker', '2026-09-01', '09:00', '17:00', '09:00', '17:00', 30, '7:30', 'Manager'],
+    ]), { profileId });
+  }
+  return parseWeeklySourceFile(csvBytes(), { profileId });
+}
+
+test('import use defaults to checking for same-format exports and is explicit for preparation', async () => {
+  for (const profileId of [WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1]) {
+    const parsed = await parseCase(profileId);
+    assert.equal(adaptWeeklySourceParserOutput(parsed, body, context).beginRequest.file_metadata_json.import_use, 'CHECKING');
+    assert.equal(adaptWeeklySourceParserOutput(parsed, { ...body, import_use: 'PREPARE_FINALISATION' }, context)
+      .beginRequest.file_metadata_json.import_use, 'PREPARE_FINALISATION');
+  }
+  const prefinal = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1);
+  assert.throws(() => adaptWeeklySourceParserOutput(prefinal, { ...body, import_use: 'PREPARE_FINALISATION' }, context),
+    { code: 'WEEKLY_SOURCE_IMPORT_USE_INVALID' });
+  const final = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1);
+  assert.equal(adaptWeeklySourceParserOutput(final, body, context).beginRequest.file_metadata_json.import_use, 'PREPARE_FINALISATION');
+});
+
+test('strict staging adapter preserves a complete physical census for all five profiles', async () => {
+  for (const profileId of [WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1]) {
+    const parsed = await parseCase(profileId);
+    assert.equal(parsed.ok, true, profileId);
+    const final = profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1;
+    const adapted = adaptWeeklySourceParserOutput(parsed, {
+      ...body,
+      ...(final ? { coverage: undefined } : {}),
+    }, {
+      ...context,
+      ...(final ? { report_scope_id: ID.group, client_name: 'Trust One' } : {}),
+    });
+    assert.equal(adapted.physicalRows.length, parsed.selectedWorksheet.physicalOrdinalSpan, profileId);
+    assert.equal(adapted.normalisedRows.length, parsed.rows.length, profileId);
+    assert.equal(adapted.beginRequest.physical_row_count,
+      adapted.beginRequest.header_count + adapted.beginRequest.trailer_count
+      + adapted.beginRequest.continuation_count + adapted.beginRequest.accepted_count);
+    assert.ok(adapted.physicalRows.every((row, index) => row.source_row_ordinal === index + 1));
+    if (final) {
+      assert.deepEqual(adapted.moneyEvidence.map((item) => item.money_field_kind),
+        ['COMMISSION', 'TOTAL_COST', 'FMC', 'BOTTOM_TOTAL_COST']);
+      assert.equal(adapted.beginRequest.file_metadata_json.nhsp_report_number, '123');
+    }
+    if (profileId === WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1) {
+      assert.equal(adapted.expenseEvidence[0].parsed_pence, '1250');
+      assert.equal(adapted.normalisedRows[0].break_minutes, 30);
+    }
+  }
+});
+
+test('pre-final NHSP unverifiable money remains accepted checking evidence with a seal-compatible parse state', async () => {
+  const rows = nhspRows(false);
+  rows[3][15] = 'not-money';
+  const parsed = await parseWeeklySourceFile(workbookBytes(rows), {
+    profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+  });
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.warnings.length, 1);
+  const adapted = adaptWeeklySourceParserOutput(parsed, body, context);
+  assert.equal(adapted.normalisedRows[0].source_money_parse_state, 'INVALID');
+  assert.deepEqual(adapted.moneyEvidence.map((item) => item.parse_state), ['INVALID', 'INVALID']);
+  assert.equal(adapted.normalisedRows[0].source_shift_charge_pence, null);
+});
+
+test('NHSP preview resolves the server-owned report heading before parsing', async () => {
+  const calls = [];
+  let parseCount = 0;
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc: async (name, args) => {
+      calls.push([name, args.p_request ?? args]);
+      if (name === 'weekly_source_upload_context_v1') {
+        const request = args.p_request ?? args;
+        return {
+          ok: true,
+          ...context,
+          authority_scope_version: 1,
+          nhsp_report_heading_name: 'Exact Heading',
+          report_scope_id: request.report_scope_id ?? null,
+          client_id: request.report_scope_id ? ID.client : null,
+          client_name: request.report_scope_id ? 'Trust One' : null,
+        };
+      }
+      if (name === 'weekly_source_nhsp_report_scope_resolve_atomic_v1') {
+        assert.equal(args.p_request.trust_name, 'Trust One');
+        return { ok: true, report_scope_id: ID.group, client_id: ID.client };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  });
+  const parsed = {
+    ok: true,
+    profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+    scope: { trust: 'Trust One' },
+    rows: [{ trust: 'Trust One' }],
+  };
+  const result = await owner.previewUpload({
+    body: {
+      source_group_id: ID.group,
+      source_cycle_id: ID.cycle,
+      client_id: ID.client,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+      parser_options: {
+        profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+        configuredNhspReportHeadingName: 'Browser must not control this',
+      },
+    },
+    bytes: new Uint8Array([1]),
+    actor: { id: ID.actor },
+    parseWeeklySourceFile: async (_bytes, options) => {
+      parseCount += 1;
+      assert.equal(options.profileId, WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1);
+      assert.equal(options.configuredNhspReportHeadingName, 'Exact Heading');
+      assert.equal(options.expectedTrust, parseCount === 1 ? null : 'Trust One');
+      return parsed;
+    },
+  });
+  assert.equal(result.parsed, parsed);
+  assert.equal(parseCount, 2);
+  assert.deepEqual(calls.map(([name]) => name), [
+    'weekly_source_upload_context_v1',
+    'weekly_source_nhsp_report_scope_resolve_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+  assert.equal(calls[0][1].operation, 'DISCOVER_SCOPE');
+  assert.equal(result.accept_context.report_scope_id, ID.group);
+  assert.equal(result.accept_context.client_id, ID.client);
+});
+
+test('ROSTER preview rereads the exact server-owned client cycle before returning acceptance authority', async () => {
+  const clientCycle = '20000000-0000-4000-8000-000000000001';
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name, args) => {
+    const request = args.p_request;
+    calls.push([name, request]);
+    if (name === 'weekly_source_upload_context_v1') return {
+      ok: true, ...context, source_family: 'ROSTER',
+      source_cycle_id: request.source_cycle_id,
+      authority_scope_version: request.source_cycle_id === clientCycle ? 9 : 2,
+    };
+    if (name === 'weekly_source_client_cycle_resolve_atomic_v1') {
+      assert.equal(request.client_id, ID.client);
+      assert.equal(request.source_cycle_id, ID.cycle);
+      return {ok:true, source_cycle_id:clientCycle};
+    }
+    throw Error(`Unexpected RPC ${name}`);
+  }});
+  const result = await owner.previewUpload({
+    body: {source_group_id:ID.group,source_cycle_id:ID.cycle,client_id:ID.client,
+      profile_id:WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1},
+    bytes:csvBytes(),actor:{id:ID.actor},parseWeeklySourceFile,
+  });
+  assert.equal(result.accept_context.source_cycle_id, clientCycle);
+  assert.equal(result.accept_context.authority_scope_version, 9);
+  assert.deepEqual(calls.map(([name])=>name), [
+    'weekly_source_upload_context_v1','weekly_source_client_cycle_resolve_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+});
+
+test('ROSTER preview cannot continue when the client cycle cannot be verified', async () => {
+  let parsed = false;
+  const owner = createWeeklySourceUploadPublicationOwner({rpc:async(name)=>
+    name==='weekly_source_upload_context_v1'
+      ? {ok:true,...context,source_family:'ROSTER'} : {ok:false}});
+  await assert.rejects(owner.previewUpload({body:{source_cycle_id:ID.cycle,client_id:ID.client,
+    profile_id:WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1},
+    bytes:csvBytes(),actor:{id:ID.actor},parseWeeklySourceFile:async()=>{parsed=true;}}),
+    error=>error.code==='WEEKLY_SOURCE_CLIENT_SCOPE_UNAVAILABLE');
+  assert.equal(parsed,false);
+});
+
+test('duplicate NHSP Reference Numbers are explained in preview and refused before staging', async () => {
+  const calls = [];
+  const parsed = {
+    ok: true, profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+    rows: [
+      { physicalRow: 4, referenceNumber: '155154202' },
+      { physicalRow: 6, referenceNumber: '155154202' },
+    ],
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc: async (name) => {
+      calls.push(name);
+      if (name === 'weekly_source_upload_context_v1') return {
+        ok: true, ...context, client_id: null, authority_scope_version: 4,
+        previous_coverage: { start_local_date: '2026-09-08', end_local_date: '2026-09-17' },
+      };
+      if (name === 'weekly_source_upload_attempt_record_atomic_v1') return { ok: true };
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  });
+  const input = {
+    body: {
+      source_group_id: ID.group, source_cycle_id: ID.cycle,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+      original_filename: 'nhsp.xlsx', coverage: body.coverage,
+    },
+    bytes: new Uint8Array([1]), actor: { id: ID.actor },
+    parseWeeklySourceFile: async () => parsed,
+  };
+  const preview = await owner.previewUpload(input);
+  assert.equal(preview.parsed.ok, false);
+  assert.equal(preview.parsed.fatalErrors[0].code, 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY');
+  assert.match(preview.parsed.fatalErrors[0].message, /Rows 4 and 6.*NHSP Reference Number.*155154202/);
+  assert.deepEqual(preview.accept_context.previous_coverage, {
+    start_local_date: '2026-09-08', end_local_date: '2026-09-17',
+  });
+  await assert.rejects(owner.acceptUpload(input), (error) => {
+    assert.equal(error.code, 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY');
+    assert.match(error.message, /Rows 4 and 6/);
+    return true;
+  });
+  assert.equal(calls.includes('weekly_source_upload_stage_begin_atomic_v1'), false);
+});
+
+test('acceptUpload stages, seals and publishes a complete unresolved census without browser economics', async () => {
+  const calls = [];
+  let appliedRows;
+  const parsed = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1);
+  const rpc = async (name, args) => {
+    calls.push(name);
+    const request = args.p_request ?? args;
+    if (name === 'weekly_source_upload_context_v1' && request.operation === 'DISCOVER_SCOPE') {
+      return { ok: true, ...context, authority_scope_version: 1, nhsp_report_heading_name: null };
+    }
+    if (name === 'weekly_source_upload_stage_begin_atomic_v1') return { ok: true, status: 'STAGING', upload_id: ID.upload };
+    if (name === 'weekly_source_upload_stage_rows_atomic_v1') return { ok: true, status: 'STAGING' };
+    if (name === 'weekly_source_upload_seal_atomic_v1') {
+      return { ok: true, status: 'CURRENT', logical_upload_id: ID.upload, authority_scope_version: 2, row_manifest_hash: '1'.repeat(64) };
+    }
+    if (name === 'weekly_source_projection_begin_atomic_v1') {
+      return { ok: true, status: 'BUILDING', publication_id: ID.publication, authority_scope_version: 2 };
+    }
+    if (name === 'weekly_source_upload_context_v1' && request.operation === 'BUILD_PROJECTION') {
+      return {
+        ok: true, ...context, profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+        upload_id: ID.upload, authority_scope_version: 2,
+        rows: [{
+          upload_row_id: ID.uploadRow, source_row_ordinal: 2, candidate_match_count: 0,
+          candidate_id: null, client_id: ID.client, contracts: [], row_finalisation_state: 'SOURCE_WORKED',
+        }],
+      };
+    }
+    if (name === 'weekly_source_projection_rows_apply_atomic_v1') {
+      appliedRows = args.p_rows;
+      return { ok: true, applied_row_count: 1 };
+    }
+    if (name === 'weekly_source_projection_publish_atomic_v1') {
+      return { ok: true, status: 'CURRENT', publication_id: ID.publication, comparison_manifest_hash: '2'.repeat(64), issue_set_hash: '3'.repeat(64) };
+    }
+    throw new Error(`Unexpected RPC ${name}`);
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc });
+  const result = await owner.acceptUpload({
+    body: {
+      source_group_id: ID.group, source_cycle_id: ID.cycle, client_id: ID.client,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+      original_filename: 'source.xlsx', coverage: body.coverage,
+    },
+    bytes: new Uint8Array([1]), actor: { id: ID.actor },
+    parseWeeklySourceFile: async (_bytes, options) => {
+      assert.deepEqual(options, { profileId: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1, expectedClient: 'Client A' });
+      return parsed;
+    },
+  });
+  assert.equal(result.status, 'CURRENT');
+  assert.equal(appliedRows.length, 1);
+  assert.equal(appliedRows[0].mapping_state, 'CANDIDATE_NOT_FOUND');
+  assert.equal(JSON.stringify(appliedRows).includes('gross_pay'), false);
+  assert.deepEqual(calls, [
+    'weekly_source_upload_context_v1', 'weekly_source_upload_stage_begin_atomic_v1',
+    'weekly_source_upload_stage_rows_atomic_v1', 'weekly_source_upload_seal_atomic_v1',
+    'weekly_source_projection_begin_atomic_v1', 'weekly_source_upload_context_v1',
+    'weekly_source_projection_rows_apply_atomic_v1', 'weekly_source_projection_publish_atomic_v1',
+  ]);
+});
+
+test('Correct-final exact replay returns the sealed durable proofs and current correction version', async () => {
+  const calls = [];
+  const parsed = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1);
+  const hashes = { rows: '1'.repeat(64), comparison: '2'.repeat(64), issues: '3'.repeat(64) };
+  const projectionContext = {
+    ok: true, ...context,
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    upload_id: ID.upload,
+    authority_scope_version: 7,
+    correction_session_id: ID.correction,
+    correction_session_version: 4,
+    projection_publication_id: ID.publication,
+    projection_state: 'CORRECTION_READY',
+    row_manifest_hash: hashes.rows,
+    comparison_manifest_hash: hashes.comparison,
+    issue_set_hash: hashes.issues,
+    rows: [],
+  };
+  const rpc = async (name, args) => {
+    calls.push(name);
+    const request = args.p_request ?? args;
+    if (name === 'weekly_source_upload_context_v1' && request.operation === 'DISCOVER_SCOPE') {
+      assert.equal(request.source_group_id, null);
+      return { ok: true, ...context, authority_scope_version: 7 };
+    }
+    if (name === 'weekly_source_upload_stage_begin_atomic_v1') {
+      assert.equal(request.expected_correction_session_version, 1);
+      return { ok: true, status: 'DUPLICATE', logical_upload_id: ID.upload };
+    }
+    if (name === 'weekly_source_projection_begin_atomic_v1') {
+      return {
+        ok: true, status: 'CORRECTION_READY', publication_id: ID.publication,
+        upload_id: ID.upload, authority_scope_version: 7, idempotent: true,
+      };
+    }
+    if (name === 'weekly_source_upload_context_v1' && request.operation === 'BUILD_PROJECTION') {
+      return projectionContext;
+    }
+    throw new Error(`Unexpected RPC ${name}`);
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc,
+    loadFileBytes: async (_env, key) => {
+      assert.equal(key, 'weekly-source/correct.xlsx');
+      return new Uint8Array([1]);
+    },
+    parseWeeklySourceFile: async (_bytes, options) => {
+      assert.equal(options.profileId, WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1);
+      return parsed;
+    },
+  });
+  const result = await owner.stageReplacementSource({
+    actor_user_id: ID.actor,
+    correction_session_id: ID.correction,
+    expected_session_version: 1,
+    source_cycle_id: ID.cycle,
+    report_scope_id: null,
+    replacement_source: {
+      file_key: 'weekly-source/correct.xlsx',
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+      coverage: body.coverage,
+    },
+  });
+  assert.deepEqual(result, {
+    ok: true,
+    status: 'CORRECTION_READY',
+    correction_session_id: ID.correction,
+    replacement_upload_id: ID.upload,
+    replacement_projection_publication_id: ID.publication,
+    expected_authority_scope_version: 7,
+    expected_row_manifest_hash: hashes.rows,
+    expected_comparison_manifest_hash: hashes.comparison,
+    expected_issue_set_hash: hashes.issues,
+    version: 4,
+    idempotent_replay: true,
+  });
+  assert.deepEqual(calls, [
+    'weekly_source_upload_context_v1',
+    'weekly_source_upload_stage_begin_atomic_v1',
+    'weekly_source_projection_begin_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+});
+
+test('Correct-final Recheck rebuilds a fresh projection from the immutable upload and current mapping', async () => {
+  const calls = [];
+  let contextCalls = 0;
+  let appliedRows;
+  const hashes = {
+    rows: '1'.repeat(64),
+    priorComparison: '2'.repeat(64),
+    priorIssues: '3'.repeat(64),
+    comparison: '4'.repeat(64),
+    issues: '5'.repeat(64),
+  };
+  const rpc = async (name, args) => {
+    calls.push([name, args]);
+    const request = args.p_request ?? args;
+    if (name === 'weekly_source_projection_begin_atomic_v1') {
+      assert.equal(request.upload_id, ID.upload);
+      assert.equal(request.correction_session_id, ID.correction);
+      assert.equal(request.expected_correction_session_version, 4);
+      assert.equal(request.expected_projection_publication_id, ID.publication);
+      assert.equal(request.expected_row_manifest_hash, hashes.rows);
+      return {
+        ok: true,
+        status: 'BUILDING',
+        publication_id: ID.rebuiltPublication,
+        projection_generation: 8,
+        rows_applied: false,
+        idempotent: false,
+      };
+    }
+    if (name === 'weekly_source_upload_context_v1') {
+      contextCalls += 1;
+      assert.equal(request.operation, 'BUILD_PROJECTION');
+      assert.equal(request.upload_id, ID.upload);
+      return {
+        ok: true,
+        ...context,
+        profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+        upload_id: ID.upload,
+        correction_session_id: ID.correction,
+        correction_session_version: contextCalls === 1 ? 4 : 5,
+        projection_publication_id: contextCalls === 1 ? ID.publication : ID.rebuiltPublication,
+        projection_state: 'CORRECTION_READY',
+        row_manifest_hash: hashes.rows,
+        comparison_manifest_hash: contextCalls === 1 ? hashes.priorComparison : hashes.comparison,
+        issue_set_hash: contextCalls === 1 ? hashes.priorIssues : hashes.issues,
+        rows: [],
+      };
+    }
+    if (name === 'weekly_source_projection_rows_apply_atomic_v1') {
+      appliedRows = args.p_rows;
+      assert.equal(args.p_publication_id, ID.rebuiltPublication);
+      return { ok: true, applied_row_count: 0 };
+    }
+    if (name === 'weekly_source_projection_publish_atomic_v1') {
+      assert.equal(request.publication_id, ID.rebuiltPublication);
+      return {
+        ok: true,
+        status: 'CORRECTION_READY',
+        publication_id: ID.rebuiltPublication,
+        ready_session_version: 5,
+        comparison_manifest_hash: hashes.comparison,
+        issue_set_hash: hashes.issues,
+        idempotent: false,
+      };
+    }
+    throw new Error(`Unexpected RPC ${name}`);
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc,
+    loadFileBytes: async () => { throw new Error('Recheck must not reload replacement bytes.'); },
+    parseWeeklySourceFile: async () => { throw new Error('Recheck must not parse or restage the upload.'); },
+  });
+  const result = await owner.rebuildReplacementProjection({
+    actor_user_id: ID.actor,
+    correction_session_id: ID.correction,
+    expected_session_version: 4,
+    source_cycle_id: ID.cycle,
+    report_scope_id: null,
+    replacement_upload_id: ID.upload,
+    replacement_projection_publication_id: ID.publication,
+    expected_authority_scope_version: 7,
+    expected_row_manifest_hash: hashes.rows,
+    expected_comparison_manifest_hash: hashes.priorComparison,
+    expected_issue_set_hash: hashes.priorIssues,
+    idempotency_key: 'correct-final-recheck-build-0001',
+  });
+  assert.deepEqual(appliedRows, []);
+  assert.deepEqual(result, {
+    ok: true,
+    status: 'CORRECTION_READY',
+    correction_session_id: ID.correction,
+    replacement_upload_id: ID.upload,
+    replacement_projection_publication_id: ID.rebuiltPublication,
+    expected_authority_scope_version: 7,
+    expected_row_manifest_hash: hashes.rows,
+    expected_comparison_manifest_hash: hashes.comparison,
+    expected_issue_set_hash: hashes.issues,
+    version: 5,
+    idempotent_replay: false,
+  });
+  assert.deepEqual(calls.map(([name]) => name), [
+    'weekly_source_projection_begin_atomic_v1',
+    'weekly_source_upload_context_v1',
+    'weekly_source_projection_rows_apply_atomic_v1',
+    'weekly_source_projection_publish_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+});
+
+test('Correct-final Recheck exactly replays an already-published fresh projection', async () => {
+  const calls = [];
+  const hashes = {
+    rows: '1'.repeat(64),
+    priorComparison: '2'.repeat(64),
+    priorIssues: '3'.repeat(64),
+    comparison: '4'.repeat(64),
+    issues: '5'.repeat(64),
+  };
+  const rpc = async (name, args) => {
+    calls.push(name);
+    const request = args.p_request ?? args;
+    if (name === 'weekly_source_projection_begin_atomic_v1') {
+      return {
+        ok: true,
+        status: 'CORRECTION_READY',
+        publication_id: ID.rebuiltPublication,
+        ready_session_version: 5,
+        comparison_manifest_hash: hashes.comparison,
+        issue_set_hash: hashes.issues,
+        rows_applied: true,
+        idempotent: true,
+      };
+    }
+    if (name === 'weekly_source_upload_context_v1') {
+      assert.equal(request.upload_id, ID.upload);
+      return {
+        ok: true,
+        ...context,
+        profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+        upload_id: ID.upload,
+        correction_session_id: ID.correction,
+        correction_session_version: 5,
+        projection_publication_id: ID.rebuiltPublication,
+        projection_state: 'CORRECTION_READY',
+        row_manifest_hash: hashes.rows,
+        comparison_manifest_hash: hashes.comparison,
+        issue_set_hash: hashes.issues,
+        rows: [],
+      };
+    }
+    throw new Error(`Exact replay must not call ${name}`);
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc,
+    loadFileBytes: async () => { throw new Error('Exact replay must not reload bytes.'); },
+    parseWeeklySourceFile: async () => { throw new Error('Exact replay must not parse bytes.'); },
+  });
+  const result = await owner.rebuildReplacementProjection({
+    actor_user_id: ID.actor,
+    correction_session_id: ID.correction,
+    expected_session_version: 4,
+    source_cycle_id: ID.cycle,
+    report_scope_id: null,
+    replacement_upload_id: ID.upload,
+    replacement_projection_publication_id: ID.publication,
+    expected_authority_scope_version: 7,
+    expected_row_manifest_hash: hashes.rows,
+    expected_comparison_manifest_hash: hashes.priorComparison,
+    expected_issue_set_hash: hashes.priorIssues,
+    idempotency_key: 'correct-final-recheck-replay-0001',
+  });
+  assert.equal(result.replacement_projection_publication_id, ID.rebuiltPublication);
+  assert.equal(result.version, 5);
+  assert.equal(result.idempotent_replay, true);
+  assert.deepEqual(calls, [
+    'weekly_source_projection_begin_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+});
+
+test('ambiguous exact Contracts remain a chooser and a supplied choice is revalidated', () => {
+  const contract = (suffix) => ({
+    contract_id: `20000000-0000-4000-8000-00000000000${suffix}`,
+    candidate_id: ID.actor,
+    client_id: ID.client,
+    valid_from: '2026-01-01',
+    valid_to: null,
+    display_label: `Contract ${suffix}`,
+    pay_type: 'PAYE',
+    weekly_source_applicable: true,
+    effective_policy: {
+      authority_mode: 'TIMESHEET_AUTHORITY', c1_source_mode: null,
+      weekly_rate_classification_method: 'SPLIT_RATE_WINDOWS', policy_sha256: String(suffix).repeat(64),
+    },
+    settings_authority: { values: {} },
+    rates_json: {},
+  });
+  const projectionContext = {
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    rows: [{
+      upload_row_id: ID.uploadRow, source_row_ordinal: 2, candidate_match_count: 1,
+      candidate_id: ID.actor, client_id: ID.client, work_date: '2026-09-01',
+      row_finalisation_state: 'SOURCE_UNFINALISED', external_source_key: 'A1',
+      contracts: [contract(1), contract(2)], prior_accepted_contract_id: null,
+    }],
+  };
+  const chooser = buildWeeklySourceProjectionRows(projectionContext)[0];
+  assert.equal(chooser.mapping_state, 'CONTRACT_SELECTION_REQUIRED');
+  assert.deepEqual(chooser.qualifying_contract_ids, [contract(1).contract_id, contract(2).contract_id]);
+
+  const selected = buildWeeklySourceProjectionRows(projectionContext, {
+    contract_selections: { 2: contract(2).contract_id },
+  })[0];
+  assert.equal(selected.mapping_state, 'RESOLVED');
+  assert.equal(selected.contract_id, contract(2).contract_id);
+  assert.equal(selected.contract_selection_method, 'OFFICE_SELECTED');
+
+  assert.throws(() => buildWeeklySourceProjectionRows(projectionContext, {
+    contract_selections: { 2: '20000000-0000-4000-8000-000000000099' },
+  }), { code: 'WEEKLY_SOURCE_CONTRACT_SELECTION_STALE' });
+});
+
+test('resolved source-authority rows are calculated by the canonical rate and economic owners', () => {
+  const contractId = '30000000-0000-4000-8000-000000000001';
+  const settings = {
+    values: {
+      timezone_id: 'Europe/London', day_start: '06:00:00', day_end: '20:00:00',
+      night_start: '20:00:00', night_end: '06:00:00', sat_start: '00:00:00', sat_end: '00:00:00',
+      sun_start: '00:00:00', sun_end: '00:00:00', bh_start: '00:00:00', bh_end: '00:00:00', bh_list: [],
+    },
+  };
+  const rates = {
+    paye_day: 10, paye_night: 10, paye_sat: 10, paye_sun: 10, paye_bh: 10,
+    charge_day: 20, charge_night: 20, charge_sat: 20, charge_sun: 20, charge_bh: 20,
+  };
+  const economicContext = {
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+    rows: [{
+      upload_row_id: ID.uploadRow, source_row_ordinal: 4, external_source_key: 'REF-1',
+      candidate_match_count: 1, candidate_id: ID.actor, client_id: ID.client,
+      work_date: '2026-09-01', start_at_local: '2026-09-01T09:00:00',
+      end_at_local: '2026-09-01T17:00:00', break_minutes: 30, actual_net_minutes: 450,
+      row_finalisation_state: 'SOURCE_WORKED', source_commission_pence: '0',
+      source_total_cost_pence: '15000', source_shift_charge_pence: '15000',
+      contracts: [{
+        contract_id: contractId, candidate_id: ID.actor, client_id: ID.client,
+        valid_from: '2026-01-01', valid_to: null, display_label: 'RGN', pay_type: 'PAYE',
+        rates_json: rates, contract_updated_at: '2026-09-01T00:00:00Z', weekly_source_applicable: true,
+        effective_policy: {
+          authority_mode: 'SOURCE_AUTHORITY', self_bill_enabled: true, c1_source_mode: 'NHSP_WEEKLY',
+          weekly_rate_classification_method: 'SPLIT_RATE_WINDOWS',
+          duration_break_tie_rule: 'EARLIEST_LONGEST_PORTION', policy_sha256: 'a'.repeat(64),
+        },
+        settings_authority: settings,
+      }],
+      prior_accepted_contract_id: null, prior_work_event_id: null,
+    }],
+  };
+  const resolved = buildWeeklySourceProjectionRows(economicContext)[0];
+  assert.equal(resolved.mapping_state, 'RESOLVED');
+  assert.equal(resolved.contract_id, contractId);
+  assert.equal(resolved.economic_snapshot.total_pay_pence, '7500');
+  assert.equal(resolved.economic_snapshot.calculated_charge_pence, '15000');
+  assert.deepEqual(resolved.economic_snapshot.bucket_minutes,
+    { day: 450, night: 0, sat: 0, sun: 0, bh: 0 });
+  assert.equal(resolved.qualification_observations[0].comparison_result, 'EXACT');
+  assert.equal(resolved.charge_check.comparison_result, 'EXACT');
+  assert.equal(resolved.link_kind, 'POSITIVE_SOURCE');
+});
+
+test('split-rate projection uses the policy defaults when optional rate-window settings are blank', () => {
+  const contractId = '30000000-0000-4000-8000-000000000002';
+  const resolved = buildWeeklySourceProjectionRows({
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1,
+    rows: [{
+      upload_row_id: ID.uploadRow, source_row_ordinal: 2, external_source_key: 'HR-DEFAULT-1',
+      candidate_match_count: 1, candidate_id: ID.actor, client_id: ID.client,
+      work_date: '2026-09-14', start_at_local: '2026-09-14T20:00:00',
+      end_at_local: '2026-09-15T08:00:00', break_minutes: 60, actual_net_minutes: 660,
+      row_finalisation_state: 'SOURCE_WORKED',
+      contracts: [{
+        contract_id: contractId, candidate_id: ID.actor, client_id: ID.client,
+        valid_from: '2026-01-01', valid_to: null, display_label: 'Band 5', pay_type: 'PAYE',
+        rates_json: {
+          paye_day: 10, paye_night: 12, paye_sat: 13, paye_sun: 14, paye_bh: 15,
+          charge_day: 20, charge_night: 24, charge_sat: 26, charge_sun: 28, charge_bh: 30,
+        },
+        contract_updated_at: '2026-09-01T00:00:00Z', weekly_source_applicable: true,
+        effective_policy: {
+          authority_mode: 'SOURCE_AUTHORITY', self_bill_enabled: true, c1_source_mode: 'HEALTHROSTER_WEEKLY',
+          weekly_rate_classification_method: 'SPLIT_RATE_WINDOWS',
+          duration_break_tie_rule: 'EARLIEST_LONGEST_PORTION', policy_sha256: 'b'.repeat(64),
+        },
+        settings_authority: { values: { timezone_id: 'Europe/London' } },
+      }],
+      prior_accepted_contract_id: null, prior_work_event_id: null,
+    }],
+  })[0];
+  assert.equal(resolved.mapping_state, 'RESOLVED');
+  assert.deepEqual(resolved.economic_snapshot.bucket_minutes,
+    { day: 120, night: 540, sat: 0, sun: 0, bh: 0 });
+  assert.equal(resolved.economic_snapshot.calculated_charge_pence, '25600');
+});

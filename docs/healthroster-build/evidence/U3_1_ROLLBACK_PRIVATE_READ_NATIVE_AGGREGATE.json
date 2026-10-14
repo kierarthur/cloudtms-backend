@@ -1,0 +1,505 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"accepted\": true,\n  \"database\": \"cloudtms_test_clone\",\n  \"label\": \"HR U3 exact private read compile and native aggregate 1\",\n  \"sqlSha256\": \"3d30f36e834bb674ab29199581572e7168e853f5b1106ade0d6f4b93e79140e0\",\n  \"statementCount\": 37,\n  \"statements\": [\n    {\n      \"statement\": 1,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 2,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 3,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 4,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 5,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 6,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 7,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 8,\n      \"command\": \"COMMENT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 9,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 10,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 11,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 12,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 13,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 14,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 15,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 16,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 17,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 18,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 19,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 20,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 21,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 22,\n      \"command\": \"COMMENT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 23,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 24,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 25,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 26,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 27,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 28,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 29,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 30,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 31,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 32,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 33,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 34,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 35,\n      \"command\": \"SELECT\",\n      \"rowCount\": 4,\n      \"fields\": [\n        \"signature\",\n        \"present\",\n        \"owner_current\",\n        \"security_definer\",\n        \"stable\",\n        \"anon_denied\",\n        \"authenticated_denied\",\n        \"service_denied\"\n      ],\n      \"rows\": [\n        {\n          \"signature\": \"private.weekly_source_actual_timesheet_submission_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"stable\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_denied\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_signed_submission_read_context_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"stable\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_denied\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"stable\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_denied\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"stable\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_denied\": true\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 36,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 37,\n      \"command\": \"SELECT\",\n      \"rowCount\": 3,\n      \"fields\": [\n        \"support_state\",\n        \"reason\",\n        \"sampled_records\"\n      ],\n      \"rows\": [\n        {\n          \"support_state\": \"NOT_SUBMITTED\",\n          \"reason\": \"ACTUAL_SUBMISSION_SOURCE_WITNESS_UNAVAILABLE\",\n          \"sampled_records\": 6\n        },\n        {\n          \"support_state\": \"NOT_SUBMITTED\",\n          \"reason\": \"NO_CURRENT_HOURS_TIMESHEET\",\n          \"sampled_records\": 3\n        },\n        {\n          \"support_state\": \"UNPROVED\",\n          \"reason\": \"ACTUAL_SUBMISSION_SOURCE_WITNESS_UNAVAILABLE\",\n          \"sampled_records\": 1\n        }\n      ],\n      \"rowsTruncated\": false\n    }\n  ],\n  \"rolledBack\": true,\n  \"rollbackVerification\": {\n    \"connectedFresh\": true,\n    \"database\": \"cloudtms_test_clone\",\n    \"statements\": [\n      {\n        \"statement\": 1,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"physical_database\",\n          \"functions_hash\",\n          \"tables_acl_hash\",\n          \"triggers_hash\",\n          \"policies_hash\"\n        ],\n        \"rows\": [\n          {\n            \"physical_database\": \"cloudtms_test_clone\",\n            \"functions_hash\": \"25e12a4aac94ad8fa60badfdea2035ac\",\n            \"tables_acl_hash\": \"7c7433ff59d513a4c37eb1e9bf636536\",\n            \"triggers_hash\": \"61ab0139de5e90bdb78f1eec12c694ac\",\n            \"policies_hash\": \"3d46c24766a7a69b19fd9eb504bf54b5\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 2,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"physical_database\",\n          \"request_table_absent\",\n          \"support_column_absent\",\n          \"rule_column_absent\",\n          \"rules_absent\",\n          \"rule_versions_absent\",\n          \"assignments_absent\",\n          \"pp_helper_absent\",\n          \"mail_outbox_count\",\n          \"invoice_count\",\n          \"timesheet_count\",\n          \"financial_count\",\n          \"financial_outbox_count\"\n        ],\n        \"rows\": [\n          {\n            \"physical_database\": \"cloudtms_test_clone\",\n            \"request_table_absent\": true,\n            \"support_column_absent\": true,\n            \"rule_column_absent\": true,\n            \"rules_absent\": true,\n            \"rule_versions_absent\": true,\n            \"assignments_absent\": true,\n            \"pp_helper_absent\": true,\n            \"mail_outbox_count\": \"332\",\n            \"invoice_count\": \"46\",\n            \"timesheet_count\": \"120\",\n            \"financial_count\": \"577\",\n            \"financial_outbox_count\": \"20\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 3,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"f8_helpers_absent\"\n        ],\n        \"rows\": [\n          {\n            \"f8_helpers_absent\": true\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 4,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"report_metadata_absent\",\n          \"report_bindings_absent\",\n          \"report_scope_column_absent\",\n          \"active_profile_count\"\n        ],\n        \"rows\": [\n          {\n            \"report_metadata_absent\": true,\n            \"report_bindings_absent\": true,\n            \"report_scope_column_absent\": true,\n            \"active_profile_count\": \"5\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 5,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"invoice_hold_releases_absent\",\n          \"money_columns_absent\"\n        ],\n        \"rows\": [\n          {\n            \"invoice_hold_releases_absent\": true,\n            \"money_columns_absent\": true\n          }\n        ],\n        \"rowsTruncated\": false\n      }\n    ]\n  },\n  \"warnings\": [\n    \"All transactional database and catalog changes were rolled back.\",\n    \"PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.\",\n    \"Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics.\"\n  ]\n}"
+    }
+  ],
+  "structuredContent": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "HR U3 exact private read compile and native aggregate 1",
+    "sqlSha256": "3d30f36e834bb674ab29199581572e7168e853f5b1106ade0d6f4b93e79140e0",
+    "statementCount": 37,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "COMMENT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 21,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 22,
+        "command": "COMMENT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 23,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 24,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 25,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 26,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 27,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 28,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 29,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 30,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 31,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 32,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 33,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 34,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 35,
+        "command": "SELECT",
+        "rowCount": 4,
+        "fields": [
+          "signature",
+          "present",
+          "owner_current",
+          "security_definer",
+          "stable",
+          "anon_denied",
+          "authenticated_denied",
+          "service_denied"
+        ],
+        "rows": [
+          {
+            "signature": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "stable": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_denied": true
+          },
+          {
+            "signature": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "stable": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_denied": true
+          },
+          {
+            "signature": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "stable": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_denied": true
+          },
+          {
+            "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "stable": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_denied": true
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 36,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 37,
+        "command": "SELECT",
+        "rowCount": 3,
+        "fields": [
+          "support_state",
+          "reason",
+          "sampled_records"
+        ],
+        "rows": [
+          {
+            "support_state": "NOT_SUBMITTED",
+            "reason": "ACTUAL_SUBMISSION_SOURCE_WITNESS_UNAVAILABLE",
+            "sampled_records": 6
+          },
+          {
+            "support_state": "NOT_SUBMITTED",
+            "reason": "NO_CURRENT_HOURS_TIMESHEET",
+            "sampled_records": 3
+          },
+          {
+            "support_state": "UNPROVED",
+            "reason": "ACTUAL_SUBMISSION_SOURCE_WITNESS_UNAVAILABLE",
+            "sampled_records": 1
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "functions_hash",
+            "tables_acl_hash",
+            "triggers_hash",
+            "policies_hash"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+              "tables_acl_hash": "7c7433ff59d513a4c37eb1e9bf636536",
+              "triggers_hash": "61ab0139de5e90bdb78f1eec12c694ac",
+              "policies_hash": "3d46c24766a7a69b19fd9eb504bf54b5"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "request_table_absent",
+            "support_column_absent",
+            "rule_column_absent",
+            "rules_absent",
+            "rule_versions_absent",
+            "assignments_absent",
+            "pp_helper_absent",
+            "mail_outbox_count",
+            "invoice_count",
+            "timesheet_count",
+            "financial_count",
+            "financial_outbox_count"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "request_table_absent": true,
+              "support_column_absent": true,
+              "rule_column_absent": true,
+              "rules_absent": true,
+              "rule_versions_absent": true,
+              "assignments_absent": true,
+              "pp_helper_absent": true,
+              "mail_outbox_count": "332",
+              "invoice_count": "46",
+              "timesheet_count": "120",
+              "financial_count": "577",
+              "financial_outbox_count": "20"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 3,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "f8_helpers_absent"
+          ],
+          "rows": [
+            {
+              "f8_helpers_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 4,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "report_metadata_absent",
+            "report_bindings_absent",
+            "report_scope_column_absent",
+            "active_profile_count"
+          ],
+          "rows": [
+            {
+              "report_metadata_absent": true,
+              "report_bindings_absent": true,
+              "report_scope_column_absent": true,
+              "active_profile_count": "5"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 5,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "invoice_hold_releases_absent",
+            "money_columns_absent"
+          ],
+          "rows": [
+            {
+              "invoice_hold_releases_absent": true,
+              "money_columns_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  }
+}

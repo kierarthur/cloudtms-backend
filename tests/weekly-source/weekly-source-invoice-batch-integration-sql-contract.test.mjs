@@ -42,9 +42,11 @@ const editContext = sliceBetween(
 );
 const confirm = sliceBetween(
   broker,
+  'async function handleBatchGenerateConfirmNative(',
   'async function handleBatchGenerateConfirm(',
-  'async function handleBatchIssueConfirm(',
 );
+const automaticConfirm = sliceBetween(broker,
+  'async function handleBatchGenerateConfirm(', 'async function handleBatchIssueConfirm(');
 
 test('batch candidate scope is final-source manifests with immutable unplaced movements only', () => {
   assert.match(owner, /manifest\.invoice_state='READY'/);
@@ -80,6 +82,10 @@ test('source admissions are one atomic wrapper over the established guarded invo
 });
 
 test('mixed selection validates both sources before either ordinary or source creation', () => {
+  assert.match(automaticConfirm,/return handleBatchGenerateConfirmNative\(env,req,ctx,user,deps\)/,
+    'the source-free automatic wrapper delegates the complete original native confirmation');
+  assert.match(automaticConfirm,/healthRosterCorrectionConsumersReady/,
+    'automatic credit source presence is never readiness authority');
   const mixedStart = confirm.indexOf('const ordinaryPreflightQuery =');
   const mixed = confirm.slice(mixedStart);
   const ordinaryPreflightAt = mixed.indexOf("await deps.rpc('invoice_batch_generate_candidates'");

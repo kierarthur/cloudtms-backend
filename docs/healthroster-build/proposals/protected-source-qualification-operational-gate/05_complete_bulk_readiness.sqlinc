@@ -1,0 +1,11 @@
+create or replace function private.weekly_source_bulk_producer_ready_v1(p_cycle_id uuid)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare q jsonb;
+begin
+  q:=private.weekly_source_protected_capability_receipt_v1(p_cycle_id);
+  return coalesce(q->>'schema_version'='WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'
+    and q->>'phase'='ALL_PRE_SWITCH_GATES_QUALIFIED' and q->'capabilities' @> '["BULK_SIGNED"]'::jsonb,false);
+exception when no_data_found or too_many_rows or sqlstate '55000' then return false;
+end;
+$function$;

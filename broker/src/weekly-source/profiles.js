@@ -7,6 +7,7 @@ export const WEEKLY_SOURCE_PROFILE_IDS = Object.freeze({
   HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1: 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
   HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1: 'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1',
   ROSTER_WEEKLY_SUMMARY_ACTUAL_V1: 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1',
+  ACACIUM_SELF_BILL_REPORT_V1: 'ACACIUM_SELF_BILL_REPORT_V1',
 });
 
 const PROFILE_VERSION = '1';
@@ -201,6 +202,18 @@ function mapHealthRosterColumns(layoutId, exactColumns) {
 function allProfileCandidates(evidence) {
   const candidates = [];
   for (const sheet of evidence.sheets) {
+    if (evidence.sourceKind === 'XLSX' && sheet.name === 'Allocate') {
+      const headers = headerMapForRow(sheet, 1);
+      for (const layout of ['A', 'B']) {
+        const moneyHeaders = layout === 'A' ? ['Net', 'VAT', 'Total'] : ['Actual Cost', 'Net to Agency', 'VAT to Agency', 'Total'];
+        const exact = exactUniqueColumns(headers, ['Request', 'Staff', 'Date', 'Start', 'End', 'Requested On', 'Invoicenumber', 'Invoicedate', ...moneyHeaders]);
+        if (exact) candidates.push({ profileId: WEEKLY_SOURCE_PROFILE_IDS.ACACIUM_SELF_BILL_REPORT_V1,
+          sheet, headerRow: 1, columns: { requestId: exact.Request, workerName: exact.Staff,
+            date: exact.Date, actualStart: exact.Start, actualEnd: exact.End,
+            requestedOn: exact['Requested On'], reportNumber: exact.Invoicenumber, invoiceDate: exact.Invoicedate,
+            net: exact[layout === 'A' ? 'Net' : 'Net to Agency'], vat: exact[layout === 'A' ? 'VAT' : 'VAT to Agency'], gross: exact.Total }, metadata: { layout } });
+      }
+    }
     const a1Cell = sheet.getCell(1, 1);
     const a1 = a1Cell?.kind === 'STRING' ? trimNhspOuterWhitespace(a1Cell.text) : '';
     const prefinalColumns = nhspHeaderColumns(sheet, false);
@@ -269,7 +282,7 @@ function allProfileCandidates(evidence) {
 
 export function resolveWeeklySourceProfile(evidence, options = {}) {
   const profileId = options.profileId;
-  if (!Object.values(WEEKLY_SOURCE_PROFILE_IDS).includes(profileId)) {
+  if (profileId != null && !Object.values(WEEKLY_SOURCE_PROFILE_IDS).includes(profileId)) {
     failParser('APPROVED_PROFILE_REQUIRED', 'An exact approved weekly source profile is required.', { profileId: profileId ?? null });
   }
   const candidates = allProfileCandidates(evidence);
@@ -283,13 +296,21 @@ export function resolveWeeklySourceProfile(evidence, options = {}) {
     });
   }
   const selected = candidates[0];
-  if (selected.profileId !== profileId) {
+  if (profileId != null && selected.profileId !== profileId) {
     failParser('SOURCE_PROFILE_MISMATCH', 'The supplied file does not match the explicitly approved source profile.', {
       expectedProfileId: profileId,
       detectedProfileId: selected.profileId,
     });
   }
-  if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1) {
+  const rules = options.effectiveRuleSet?.values;
+  if (rules?.invoice_sender === 'CLIENT_SELF_BILL'
+      && rules.invoice_amount_basis === 'SOURCE_AMOUNT'
+      && rules.source_amount_basis === 'EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY') {
+    const moneyColumns = exactUniqueColumns(headerMapForRow(selected.sheet, selected.headerRow), ['Agency Worker Pay', 'Actual Cost']);
+    if (!moneyColumns) failParser('HEALTHROSTER_SOURCE_MONEY_HEADERS_REQUIRED', 'The source amount needs one Agency Worker Pay and one Actual Cost column.');
+    selected.columns = { ...selected.columns, sourceNet: moneyColumns['Agency Worker Pay'], sourceGross: moneyColumns['Actual Cost'] };
+  }
+  if (selected.profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1 && profileId != null) {
     const expectedHeading = trimNhspOuterWhitespace(options.configuredNhspReportHeadingName);
     if (!expectedHeading) {
       failParser('NHSP_REPORT_HEADING_REQUIRED', 'The configured NHSP report heading name is required for a final backing report.');

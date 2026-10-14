@@ -1,0 +1,42 @@
+-- Key discovery is plain. The unchanged native I-1 owner locks the complete
+-- physical booking family before any target/run/group/cycle row lock.
+create or replace function private.weekly_source_protected_family_lock_v1(p_family_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_before public.weekly_exceptional_pay_target_families%rowtype;
+  v_after public.weekly_exceptional_pay_target_families%rowtype; v_lock jsonb;
+begin
+  select * into strict v_before from public.weekly_exceptional_pay_target_families where id=p_family_id;
+  perform private.weekly_source_pay_query_admit_v2();
+  v_lock:=private.weekly_source_lock_family_rows_v1(array[v_before.root_timesheet_id],v_before.candidate_id);
+  if v_lock->>'ok' is distinct from 'true' then
+    raise exception '%',coalesce(v_lock->>'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE') using errcode='55000'; end if;
+  select * into strict v_after from public.weekly_exceptional_pay_target_families where id=p_family_id;
+  if (v_after.root_timesheet_id,v_after.candidate_id,v_after.contract_id,v_after.week_ending_date)
+    is distinct from (v_before.root_timesheet_id,v_before.candidate_id,v_before.contract_id,v_before.week_ending_date)
+    or v_lock#>>'{families,0,canonical_timesheet_id}' is distinct from v_before.root_timesheet_id::text then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  return jsonb_build_object('root_timesheet_id',v_before.root_timesheet_id,'candidate_id',v_before.candidate_id,
+    'contract_id',v_before.contract_id,'week_ending_date',v_before.week_ending_date);
+end;
+$function$;
+alter function private.weekly_source_protected_family_lock_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_family_lock_v1(uuid) from public,anon,authenticated,service_role;
+
+-- Callers already hold I-1. This returns the exact discovered group key and
+-- the caller rechecks it immediately after its original cycle row lock.
+create or replace function private.weekly_source_protected_group_lock_v1(p_cycle_id uuid)
+returns uuid language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_group_id uuid;
+begin
+  select source_group_id into strict v_group_id from public.weekly_source_cycles where id=p_cycle_id;
+  perform 1 from public.weekly_source_groups where id=v_group_id and active for share;
+  if not found then raise no_data_found; end if;
+  return v_group_id;
+end;
+$function$;
+alter function private.weekly_source_protected_group_lock_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_protected_group_lock_v1(uuid) from public,anon,authenticated,service_role;

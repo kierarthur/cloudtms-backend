@@ -1,0 +1,72 @@
+create or replace function private.weekly_source_ordinary_projection_receipt_insert_v1(
+  p_final_revision_id uuid,
+  p_source_cycle_id uuid,
+  p_client_id uuid,
+  p_root_timesheet_id uuid,
+  p_published_timesheet_financial_id uuid,
+  p_source_profile_kind text,
+  p_source_mode text,
+  p_outcome text,
+  p_source_units jsonb,
+  p_source_unit_manifest_hash bytea,
+  p_source_expenses jsonb,
+  p_source_expense_manifest_hash bytea,
+  p_final_manifest_hash bytea,
+  p_final_policy_fingerprint bytea,
+  p_service_snapshot_hash bytea,
+  p_server_calculation_fingerprint bytea,
+  p_root_before_hash bytea,
+  p_root_after_hash bytea,
+  p_idempotency_key text,
+  p_request_hash bytea,
+  p_actor_user_id uuid
+) returns public.weekly_source_ordinary_pay_projection_receipts
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+  v_receipt_hash bytea;
+begin
+  v_receipt_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_ORDINARY_PAY_PROJECTION_RECEIPT_V1',
+    pg_catalog.jsonb_build_object(
+      'final_revision_id',p_final_revision_id,'source_cycle_id',p_source_cycle_id,
+      'client_id',p_client_id,'root_timesheet_id',p_root_timesheet_id,
+      'published_timesheet_financial_id',p_published_timesheet_financial_id,
+      'source_profile_kind',p_source_profile_kind,'source_mode',p_source_mode,
+      'outcome',p_outcome,'source_units',p_source_units,
+      'source_unit_manifest_hash',pg_catalog.encode(p_source_unit_manifest_hash,'hex'),
+      'source_expense_authorities',p_source_expenses,
+      'source_expense_manifest_hash',
+        pg_catalog.encode(p_source_expense_manifest_hash,'hex'),
+      'final_manifest_hash',pg_catalog.encode(p_final_manifest_hash,'hex'),
+      'final_policy_fingerprint',pg_catalog.encode(p_final_policy_fingerprint,'hex'),
+      'service_snapshot_hash',pg_catalog.encode(p_service_snapshot_hash,'hex'),
+      'server_calculation_fingerprint',
+        pg_catalog.encode(p_server_calculation_fingerprint,'hex'),
+      'root_before_hash',pg_catalog.encode(p_root_before_hash,'hex'),
+      'root_after_hash',pg_catalog.encode(p_root_after_hash,'hex'),
+      'request_hash',pg_catalog.encode(p_request_hash,'hex'),'actor_user_id',p_actor_user_id
+    )
+  );
+  insert into public.weekly_source_ordinary_pay_projection_receipts(
+    final_revision_id,source_cycle_id,client_id,root_timesheet_id,
+    published_timesheet_financial_id,source_profile_kind,source_mode,outcome,
+    source_unit_count,source_unit_outcomes_json,source_unit_manifest_hash,
+    source_expense_authorities_json,source_expense_manifest_hash,
+    final_manifest_hash,final_policy_fingerprint,service_snapshot_hash,
+    server_calculation_fingerprint,root_before_hash,root_after_hash,
+    idempotency_key,request_hash,receipt_hash,actor_user_id
+  ) values (
+    p_final_revision_id,p_source_cycle_id,p_client_id,p_root_timesheet_id,
+    p_published_timesheet_financial_id,p_source_profile_kind,p_source_mode,p_outcome,
+    pg_catalog.jsonb_array_length(p_source_units),p_source_units,p_source_unit_manifest_hash,
+    p_source_expenses,p_source_expense_manifest_hash,
+    p_final_manifest_hash,p_final_policy_fingerprint,p_service_snapshot_hash,
+    p_server_calculation_fingerprint,p_root_before_hash,p_root_after_hash,
+    p_idempotency_key,p_request_hash,v_receipt_hash,p_actor_user_id
+  ) returning * into v_receipt;
+  return v_receipt;
+end;
+$function$;

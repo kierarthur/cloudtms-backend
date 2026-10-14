@@ -1,0 +1,109 @@
+-- Complete isolated source proposal. Root review and native proofs pending.
+create or replace function private.weekly_source_protect_all_signed_selection_v1(p_source_cycle_id uuid,p_actor_user_id uuid,p_own_stage_context jsonb,p_original_client_ids uuid[])
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_cycle public.weekly_source_cycles%rowtype; v_publication public.weekly_source_projection_publications%rowtype;
+  v_row record; v_claim jsonb; v_facts jsonb; v_witness jsonb; v_selection jsonb; v_key text;
+  v_eligible jsonb:='[]'::jsonb; v_skipped jsonb:='[]'::jsonb; v_reason text; v_code text; v_count integer; v_clients uuid[]:='{}'::uuid[]; v_cas jsonb; v_own_stage boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'APPROVE_PROTECTED_PAY',v_cycle.source_group_id,null,v_cycle.finalisation_week_ending);
+  select * into strict v_publication from public.weekly_source_projection_publications
+    where id=v_cycle.current_projection_publication_id and source_cycle_id=v_cycle.id and state='CURRENT'
+      and authority_scope_kind='CYCLE' and correction_session_id is null;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
+  for v_row in select incident.id as incident_id,incident.episode_number,incident.candidate_id,incident.client_id,
+      incident.work_event_id,comparison.id as comparison_id,comparison.contract_id,comparison.issue_family,
+      comparison.material_comparison_fingerprint,work.work_date
+    from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id
+      and work.client_id=incident.client_id and work.first_source_group_id=v_cycle.source_group_id
+    join public.contracts contract on contract.id=comparison.contract_id and contract.candidate_id=incident.candidate_id
+      and contract.client_id=incident.client_id
+    where incident.source_cycle_id=v_cycle.id and incident.state='OPEN'
+      and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work.work_date)
+      and (private.weekly_source_checking_client_scope_v1(v_publication.id) is null
+        or incident.client_id=private.weekly_source_checking_client_scope_v1(v_publication.id))
+    order by incident.candidate_id,work.id,incident.id
+  loop
+    v_code:=null; v_reason:=null; v_claim:=null;
+    if not (v_row.client_id=any(v_clients)) then v_clients:=array_append(v_clients,v_row.client_id); end if;
+    if v_row.issue_family not in ('HEALTHROSTER_NOT_FINALISED','SOURCE_MISSING_OR_NOT_AUTHORISED') then
+      v_code:='DECIDE_INDIVIDUALLY'; v_reason:=case v_row.issue_family when 'SOURCE_HOURS_DIFFER'
+        then 'Hours differ - decide individually' else 'Review this shift individually' end;
+    elsif private.weekly_source_covered_hours_incident_v1(v_row.incident_id) then
+      v_code:='ALREADY_PROTECTED'; v_reason:='Already protected';
+    else
+      -- A bare or partial WAIT is unknown, never treated as unprotected.
+      v_own_stage:=exists(select 1 from jsonb_array_elements(p_own_stage_context->'exclusions') exclusion
+        where exclusion->>'work_event_id'=v_row.work_event_id::text);
+      v_witness:=case when v_own_stage then null else private.weekly_source_protected_wait_witness_v1(v_row.work_event_id,v_cycle.id) end;
+      if v_witness is not null then v_code:='ALREADY_PROTECTED'; v_reason:='Already protected'; end if;
+      if v_code is null then
+        if p_own_stage_context is null then
+          v_facts:=private.weekly_source_shift_on_self_bill_v1(v_row.work_event_id,v_cycle.id);
+        else
+          if to_regprocedure('private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)') is null then
+            raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+          execute 'select private.weekly_source_shift_on_self_bill_context_v1($1,$2,$3)' into v_facts
+            using v_row.work_event_id,v_cycle.id,p_own_stage_context;
+        end if;
+        if jsonb_typeof(v_facts) is distinct from 'object' or not (v_facts ?& array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected'])
+          or exists(select 1 from unnest(array['on_accepted_report','bound_to_finalised_export','invoice_ready','s25_pay_selected']) field
+            where jsonb_typeof(v_facts->field) is distinct from 'boolean') then
+          raise exception 'WEEKLY_SOURCE_SELF_BILL_FACTS_UNAVAILABLE' using errcode='55000'; end if;
+        if (v_facts->>'s25_pay_selected')::boolean or (v_facts->>'on_accepted_report')::boolean then
+          v_code:='ON_SELF_BILL'; v_reason:='Already on the client self-bill';
+        end if;
+      end if;
+      if v_code is null then
+        begin
+          v_claim:=private.weekly_source_bulk_signed_claim_v1(v_row.comparison_id);
+          if v_claim->>'eligible' is distinct from 'true' then v_code:=v_claim->>'code'; v_reason:=v_claim->>'reason'; end if;
+        exception when others then
+          if sqlerrm='WEEKLY_PROTECTED_EVIDENCE_UNSIGNED' then v_code:='NO_SIGNED_SUBMISSION'; v_reason:='No signed submission';
+          elsif sqlerrm='WEEKLY_PROTECTED_EVIDENCE_INVALID' then v_code:='SIGNED_SUBMISSION_UNAVAILABLE'; v_reason:='Signed submission changed - protect individually';
+          else raise; end if;
+        end;
+      end if;
+    end if;
+    if v_code is not null then
+      v_skipped:=v_skipped||jsonb_build_array(jsonb_build_object('incident_id',v_row.incident_id,'work_event_id',v_row.work_event_id,
+        'work_date',v_row.work_date,'code',v_code,'reason',v_reason));
+    else
+      v_eligible:=v_eligible||jsonb_build_array(jsonb_build_object('incident_id',v_row.incident_id,'issue_episode',v_row.episode_number,
+        'comparison_revision_id',v_row.comparison_id,'comparison_fingerprint',encode(v_row.material_comparison_fingerprint,'hex'),
+        'candidate_id',v_row.candidate_id,'client_id',v_row.client_id,'contract_id',v_row.contract_id,
+        'work_event_id',v_row.work_event_id,'claim',v_claim,'self_bill_facts',v_facts));
+    end if;
+  end loop;
+  -- Protected/skipped questions retain their Client in the Source CAS census.
+  -- Completing a round must not shrink its original relevant Client authority.
+  select coalesce(array_agg(item order by item),'{}'::uuid[]) into v_clients from unnest(v_clients) item;
+  if p_original_client_ids is not null then
+    if array_position(p_original_client_ids,null::uuid) is not null or cardinality(p_original_client_ids)>100
+      or exists(select 1 from unnest(v_clients) client where not(client=any(p_original_client_ids))) then
+      raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_CHANGED' using errcode='40001'; end if;
+    select coalesce(array_agg(distinct client order by client),'{}'::uuid[]) into v_clients from unnest(p_original_client_ids) client;
+  end if;
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1(v_cycle.id,v_clients);
+  v_count:=jsonb_array_length(v_eligible);
+  v_selection:=jsonb_build_object('contract','WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1','source_cycle_id',v_cycle.id,
+    'source_cycle_version',v_cycle.version,'projection_publication_id',v_publication.id,
+    'source_cas',v_cas,'eligible',v_eligible,'skipped',v_skipped);
+  return v_selection||jsonb_build_object('selection_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1',v_selection),'hex'),'eligible_count',v_count,
+    'skipped_count',jsonb_array_length(v_skipped));
+end;
+$function$;
+
+create or replace function private.weekly_source_protect_all_signed_selection_v1(p_source_cycle_id uuid,p_actor_user_id uuid,p_own_stage_context jsonb default null)
+returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_protect_all_signed_selection_v1(p_source_cycle_id,p_actor_user_id,p_own_stage_context,null::uuid[]);
+$function$;

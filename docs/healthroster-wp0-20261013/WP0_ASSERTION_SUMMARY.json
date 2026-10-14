@@ -1,0 +1,14 @@
+{
+  "rootAssertions": 15,
+  "creditRows": 22,
+  "journeyRows": 22,
+  "NEXTrows": 10,
+  "individualRows": 54,
+  "rootResultCounts": {
+    "PASS": 8,
+    "FAIL": 1,
+    "UNPROVED": 6
+  },
+  "allCreditAcceptanceExits": "18UNPROVED",
+  "executionProof": "None for features"
+}

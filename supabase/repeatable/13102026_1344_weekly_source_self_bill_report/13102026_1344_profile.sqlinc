@@ -1,0 +1,30 @@
+-- Sixth active parser profile; report times are factual invoice evidence,
+-- never worked duration or pay authority. The existing five profiles stay exact.
+do $seed_acacium_report_profile$
+declare
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_json jsonb:='{"source_family":"ROSTER","purpose":"SELF_BILL_REPORT","sheet":"Allocate","header_row":1,"layouts":["A","B"],"report_number_required":true,"single_client_required":true,"invoice_only":true,"report_times_are_pay_hours":false,"fee_columns_read":false}'::jsonb;
+  v_hash bytea;
+begin
+  v_hash:=extensions.digest(pg_catalog.convert_to(v_json::text,'UTF8'),'sha256');
+  insert into public.weekly_source_format_profiles(id,profile_code,version,final_authority_kind,container_kind,omission_meaning,
+    row_finalisation_capability,worked_duration_authority,scheduled_hours_fallback,physical_negative_meaning,
+    report_number_required,single_client_required,fmc_must_equal_zero,profile_json,profile_sha256,active)
+  values('36666666-6666-4666-8666-666666666666','ACACIUM_SELF_BILL_REPORT_V1',1,'SELF_BILL_REPORT','XLSX','NO_INFERENCE',
+    'INVOICE_ONLY_REPORT_LINES','NO_PAY_HOURS',false,'INVOICE_ONLY_TRUST_CREDIT',true,true,false,v_json,v_hash,true)
+    on conflict(profile_code,version) do nothing;
+  select profile.* into strict v_profile from public.weekly_source_format_profiles profile
+    where profile.profile_code='ACACIUM_SELF_BILL_REPORT_V1' and profile.version=1;
+  if v_profile.id is distinct from '36666666-6666-4666-8666-666666666666'::uuid
+    or v_profile.final_authority_kind is distinct from 'SELF_BILL_REPORT' or v_profile.container_kind is distinct from 'XLSX'
+    or v_profile.omission_meaning is distinct from 'NO_INFERENCE'
+    or v_profile.row_finalisation_capability is distinct from 'INVOICE_ONLY_REPORT_LINES'
+    or v_profile.worked_duration_authority is distinct from 'NO_PAY_HOURS' or v_profile.scheduled_hours_fallback is distinct from false
+    or v_profile.physical_negative_meaning is distinct from 'INVOICE_ONLY_TRUST_CREDIT'
+    or v_profile.report_number_required is distinct from true or v_profile.single_client_required is distinct from true
+    or v_profile.fmc_must_equal_zero is distinct from false or v_profile.profile_json is distinct from v_json
+    or v_profile.profile_sha256 is distinct from v_hash or v_profile.active is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PROFILE_VERSION_CONFLICT' using errcode='55000';
+  end if;
+end;
+$seed_acacium_report_profile$;

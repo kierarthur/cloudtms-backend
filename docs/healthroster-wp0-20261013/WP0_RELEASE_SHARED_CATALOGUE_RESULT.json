@@ -1,0 +1,77 @@
+{
+  "proofClass": "SELECT-only installed TEST catalogue/control observation; batch failed; no repair/rerun",
+  "account": "arthurrai2006@gmail.com",
+  "tool": "cloudtms-miget-transaction-lab-arthurrai2006",
+  "receipt": {
+    "accepted": false,
+    "database": "cloudtms_test_clone",
+    "rolledBack": true,
+    "sqlSha256": "5849e3f6499b078c86a71afdf08ccd22e1a51f86345995b450fb96c31e761f2d",
+    "statementCount": 5,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "database_name",
+            "probe_absent"
+          ],
+          "rows": [
+            {
+              "database_name": "cloudtms_test_clone",
+              "probe_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    }
+  },
+  "completedObservations": [
+    {
+      "statement": 1,
+      "rows": [
+        {
+          "active_owner": "LEGACY",
+          "owner_epoch": "1"
+        }
+      ]
+    },
+    {
+      "statement": 2,
+      "rows": [
+        {
+          "git_commit": "bea9021895e252e60ec51892e92b5a43a8abe035",
+          "install_mode": "UPGRADE",
+          "status": "FAILED",
+          "repository_contract_sha256": "5137561918a01a406466e74e2a6bde32e7fbae2dc5acc100f901dac0fef42d5f",
+          "installed_contract_sha256": "5137561918a01a406466e74e2a6bde32e7fbae2dc5acc100f901dac0fef42d5f",
+          "started_at_utc": "2026-10-13T09:16:02.214Z",
+          "completed_at_utc": "2026-10-13T09:17:26.522Z"
+        }
+      ]
+    }
+  ],
+  "failedStatement": {
+    "statement": 3,
+    "error": {
+      "message": "column a.sha256 does not exist",
+      "code": "42703",
+      "hint": "Perhaps you meant to reference the column \"e.sha256\".",
+      "position": "41903",
+      "routine": "errorMissingColumn"
+    }
+  },
+  "unexecuted": [
+    "repeatable full-ledger comparison",
+    "26 additional shared owner routine metadata"
+  ],
+  "disposition": "UNPROVED for ledger parity/remaining shared-owner inventory. SQL42703 is caller proof-query authoring error, not application defect. Returned alias sha256 was incorrectly assumed as physical ledger column. No repeat or repair, per SEND_2B item3. Latest FAILED release is independently observed, with no installation attempted here.",
+  "localResourcesCreated": 0,
+  "durableWrites": 0,
+  "businessRoutineInvocations": 0
+}

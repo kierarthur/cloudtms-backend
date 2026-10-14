@@ -1,0 +1,735 @@
+[
+  {
+    "name": "private._candidate_daily_read_projection_v1",
+    "identityArguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "c08c0707ea0eeb4f73732d9c6c5e6b72397e2f3eb06220c792bd5ec8b0249965",
+    "sourceOwner": {
+      "name": "private._candidate_daily_read_projection_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
+      "line": 5,
+      "lastInstallingRoot": "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
+      "rootClosureSHA256": "187de46941157134ad6e19a6fd9f45cc6fba103841874928953734c18cbc038b",
+      "physicalSourceSHA256": "6526e2db89a14fe28a2ea873a788ffcf001e7fc85da297206ca00cfd5ecc18c1",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "c08c0707ea0eeb4f73732d9c6c5e6b72397e2f3eb06220c792bd5ec8b0249965"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._candidate_daily_receipt_context_v1",
+    "identityArguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_require_mutable boolean, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "ef94429c9e3ae9edc6001d32d5c59cfd45141af10c7ccc5097ead3ff9c729d31",
+    "sourceOwner": {
+      "name": "private._candidate_daily_receipt_context_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "line": 4,
+      "lastInstallingRoot": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "rootClosureSHA256": "8f2b8de4b575526f843f737fc7f1d060ead3700fa34c85b3b5f28d57e89c0883",
+      "physicalSourceSHA256": "24284276bdbe3d45301e329d5c7a1ad93dc9264d535c0bd6de1570999bb9b749",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "ef94429c9e3ae9edc6001d32d5c59cfd45141af10c7ccc5097ead3ff9c729d31"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._candidate_daily_receipt_reset_v1",
+    "identityArguments": "p_environment text, p_candidate_id uuid, p_timesheet_id uuid, p_expected_timesheet_id uuid, p_reason text, p_actor_user_id uuid, p_event text, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "0a0be37685530ba3b6d9dcf05606b62ad035031ea67a018c02a850ce4ef07f20",
+    "sourceOwner": {
+      "name": "private._candidate_daily_receipt_reset_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "line": 5,
+      "lastInstallingRoot": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "rootClosureSHA256": "46fb3ba53254c82dbff2c54913e86247cce21847dadaabbcfe3fee9218d8aa15",
+      "physicalSourceSHA256": "6da37413a8f5ac0e462cf8f4d1c331859a382b3e9b54dcb702aebedf95edfdf3",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "0a0be37685530ba3b6d9dcf05606b62ad035031ea67a018c02a850ce4ef07f20"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._candidate_workflow_cancel_authority_v1",
+    "identityArguments": "p_workflow_id uuid",
+    "installedBodySHA256": "59682263e337641fba07c9c5d7065b6eb8578fb5d8894f071a26a48fc654d06b",
+    "sourceOwner": {
+      "name": "private._candidate_workflow_cancel_authority_v1",
+      "physicalDefinitionFile": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "line": 346,
+      "lastInstallingRoot": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "rootClosureSHA256": "e6a88d892961c7fdd7820353885615ec7b5ff2921d032fed4224637fd33e18ec",
+      "physicalSourceSHA256": "beb69222777f56a1d23113162c3b233d79a58d59d829985c3ba15e726a2d6a7d",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "59682263e337641fba07c9c5d7065b6eb8578fb5d8894f071a26a48fc654d06b"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._invoice_generation_advance_core_v8",
+    "identityArguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "ddce4d5df2e25afd62442a0a9ea918b38ffc3f9b0e9b03cbc0be1143af67bd3e",
+    "sourceOwner": {
+      "name": "private._invoice_generation_advance_core_v8",
+      "physicalDefinitionFile": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+      "line": 9,
+      "lastInstallingRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rootClosureSHA256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "physicalSourceSHA256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "ddce4d5df2e25afd62442a0a9ea918b38ffc3f9b0e9b03cbc0be1143af67bd3e"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._invoice_issue_advance_batch",
+    "identityArguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "dc729d01907b812cfde25d88271ac6e54bba8e1c4c7a2a1c01acaa147bc946c5",
+    "sourceOwner": {
+      "name": "private._invoice_issue_advance_batch",
+      "physicalDefinitionFile": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_issue_advance_batch.sql",
+      "line": 2,
+      "lastInstallingRoot": "supabase/repeatable/25072026_0003_invoice_presentation_runtime_authority.sql",
+      "rootClosureSHA256": "7b4a28e9f6a327f2a00029ec41c6593b725245cfe9214856b9a4f4bc37ef1314",
+      "physicalSourceSHA256": "c6e543346e070f8b0d630a98ec5362b945e03280b2d646e23e9c824c01612628",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "dc729d01907b812cfde25d88271ac6e54bba8e1c4c7a2a1c01acaa147bc946c5"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private._invoice_issue_advance_core_v8",
+    "identityArguments": "p_claims jsonb, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "9d4b46a2b4023ce44c1c2f9300985d16b7b973d5f8602e2402a6753d950f6559",
+    "sourceOwner": {
+      "name": "private._invoice_issue_advance_core_v8",
+      "physicalDefinitionFile": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+      "rootClosureSHA256": "f0f00f14a088b5da8cff82057539b5305cd09396dc8cf43af5e672d543c3ce1d",
+      "physicalSourceSHA256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "9d4b46a2b4023ce44c1c2f9300985d16b7b973d5f8602e2402a6753d950f6559"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "private.weekly_source_first_authorise_core_v1",
+    "identityArguments": "p_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid, p_lock_result jsonb",
+    "installedBodySHA256": "98046f59cf9458b77fadc5b50e4bdc7639934ea8a71514c7e442abdd9f9fc578",
+    "sourceOwner": {
+      "name": "private.weekly_source_first_authorise_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "line": 1413,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "rootClosureSHA256": "e95320c23ee1236d4ff469412c157f334233bd1b4fe90877fdf5cbb24a6561db",
+      "physicalSourceSHA256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "98046f59cf9458b77fadc5b50e4bdc7639934ea8a71514c7e442abdd9f9fc578"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public._ctms_assert_invoice_can_unissue_v1",
+    "identityArguments": "p_invoice_id uuid, p_lock_row boolean, p_context text",
+    "installedBodySHA256": "244be4fc03c35799fb2c43bea7928fe976dca367a13cfaf3e74b1ad634d821c4",
+    "sourceOwner": {
+      "name": "public._ctms_assert_invoice_can_unissue_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql",
+      "line": 3404,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql",
+      "rootClosureSHA256": "a1274cddf4b5562b19af27c17db0e9d96c8cca3896cf28d8eca9a89a1e8e7710",
+      "physicalSourceSHA256": "d62a8132bf7ca319637b9d32af5e2d80860e4ca8342e24ad95854847dd8bc411",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "244be4fc03c35799fb2c43bea7928fe976dca367a13cfaf3e74b1ad634d821c4"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public._ctms_expand_lifecycle_items_v1",
+    "identityArguments": "p_items jsonb, p_action text, p_actor_user_id uuid, p_max_members integer",
+    "installedBodySHA256": "2098ab5e78066759174001ce2ebd434d3b6f101555164d8222ca02c8a08160e4",
+    "sourceOwner": {
+      "name": "public._ctms_expand_lifecycle_items_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "line": 379,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "rootClosureSHA256": "8caabdf94e683acfdb44fb66524a8cd859350b2264c99aafd65b595efc4e79f8",
+      "physicalSourceSHA256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "2098ab5e78066759174001ce2ebd434d3b6f101555164d8222ca02c8a08160e4"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public._import_review_action_catalog_core_v1",
+    "identityArguments": "p_import_id uuid, p_preview_generation integer, p_max_actions integer",
+    "installedBodySHA256": "0c79b959fd14489d1afe7a6a2d4ba6bffe303663fc5c31bf382c16508e30e803",
+    "sourceOwner": {
+      "name": "public._import_review_action_catalog_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+      "line": 11,
+      "lastInstallingRoot": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+      "rootClosureSHA256": "06460ec7d80ef649538530da221bbcbece51e870ceb2c93e78eb2e2e7fc1bf7c",
+      "physicalSourceSHA256": "a4517329d2b823d871eb1beed88a741acde65cb5a61651fc0251d763117c0302",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "result": "UNPROVED: initial sample omitted import_review declarations from its source filter; declaration is present in the expanded inventory, but its exact body reconciliation was not performed. No source absence or drift is inferred.",
+    "documentaryCorrection": "Metadata projection only; original installed observation retained; no hosted query or proof rerun."
+  },
+  {
+    "name": "public._import_review_follow_up_reconcile_core_v1",
+    "identityArguments": "p_import_id uuid, p_operation_id uuid, p_actor_user_id uuid",
+    "installedBodySHA256": "9d1f3462b077678716dd1592c96c9536809a5c39c4060fef75b842b695fe3ddc",
+    "sourceOwner": {
+      "name": "public._import_review_follow_up_reconcile_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "line": 1536,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "rootClosureSHA256": "8698d0e19c44563edd6c776c29810eb0c1c0dbb686e0143cc04056289bc7a7c1",
+      "physicalSourceSHA256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "result": "UNPROVED: initial sample omitted import_review declarations from its source filter; declaration is present in the expanded inventory, but its exact body reconciliation was not performed. No source absence or drift is inferred.",
+    "documentaryCorrection": "Metadata projection only; original installed observation retained; no hosted query or proof rerun."
+  },
+  {
+    "name": "public._import_review_query_evidence_core_v1",
+    "identityArguments": "p_timesheet_id uuid",
+    "installedBodySHA256": "4b93c1150a7b5f59332ce0e0e2781586e7fa20fee30aff34299b18555d65935e",
+    "sourceOwner": {
+      "name": "public._import_review_query_evidence_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "line": 603,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "rootClosureSHA256": "289719378b1353284983fe2b5a55c9636dca0240516aea45c09ed20ab2a335f8",
+      "physicalSourceSHA256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "4b93c1150a7b5f59332ce0e0e2781586e7fa20fee30aff34299b18555d65935e"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_app_timesheet_detail_v1",
+    "identityArguments": "p_session_id uuid, p_environment text, p_timesheet_id uuid, p_contract_week_id uuid, p_workflow_id uuid, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "6a95c8c9859ae0514f86c1dcf624668eb665288da78a86464f0917a60f1c48aa",
+    "sourceOwner": {
+      "name": "public.candidate_app_timesheet_detail_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 5432,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "rootClosureSHA256": "171d41d8ed2f958cb75ae65573bb0c51fd54de1c0f87e46c82f594d2484fb03b",
+      "physicalSourceSHA256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "6a95c8c9859ae0514f86c1dcf624668eb665288da78a86464f0917a60f1c48aa"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_app_timesheet_detail_v2",
+    "identityArguments": "p_session_id uuid, p_environment text, p_timesheet_id uuid, p_contract_week_id uuid, p_workflow_id uuid, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "9519e8a2dc796af5e071d3aace41790f863f3bf261dfea87102015ca4ccd46d7",
+    "sourceOwner": {
+      "name": "public.candidate_app_timesheet_detail_v2",
+      "physicalDefinitionFile": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+      "line": 18,
+      "lastInstallingRoot": "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
+      "rootClosureSHA256": "0cb2c7ba9e4ac67428b6cdf064b5f37c88c19fd0e61f987782bc7f654657bcdf",
+      "physicalSourceSHA256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "9519e8a2dc796af5e071d3aace41790f863f3bf261dfea87102015ca4ccd46d7"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_app_timesheet_page_v1",
+    "identityArguments": "p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "093aa5487cd083e6bba356f3617ff9a42a9030431ded0dab79c36a3252c84f91",
+    "sourceOwner": {
+      "name": "public.candidate_app_timesheet_page_v1",
+      "physicalDefinitionFile": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "line": 345,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "rootClosureSHA256": "e95320c23ee1236d4ff469412c157f334233bd1b4fe90877fdf5cbb24a6561db",
+      "physicalSourceSHA256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "093aa5487cd083e6bba356f3617ff9a42a9030431ded0dab79c36a3252c84f91"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_app_timesheet_page_v2",
+    "identityArguments": "p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "ad70f86f6f020ff71d89ca6e05b1900b168e225329eecc93347c1feba477d701",
+    "sourceOwner": {
+      "name": "public.candidate_app_timesheet_page_v2",
+      "physicalDefinitionFile": "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+      "line": 93,
+      "lastInstallingRoot": "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+      "rootClosureSHA256": "8e99de3cfd0556c4fe1e8d231157423f73f606c197c400291f7fdb51e169595d",
+      "physicalSourceSHA256": "872ea1bea30acf0a0a510d6546dd4138773e6257610aebce9880fb386f43a0e2",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "ad70f86f6f020ff71d89ca6e05b1900b168e225329eecc93347c1feba477d701"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_submission_finalize_atomic_v1",
+    "identityArguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb",
+    "installedBodySHA256": "6a59e99405d0959e178a58366077a758b6ec5f94ccaddde3cad6bb4d58a2f8bd",
+    "sourceOwner": {
+      "name": "public.candidate_submission_finalize_atomic_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 4427,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "rootClosureSHA256": "171d41d8ed2f958cb75ae65573bb0c51fd54de1c0f87e46c82f594d2484fb03b",
+      "physicalSourceSHA256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "6a59e99405d0959e178a58366077a758b6ec5f94ccaddde3cad6bb4d58a2f8bd"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_workflow_cancel_atomic_v2",
+    "identityArguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "92d0f3f306c422e5966d0f892401417e407d894898cc845b59e60aeb720f53aa",
+    "sourceOwner": {
+      "name": "public.candidate_workflow_cancel_atomic_v2",
+      "physicalDefinitionFile": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "line": 2347,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "rootClosureSHA256": "e95320c23ee1236d4ff469412c157f334233bd1b4fe90877fdf5cbb24a6561db",
+      "physicalSourceSHA256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "92d0f3f306c422e5966d0f892401417e407d894898cc845b59e60aeb720f53aa"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.candidate_workflow_transition_atomic_v1",
+    "identityArguments": "p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "ae9522c243f17ca0bdd9d84667c17cba64040c22c9e10bdcec54d7c9de66c4fe",
+    "sourceOwner": {
+      "name": "public.candidate_workflow_transition_atomic_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 79,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "rootClosureSHA256": "171d41d8ed2f958cb75ae65573bb0c51fd54de1c0f87e46c82f594d2484fb03b",
+      "physicalSourceSHA256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "ae9522c243f17ca0bdd9d84667c17cba64040c22c9e10bdcec54d7c9de66c4fe"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.hr_daily_timesheet_resolution_save_v1",
+    "identityArguments": "p_import_id uuid, p_hr_row_id uuid, p_timesheet_id uuid, p_expected_state_version bigint, p_expected_preview_generation integer, p_expected_evidence_fingerprint text, p_actor_user_id uuid, p_request_id uuid",
+    "installedBodySHA256": "bc3a06965cf79659b3ff66c2a847eb820fbd6d9469812aa9300ef969bf78f243",
+    "sourceOwner": {
+      "name": "public.hr_daily_timesheet_resolution_save_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "line": 3,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "rootClosureSHA256": "0bd41fe62ef0e2c8b0e75003dc6b5d5705fd57da526d97bf446a8b501a7f52ad",
+      "physicalSourceSHA256": "5efe95fc22ba3a77a3547b37461c72f49ab7fd916519123ea6ddcaa96015a150",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "bc3a06965cf79659b3ff66c2a847eb820fbd6d9469812aa9300ef969bf78f243"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.hr_daily_validation_preview_v1",
+    "identityArguments": "p_import_id uuid, p_after_action_id text, p_limit integer",
+    "installedBodySHA256": "15edff997a0416c9e278e37081870e413c52f8c1e7aea4e78f90fde85473adc7",
+    "sourceOwner": {
+      "name": "public.hr_daily_validation_preview_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "line": 143,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "rootClosureSHA256": "0bd41fe62ef0e2c8b0e75003dc6b5d5705fd57da526d97bf446a8b501a7f52ad",
+      "physicalSourceSHA256": "5efe95fc22ba3a77a3547b37461c72f49ab7fd916519123ea6ddcaa96015a150",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "15edff997a0416c9e278e37081870e413c52f8c1e7aea4e78f90fde85473adc7"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.import_review_apply_status_get_v1",
+    "identityArguments": "p_import_id uuid, p_operation_id uuid, p_request_hash text",
+    "installedBodySHA256": "93574eeb563bf58e8553573f3fec8924e764c63a22917a61e15d6690b7e92d74",
+    "sourceOwner": {
+      "name": "public.import_review_apply_status_get_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "line": 1664,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "rootClosureSHA256": "8698d0e19c44563edd6c776c29810eb0c1c0dbb686e0143cc04056289bc7a7c1",
+      "physicalSourceSHA256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "result": "UNPROVED: initial sample omitted import_review declarations from its source filter; declaration is present in the expanded inventory, but its exact body reconciliation was not performed. No source absence or drift is inferred.",
+    "documentaryCorrection": "Metadata projection only; original installed observation retained; no hosted query or proof rerun."
+  },
+  {
+    "name": "public.import_review_follow_up_component_update_v1",
+    "identityArguments": "p_import_id uuid, p_operation_id uuid, p_request_hash text, p_component text, p_expected_component_status text, p_new_component_status text, p_error_code text, p_error_message text, p_actor_user_id uuid",
+    "installedBodySHA256": "aebbea613cd43f5dc7d8028715641ec7ee5c060bb178466dd64f26c58717d30a",
+    "sourceOwner": {
+      "name": "public.import_review_follow_up_component_update_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "line": 1592,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "rootClosureSHA256": "8698d0e19c44563edd6c776c29810eb0c1c0dbb686e0143cc04056289bc7a7c1",
+      "physicalSourceSHA256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "result": "UNPROVED: initial sample omitted import_review declarations from its source filter; declaration is present in the expanded inventory, but its exact body reconciliation was not performed. No source absence or drift is inferred.",
+    "documentaryCorrection": "Metadata projection only; original installed observation retained; no hosted query or proof rerun."
+  },
+  {
+    "name": "public.invoice_correction_pair_scope_v1",
+    "identityArguments": "p_timesheet_id uuid, p_target_invoice_id uuid, p_actor_user_id uuid, p_lock_rows boolean, p_max_members integer",
+    "installedBodySHA256": "0780942584a93ab204df15f424ea149e54fee8381833bdcf53bf742f14f1ba83",
+    "sourceOwner": {
+      "name": "public.invoice_correction_pair_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "rootClosureSHA256": "17c6aac5befde367679b9cc535eb8cb1e40593ef08a2f3650346d8d2c8ecf706",
+      "physicalSourceSHA256": "52a1f1b76cb9cf7902b35ee57c42a182b67bc9bc19bd2811decba0c14eb84979",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "0780942584a93ab204df15f424ea149e54fee8381833bdcf53bf742f14f1ba83"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.invoice_create_credit_note_and_unlock",
+    "identityArguments": "p_invoice_id uuid, p_actor_user_id uuid",
+    "installedBodySHA256": "554be0fa554e09fafb3f3623ac3fc6ee013c21bb247f8aa438077d7558a6a903",
+    "sourceOwner": {
+      "name": "public.invoice_create_credit_note_and_unlock",
+      "physicalDefinitionFile": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "line": 587,
+      "lastInstallingRoot": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "rootClosureSHA256": "b29d12e05f3f840bf43f11494150fc606e20c7024b994440e824c8112c33c83a",
+      "physicalSourceSHA256": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "554be0fa554e09fafb3f3623ac3fc6ee013c21bb247f8aa438077d7558a6a903"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.invoice_unissue_batch",
+    "identityArguments": "p_invoice_ids uuid[], p_actor_user_id uuid, p_clear_pdf boolean",
+    "installedBodySHA256": "28fdc030dbb97617c04a3e261f33e3575d4052980aec49fdec48ede4ff091b2c",
+    "sourceOwner": {
+      "name": "public.invoice_unissue_batch",
+      "physicalDefinitionFile": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "line": 276,
+      "lastInstallingRoot": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "rootClosureSHA256": "714a3cea45af5cd0a91fdde7a6be9514b62b02ce168309a76cc3d40d6e6e5648",
+      "physicalSourceSHA256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "28fdc030dbb97617c04a3e261f33e3575d4052980aec49fdec48ede4ff091b2c"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.invoice_unissue_one",
+    "identityArguments": "p_invoice_id uuid, p_actor_user_id uuid, p_clear_pdf boolean",
+    "installedBodySHA256": "2502e62fdbd47dc2ff8cdef69f4faf9edd70e57ad8457cd63be30baa35c12e0e",
+    "sourceOwner": {
+      "name": "public.invoice_unissue_one",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_unissue_one.sql",
+      "rootClosureSHA256": "db59c1a0841baf7592921014c0ffdec31c006350da1c980a2b8bf6f16459dd26",
+      "physicalSourceSHA256": "f4971f7465ca0886ca65053b0998bb56cdb97dd1c0aa5503f9369bff98c910a0",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "2502e62fdbd47dc2ff8cdef69f4faf9edd70e57ad8457cd63be30baa35c12e0e"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.invoice_work_claim_batch",
+    "identityArguments": "p_chunk_types text[], p_worker_id text, p_limit integer, p_lease_seconds integer, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "7d1fa3c52001ff9c03c2fecaa1674661fb238af452fb8d26b8cc2a09ad1511f0",
+    "sourceOwner": {
+      "name": "public.invoice_work_claim_batch",
+      "physicalDefinitionFile": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_work_claim_batch.sql",
+      "rootClosureSHA256": "b4b8ff254be382ff708a4d3894cde55c61f68da9f23928d51aa68d10f1ea9810",
+      "physicalSourceSHA256": "0bc13edcccb6b86a68636010cb8dec7499c4766ac6fddff5f620248ff02abe58",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "7d1fa3c52001ff9c03c2fecaa1674661fb238af452fb8d26b8cc2a09ad1511f0"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_authorise_bulk_atomic",
+    "identityArguments": "p_items jsonb, p_actor_user_id uuid, p_now_utc timestamp with time zone",
+    "installedBodySHA256": "270cf05e1140fd52052c7dd8c621aa733b06f2ac161bdc3af3cf0fefdc032949",
+    "sourceOwner": {
+      "name": "public.timesheet_authorise_bulk_atomic",
+      "physicalDefinitionFile": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+      "line": 2103,
+      "lastInstallingRoot": "supabase/repeatable/05092026_1200_banking_pay_draft_v8_final_authority_closure.sql",
+      "rootClosureSHA256": "1cef768e9f97a22fd965834d6459363c383774ea50c979117d4bd16a1b33fcdb",
+      "physicalSourceSHA256": "f19f780febcc8c1b74a492a1f9ac2bb80c10f5a936ed866b667da267b86db28b",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "270cf05e1140fd52052c7dd8c621aa733b06f2ac161bdc3af3cf0fefdc032949"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_correction_chain_scope_v1",
+    "identityArguments": "p_timesheet_id uuid, p_lock_rows boolean, p_max_depth integer, p_max_members integer",
+    "installedBodySHA256": "248b3fabb9b60661aa880c8311c3220d4492c500ace408bc15ac1733c7479773",
+    "sourceOwner": {
+      "name": "public.timesheet_correction_chain_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+      "rootClosureSHA256": "b3e5ac5bc0e6fc872e5c7201043c198a0c315811d7fbb8dedff69eeb4b618fcf",
+      "physicalSourceSHA256": "a05b10b328e312156c1c16f8b058b56ab9d49684e17b4b23d4033f4f7b3c087b",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "248b3fabb9b60661aa880c8311c3220d4492c500ace408bc15ac1733c7479773"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_correction_pair_transition_v1",
+    "identityArguments": "p_timesheet_id uuid, p_action text, p_actor_user_id uuid, p_operation_id uuid, p_expected_chain_fingerprint text, p_lock_rows boolean, p_max_members integer",
+    "installedBodySHA256": "539700f2a28871ad474ad2f1bdf2598345253fc96ac1fcc0c6d53335742100d8",
+    "sourceOwner": {
+      "name": "public.timesheet_correction_pair_transition_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+      "rootClosureSHA256": "28e6bf89b43bfab4133e732c28af3ab7155f235d8e239dea1c91f3cce06be4d8",
+      "physicalSourceSHA256": "ea691560f6fd2f8381adaececa4ce727d346e50ad25db50982b8b1ecd8a3c01e",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "539700f2a28871ad474ad2f1bdf2598345253fc96ac1fcc0c6d53335742100d8"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_query_email_delivery_mark_v1",
+    "identityArguments": "p_mail_outbox_id uuid, p_provider_message_id text, p_provider_status text, p_accepted_at_utc timestamp with time zone, p_actor_user_id uuid",
+    "installedBodySHA256": "5b7ab9cc7ab8802e6d21ab5c4c6f8acce3395f76cf6080e3c6512ba8b7ba453b",
+    "sourceOwner": {
+      "name": "public.timesheet_query_email_delivery_mark_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "line": 318,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "rootClosureSHA256": "f0e328f844c8a568f87169d60f4b95f1e1a6c9808a66c18a519d6627b38dc93a",
+      "physicalSourceSHA256": "3106e43bbc693e3c2ecf406c62b83845bafea8fe62e2c4e3cbb3a4de5cce8eef",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "5b7ab9cc7ab8802e6d21ab5c4c6f8acce3395f76cf6080e3c6512ba8b7ba453b"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_query_email_enqueue_v1",
+    "identityArguments": "p_import_id uuid, p_operation_id uuid, p_selected_action_ids jsonb, p_actor_user_id uuid, p_max_actions integer, p_max_groups integer",
+    "installedBodySHA256": "39bb8bba461812d6ab177c2aa96d5f0981b8727eb8a09f8316d617f048148f5d",
+    "sourceOwner": {
+      "name": "public.timesheet_query_email_enqueue_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "line": 35,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "rootClosureSHA256": "f0e328f844c8a568f87169d60f4b95f1e1a6c9808a66c18a519d6627b38dc93a",
+      "physicalSourceSHA256": "3106e43bbc693e3c2ecf406c62b83845bafea8fe62e2c4e3cbb3a4de5cce8eef",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "39bb8bba461812d6ab177c2aa96d5f0981b8727eb8a09f8316d617f048148f5d"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_weekly_manual_adjustment_delete_apply",
+    "identityArguments": "p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_ids uuid[], p_expected_contract_week_ids uuid[], p_expected_preserved_source_timesheet_ids uuid[], p_expected_preserved_source_contract_week_ids uuid[], p_expected_row_signature text",
+    "installedBodySHA256": "d0e618f1e7bdf204a21a184fa35d91129f68a2a73c24970b699603f77e8bdd8d",
+    "sourceOwner": {
+      "name": "public.timesheet_weekly_manual_adjustment_delete_apply",
+      "physicalDefinitionFile": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "line": 705,
+      "lastInstallingRoot": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "rootClosureSHA256": "0b64f4fd89eb184a52304feff0969fcd24d2d9bfa929449b6f5cd60ee9edda41",
+      "physicalSourceSHA256": "eb5f823f94ff458df054826f0a976781103ee42a5b79aeb115bea879b68f1789",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "d0e618f1e7bdf204a21a184fa35d91129f68a2a73c24970b699603f77e8bdd8d"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  },
+  {
+    "name": "public.timesheet_weekly_manual_adjustment_delete_preview",
+    "identityArguments": "p_timesheet_id uuid, p_actor_user_id uuid",
+    "installedBodySHA256": "0bdbbd5495bd2fdad681f0fd0b108a01b6465af27c3b3a6572f3e7887ca58dc9",
+    "sourceOwner": {
+      "name": "public.timesheet_weekly_manual_adjustment_delete_preview",
+      "physicalDefinitionFile": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+      "line": 715,
+      "lastInstallingRoot": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+      "rootClosureSHA256": "51d64bb9e51db11d620f9384c34f74e956cab3827b896f776c82e2946f7ce81f",
+      "physicalSourceSHA256": "4c140357d65f875217c6d36e55af01c2d1b6eb420af83ad7cdbb5c20e63bb3ca",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "283a7cce9e9406527ccac140820025d262dc12aa8cb205043590294c9eb91fe2"
+    ],
+    "result": "UNPROVED: dynamic patch/overload/definition-format or drift needs exact source reconciliation; no inferred failure",
+    "qualification": "A later dynamic pg_get_functiondef patch in 06092026_2355_candidate_advanced_expense_completion_v1.sql is outside this declaration-only comparison. Current source/install equality remains UNPROVED; this sample is not a drift verdict."
+  },
+  {
+    "name": "public.weekly_source_office_authorise_scope_v1",
+    "identityArguments": "p_request jsonb",
+    "installedBodySHA256": "719283747115627110ec08a5720b4ba6f32576ee7ccd609034b793ed692eddf8",
+    "sourceOwner": {
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "line": 11,
+      "lastInstallingRoot": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "rootClosureSHA256": "1ea079ea417c3750f214f30de0360af3a756f58c486751d5c146e588ded7c064",
+      "physicalSourceSHA256": "a839de0fa33b9ec4d0047a7199c5746b1365d90d99535b73e0979b912d7a504e",
+      "proofClass": "Source/static",
+      "signatureClosure": "name-level static declaration census; overload identities need installed catalogue confirmation"
+    },
+    "proofClass": "Source/static versus installed catalogue; no invocation",
+    "declaredBodySHA256s": [
+      "719283747115627110ec08a5720b4ba6f32576ee7ccd609034b793ed692eddf8"
+    ],
+    "result": "PASS: exact LF-normalized body matches declared source"
+  }
+]

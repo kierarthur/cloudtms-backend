@@ -1,0 +1,35 @@
+{
+  "input": {
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/js/main.js",
+    "sha256": "66ad20421e7c25352b9736ead08e1b87fff1b42b948d41fd5615e4e4c57ff268"
+  },
+  "status": "PROPOSAL_UNMOUNTED",
+  "requiredScriptBeforeMain": "js/weekly-source/source-invoice-adjustments.js",
+  "hunks": [
+    {
+      "line": 306011,
+      "anchor": "    amount_ex_vat: a.amount_ex_vat\n  })).filter",
+      "replacement": "    amount_ex_vat: a.amount_ex_vat,\n    ...(invoiceModalGetInvoiceData(modalCtx).weekly_source_invoice?.is_weekly_source_invoice === true\n      && Object.prototype.hasOwnProperty.call(a,'vat_amount') ? {vat_amount:a.vat_amount} : {})\n  })).filter"
+    },
+    {
+      "line": 305683,
+      "anchor": "    const vat = ex * (vatRatePct / 100);\n    subtotal_ex_vat += ex;",
+      "replacement": "    const source = invData.weekly_source_invoice;\n    const helper = window.CloudTmsSourceInvoiceAdjustments;\n    const vat = source?.is_weekly_source_invoice === true\n      ? (Object.prototype.hasOwnProperty.call(a,'vat_amount') ? Number(a.vat_amount)\n        : Number(helper.defaultVat(a.amount_ex_vat,helper.context(source).default_vat_rate_pct)))\n      : ex * (vatRatePct / 100);\n    subtotal_ex_vat += ex;"
+    },
+    {
+      "line": 308382,
+      "anchor": "  const { invoice } = invoiceModalGetInvoiceData(parentCtx);\n\n  // Ensure showModal",
+      "replacement": "  const sourceInvoiceData = invoiceModalGetInvoiceData(parentCtx);\n  const { invoice } = sourceInvoiceData;\n  if (sourceInvoiceData.weekly_source_invoice?.is_weekly_source_invoice === true) {\n    return window.CloudTmsSourceInvoiceAdjustments?.open(parentCtx,{\n      invoiceData:sourceInvoiceData,canEdit:invoiceModalIsEditable(invoice,parentCtx,'lines'),\n      showModal,document,newToken:invoiceModalNewClientToken,\n      close:()=>document.getElementById('btnCloseModal')?.click(),rerender\n    });\n  }\n\n  // Ensure showModal"
+    },
+    {
+      "line": 310756,
+      "anchor": "        ` : ''}\n      </div>\n\n      ${isEditing && hasPendingEdits ?",
+      "replacement": "        ` : ''}\n        ${isEditing && weekly_source_invoice?.is_weekly_source_invoice === true\n          && window.CloudTmsSourceInvoiceAdjustments?.context(weekly_source_invoice) ? `\n          <button type=\"button\" class=\"btn btn-sm btn-outline-secondary\" data-action=\"inv-add-adjustment\" ${addDisabledAttr}>+ Add adjustment</button>\n        ` : ''}\n      </div>\n\n      ${isEditing && hasPendingEdits ?"
+    },
+    {
+      "line": 310956,
+      "anchor": "        <tbody>${sourceBody || `<tr><td colspan=\"${isEditing ? 7 : 6}\" class=\"text-muted\">No source lines remain on this invoice.</td></tr>`}</tbody>\n      </table>\n    </div>`;",
+      "replacement": "        <tbody>${sourceBody || `<tr><td colspan=\"${isEditing ? 7 : 6}\" class=\"text-muted\">No source lines remain on this invoice.</td></tr>`}</tbody>\n      </table>\n      ${window.CloudTmsSourceInvoiceAdjustments?.rows(items,modalCtx.invoiceEdits?.add_adjustments,\n        removedSet,weeklySource,isEditing,esc,fmtMoneyLocal) || ''}\n    </div>`;"
+    }
+  ]
+}

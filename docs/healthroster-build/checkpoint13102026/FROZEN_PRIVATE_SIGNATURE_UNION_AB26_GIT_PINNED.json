@@ -1,0 +1,1869 @@
+{
+  "status": "FROZEN_SOURCE_LITERAL_UNION_ONLY_NOT_FINAL_OR_INSTALLED_CENSUS",
+  "sourceCommit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "groupCounts": {
+    "preservedRoot": 232,
+    "strictQualificationAdditions": 26,
+    "preparedAdditions": 7,
+    "missingA0NormalizationAndFence": 4,
+    "creatorAdmission": 6
+  },
+  "distinctPrivateSignatures": 275,
+  "signatures": [
+    {
+      "signature": "private._weekly_source_completed_pack_copy_eligibility_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private._weekly_source_rule_group_context_v1(uuid,date,date,jsonb,boolean)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private._weekly_source_rule_values_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_booking_before_v1()",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_candidate_before_v1()",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_clock_scope_v1(uuid)",
+      "groups": [
+        "missingA0NormalizationAndFence"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_input_witness_v1(uuid)",
+      "groups": [
+        "missingA0NormalizationAndFence"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+      "groups": [
+        "missingA0NormalizationAndFence"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_reference_before_v1()",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+      "groups": [
+        "creatorAdmission"
+      ]
+    },
+    {
+      "signature": "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+      "groups": [
+        "missingA0NormalizationAndFence"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_accepted_publication_action_immutable_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_accepted_publication_action_record_v1(jsonb,jsonb,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_accepted_publication_action_verify_v1(uuid,uuid,bigint,bytea,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_accepted_publication_context_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_accepted_removal_query_evidence_v1(uuid,uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_approval_duty_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_approved_expense_evidence_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_authority_subset_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_selection_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_stage_proof_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_automatic_reconcile_stage_replay_assert_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_own_stage_event_excluded_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_signed_claim_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_approved_clock_row_v2(jsonb,jsonb,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_generation_current_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_head_hours_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_initial_approval_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_saved_local_hours_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_serial_gate_v1(uuid,text,uuid,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_canonical_json_text_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_checking_client_scope_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_completed_rows_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_configured_agency_invoice_v1(uuid,uuid,uuid,text,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_configured_upload_profile_v1(uuid,uuid,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_correct_final_preconditions_v1(uuid,uuid,uuid,boolean)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_covered_hours_incident_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_current_publication_guard_v1(uuid,text,uuid,uuid,uuid,bigint)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_cutoff_admission_assert_v1(uuid,text,timestamp with time zone)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_effective_inventory_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_component_id_v1(text,text,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_components_v1(jsonb,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_derived_uuid_v1(text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_head_inventory_assert_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_head_receipt_assert_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_head_root_identity_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_proposal_record_v1(jsonb,uuid,uuid,date,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_proposal_request_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_proposal_request_v2(uuid,jsonb,text,uuid,bigint,uuid,uuid,jsonb,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_publication_receipt_immutable_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_publish_core_v1(jsonb,text,jsonb,uuid,text,uuid,jsonb,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_entitlement_publish_immediate_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_expected_week_question_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_expected_week_unsigned_materialise_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_expense_authority_evidence_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_final_rule_version_guard_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_final_upload_assert_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_final_upload_gate_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_final_value_vector_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_frozen_rule_values_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_has_self_bill_rules_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_head_origin_guard_v2()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_import_is_prepared_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_import_outreach_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_incident_contact_retire_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_initial_additional_components_v2(jsonb,jsonb,numeric,numeric,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_inventory_approval_basis_v2(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_admission_receipt_map_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_admitted_member_money_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_family_timesheet_ids_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_issue_blockers_v1(uuid,text[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_issue_reasons_v1(jsonb,text[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_issue_skippable_code_v1(text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_issue_skippable_reason_v1(text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_issue_validate_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_legacy_render_support_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_manifest_admission_money_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_movement_money_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_placement_identity_guard_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_presentation_expected_source_hash_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_receipt_projection_assert_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_receipt_support_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_rounding_authority_rebuild_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_rounding_receipt_set_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_rounding_suppression_witness_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_vat_target_pence_v1(numeric,numeric,text,numeric)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_window_cycle_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_window_lock_inventory_v1(uuid,bigint,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_window_scope_v1(uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_is_import_authoritative_v1(uuid,uuid,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_local_origin_canonical_v2(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_local_publication_origin_guard_v2()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_lock_and_resolve_families_v1(uuid,uuid[],text,uuid,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_managed_root_guard_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_manager_due_event_covers_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_manual_review_command_immutable_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_manual_review_final_rows_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_manual_review_source_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_mode_a_operation_key_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_mode_a_refuse_operation_v1(uuid,uuid,uuid,uuid,uuid,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_mode_a_role_type_v1(text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_not_finalised_dispatch_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_not_finalised_due_scope_guard_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_office_next_owner_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_office_next_paid_evidence_page_v1(uuid,uuid,text,uuid,jsonb,integer)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_operational_empty_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_overlap_admission_assert_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_c1_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_c1_receipt_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_facts_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_gate_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_local_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_local_receipt_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_next_receipt_event_v1(uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_next_receipt_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_contact_retire_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_family_lock_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_group_lock_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_release_v1()",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_query_rows_v1(uuid,uuid,boolean)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_saved_prepare_route_v1(jsonb,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_wait_receipt_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_comparison_record_v1(uuid,uuid,text,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_component_canonical_v1(jsonb,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_receipt_json_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_request_canonical_v1(jsonb,text,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_request_digest_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_require_keys_v1(jsonb,text[],text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_scalar_v1(jsonb,text,text,integer,boolean)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_signed_family_fence_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_publication_signed_roots_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+      "groups": [
+        "strictQualificationAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_context_assert_v1()",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_financial_codec_v1(public.timesheets_financials)",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_output_capture_v1(uuid,uuid,uuid,bytea,bytea,bytea,jsonb)",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_output_hash_v1(bytea,jsonb)",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_output_insert_guard_v1()",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_output_supported_v1(uuid)",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_prepared_pay_amount_v1(public.weekly_source_ordinary_pay_projection_receipts)",
+      "groups": [
+        "preparedAdditions"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_shift_facts_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_report_shift_facts_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_retain_approved_additional_v2(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_root_authorisation_identity_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_root_authorisation_withdrawal_once_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_root_integrity_assert_v1(uuid,text,integer)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_rule_coverage_floor_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_schedule_compatible_v1(jsonb,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_binding_guard_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_bind_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_duplicate_hold_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_duplicate_prior_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_finalise_v1(jsonb,text)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_manifest_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_movement_insert_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_pay_authority_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_pay_witness_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_prior_binding_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_projection_rows_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_row_dto_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_row_hash_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_rules_assert_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_seal_assert_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_stored_rows_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_self_bill_report_workspace_v1(jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_signed_check_only_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_snapshot_authority_subset_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_snapshot_value_fingerprint_v1(uuid,jsonb)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_source_amount_warnings_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_staged_entitlement_components_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_staged_prior_wait_receipt_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_staged_publication_context_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_staged_source_documents_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_target_family_for_root_v1(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_target_family_root_identity_v1()",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_timesheet_category_v2(uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_unprotected_not_finalised_close_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_upload_coverage_context_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_upload_coverage_floor_assert_v1(uuid,uuid,text,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_upload_seal_core_v1(uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_uuid_array_is_distinct_v1(uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_uuid_set_difference_v1(uuid[],uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_uuid_set_equals_v1(uuid[],uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_uuid_set_intersect_v1(uuid[],uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_uuid_set_union_v1(uuid[],uuid[])",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_verified_role_band_match_v1(text,text,uuid,uuid,uuid,text,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date)",
+      "groups": [
+        "preservedRoot"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_work_event_schedule_compatible_v1(uuid,timestamp without time zone,timestamp without time zone)",
+      "groups": [
+        "preservedRoot"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-creator-census-forward/sql-function-source-index.mjs",
+      "bytes": 14259,
+      "sha256": "2e1b5039b8fa5672f61a2baee03bd7da322ff7efc90baa9c1d02ad39ddc9f0aa",
+      "gitBlobBytes": 14259,
+      "gitBlobSha256": "2e1b5039b8fa5672f61a2baee03bd7da322ff7efc90baa9c1d02ad39ddc9f0aa"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "bytes": 35662,
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "gitBlobBytes": 35662,
+      "gitBlobSha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/COMPLETE_CLOSURE_CENSUS.json",
+      "bytes": 68052,
+      "sha256": "dc6167f29027cb8ff804c0a74c4c22f067dead3ba085db37cc264993f7515769",
+      "gitBlobBytes": 68052,
+      "gitBlobSha256": "dc6167f29027cb8ff804c0a74c4c22f067dead3ba085db37cc264993f7515769"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/06_complete_automatic_readiness.sqlinc",
+      "bytes": 1843,
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+      "gitBlobBytes": 1843,
+      "gitBlobSha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/04_original_clients.sqlinc",
+      "bytes": 3530,
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+      "gitBlobBytes": 3530,
+      "gitBlobSha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/05_complete_bulk_readiness.sqlinc",
+      "bytes": 615,
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+      "gitBlobBytes": 615,
+      "gitBlobSha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/08_complete_cas_admission.sqlinc",
+      "bytes": 3409,
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+      "gitBlobBytes": 3409,
+      "gitBlobSha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "bytes": 20104,
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "gitBlobBytes": 20104,
+      "gitBlobSha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/10_complete_actor_bulk_selection.sqlinc",
+      "bytes": 8394,
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "gitBlobBytes": 8394,
+      "gitBlobSha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "bytes": 2849,
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "gitBlobBytes": 2849,
+      "gitBlobSha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "bytes": 6266,
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "gitBlobBytes": 6266,
+      "gitBlobSha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18341,
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+      "gitBlobBytes": 18341,
+      "gitBlobSha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/09_complete_actor_non_self_bill_admission.sqlinc",
+      "bytes": 2861,
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+      "gitBlobBytes": 2861,
+      "gitBlobSha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/04_complete_non_self_bill_admission.sqlinc",
+      "bytes": 2234,
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "gitBlobBytes": 2234,
+      "gitBlobSha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/02_complete_prerequisite_reader.sqlinc",
+      "bytes": 8874,
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+      "gitBlobBytes": 8874,
+      "gitBlobSha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "bytes": 20026,
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "gitBlobBytes": 20026,
+      "gitBlobSha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/00_complete_current_catalogue.sqlinc",
+      "bytes": 14686,
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+      "gitBlobBytes": 14686,
+      "gitBlobSha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "gitBlobBytes": 9896,
+      "gitBlobSha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "bytes": 14636,
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66",
+      "gitBlobBytes": 14636,
+      "gitBlobSha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/TEST_JOURNEY_SCOPE.sqlinc",
+      "bytes": 18451,
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "gitBlobBytes": 18451,
+      "gitBlobSha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "bytes": 381,
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "gitBlobBytes": 381,
+      "gitBlobSha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/report-prepared-output-retention/08_complete_registry_union.sqlinc",
+      "bytes": 36266,
+      "sha256": "72b0a2a14f8bfc9607df6cfd0a074390aaa02b6e0ddd6aec958f4db8a85ba3fb",
+      "gitBlobBytes": 36266,
+      "gitBlobSha256": "72b0a2a14f8bfc9607df6cfd0a074390aaa02b6e0ddd6aec958f4db8a85ba3fb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/canonical-input-assert.sqlinc",
+      "bytes": 1528,
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+      "gitBlobBytes": 1528,
+      "gitBlobSha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_clock_scope.complete-proposed.sqlinc",
+      "bytes": 9527,
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+      "gitBlobBytes": 9527,
+      "gitBlobSha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_input_witness.sqlinc",
+      "bytes": 4526,
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+      "gitBlobBytes": 4526,
+      "gitBlobSha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-lock-fence/13102026_2034_a0_native_lock_fence.sqlinc",
+      "bytes": 12148,
+      "sha256": "455768aaa41bf9d949a1c4f52830938a86c1ba231f45a95c72f772fc89b58f8f",
+      "gitBlobBytes": 12148,
+      "gitBlobSha256": "455768aaa41bf9d949a1c4f52830938a86c1ba231f45a95c72f772fc89b58f8f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "bytes": 19166,
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "gitBlobBytes": 19166,
+      "gitBlobSha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+      "bytes": 5935,
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "gitBlobBytes": 5935,
+      "gitBlobSha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae"
+    }
+  ],
+  "scope": "Preserved root232 plus26 exact strict definitions plus7 prepared plus4 prior missing-A0 normalization/fence dependencies plus6 creator definitions. Current SECURITY/OFF-rule and Report A/B follow-ons, new Banking source and any subsequent owner/helper changes are outside this finite union. Root must reconstruct literal final registries and independent verifiers from the complete reviewed composition; do not replace current registries with a frozen smaller package or infer a final count from this arithmetic.",
+  "parserBoundary": "Uses the current corrected finite source scanner; its separate quoted char P3 forward is in progress. None of these literal signature inputs contains that type. This is not a general PostgreSQL type resolver or installed type identity proof.",
+  "executableRootChanges": 0,
+  "databaseCalls": 0,
+  "newServiceGrants": 0,
+  "newTables": 0,
+  "nativeQualification": false
+}

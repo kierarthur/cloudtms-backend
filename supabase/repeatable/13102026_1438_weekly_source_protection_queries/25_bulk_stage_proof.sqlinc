@@ -1,0 +1,212 @@
+-- Root owns both readiness and the actual shared Source/Report CAS census.
+-- Presence is not qualification. No fake readiness or CAS implementation here.
+create or replace function private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id uuid,p_client_ids uuid[])
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ready boolean; v_cas jsonb; v_clients uuid[];
+begin
+  if p_client_ids is null or array_position(p_client_ids,null::uuid) is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='22023'; end if;
+  select coalesce(array_agg(distinct item order by item),'{}'::uuid[]) into v_clients from unnest(p_client_ids) item;
+  if to_regprocedure('private.weekly_source_bulk_producer_ready_v1(uuid)') is null
+    or to_regprocedure('private.weekly_source_bulk_source_cas_v1(uuid,uuid[])') is null then
+    raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_bulk_producer_ready_v1($1)' into v_ready using p_cycle_id;
+  if v_ready is distinct from true then raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_bulk_source_cas_v1($1,$2)' into v_cas using p_cycle_id,v_clients;
+  if not private.weekly_exceptional_json_keys_exact_v1(v_cas,array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or not(v_cas ?& array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or v_cas->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or v_cas->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_cas->'client_ids' is distinct from to_jsonb(v_clients)
+    or coalesce(v_cas->>'source_cas_sha256','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='55000'; end if;
+  return v_cas;
+end;
+$function$;
+alter function private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[]) owner to postgres;
+revoke all on function private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[]) from public,anon,authenticated,service_role;
+
+-- Exact immutable staged generation only. Never accepts a receipt, flags or
+-- claimed booleans from a browser, and never excludes another pending WAIT.
+create or replace function private.weekly_source_bulk_stage_replay_assert_v1(p_request_id uuid,p_stage_request jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_vector jsonb; v_hash bytea; v_proof jsonb; v_input jsonb;
+begin
+  select generation.complete_next_vector_json,generation.complete_next_vector_hash into strict v_vector,v_hash
+    from public.weekly_exceptional_c1_publication_requests request
+    join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id and generation.family_id=request.family_id
+    where request.id=p_request_id;
+  v_proof:=v_vector->'bulk_signed_selection_proof'; v_input:=p_stage_request->'bulk_signed_selection_proof';
+  if not (p_stage_request ? 'bulk_signed_selection_proof') and not (v_vector ? 'bulk_signed_selection_proof') then return; end if;
+  if not (p_stage_request ? 'bulk_signed_selection_proof') or not (v_vector ? 'bulk_signed_selection_proof')
+    or not private.weekly_exceptional_json_keys_exact_v1(v_input,array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or not(v_input ?& array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_STAGED_PROOF_V1'
+    or v_proof->>'actor_user_id' is distinct from p_stage_request->>'actor_user_id'
+    or v_proof->>'source_cycle_id' is distinct from p_stage_request->>'source_cycle_id'
+    or v_input->>'expected_selection_sha256' is distinct from v_proof->>'selection_sha256'
+    or v_input->>'expected_source_cas_sha256' is distinct from v_proof#>>'{source_cas,source_cas_sha256}'
+    or v_input->>'incident_id' is distinct from v_proof#>>'{eligible_claim,incident_id}'
+    or v_input->>'bulk_request_key' is distinct from v_proof->>'bulk_request_key'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_STAGED_PROOF_V1',v_proof-'proof_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'proof_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_vector) is distinct from v_hash then
+    raise exception 'WEEKLY_SOURCE_BULK_REPLAY_CONFLICT' using errcode='23505'; end if;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_BULK_REPLAY_CONFLICT' using errcode='23505';
+end;
+$function$;
+alter function private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_bulk_stage_replay_assert_v1(uuid,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_bulk_own_stage_v1(
+  p_request_id uuid,p_actor_id uuid,p_cycle_id uuid,p_bulk_key text,p_selection_sha256 text,p_source_cas_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_exceptional_c1_publication_requests%rowtype;
+  g public.weekly_exceptional_pay_generations%rowtype; a public.weekly_exceptional_payment_approvals%rowtype;
+  run public.weekly_exceptional_orchestration_runs%rowtype; family public.weekly_exceptional_pay_target_families%rowtype;
+  v_proof jsonb; v_claim jsonb; v_cas jsonb; v_clients uuid[]; v_event uuid; v_count integer;
+begin
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select * into strict g from public.weekly_exceptional_pay_generations where id=r.generation_id and family_id=r.family_id;
+  select * into strict run from public.weekly_exceptional_orchestration_runs where id=r.orchestration_run_id and family_id=r.family_id;
+  select * into strict family from public.weekly_exceptional_pay_target_families where id=r.family_id;
+  select * into strict a from public.weekly_exceptional_payment_approvals
+    where creation_orchestration_run_id=run.id and pay_target_family_id=family.id;
+  v_proof:=g.complete_next_vector_json->'bulk_signed_selection_proof';
+  v_claim:=v_proof->'eligible_claim';
+  if v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_STAGED_PROOF_V1'
+    or v_proof->>'actor_user_id' is distinct from p_actor_id::text
+    or v_proof->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_proof->>'bulk_request_key' is distinct from p_bulk_key
+    or v_proof->>'selection_sha256' is distinct from p_selection_sha256
+    or v_proof#>>'{source_cas,source_cas_sha256}' is distinct from p_source_cas_sha256
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_STAGED_PROOF_V1',v_proof-'proof_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'proof_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',g.complete_next_vector_json)
+      is distinct from g.complete_next_vector_hash
+    or r.state is distinct from 'READY' or g.lifecycle_state is distinct from 'PENDING_C1'
+    or run.state is distinct from 'RUNNING' or run.request_kind not in ('APPROVE','AMEND')
+    or run.requested_by_user_id is distinct from p_actor_id or a.approved_by_user_id is distinct from p_actor_id
+    or a.source_cycle_id is distinct from p_cycle_id or a.withdrawn_at_utc is not null
+    or r.candidate_id is distinct from a.candidate_id or r.contract_id is distinct from a.contract_id
+    or r.root_timesheet_id is distinct from family.root_timesheet_id
+    or r.request_sha256 is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'request_sha256')
+    or r.financial_row_id::text is distinct from v_proof->>'financial_row_id'
+    or a.work_event_id::text is distinct from v_claim->>'work_event_id'
+    or a.comparison_revision_id::text is distinct from v_claim->>'comparison_revision_id'
+    or a.signed_submission_timesheet_id::text is distinct from v_claim#>>'{claim,evidence_timesheet_id}'
+    or a.signed_submission_revision::text is distinct from v_claim#>>'{claim,timesheet_revision}'
+    or encode(a.signed_submission_hash,'hex') is distinct from v_claim#>>'{claim,signature_sha256}'
+    or v_claim#>>'{claim,signature_kind}' is distinct from 'CANDIDATE_WORKFLOW'
+    or a.approved_target_pay_components_json is distinct from g.complete_next_vector_json->'target_snapshot'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_TARGET_SNAPSHOT_V1',a.approved_target_pay_components_json),'hex')
+      is distinct from v_proof->>'target_snapshot_sha256'
+    or family.current_generation_id is distinct from g.prior_generation_id
+    or family.current_generation_number+1 is distinct from g.generation_number
+    or exists(select 1 from private.weekly_source_local_protected_decision_receipts receipt where receipt.publication_request_id=r.id)
+    or exists(select 1 from public.weekly_exceptional_c1_publication_checkpoints checkpoint where checkpoint.publication_request_id=r.id)
+    or exists(select 1 from public.weekly_exceptional_c1_unknown_outcomes outcome where outcome.publication_request_id=r.id and outcome.state='RECOVERY_REQUIRED') then
+    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;
+  select count(*),min(event.id::text)::uuid into v_count,v_event from public.weekly_exceptional_pay_family_events event
+    where event.family_id=family.id and event.evidence_approval_id=a.id and event.durable_work_event_id=a.work_event_id and event.state='WAIT'
+      and not exists(select 1 from public.weekly_exceptional_pay_family_events newer where newer.family_id=family.id
+        and newer.durable_work_event_id=a.work_event_id and newer.event_sequence>event.event_sequence);
+  if v_count<>1 or (a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes)
+    is distinct from ((v_claim#>>'{claim,work_date}')::date,(v_claim#>>'{claim,start_at_local}')::timestamp,
+      (v_claim#>>'{claim,end_at_local}')::timestamp,(v_claim#>>'{claim,break_minutes}')::integer) then
+    raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;
+  if private.weekly_source_bulk_signed_claim_v1(a.comparison_revision_id) is distinct from v_claim->'claim' then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_CHANGED' using errcode='40001'; end if;
+  select array_agg(value::uuid order by value::uuid) into v_clients from jsonb_array_elements_text(v_proof#>'{source_cas,client_ids}') value;
+  v_cas:=private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id,v_clients);
+  if v_cas is distinct from v_proof->'source_cas' then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CHANGED' using errcode='40001'; end if;
+  return jsonb_build_object('work_event_id',a.work_event_id,'publication_request_id',r.id,'generation_id',g.id,
+    'approval_id',a.id,'family_id',family.id,'proof_sha256',v_proof->>'proof_sha256');
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text) owner to postgres;
+revoke all on function private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_bulk_own_stage_context_v1(
+  p_cycle_id uuid,p_actor_id uuid,p_bulk_key text,p_selection_sha256 text,p_source_cas_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_row record; v_exclusions jsonb:='[]'::jsonb; v_clients jsonb;
+begin
+  for v_row in select request.id,generation.complete_next_vector_json->'bulk_signed_selection_proof' as proof
+    from public.weekly_exceptional_c1_publication_requests request
+    join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id
+    where generation.complete_next_vector_json#>>'{bulk_signed_selection_proof,bulk_request_key}'=p_bulk_key
+      and generation.complete_next_vector_json#>>'{bulk_signed_selection_proof,actor_user_id}'=p_actor_id::text
+      and generation.complete_next_vector_json#>>'{bulk_signed_selection_proof,source_cycle_id}'=p_cycle_id::text
+      and request.state='READY' and generation.lifecycle_state='PENDING_C1'
+    order by request.id
+  loop
+    if v_clients is null then v_clients:=v_row.proof#>'{source_cas,client_ids}';
+    elsif v_clients is distinct from v_row.proof#>'{source_cas,client_ids}' then
+      raise exception 'WEEKLY_SOURCE_BULK_OWN_STAGE_UNAVAILABLE' using errcode='55000'; end if;
+    v_exclusions:=v_exclusions||jsonb_build_array(private.weekly_source_bulk_own_stage_v1(v_row.id,p_actor_id,p_cycle_id,
+      p_bulk_key,p_selection_sha256,p_source_cas_sha256));
+  end loop;
+  if jsonb_array_length(v_exclusions)=0 then return null; end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_OWN_STAGE_CONTEXT_V1','source_cycle_id',p_cycle_id,
+    'actor_user_id',p_actor_id,'bulk_request_key',p_bulk_key,'selection_sha256',p_selection_sha256,
+    'source_cas_sha256',p_source_cas_sha256,'client_ids',v_clients,'exclusions',v_exclusions);
+end;
+$function$;
+alter function private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text) owner to postgres;
+revoke all on function private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_bulk_stage_proof_v1(p_stage jsonb,p_financial_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_request jsonb:=p_stage->'bulk_signed_selection_proof'; v_context jsonb; v_selection jsonb; v_item jsonb; v_proof jsonb;
+  v_count integer; v_run public.weekly_exceptional_orchestration_runs%rowtype;
+begin
+  if not private.weekly_exceptional_json_keys_exact_v1(v_request,array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or not(v_request ?& array['expected_selection_sha256','expected_source_cas_sha256','incident_id','bulk_request_key'])
+    or coalesce(v_request->>'expected_selection_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(v_request->>'expected_source_cas_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(v_request->>'bulk_request_key','') !~ '^[A-Za-z0-9:_-]{16,120}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='22023'; end if;
+  select * into strict v_run from public.weekly_exceptional_orchestration_runs where id=(p_stage->>'orchestration_run_id')::uuid;
+  if v_run.request_kind not in ('APPROVE','AMEND') or v_run.state is distinct from 'RUNNING'
+    or v_run.requested_by_user_id::text is distinct from p_stage->>'actor_user_id' then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='55000'; end if;
+  v_context:=private.weekly_source_bulk_own_stage_context_v1((p_stage->>'source_cycle_id')::uuid,(p_stage->>'actor_user_id')::uuid,
+    v_request->>'bulk_request_key',v_request->>'expected_selection_sha256',v_request->>'expected_source_cas_sha256');
+  if v_context is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_ROUND_ALREADY_STAGED' using errcode='55000'; end if;
+  v_selection:=private.weekly_source_protect_all_signed_selection_v1((p_stage->>'source_cycle_id')::uuid,(p_stage->>'actor_user_id')::uuid,v_context);
+  if v_selection->>'selection_sha256' is distinct from v_request->>'expected_selection_sha256'
+    or v_selection#>>'{source_cas,source_cas_sha256}' is distinct from v_request->>'expected_source_cas_sha256' then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_CHANGED' using errcode='40001'; end if;
+  select count(*),jsonb_agg(value)->0 into v_count,v_item from jsonb_array_elements(v_selection->'eligible') value
+    where value->>'incident_id'=v_request->>'incident_id';
+  if v_count<>1 or v_item->>'work_event_id' is distinct from p_stage->>'work_event_id'
+    or v_item->>'client_id' is distinct from p_stage->>'client_id'
+    or v_item#>>'{claim,evidence_timesheet_id}' is distinct from p_stage->>'evidence_timesheet_id'
+    or v_item->>'comparison_revision_id' is distinct from p_stage->>'current_comparison_revision_id'
+    or (v_item#>>'{claim,work_date}')::date is distinct from (p_stage#>>'{protected_schedule,work_date}')::date
+    or (v_item#>>'{claim,start_at_local}')::timestamp is distinct from (p_stage#>>'{protected_schedule,start_at_local}')::timestamp
+    or (v_item#>>'{claim,end_at_local}')::timestamp is distinct from (p_stage#>>'{protected_schedule,end_at_local}')::timestamp
+    or (v_item#>>'{claim,break_minutes}')::integer is distinct from (p_stage#>>'{protected_schedule,break_minutes}')::integer then
+    raise exception 'WEEKLY_SOURCE_BULK_STAGE_PROOF_INVALID' using errcode='55000'; end if;
+  v_proof:=jsonb_build_object('schema_version','WEEKLY_SOURCE_BULK_STAGED_PROOF_V1','actor_user_id',p_stage->>'actor_user_id',
+    'source_cycle_id',p_stage->>'source_cycle_id','bulk_request_key',v_request->>'bulk_request_key',
+    'selection_sha256',v_selection->>'selection_sha256','source_cas',v_selection->'source_cas',
+    'eligible_claim',v_item,'financial_row_id',p_financial_id,
+    'request_sha256',p_stage#>>'{c1_request,request_sha256}','target_snapshot_sha256',
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_TARGET_SNAPSHOT_V1',p_stage->'target_snapshot'),'hex'));
+  return v_proof||jsonb_build_object('proof_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_STAGED_PROOF_V1',v_proof),'hex'));
+end;
+$function$;
+alter function private.weekly_source_bulk_stage_proof_v1(jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_source_bulk_stage_proof_v1(jsonb,uuid) from public,anon,authenticated,service_role;

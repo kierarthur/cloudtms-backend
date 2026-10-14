@@ -1,0 +1,12 @@
+-- Complete F4 authority beside current native window/Money/Report owners.
+\set ON_ERROR_STOP on
+begin;
+\ir 13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc
+\ir 13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc
+commit;

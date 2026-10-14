@@ -1,0 +1,860 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_FIRST_USE_INVENTORY_FORWARD_V1",
+  "source_only": true,
+  "root_source_commit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "deltas": [
+    {
+      "file": "TEST_JOURNEY_SCOPE.sqlinc",
+      "original_file": "TEST_JOURNEY_SCOPE.sqlinc",
+      "original_sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "successor_sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "reverse_matches_entire_input": true
+    },
+    {
+      "file": "source-equivalence.mjs",
+      "original_file": "source-equivalence.mjs",
+      "original_sha256": "2fcd53a51abaae7bca954caf5425175877d8c196607f30537ac04d88b73d3ae2",
+      "successor_sha256": "f624c98cf7542d9091131455fc8e7ff4ee73dfaf5f9ba5db358a0434ca5a212e",
+      "reverse_matches_entire_input": true
+    },
+    {
+      "file": "weekly-source-protected-execution-tree.mjs",
+      "original_file": "weekly-source-protected-execution-tree.mjs",
+      "original_sha256": "c3d2f2926c35193747c49d75ec6a921d13a64b538e229cb0b70d94109f54af64",
+      "successor_sha256": "33361a5028275216e3bb6d660abbcdd2534be46a053e13034313af950a745878",
+      "reverse_matches_entire_input": true
+    },
+    {
+      "file": "OPERATIONAL_CERTIFICATE.sqlinc",
+      "original_file": "OPERATIONAL_CERTIFICATE.sqlinc",
+      "original_sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+      "successor_sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "reverse_matches_entire_input": true
+    }
+  ],
+  "packet_json_prefix_findings": [
+    {
+      "file": "TEST_JOURNEY_SCOPE.sqlinc",
+      "line": 121,
+      "expression": "||auth->>",
+      "source_sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+    }
+  ],
+  "packet_successor_findings": [],
+  "native_json_prefix_candidates": [
+    {
+      "file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+      "line": 382,
+      "expression": "||v_item->>",
+      "source_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85"
+    },
+    {
+      "file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+      "line": 390,
+      "expression": "||v_item->>",
+      "source_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85"
+    },
+    {
+      "file": "supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql",
+      "line": 785,
+      "expression": "||v_item->>",
+      "source_sha256": "ba297193832c9f2b9e4f3dad894bcee039deafe3d2a8096818839e5f8b518b85"
+    },
+    {
+      "file": "supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql",
+      "line": 303,
+      "expression": "||v_item->>",
+      "source_sha256": "0993d940a4ab5a04672876b13ade40a3c873a516e7419116b3c8c69d429edf02"
+    },
+    {
+      "file": "supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql",
+      "line": 311,
+      "expression": "||v_item->>",
+      "source_sha256": "0993d940a4ab5a04672876b13ade40a3c873a516e7419116b3c8c69d429edf02"
+    },
+    {
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 68162,
+      "expression": "|| p_candidate_ids->",
+      "source_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 68165,
+      "expression": "|| p_candidate_ids->",
+      "source_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 68168,
+      "expression": "|| p_candidate_ids->",
+      "source_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 68171,
+      "expression": "|| p_candidate_ids->",
+      "source_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "file": "supabase/repeatable/29082026_0922_candidate_daily_reconciliation_linked_window_v1.sql",
+      "line": 99,
+      "expression": "||v_item->>",
+      "source_sha256": "4e00ddfb512f98eb2a595c73c9cb4a0f90578c7e30bdeb467266dd88b1d03f1b"
+    },
+    {
+      "file": "supabase/repeatable/29082026_1354_candidate_daily_reconciliation_identity_probe_v1.sql",
+      "line": 114,
+      "expression": "||v_item->>",
+      "source_sha256": "a19b27cdb3a5cb41c996809315c270120ab27af9c06c33003ed954b849dbb165"
+    }
+  ],
+  "native_audit_scope": "Every committed native repeatable SQL/sqlinc at the pinned root, read-only. Existing Candidate/JSONB candidates are preserved; this packet changes only the qualified TEST setup owner. These historical/currentness candidates are not native acceptance findings or broad edit authority.",
+  "root_d67_to_cea_full_metadata_forward": [
+    {
+      "status": "M",
+      "file": "docs/healthroster-build/PROGRESS.md",
+      "sha256": "444e6605afd8cb850fb273aa52813e3a14eea592a0c95e95adfa2e916d4be8b3",
+      "bytes": 70218,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/A0_CREATOR_SOURCE_CRITIC.md",
+      "sha256": "f2887142f109c35c0861eaed4e43a3b46429dcae5ec3eebba6a87e0812e81b9f",
+      "bytes": 17122,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_3.json",
+      "sha256": "b1142328c9e3abd4b0065fa0df3f56a336c5000606eaac2ffb6d0120f2ad965e",
+      "bytes": 15637,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_3.sql",
+      "sha256": "dd5e19dea83a8b5e7c4335dea27e775a1cbc1c2a8bf16f9d1273138d0c63cb95",
+      "bytes": 179477,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_3_FRESH.sql",
+      "sha256": "e1315412fc82c4bc783a60a2309a5aed22b8fce259f5544fbab3310888c7f624",
+      "bytes": 1530,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_3_PLAN.json",
+      "sha256": "11cd4258408c9d3c3ed3efb9dd1dc02339b8fb63c244882c2ef70149ef36b332",
+      "bytes": 5149,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/AUTOMATIC_SHORT_COMPILE_TRIAL_3_SQL_CAPSULE.json",
+      "sha256": "0edbbaa0d521620765245eb0a172a60384b3be40f8d31f81eb343acb64a4e05d",
+      "bytes": 264506,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/CREATOR_STRICT_QUALIFICATION_FROZEN_PRESERVATION.json",
+      "sha256": "cc60640f732baa6652d6ee30ecd9cffd422ccde42a1fb7ae690ca900f616a21d",
+      "bytes": 893,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/READ_ONLY_VERIFIER_ENVELOPE_SOURCE_CHECK.json",
+      "sha256": "b5c070af74af9fbcdad3aa3a0799f061b4c8cf2c74dedb631964d3fc7320bcf3",
+      "bytes": 1391,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/STRICT_QUALIFICATION_PIN_FORWARD_PRESERVATION.json",
+      "sha256": "395098fa0374d46a2ac9999ad2ad37576d57994fd4f4c5bad638a1b535b9805c",
+      "bytes": 911,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/check_read_only_verifier_envelope.mjs",
+      "sha256": "3335048c52cd3b88d7a1601fd4e034fe31056838bb6214beb60a012e7df3bfdc",
+      "bytes": 2048,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/prepare_automatic_short_compile_v3.mjs",
+      "sha256": "734d3fa2a58303bf4ebd5f45224b763f2be111620aa8ffae549480ef49ed1315",
+      "bytes": 6240,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/preserve_creator_strict_qualification_packets.mjs",
+      "sha256": "86dc89549339eb62b8cb5941cf1ba5058849e35ca648b673b0e5189039db8e91",
+      "bytes": 2944,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/checkpoint13102026/preserve_strict_qualification_pin_forward_packets.mjs",
+      "sha256": "2cfa42c0e2f63898021e6cd508e46939db35ecbb5c615c9923d126b4873578e7",
+      "bytes": 2945,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_a0_native_lock_fence.complete-proposed.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+      "bytes": 12314,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_native_creator_intents.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+      "bytes": 19166,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_request.complete-proposed.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+      "bytes": 23160,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/13102026_2153_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+      "bytes": 5935,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SCHEMA_AND_SOURCE_AUDIT.json",
+      "sha256": "6ba738d1d1aeb05d10f760bc7d6b3f130100592d9803520ab9aac50b2617bedb",
+      "bytes": 28554,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/CREATOR_SOURCE_MANIFEST.json",
+      "sha256": "762f65ac35f11f1c33b779799854c1373eb0ccf9c624e44e6cebc70266cdb33e",
+      "bytes": 294348,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/FIRST_CREATOR_CENSUS.json",
+      "sha256": "e76c197f62c2e86e2a1b10fc1e50d4705d823fa0e9c9f452914de671fe9b8e0b",
+      "bytes": 1010036,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_INPUT_BODIES.sqlinc",
+      "sha256": "77d58af59c959e5d8d49fb589fa79a86c993e3914616bb8d67cadeea4ca128fc",
+      "bytes": 80981,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_CREATOR_JOURNEYS.json",
+      "sha256": "8a6161b26e9f0d8db10b51cc7ba3e54f00d1fd3bcebf03256be08b4bddcfe571",
+      "bytes": 6836,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/NATIVE_FIRST_CREATOR_BODIES.sqlinc",
+      "sha256": "67e585a45dc6874ebe62ef08187f762a7e1056e6da87489dfa497afc399b8e9c",
+      "bytes": 1669956,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/README.md",
+      "sha256": "07cd015a6124f0ec0aa0177992c8a083559e3aabb841bf3ea7c6a3d45cc612bd",
+      "bytes": 6760,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/REQUEST_ROOT.diff",
+      "sha256": "719e5cff4a07204c13711beb940835fd085f61d8dacab20d9c6e2beca32c3bdb",
+      "bytes": 955,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/ROOT_INTEGRATION_RECIPE.md",
+      "sha256": "af5c1c77d93010f85fbf3db5fc39049ec3777ff93fd3ff52e31abd938d51c72a",
+      "bytes": 3609,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/SOURCE_CHECKS.json",
+      "sha256": "2b6bd4b5732dd7eb4933190d301e9ec3104465faf588eb506413cef9a1680373",
+      "bytes": 4374,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/SUCCESSOR_GUARD.json",
+      "sha256": "21dbc9fcafef7dac45878e827100fbd3ba210412b29901f44801b38d7c9331c8",
+      "bytes": 1805,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-audit.mjs",
+      "sha256": "308d0911f2b3815b7b47054c8c00c59b9ec1499d303214d5cee123ff69c2ddd0",
+      "bytes": 7719,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/build-creator-successors.mjs",
+      "sha256": "8235ba5255e7f4d5b7cf9f1fc6753e4f23046fe17e833dceeeeec4385e5b6d42",
+      "bytes": 3417,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/census-first-creators.mjs",
+      "sha256": "9a3b75dc724e5dee65e1eb2555a9945087acc1b1174dca63eb5efaf3218a2e1a",
+      "bytes": 9834,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/cn-a0-phantom-writers/freeze-creator-packet.mjs",
+      "sha256": "0dea704ada297ba9ca94011acd7ad454c6e9b3f9797eb952b5c78eccad5e16ab",
+      "bytes": 7313,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/README.md",
+      "sha256": "5be867addeaef89fbc8ea07ad708f470ca69ac31d4eb1f6d89c03c06c41c8b66",
+      "bytes": 1699,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/REVIEW_MANIFEST.json",
+      "sha256": "4784752bda1a9c5df7edad45d99715fa114efd25b85c7810e9cdc7c01dd1e272",
+      "bytes": 2296,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/ROOT_B65_TO_D67_FULL_DIFF.patch",
+      "sha256": "a36169e114436f69c8dd39d40ba7c9ff9fa70338b0ef4c12c9ebd820e20aac78",
+      "bytes": 964111,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/ROOT_PIN_FORWARD.json",
+      "sha256": "cfecdcda19fccc1269ce2455a6ec5fa689e9f09e2db553ee41fb01d472110e90",
+      "bytes": 11389,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/VERIFIER_2206_COMPLETE_FORWARD.patch",
+      "sha256": "109c2a06b8316ef75c982bcf2c2d338ce44fcc0d51559b46589e993f5db4529b",
+      "bytes": 3159,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/generate-pin-forward.mjs",
+      "sha256": "3c6b90fc8c7a2cbe1676f2baeb6102b59a5c29f73bfe176125d6220e8d51edfe",
+      "bytes": 8076,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/README.md",
+      "sha256": "4188fe616b098f5cde9342d2ab5215da1d3a61b648b8442c181a2c7304d8f464",
+      "bytes": 1940,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/REVIEW_MANIFEST.json",
+      "sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f",
+      "bytes": 2142,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/ROOT_B65_TO_CDAF_FULL_DIFF.patch",
+      "sha256": "67c7e507d020575a795c2d516f82ca22550803cad70ff2889a11a93c56c5e6b1",
+      "bytes": 482721,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/ROOT_PIN_FORWARD.json",
+      "sha256": "736ecadaeb43a13f668c07e2c7a9291d8d6de67abda31bce90c82d143a619fa3",
+      "bytes": 10559,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/VERIFIER_2206_ALIAS_FORWARD.patch",
+      "sha256": "f151ac8ae4a4886f1bf794edad78c3a6bd4eff7ae2adc869be00c7bb55d5a150",
+      "bytes": 1402,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/generate-pin-forward.mjs",
+      "sha256": "2e3adb961bb38618ee66c793732cf4ba76a437067e7190beb710ea8f74fa72f4",
+      "bytes": 7360,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "bytes": 20026,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/02_complete_prerequisite_reader.sqlinc",
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+      "bytes": 8874,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "bytes": 6266,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "bytes": 2849,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/05_complete_bulk_readiness.sqlinc",
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+      "bytes": 615,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/06_complete_automatic_readiness.sqlinc",
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+      "bytes": 1843,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "bytes": 20906,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/08_complete_cas_admission.sqlinc",
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+      "bytes": 3409,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/09_complete_actor_non_self_bill_admission.sqlinc",
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+      "bytes": 2861,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/10_complete_actor_bulk_selection.sqlinc",
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "bytes": 8394,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/11_complete_actor_own_stage.sqlinc",
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "bytes": 6416,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_17_prepare_family.sqlinc",
+      "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d",
+      "bytes": 28838,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_18_prepare_action.sqlinc",
+      "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+      "bytes": 13447,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_19_action_context.sqlinc",
+      "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+      "bytes": 24997,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_20_stage_request.sqlinc",
+      "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+      "bytes": 55162,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/13_owner_only_acl.sqlinc",
+      "sha256": "402810badd5e27e5586966c4f34f2ca7552ba975e53277e7a874fa9422bce640",
+      "bytes": 1978,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/14_complete_managed_release.mjs",
+      "sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "bytes": 38220,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/15_complete_current_release_caller.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "bytes": 26150,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/16_complete_bulk_command_presentation.sqlinc",
+      "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e",
+      "bytes": 15449,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/17_complete_current_routes.js",
+      "sha256": "4b5a0bbaaa7ed42af5873991ef5d13183a74e3f12a45e482b350b278568f32b8",
+      "bytes": 57362,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/18_complete_owner_private_acl.sqlinc",
+      "sha256": "c6e024000673a39287b2943fafa4fba09dd1afea6b4ace0dfb51b56d59923927",
+      "bytes": 7404,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "bytes": 381,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/COMPLETE_CLOSURE_CENSUS.json",
+      "sha256": "dc6167f29027cb8ff804c0a74c4c22f067dead3ba085db37cc264993f7515769",
+      "bytes": 68052,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/ENGINEERING_BOUNDARIES.md",
+      "sha256": "75881f45730dc4986bc37dd550d2d3e84f3d060b520c4af5aefb03a9ba9ee553",
+      "bytes": 5403,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/INDEX_CALL_SITE_DELTAS.json",
+      "sha256": "5f45a7292b630951f9e26b0ad920a9a221e58210984b40f7d6de50fda507348b",
+      "bytes": 1738,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/NATIVE_JOURNEYS.json",
+      "sha256": "32d7aafed3f00593c44e1f4939c6c200fbbc0f4a6b3df660c28a18852caa19a3",
+      "bytes": 8692,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+      "bytes": 18341,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OWNER_DELTAS.json",
+      "sha256": "648337bfa31b735f21e9fc6bb4f4f34e5b56537fc389b3bae855dbe6e874b2ea",
+      "bytes": 27521,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/README.md",
+      "sha256": "fc28c00c4c14ebfc98c4b05fb7153ea1417c3da434f8a66a72d6d91b5fa98514",
+      "bytes": 13123,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/REVIEW_MANIFEST.json",
+      "sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+      "bytes": 32549,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "bytes": 18451,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/freeze-forward.mjs",
+      "sha256": "0bbf03478e9751eea3a2e2e1b325b916a8054af3e425b1934a8b69ea0c31e224",
+      "bytes": 4044,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/generate-owners.mjs",
+      "sha256": "26c239724589caa8c2418478480cef3c20948e3cacbc5e2c1c0f374322412412",
+      "bytes": 27463,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/operational-evidence.mjs",
+      "sha256": "28bd7952f0a6f2866578de4949c2215698a5e9c72b85f2456b01fd7626ec115c",
+      "bytes": 17619,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/operational-gate.test.mjs",
+      "sha256": "bda0d3aa98f806bd6a1cc78bbff1ba943d5671889289d585e5ca87cd90a58177",
+      "bytes": 16313,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/prerequisite-evidence.mjs",
+      "sha256": "6ef63b264d2e907dd52a6b7ff4aa2a619c8025948eadae42d944a86c6b6abd29",
+      "bytes": 17250,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/route-bridge.test.mjs",
+      "sha256": "3501d079aa60c69c9622276ce2230a204e38b1200d4899487f54c12bbe8a1ec8",
+      "bytes": 3594,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/setup-evidence.mjs",
+      "sha256": "0df0d93c9b54d41e9c8869aae394967afb907fff5c93403ff04f6466a8c32145",
+      "bytes": 5188,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/source-equivalence.mjs",
+      "sha256": "2fcd53a51abaae7bca954caf5425175877d8c196607f30537ac04d88b73d3ae2",
+      "bytes": 11289,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-execution-tree.mjs",
+      "sha256": "c3d2f2926c35193747c49d75ec6a921d13a64b538e229cb0b70d94109f54af64",
+      "bytes": 11284,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "4296ac9b54bab25708bd6f1ea87658f637c9002fde497e54e58888639ee73d1f",
+      "bytes": 17634,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "69f97daada66a66c7fa703a7ca765f00971ae2e8a93918a6f4ee1dbacc945128",
+      "bytes": 17285,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "42a9967f60b2ab97b6b176394f65418f7d4ed18ab122f0a74c0abc1ef6105639",
+      "bytes": 5203,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/write-closure-census.mjs",
+      "sha256": "301f2e4249dfff5d490a797c46247923d71a7ada34183b3800bddf78ecfc1146",
+      "bytes": 6894,
+      "kind": "DOCUMENTARY_SOURCE_INPUT"
+    },
+    {
+      "status": "M",
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "801de5ea9310fb8ee35d16a7c0c92486b7c48eb42c1abcf60ab8f372414a04af",
+      "bytes": 6157,
+      "kind": "EXECUTION_SOURCE_INPUT"
+    },
+    {
+      "status": "A",
+      "file": "tests/healthroster-cn-a0-phantom-writers.test.mjs",
+      "sha256": "0fba84f5707fd3ed55819c59db0c2574169e2be7f3f19e5173397d6edc307d05",
+      "bytes": 9976,
+      "kind": "EXECUTION_SOURCE_INPUT"
+    },
+    {
+      "status": "M",
+      "file": "tests/healthroster-full-rehearsal-protocol.test.mjs",
+      "sha256": "4aabfab22aa0684e489b46654ee3e6605e9f78ec90b3bd6622c69bab35447835",
+      "bytes": 5332,
+      "kind": "EXECUTION_SOURCE_INPUT"
+    }
+  ],
+  "root_input_pins": [
+    {
+      "file": "supabase/release/current-release.json",
+      "sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "bytes": 34534
+    },
+    {
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7",
+      "bytes": 34870
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da",
+      "bytes": 1357
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf",
+      "bytes": 5442
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "bytes": 19923
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8",
+      "bytes": 5083
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "bytes": 51247
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95",
+      "bytes": 8082
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861",
+      "bytes": 8551
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261",
+      "bytes": 15071
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "bytes": 18659
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b",
+      "bytes": 31628
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "bytes": 35662
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "bytes": 58831
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c",
+      "bytes": 2578
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "bytes": 7115
+    }
+  ],
+  "root_runtime_sql_unchanged_from_d67": true,
+  "exact_root_private_count_preserved": 232,
+  "planned_complete_union_unchanged": 258,
+  "tables_preserved": 105,
+  "service_signatures_preserved": 142,
+  "new_signatures": 0,
+  "semantics": "ALL_TRACKED_GIT_OBJECTS. All permanent proposals/docs/AGENTS/native-result changes invalidate R1→R2 except the same three fixed receipt bundles and narrow releaseId/descriptors. Original execution identity is never relabelled.",
+  "native_open_close_revoke_acceptance": false,
+  "actual_source_equivalence_recording": false,
+  "actual_remote_acceptance": false,
+  "actual_activation": false,
+  "lane_database_calls": 0
+}

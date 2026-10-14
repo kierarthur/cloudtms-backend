@@ -1,0 +1,209 @@
+{
+  "status": "APPLIED_SOURCE_ONLY_NO_DATABASE_OR_QUALIFICATION",
+  "outputs": [
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "bytes": 5442,
+      "sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "bytes": 19923,
+      "sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "bytes": 5083,
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "bytes": 51247,
+      "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "bytes": 8082,
+      "sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "bytes": 8551,
+      "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "bytes": 15071,
+      "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "bytes": 31628,
+      "sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "bytes": 18659,
+      "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "bytes": 35662,
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "bytes": 58831,
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "bytes": 2578,
+      "sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+      "artifact": "generated/supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sqlinc",
+      "bytes": 1357,
+      "sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da",
+      "beforeSha256": null
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "artifact": "generated/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sqlinc",
+      "bytes": 68399,
+      "sha256": "4fe4739a64a3d6971eae24153053a003fb074aadf7e89da51b5930d10607a9a4",
+      "beforeSha256": "badf08f9122db3dddbf8b5f56dc5247873bb2a70d92624553a9a5005a84209d3"
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "artifact": "generated/supabase/release/current-release.json",
+      "bytes": 34534,
+      "sha256": "61ef49299015fa46c8541a6b7123bb4b28fe39c094cd3b4b941e14d6c51868f2",
+      "beforeSha256": "7187bbda21f083c59fd232104890ba28629701a76870b6fe96da5c41eb94d648"
+    },
+    {
+      "target": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "artifact": "generated/supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sqlinc",
+      "bytes": 6773,
+      "sha256": "0b80cdf4eeb411407fcf4faca6a35462a71575c7497dc3fc0e6b39c676bbe9a1",
+      "beforeSha256": null
+    }
+  ],
+  "unchangedStageOwners": [
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    }
+  ],
+  "inputCommit": "9fc45b9a4cc3a8dce400887f1640cfaf233f23be",
+  "laneCommit": "e837e900d78d58070e24fb252bf43b8464563169",
+  "manifestSha256": "c71ac96db7c8c48fc29885852be5ad69d67a722515d3414cd4f605385db4e16c",
+  "frozenPacketFilesPreserved": 22,
+  "counts": {
+    "tables": 105,
+    "private": 232,
+    "service": 142
+  },
+  "completeReverseProofs": {
+    "localCompleteReverseSha256": "0023259b8cc936d0324965499ce0a6ba85c363655b091a757b00f471e749b995",
+    "ordinaryReceiptReverse": [
+      {
+        "kind": "local",
+        "sha256": "7151384c7ce291e4f9e9431a2ea9d1c44b4de4609844d3ab69c0a5dd65a212f5"
+      },
+      {
+        "kind": "c1",
+        "sha256": "17bebf73d40a22ca9589c022573f92e7ee53e9a120d20a1d6c458fdbe84b4a61"
+      },
+      {
+        "kind": "next",
+        "sha256": "067601f58a5a6ff3dcad9d443f2ff843f516fa726c893a4beafc57cde2ebae5f"
+      }
+    ],
+    "ACLCompleteReverse": [
+      {
+        "input": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+        "sha256": "d582c2a98c349b6415639b0e9c456235d03a26a92a612749c4da4ed49ee972fa"
+      },
+      {
+        "input": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "sha256": "641cd56acd951cb9291171b4eb1fba4b554c1761b8e8f08ed9026001ecac8146"
+      }
+    ],
+    "independentVerifierReverseSha256": "badf08f9122db3dddbf8b5f56dc5247873bb2a70d92624553a9a5005a84209d3",
+    "expandedSourceSha256": "2de3fa336ab343485b91888e51a1509534ceae1279c565bfceb52199d69606cf",
+    "expandedStatementCount": 101
+  },
+  "projectionRepairRebases": [
+    {
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "beforeSha256": "d05872065c382d3d4d63330a91dfbf09ce0903ee58bc76c7590b1b3cc1be2c28",
+      "afterSha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "canonicalFileSha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "rootReportedCanonicalOwnerSha256": "0cadd57420a32f77bf096e859659f9e4dba7592290226bd1596dd2ac9d125175",
+      "reverseSha256": "d05872065c382d3d4d63330a91dfbf09ce0903ee58bc76c7590b1b3cc1be2c28",
+      "suffixInsertions": 7,
+      "nativeRegexPredicates": 9,
+      "unrelatedBytesRetained": true,
+      "controllingRepairCommit": "c82efd3f6ad2cb8afc4a80464fc7541df5f01ae4",
+      "rootWritesPerformed": false
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "beforeSha256": "8218421d0732c10c3b2c2b3f49c2b5a982956d9d70d7920db846d7cdb1cd44e1",
+      "afterSha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495",
+      "canonicalFileSha256": "7c5c499d7c13d8974842fa932101c6c0fad71b1f746ea20cd96980ebaf219f2d",
+      "rootReportedCanonicalOwnerSha256": "2621a75d7a461da4ced5eda77faf5a581c3c1136ff3cc95b4e2ac2be137d6994",
+      "reverseSha256": "8218421d0732c10c3b2c2b3f49c2b5a982956d9d70d7920db846d7cdb1cd44e1",
+      "suffixInsertions": 7,
+      "nativeRegexPredicates": 9,
+      "unrelatedBytesRetained": true,
+      "controllingRepairCommit": "c82efd3f6ad2cb8afc4a80464fc7541df5f01ae4",
+      "rootWritesPerformed": false
+    }
+  ],
+  "runtime": {
+    "compiled": false,
+    "qualified": false,
+    "exposed": false,
+    "capabilities": "ABSENT_AT_SOURCE_BASE_AND_FAIL_CLOSED",
+    "prerequisiteV2": "OPERATIONAL_ACTIVATION_REJECTED_NOT_IMPORTED"
+  },
+  "sourceOnly": true,
+  "databaseCalls": false,
+  "featuresActivated": false,
+  "generatedContract": false
+}

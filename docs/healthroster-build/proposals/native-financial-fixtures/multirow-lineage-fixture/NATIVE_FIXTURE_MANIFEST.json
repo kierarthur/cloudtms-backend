@@ -1,0 +1,389 @@
+{
+  "contract": "NFX_NATIVE_FINANCIAL_FIXTURE_MANIFEST_V1",
+  "source_only": true,
+  "hosted_acceptance": false,
+  "identity_namespace": "cloudtms.weekly-source.test.scenario.v1",
+  "fixture_identities": {
+    "actor": "e2dac56c-1e5f-8354-95eb-39f2ca3f62b0",
+    "client": "2d503751-8104-81a3-93de-df92c1ef8c11",
+    "candidate": "90c499d2-0a69-8146-8588-90ce2a26cc31",
+    "contract": "5f55f65b-d68e-860f-a60b-4e7e7346339d"
+  },
+  "rule_request_identities": {
+    "rule-save": "452f81b6-119a-8fdd-998f-c0779c9f19d7",
+    "rule-assign": "e65cf165-bd11-8061-9dce-09af0ae11898"
+  },
+  "source_key": "NFX-SHIFT-6892ED0EF75CB46F02FD6A7D",
+  "unique_code": "NFX_MULTI_HR_20261013",
+  "unique_email": "nfx-multi-hr-20261013@example.test",
+  "fixture_contract_rates": {
+    "paye_day": 20,
+    "paye_night": 30,
+    "paye_sat": 40,
+    "paye_sun": 50,
+    "paye_bh": 60,
+    "umb_day": 20,
+    "umb_night": 30,
+    "umb_sat": 40,
+    "umb_sun": 50,
+    "umb_bh": 60,
+    "charge_day": 30,
+    "charge_night": 45,
+    "charge_sat": 60,
+    "charge_sun": 75,
+    "charge_bh": 90
+  },
+  "root_supplied_scope": [
+    "cloudtms.nfx.agency_id",
+    "cloudtms.nfx.agency_anchor_group_id"
+  ],
+  "no_seeded_business_results": [
+    "contract_weeks",
+    "timesheets",
+    "weekly_source_uploads",
+    "weekly_source_upload_rows",
+    "weekly_source_projection_publications",
+    "weekly_source_row_resolutions",
+    "weekly_source_final_revisions",
+    "weekly_source_final_snapshot_lines",
+    "weekly_source_billing_movements",
+    "invoices",
+    "invoice_lines",
+    "timesheet_financials",
+    "manager_signatures",
+    "qualification_receipts"
+  ],
+  "batch_files": [
+    {
+      "file": "01_current_null_setup.sqlinc",
+      "sha256": "cf9052ecb9129b2704620139647d77a8db017a37c8121b822f6efa038d7aaa0f",
+      "bytes": 8034,
+      "statement_count_upper_bound": 51
+    },
+    {
+      "file": "02_actual_stage_context.sqlinc",
+      "sha256": "d9bfe7cef9a63e2540dff259978f9b05910c4cbbce80bb2bea4a4dc5a4663557",
+      "bytes": 957,
+      "statement_count_upper_bound": 1
+    },
+    {
+      "file": "03_actual_projection_context.sqlinc",
+      "sha256": "992a0f40dafa44ecfb5b38535cb677a2a52fe478f574ea7842f5929644cdc0d0",
+      "bytes": 971,
+      "statement_count_upper_bound": 1
+    },
+    {
+      "file": "04_prepare_and_fin.sqlinc",
+      "sha256": "35c617b05512058ed4d0722b62d32cde2119d054b0e22a0fc08c299bd0767646",
+      "bytes": 3704,
+      "statement_count_upper_bound": 34
+    },
+    {
+      "file": "05_actual_pay_snapshot_context.sqlinc",
+      "sha256": "2ebe41a7338bf08daa71252e5fd5e96956ad02fa8f18cb6b85464000c47b1759",
+      "bytes": 913,
+      "statement_count_upper_bound": 1
+    },
+    {
+      "file": "07_invoice_admit_issue_model.sqlinc",
+      "sha256": "d34cf9a2807d8b03b1efd5181d6f51275ce261eb8d671fb6afa79363e20fb20b",
+      "bytes": 2649,
+      "statement_count_upper_bound": 29
+    },
+    {
+      "file": "08_null_pay_and_invoice_assertions.sqlinc",
+      "sha256": "65507fdc68a9f3d8434345cf4f7124cd4af252c33cb72c4563bfb4aca6cfa1f1",
+      "bytes": 1497,
+      "statement_count_upper_bound": 17
+    },
+    {
+      "file": "09_fresh_namespace_absence.sqlinc",
+      "sha256": "3a2324ce077df9bb8ed64e4eca927f0a6e6a859acecaab93f9d5ba89c80d10a9",
+      "bytes": 2578,
+      "statement_count_upper_bound": 1
+    },
+    {
+      "file": "10_current_rule_save_assign_off.sqlinc",
+      "sha256": "a1a30ab838c533034264a2aeeccbbb72c832e6b76d1201957c79a2ec4715b98e",
+      "bytes": 3867,
+      "statement_count_upper_bound": 20
+    },
+    {
+      "file": "11_current_null_and_missing_negatives.sqlinc",
+      "sha256": "fca31d806831958cbd9f4f7241fde631c7504149a58b936a2acb8e8479816bf9",
+      "bytes": 1575,
+      "statement_count_upper_bound": 19
+    }
+  ],
+  "cases": [
+    {
+      "id": "WS-NFX-NULL-HR-20261013",
+      "kind": "NULL_RULE_HEALTHROSTER",
+      "execution": "CURRENT_DATE_BOUND",
+      "workDate": "2026-10-06",
+      "weekEnding": "2026-10-11",
+      "start": "09:00",
+      "end": "17:00",
+      "breakMinutes": 0,
+      "paidMinutes": 480,
+      "expected": {
+        "payPence": 16000,
+        "chargePence": 24000,
+        "vatPence": 4800,
+        "grossPence": 28800
+      },
+      "rules": null
+    },
+    {
+      "id": "WS-NFX-MULTI-HR-20261013",
+      "kind": "NULL_RULE_HEALTHROSTER",
+      "execution": "CURRENT_DATE_BOUND",
+      "workDate": "2026-10-06",
+      "workDates": [
+        "2026-10-06",
+        "2026-10-07"
+      ],
+      "rowCount": 2,
+      "weekEnding": "2026-10-11",
+      "start": "09:00",
+      "end": "17:00",
+      "breakMinutes": 0,
+      "paidMinutes": 480,
+      "expected": {
+        "payPence": 32000,
+        "chargePence": 48000,
+        "vatPence": 9600,
+        "grossPence": 57600
+      },
+      "rules": null,
+      "nativePurpose": "Two source rows in one Contract/week must share the genuinely created native root; LEGACY original EMPTY census may extend only through native INSERT RETURNING after I-1."
+    },
+    {
+      "id": "WS-NFX-M1-NIGHT-20261013",
+      "kind": "M1_WHOLE_SHIFT",
+      "execution": "ROOT_BOUND_EXISTING_NATIVE_CYCLE_REQUIRED",
+      "workDate": "2026-10-06",
+      "weekEnding": "2026-10-11",
+      "start": "21:00",
+      "end": "01:00",
+      "breakMinutes": 0,
+      "paidMinutes": 240,
+      "sourceTotalCostPence": 999999,
+      "expected": {
+        "payPence": 12000,
+        "chargePence": 18000,
+        "vatPence": 3600,
+        "grossPence": 21600,
+        "bucket": "NIGHT"
+      },
+      "rules": null
+    },
+    {
+      "id": "WS-NFX-FIRST-RULE-UPLOAD",
+      "kind": "RULE_SET_EARLY_UPLOAD",
+      "execution": "CURRENT_NEGATIVE_ONLY",
+      "assignmentNotBefore": "2026-10-13",
+      "firstEnabledSunday": "2026-10-18",
+      "coverageFloor": "2026-10-12",
+      "expected": {
+        "effectiveRuleSetBeforeEnable": null,
+        "earlyUploadAllowed": false
+      }
+    },
+    {
+      "id": "WS-NFX-SOURCE-VAT-FIT",
+      "kind": "RULE_SET_EXPORT_SOURCE_MONEY",
+      "execution": "FRESH_UPLOAD_AFTER_NATIVE_GATE",
+      "coverageFloor": "2026-10-12",
+      "source": {
+        "netPence": 10000,
+        "vatPence": 2002,
+        "grossPence": 12002
+      },
+      "expected": {
+        "hold": "VAT_FIT",
+        "payPence": 16000,
+        "net20": {
+          "netPence": 10000,
+          "vatPence": 2000,
+          "grossPence": 12000
+        },
+        "asFile": {
+          "netPence": 10000,
+          "vatPence": 2002,
+          "grossPence": 12002
+        }
+      }
+    },
+    {
+      "id": "WS-NFX-SOURCE-FRACTIONAL",
+      "kind": "RULE_SET_EXACT_MINUTES",
+      "execution": "FRESH_UPLOAD_AFTER_NATIVE_GATE",
+      "paidMinutes": 3,
+      "minutes": {
+        "day": 1,
+        "night": 2
+      },
+      "rates": {
+        "charge_day": 37.13,
+        "charge_night": 41.27,
+        "paye_day": 10,
+        "paye_night": 15
+      },
+      "expected": {
+        "presentationNetPence": 198,
+        "grossPence": 239,
+        "vatPence": 41,
+        "payPence": 65
+      }
+    },
+    {
+      "id": "WS-NFX-S09-PENDING-ZERO",
+      "kind": "RECEIPT_SET_ZERO_AUTHORITY",
+      "execution": "FRESH_UPLOAD_AFTER_NATIVE_GATE",
+      "sourceLines": [
+        {
+          "netPence": 10000,
+          "vatPence": 2002,
+          "grossPence": 12002
+        },
+        {
+          "netPence": 10000,
+          "vatPence": 1998,
+          "grossPence": 11998
+        }
+      ],
+      "expected": {
+        "rawNetPence": 20000,
+        "rawVatPence": 4000,
+        "rawGrossPence": 24000,
+        "rawRoundingPence": 0,
+        "mixedReceiptsVatPence": 3998,
+        "mixedAdmittedRoundingPence": 2,
+        "invoiceVatPence": 4000,
+        "invoiceGrossPence": 24000,
+        "payUnaffected": true
+      }
+    },
+    {
+      "id": "WS-NFX-S09-A-QUALIFY",
+      "kind": "ROUNDING_A_NULL_IDENTITY",
+      "execution": "HOSTED_NATIVE_JOURNEY_REQUIRED",
+      "expected": {
+        "origin": "INVOICE_VAT_ROUNDING",
+        "candidateId": null,
+        "contractId": null,
+        "workEventId": null,
+        "totalPayPence": 0
+      }
+    },
+    {
+      "id": "WS-NFX-S09-B-QUALIFY",
+      "kind": "ROUNDING_B_REAL_IDENTITY",
+      "execution": "REPORT_NATIVE_VARIANT_B_JOURNEY_REQUIRED",
+      "expected": {
+        "origin": "INVOICE_VAT_ROUNDING",
+        "sameRevisionClientIdentity": true,
+        "totalPayPence": 0
+      },
+      "sameFileBoundary": "Current SAME_FILE FIN passes NULL identity to its factory; no fixture may patch frozen FIN or manually insert a B movement."
+    },
+    {
+      "id": "WS-NFX-REPORT-LITERAL-A",
+      "kind": "REPORT_LAYOUT_A",
+      "execution": "CURRENT_STATIC_ORACLE_AND_LATER_NATIVE_REPORT",
+      "input": {
+        "net": "33.01",
+        "vat": "6.602",
+        "gross": "39.612"
+      },
+      "expected": {
+        "netPence": 3301,
+        "vatPence": 660,
+        "grossPence": 3961
+      }
+    },
+    {
+      "id": "WS-NFX-REPORT-LITERAL-B",
+      "kind": "REPORT_LAYOUT_B",
+      "execution": "CURRENT_STATIC_ORACLE_AND_LATER_NATIVE_REPORT",
+      "input": {
+        "net": "33.01",
+        "vat": "6.61",
+        "gross": "39.62"
+      },
+      "expected": {
+        "netPence": 3301,
+        "vatPence": 661,
+        "grossPence": 3962
+      }
+    },
+    {
+      "id": "WS-NFX-REPORT-BIND-PAY",
+      "kind": "REPORT_PAY_WITNESS",
+      "execution": "FRESH_UPLOAD_AFTER_NATIVE_GATE",
+      "sequence": [
+        "EXPORT_PARSE_STAGE_SEAL_PROJECT",
+        "REPORT_PARSE_STAGE_SEAL_PROJECT",
+        "NATIVE_CURRENT_BIND",
+        "EXPORT_FIN",
+        "ORDINARY_PAY_RUN_NATIVE_SNAPSHOT_AND_RECEIPT",
+        "REPORT_FIN",
+        "INVOICE_ADMIT",
+        "ALLOCATION_ASSERT",
+        "ISSUE_VALIDATE",
+        "ISSUE_ONE",
+        "MODEL_SNAPSHOT"
+      ],
+      "expected": {
+        "reportPayPence": 0,
+        "invoiceReadyRequiresActualBoundFinalPay": true
+      }
+    },
+    {
+      "id": "WS-NFX-HISTORICAL-2025",
+      "kind": "HISTORICAL_REPORT_CORPUS",
+      "execution": "STATIC_ORACLE_ONLY",
+      "reason": "The 2025 source corpus cannot be assigned a first enabled current rule version or bound to an enabled 18 October 2026 fixture. It proves parser/literal-money oracle values only."
+    },
+    {
+      "id": "WS-NFX-NHSP-CONTROL",
+      "kind": "NHSP_ORIGINAL",
+      "execution": "ROOT_BOUND_EXISTING_NATIVE_NHSP_CYCLE_REQUIRED",
+      "expected": {
+        "ruleSet": null,
+        "newSourceGrossVatFields": null,
+        "unchangedNativeTwoComponentPence": true
+      }
+    },
+    {
+      "id": "WS-NFX-ORDINARY-CONTROL",
+      "kind": "ORDINARY_NEGATIVE",
+      "execution": "CURRENT_DATE_BOUND",
+      "expected": {
+        "sourceInvoice": false,
+        "sourceRules": null,
+        "signedCheckOnly": false,
+        "agencyInvoiceCheckOnly": false
+      }
+    },
+    {
+      "id": "WS-NFX-POSTCUTOFF-S1",
+      "kind": "SURREY_SINGLE_CYCLE",
+      "execution": "FRESH_UPLOAD_AFTER_NATIVE_GATE",
+      "expected": {
+        "lateInThisCyclePay": false,
+        "lateInThisCycleInvoice": false,
+        "nextEligibleCycle": "CANONICAL_ADD_PAY_AND_INVOICE"
+      }
+    }
+  ],
+  "proof_gates": {
+    "fresh_before_manifest": "Root hashes actual ledger/catalogue and records namespace vacancy before any fixture DML.",
+    "fresh_after_manifest": "Root repeats exact same fresh ledger/catalogue queries and this package 09 after unconditional rollback.",
+    "pdf": "HELD until unchanged renderer is run with actual source/support bytes in authorized TEST R2 and the true FINAL_ISSUE snapshot. No document queue drain or fake R2 locator.",
+    "enabled_rule_money_report": "HELD until genuine upload timestamp satisfies F1 floor and F8 gate; setup/assignment/activation must use current exact VERIFIED release and existing controlled owner.",
+    "variant_B": "HELD operational choice; Report native internal variant can be qualified separately without exposed selector or manual movement insertion.",
+    "signed_documents": "HELD genuine Candidate/manager signature flow; no manager evidence seeded."
+  }
+}

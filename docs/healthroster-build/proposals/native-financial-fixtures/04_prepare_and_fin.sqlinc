@@ -1,0 +1,23 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+do $nfx_fin$ declare s pg_temp.nfx_state%rowtype;ctx jsonb;prepared jsonb;fin jsonb;begin
+ select * into strict s from pg_temp.nfx_state;
+ ctx:=public.weekly_source_upload_context_v1(jsonb_build_object('operation','BUILD_PROJECTION','actor_user_id',s.actor_id,'source_group_id',s.group_id,'source_cycle_id',s.cycle_id,'client_id',s.client_id,'upload_id',s.upload_id));
+ if ctx->>'projection_state'<>'CURRENT' or (ctx->>'projection_publication_id')::uuid is distinct from s.publication_id then raise exception 'NFX_ACTUAL_PUBLICATION_NOT_CURRENT';end if;
+ prepared:=public.weekly_source_import_prepare_atomic_v1(jsonb_build_object('actor_user_id',s.actor_id,'upload_id',s.upload_id,'projection_publication_id',s.publication_id,'expected_authority_scope_version',ctx->'authority_scope_version','expected_row_manifest_hash',ctx->>'row_manifest_hash'));
+ if prepared->>'ok' is distinct from 'true' then raise exception 'NFX_NATIVE_PREPARE_FAILED';end if;
+ fin:=public.weekly_source_finalise_atomic_v1(jsonb_build_object('actor_user_id',s.actor_id,'source_cycle_id',s.cycle_id,'authority_scope_kind','CYCLE','report_scope_id',null,'upload_id',s.upload_id,'projection_publication_id',s.publication_id,'expected_authority_scope_version',ctx->'authority_scope_version','expected_row_manifest_hash',ctx->>'row_manifest_hash','expected_comparison_manifest_hash',ctx->>'comparison_manifest_hash','expected_issue_set_hash',ctx->>'issue_set_hash','exclude_unfinalised_acknowledged',false));
+ if fin->>'ok' is distinct from 'true' or fin->>'status'<>'FINALISED' then raise exception 'NFX_NATIVE_FIN_FAILED';end if;
+ update pg_temp.nfx_state set revision_id=(fin->>'final_revision_id')::uuid;
+ select * into strict s from pg_temp.nfx_state;
+ if not exists(select 1 from public.weekly_source_final_revisions where id=s.revision_id and source_cycle_id=s.cycle_id and upload_id=s.upload_id and rule_set_version_id is null) then raise exception 'NFX_NULL_RULE_REVISION_PROVENANCE';end if;
+ if (select count(*) from public.weekly_source_billing_movements where final_revision_id=s.revision_id)<>1 or exists(select 1 from public.weekly_source_billing_movements where final_revision_id=s.revision_id and (actual_client_id<>s.client_id or candidate_id<>s.candidate_id or contract_id<>s.contract_id or total_pay_ex_vat<>160 or invoice_presentation_charge_pence<>24000 or vat_amount<>48 or total_inc_vat<>288 or movement_role<>'POSITIVE')) then raise exception 'NFX_NATIVE_FIN_EXACT_MONEY_FAILED';end if;
+ if (select count(distinct invoice_timesheet_id) from public.weekly_source_billing_movements where final_revision_id=s.revision_id)<>1 or (select count(*) from public.contract_weeks where contract_id=s.contract_id)<>1 or (select count(*) from public.timesheets where contract_id=s.contract_id)<>1 then raise exception 'NFX_NATIVE_CREATED_ROOT_NOT_EXACT';end if;
+ update pg_temp.nfx_state set manifest_id=(select id from public.weekly_source_client_manifests where final_revision_id=s.revision_id and client_id=s.client_id);
+end;$nfx_fin$;
+do $nfx_pay_open$ declare s pg_temp.nfx_state%rowtype;r jsonb;begin
+ select * into strict s from pg_temp.nfx_state;
+ r:=public.weekly_source_finalisation_pay_open_atomic_v1(jsonb_build_object('schema_version','WEEKLY_SOURCE_FINALISATION_PAY_OPEN_V1','actor_user_id',s.actor_id,'final_revision_id',s.revision_id));
+ if r->>'ok' is distinct from 'true' or jsonb_array_length(r->'tasks')<>1 then raise exception 'NFX_NATIVE_ONE_PAY_TASK_REQUIRED';end if;
+ update pg_temp.nfx_state set pay_run=r;
+end;$nfx_pay_open$;

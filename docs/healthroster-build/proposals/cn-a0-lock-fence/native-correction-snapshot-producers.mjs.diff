@@ -1,0 +1,53 @@
+@@ -93,6 +93,15 @@ export function createNativeCorrectionSnapshotProducers(deps){
+     const rows=await deps.readContext([id]);
+     required(Array.isArray(rows)&&rows.length===1,'CORRECTION_CANONICAL_CONTEXT_AMBIGUOUS');
+     const ctx=rows[0],ts=ctx?.out_timesheet;
++    if(prepare.original_materialisation_required===true&&expectedTs.sheet_scope==='WEEKLY'){
++      const w=a.original_a0_native_input_witness;
++      required(object(w)&&Object.keys(w).length===7&&['contract','request_id','contexts','weekly_contexts','import_contexts','validations','sha256'].every(k=>own(w,k))&&
++        w.contract==='TIMESHEET_CORRECTION_A0_NATIVE_INPUT_WITNESS_V1'&&same(w.request_id,a.request_id)&&
++        typeof w.sha256==='string'&&/^[0-9a-f]{64}$/.test(w.sha256)&&Array.isArray(w.contexts)&&w.contexts.length===2&&
++        new Set(w.contexts.map(c=>c?.effective_timesheet_id)).size===2,'CORRECTION_A0_NATIVE_INPUT_UNPROVED');
++      const preparedContext=w.contexts.filter(c=>same(c?.effective_timesheet_id,id));
++      required(preparedContext.length===1&&jsonEqual(ctx,preparedContext[0]),'CORRECTION_A0_NATIVE_INPUT_CHANGED');
++    }
+     required(same(ctx?.effective_timesheet_id,id)&&same(ts?.timesheet_id,id)&&ts.version===version&&ts.booking_id===expectedTs.booking_id&&
+       ts.is_current===true&&ts.archived_at_utc==null&&ts.authorised_at_server==null&&same(ctx?.out_candidate?.id,prepare.candidate_id)&&
+       same(ctx?.out_client_id,prepare.client_id)&&object(ctx?.out_policy)&&object(ctx?.out_effective_flags),'CORRECTION_CANONICAL_TARGET_CHANGED');
+@@ -114,6 +123,13 @@ export function createNativeCorrectionSnapshotProducers(deps){
+     if(ts.sheet_scope==='WEEKLY'){
+       const weekly=await deps.readWeeklyContext([id]);
+       required(Array.isArray(weekly)&&weekly.length===1&&same(weekly[0]?.timesheet_id,id),'CORRECTION_CANONICAL_WEEKLY_CONTEXT_AMBIGUOUS');
++      if(prepare.original_materialisation_required===true&&expectedTs.sheet_scope==='WEEKLY'){
++        const saved=a.original_a0_native_input_witness.weekly_contexts;
++        required(Array.isArray(saved)&&saved.length===2&&new Set(saved.map(c=>c?.timesheet_id)).size===2,
++          'CORRECTION_A0_NATIVE_INPUT_UNPROVED');
++        const row=saved.filter(c=>same(c?.timesheet_id,id));
++        required(row.length===1&&jsonEqual(row[0],weekly[0]),'CORRECTION_A0_NATIVE_INPUT_CHANGED');
++      }
+       const cw=weekly[0].out_cw,contract=weekly[0].out_contract;
+       required(object(cw)&&object(contract)&&same(cw.timesheet_id,id)&&same(cw.contract_id,contract.id)&&same(ts.contract_id,contract.id)&&
+         same(contract.candidate_id,prepare.candidate_id)&&same(contract.client_id,prepare.client_id),'CORRECTION_CANONICAL_WEEKLY_TARGET_CHANGED');
+@@ -122,8 +138,22 @@ export function createNativeCorrectionSnapshotProducers(deps){
+       let shifts=shiftRows[0].shifts;
+       if(typeof shifts==='string'){try{shifts=JSON.parse(shifts);}catch{refuse('CORRECTION_CANONICAL_IMPORTED_CONTEXT_INVALID');}}
+       required(Array.isArray(shifts),'CORRECTION_CANONICAL_IMPORTED_CONTEXT_INVALID');
++      if(prepare.original_materialisation_required===true&&expectedTs.sheet_scope==='WEEKLY'){
++        const saved=a.original_a0_native_input_witness.import_contexts;
++        required(Array.isArray(saved)&&saved.length===2&&new Set(saved.map(c=>c?.timesheet_id)).size===2,
++          'CORRECTION_A0_NATIVE_INPUT_UNPROVED');
++        const row=saved.filter(c=>same(c?.timesheet_id,id));
++        required(row.length===1&&jsonEqual(row[0],{timesheet_id:id,shifts}),'CORRECTION_A0_NATIVE_INPUT_CHANGED');
++      }
+       const validations=await deps.readWeeklyValidation(id);
+       required(Array.isArray(validations)&&validations.length<=2&&validations.every(v=>same(v.timesheet_id,id)),'CORRECTION_CANONICAL_VALIDATION_AMBIGUOUS');
++      if(prepare.original_materialisation_required===true&&expectedTs.sheet_scope==='WEEKLY'){
++        const saved=a.original_a0_native_input_witness.validations;
++        required(Array.isArray(saved)&&saved.length===2&&new Set(saved.map(c=>c?.timesheet_id)).size===2,
++          'CORRECTION_A0_NATIVE_INPUT_UNPROVED');
++        const row=saved.filter(c=>same(c?.timesheet_id,id));
++        required(row.length===1&&jsonEqual(row[0],{timesheet_id:id,rows:validations}),'CORRECTION_A0_NATIVE_INPUT_CHANGED');
++      }
+       if(validations.length===2){
+         // The native enrichment owner orders validation by updated_at DESC.
+         // Read one extra row to refuse an ambiguous latest timestamp; an older

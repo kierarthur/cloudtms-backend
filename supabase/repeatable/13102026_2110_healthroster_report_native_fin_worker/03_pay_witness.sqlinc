@@ -1,0 +1,17 @@
+-- Complete successor: retain the invoice producer's compact old DTO keys.
+-- The detailed authority is separate; bound_* provenance never implies pay.
+create or replace function private.weekly_source_self_bill_report_pay_witness_v1(p_binding_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare a jsonb;
+begin
+  a:=private.weekly_source_self_bill_report_pay_authority_v1(p_binding_id);
+  if a is null or a->'invoice_ready' is distinct from 'true'::jsonb then return null; end if;
+  return jsonb_build_object('bound_pay_snapshot_line_id',a->'bound_pay_snapshot_line_id',
+    'bound_pay_final_revision_id',a->'bound_pay_final_revision_id',
+    'bound_pay_projection_receipt_id',a->'bound_pay_projection_receipt_id',
+    'published_timesheet_financial_id',a->'published_timesheet_financial_id',
+    'invoice_timesheet_id',a->'invoice_timesheet_id','candidate_id',a->'candidate_id',
+    'client_id',a->'client_id','contract_id',a->'contract_id','work_event_id',a->'work_event_id');
+end;
+$function$;

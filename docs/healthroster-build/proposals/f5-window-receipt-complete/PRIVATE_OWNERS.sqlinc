@@ -1,0 +1,277 @@
+-- Owner-private complete proposed helpers. No caller money/config/activation.
+create or replace function private.weekly_source_invoice_legacy_render_support_v1(p_invoice_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare suppressed jsonb; receipts jsonb;
+begin
+  select jsonb_agg(private.weekly_source_invoice_rounding_suppression_witness_v1(line.id) order by line.id)
+    into suppressed from public.invoice_lines line where line.invoice_id=p_invoice_id
+      and line.meta_json->>'presentation_disposition'='SUPPRESS_ZERO_ROUNDING_AUTHORITY';
+  receipts:=private.weekly_source_invoice_receipt_support_v1(p_invoice_id);
+  return case when suppressed is null then '{}'::jsonb else jsonb_build_object('source_rounding_suppressions',suppressed) end
+    ||case when receipts is null then '{}'::jsonb else jsonb_build_object('source_invoice_receipt_support',receipts) end;
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_window_lock_inventory_v1(
+  p_upload_id uuid,p_generation bigint,p_source_cycle_id uuid,p_client_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare source_cycle public.weekly_source_cycles%rowtype; rules jsonb;
+  row record; target uuid; ids uuid[]; windows jsonb; witnesses jsonb:='[]'::jsonb;
+begin
+  select * into strict source_cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  if not exists(select 1 from public.weekly_source_uploads upload where upload.id=p_upload_id
+    and upload.source_cycle_id=source_cycle.id) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_UPLOAD_SCOPE_INVALID' using errcode='55000'; end if;
+  ids:=array[source_cycle.id];
+  rules:=private.weekly_source_effective_rule_set_v1(p_client_id,source_cycle.id)->'values';
+  if rules is not null and rules->>'invoice_sender'='CLIENT_SELF_BILL'
+    and rules->>'invoice_amount_basis'='SOURCE_AMOUNT'
+    and rules->>'invoice_membership'='FINALISED_IN_CYCLE_WINDOW'
+    and rules->>'self_bill_source'='SAME_FILE' then
+    for row in select source_row.*,resolution.id resolution_id,resolution.work_event_id,
+        resolution.client_id,resolution.contract_id from public.weekly_source_upload_rows source_row
+      join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+        and resolution.generation=p_generation where source_row.upload_id=p_upload_id
+      order by source_row.id
+    loop
+      if row.client_id is distinct from p_client_id then
+        raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_CLIENT_INVALID' using errcode='55000'; end if;
+      target:=private.weekly_source_invoice_window_cycle_v1(row.id,source_cycle.source_group_id);
+      if target is not null then
+        if not(target=any(ids)) then ids:=array_append(ids,target); end if;
+        witnesses:=witnesses||jsonb_build_array(jsonb_build_object('upload_row_id',row.id,
+          'row_hash',encode(row.normalised_row_hash,'hex'),'resolution_id',row.resolution_id,
+          'work_event_id',row.work_event_id,'client_id',row.client_id,'contract_id',row.contract_id,
+          'invoice_window_scope',private.weekly_source_invoice_window_scope_v1(source_cycle.id,row.client_id,row.id,target)));
+      end if;
+    end loop;
+  end if;
+  select jsonb_object_agg(cycle.id::text,to_jsonb(cycle) order by cycle.id) into windows
+    from public.weekly_source_cycles cycle where cycle.id=any(ids);
+  if (select count(*) from jsonb_object_keys(windows))<>cardinality(ids) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_SET_INVALID' using errcode='55000'; end if;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_INVOICE_WINDOW_LOCK_INVENTORY_V1',
+    'source_cycle_id',source_cycle.id,'upload_id',p_upload_id,'generation',p_generation,
+    'client_id',p_client_id,'cycles',windows,'row_window_witnesses',witnesses);
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_receipt_support_v1(p_invoice_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare witnesses jsonb;
+begin
+  if not exists(select 1 from public.weekly_source_invoice_line_bindings b
+    join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+    where b.invoice_id=p_invoice_id and b.state='CURRENT'
+      and (p.invoice_rounding_authority_json is not null or p.invoice_hold_release_id is not null)) then return null; end if;
+  perform private.weekly_source_invoice_allocation_assert_v1(p_invoice_id);
+  select jsonb_agg(witness order by presentation_id) into witnesses from (
+    select p.id presentation_id,jsonb_build_object('presentation_line_id',p.id,
+      'presentation_hash',encode(p.presentation_hash,'hex'),'source_hash',encode(p.source_hash,'hex'),
+      'client_manifest_id',p.client_manifest_id,'rounding_authority',p.invoice_rounding_authority_json,
+      'invoice_hold_release_authority',private.weekly_source_invoice_presentation_release_authority_v1(
+        array_agg(b.billing_movement_id order by b.billing_movement_id),p.invoice_hold_release_id),
+      'billing_movement_ids',jsonb_agg(b.billing_movement_id order by b.billing_movement_id)) witness
+      from public.weekly_source_invoice_line_bindings b join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+      where b.invoice_id=p_invoice_id and b.state='CURRENT'
+        and (p.invoice_rounding_authority_json is not null or p.invoice_hold_release_id is not null)
+      group by p.id
+  ) exact;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_INVOICE_RECEIPT_SUPPORT_V1','invoice_id',p_invoice_id,
+    'presentation_witnesses',witnesses,'support_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_RECEIPT_SUPPORT_V1',witnesses),'hex'));
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_window_cycle_v1(p_upload_row_id uuid,p_source_group_id uuid)
+returns uuid language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare row public.weekly_source_upload_rows%rowtype; actual_client uuid; ids uuid[];
+begin
+  select * into strict row from public.weekly_source_upload_rows where id=p_upload_row_id;
+  if row.finalised_at_utc is null then return null; end if;
+  -- The exact saved active publication owns the generation; no latest-row pick.
+  select resolution.client_id into strict actual_client from public.weekly_source_uploads upload
+    join public.weekly_source_projection_publications publication on publication.upload_id=upload.id
+      and publication.source_cycle_id=upload.source_cycle_id and publication.report_scope_id is null
+      and publication.authority_scope_kind='CYCLE' and publication.state in ('CURRENT','CORRECTION_READY')
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=row.id
+      and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+    where upload.id=row.upload_id and upload.state in ('CURRENT','CORRECTION_READY');
+  select array_agg(cycle.id order by cycle.id) into ids from public.weekly_source_cycles cycle
+    where cycle.source_group_id=p_source_group_id and cycle.state in ('OPEN','FINALISABLE','FINALISING')
+      and (cycle.scope_client_id is null or cycle.scope_client_id=actual_client)
+      and row.work_date<=cycle.finalisation_week_ending and cycle.cutoff_at_utc>=row.finalised_at_utc
+      and row.finalised_at_utc>coalesce((select max(prior.cutoff_at_utc) from public.weekly_source_cycles prior
+        where prior.source_group_id=cycle.source_group_id and prior.cutoff_at_utc<cycle.cutoff_at_utc),
+        ((cycle.cutoff_at_utc at time zone 'Europe/London')-interval '7 days') at time zone 'Europe/London');
+  if cardinality(ids)>1 then select array_agg(cycle.id order by cycle.id) into ids
+    from public.weekly_source_cycles cycle where cycle.id=any(ids) and cycle.scope_client_id=actual_client; end if;
+  if cardinality(ids)>1 then raise exception 'WEEKLY_SOURCE_INVOICE_WINDOW_AMBIGUOUS' using errcode='55000'; end if;
+  return ids[1];
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_admission_receipt_map_v1(p_client_manifest_id uuid)
+returns jsonb language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select coalesce(jsonb_agg(jsonb_build_object('billing_movement_id',m.id,'invoice_hold_release_id',receipt.id)
+    order by m.id),'[]'::jsonb) from public.weekly_source_manifest_movements mm
+  join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+  left join public.weekly_source_invoice_hold_releases receipt
+    on receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT'
+    and m.movement_role in ('POSITIVE','REPLACEMENT')
+    and m.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+  where mm.client_manifest_id=p_client_manifest_id and m.source_line_kind<>'INVOICE_VAT_ROUNDING';
+$function$;
+
+create or replace function private.weekly_source_invoice_manifest_admission_money_v1(p_client_manifest_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare member record; authority jsonb; receipt_map jsonb; money jsonb;
+  net numeric:=0; vat numeric:=0; gross numeric:=0;
+begin
+  receipt_map:=private.weekly_source_invoice_admission_receipt_map_v1(p_client_manifest_id);
+  authority:=private.weekly_source_invoice_rounding_receipt_set_v1(p_client_manifest_id,receipt_map);
+  for member in select m.*,supplied->>'invoice_hold_release_id' receipt_id
+    from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements m on m.id=mm.billing_movement_id
+    left join lateral (select supplied from jsonb_array_elements(receipt_map) supplied where supplied->>'billing_movement_id'=m.id::text) receipt on true
+    where mm.client_manifest_id=p_client_manifest_id order by m.id
+  loop
+    if member.source_line_kind='INVOICE_VAT_ROUNDING' and authority is not null then
+      money:=jsonb_build_object('net_pence',0,'vat_pence',authority->'admitted_rounding_vat_pence','gross_pence',authority->'admitted_rounding_vat_pence');
+    elsif member.receipt_id is not null then
+      money:=private.weekly_source_invoice_movement_money_v1(member.id,member.receipt_id::uuid);
+    else money:=jsonb_build_object('net_pence',member.invoice_presentation_charge_pence,
+      'vat_pence',(member.vat_amount*100)::bigint,'gross_pence',(member.total_inc_vat*100)::bigint); end if;
+    net:=net+(money->>'net_pence')::numeric;vat:=vat+(money->>'vat_pence')::numeric;gross:=gross+(money->>'gross_pence')::numeric;
+  end loop;
+  return jsonb_build_object('net_pence',net,'vat_pence',vat,'gross_pence',gross);
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_rounding_authority_rebuild_v1(p_presentation_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_invoice_presentation_lines%rowtype; receipt_map jsonb; result jsonb;
+begin
+  select * into strict p from public.weekly_source_invoice_presentation_lines where id=p_presentation_id;
+  if p.invoice_rounding_authority_json is null then return null; end if;
+  if p.line_kind<>'INVOICE_VAT_ROUNDING' or p.origin_kind<>'INVOICE_VAT_ROUNDING'
+    or jsonb_typeof(p.invoice_rounding_authority_json->'member_witnesses') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_ROUNDING_PRESENTATION_AUTHORITY_INVALID' using errcode='55000'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('billing_movement_id',w->'billing_movement_id',
+    'invoice_hold_release_id',w->'invoice_hold_release_id') order by w->>'billing_movement_id'),'[]'::jsonb)
+    into receipt_map from jsonb_array_elements(p.invoice_rounding_authority_json->'member_witnesses') w;
+  result:=private.weekly_source_invoice_rounding_receipt_set_v1(p.client_manifest_id,receipt_map);
+  if result is distinct from p.invoice_rounding_authority_json then
+    raise exception 'WEEKLY_SOURCE_ROUNDING_PRESENTATION_AUTHORITY_INVALID' using errcode='55000'; end if;
+  -- Every admitted witness must be tied to the exact original presentation of
+  -- the actual member, including an explicit NULL original-money decision.
+  if exists(select 1 from jsonb_array_elements(result->'member_witnesses') w
+    where not exists(select 1 from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_presentation_lines original on original.id=binding.presentation_line_id
+      where binding.billing_movement_id=(w->>'billing_movement_id')::uuid and binding.state='CURRENT'
+        and original.client_manifest_id=p.client_manifest_id
+        and original.invoice_hold_release_id is not distinct from nullif(w->>'invoice_hold_release_id','')::uuid)) then
+    raise exception 'WEEKLY_SOURCE_ROUNDING_RECEIPT_PRESENTATION_SET_INVALID' using errcode='55000'; end if;
+  return result;
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_presentation_expected_source_hash_v1(p_presentation_id uuid)
+returns bytea language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_invoice_presentation_lines%rowtype; ids uuid[]; original bytea; authority jsonb;
+begin
+  select * into strict p from public.weekly_source_invoice_presentation_lines where id=p_presentation_id;
+  select array_agg(binding.billing_movement_id order by binding.billing_movement_id) into ids
+    from public.weekly_source_invoice_line_bindings binding where binding.presentation_line_id=p.id and binding.state='CURRENT';
+  original:=private.weekly_source_invoice_presentation_source_hash_v1(ids,p.invoice_hold_release_id);
+  authority:=private.weekly_source_invoice_rounding_authority_rebuild_v1(p.id);
+  if authority is null then return original; end if;
+  return private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_INVOICE_ROUNDING_PRESENTATION_V1',
+    jsonb_build_object('original_movement_source_hash',encode(original,'hex'),
+      'rounding_authority_sha256',authority->>'authority_sha256'));
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_admitted_member_money_v1(p_presentation_id uuid,p_movement_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_invoice_presentation_lines%rowtype; m public.weekly_source_billing_movements%rowtype;
+  authority jsonb; receipt public.weekly_source_invoice_hold_releases%rowtype;
+begin
+  select * into strict p from public.weekly_source_invoice_presentation_lines where id=p_presentation_id;
+  select * into strict m from public.weekly_source_billing_movements where id=p_movement_id;
+  if not exists(select 1 from public.weekly_source_invoice_line_bindings b where b.presentation_line_id=p.id
+    and b.billing_movement_id=m.id and b.state='CURRENT') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMITTED_MEMBER_INVALID' using errcode='55000'; end if;
+  authority:=private.weekly_source_invoice_rounding_authority_rebuild_v1(p.id);
+  if authority is not null then
+    if authority->>'rounding_movement_id' is distinct from m.id::text then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ROUNDING_MEMBER_INVALID' using errcode='55000'; end if;
+    return jsonb_build_object('net_pence',0,'vat_pence',authority->'admitted_rounding_vat_pence','gross_pence',authority->'admitted_rounding_vat_pence');
+  end if;
+  if p.invoice_hold_release_id is not null then
+    select * into strict receipt from public.weekly_source_invoice_hold_releases where id=p.invoice_hold_release_id;
+    if receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and m.movement_role in ('POSITIVE','REPLACEMENT') then
+      return private.weekly_source_invoice_movement_money_v1(m.id,receipt.id); end if;
+  end if;
+  -- NULL is the original immutable money at this exact historical identity.
+  return jsonb_build_object('net_pence',m.invoice_presentation_charge_pence,
+    'vat_pence',(m.vat_amount*100)::bigint,'gross_pence',(m.total_inc_vat*100)::bigint);
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_receipt_projection_assert_v1(p_invoice_id uuid)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare row record; authority jsonb; expected jsonb; expected_hash bytea; members uuid[];
+begin
+  for row in select distinct presentation.* from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_invoice_presentation_lines presentation on presentation.id=binding.presentation_line_id
+    where binding.invoice_id=p_invoice_id and binding.state='CURRENT' order by presentation.id
+  loop
+    authority:=private.weekly_source_invoice_rounding_authority_rebuild_v1(row.id);
+    expected_hash:=private.weekly_source_invoice_presentation_expected_source_hash_v1(row.id);
+    if row.source_hash is distinct from expected_hash then
+      raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_SOURCE_HASH_INVALID' using errcode='55000'; end if;
+    select array_agg(b.billing_movement_id order by m.movement_role,m.id) into members
+      from public.weekly_source_invoice_line_bindings b join public.weekly_source_billing_movements m on m.id=b.billing_movement_id
+      where b.presentation_line_id=row.id and b.state='CURRENT';
+    if authority is not null and row.presentation_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_PRESENTATION_V1',jsonb_build_object(
+        'client_manifest_id',row.client_manifest_id,'movement_ids',to_jsonb(members),'line_kind',row.line_kind,
+        'source_shift_group_id',row.source_shift_group_id,'work_date',row.work_date,
+        'start_at_local',row.start_at_local,'end_at_local',row.end_at_local,'break_minutes',row.break_minutes,
+        'hours',jsonb_build_array(row.hours_day,row.hours_night,row.hours_sat,row.hours_sun,row.hours_bh),
+        'total_pay',row.total_pay_ex_vat,'total_charge',row.total_charge_ex_vat,
+        'vat_rate',row.vat_rate_pct,'vat',row.vat_amount,'total',row.total_inc_vat,
+        'charge_acceptance_id',row.charge_acceptance_id,'source_hash',encode(row.source_hash,'hex'))
+        ||case when row.invoice_hold_release_id is null then '{}'::jsonb else jsonb_build_object(
+          'invoice_hold_release_authority',private.weekly_source_invoice_presentation_release_authority_v1(members,row.invoice_hold_release_id)) end
+        ||case when authority is null then '{}'::jsonb else jsonb_build_object('weekly_source_rounding_authority',authority) end) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_HASH_INVALID' using errcode='55000'; end if;
+    select jsonb_build_object('net_pence',sum((money->>'net_pence')::numeric),
+      'vat_pence',sum((money->>'vat_pence')::numeric),'gross_pence',sum((money->>'gross_pence')::numeric)) into expected
+      from public.weekly_source_invoice_line_bindings binding
+      cross join lateral (select private.weekly_source_invoice_admitted_member_money_v1(row.id,binding.billing_movement_id) money) actual
+      where binding.presentation_line_id=row.id and binding.state='CURRENT';
+    if row.invoice_presentation_charge_pence is distinct from (expected->>'net_pence')::bigint
+      or row.vat_amount*100 is distinct from (expected->>'vat_pence')::numeric
+      or row.total_inc_vat*100 is distinct from (expected->>'gross_pence')::numeric then
+      raise exception 'WEEKLY_SOURCE_INVOICE_PRESENTATION_ADMITTED_MONEY_INVALID' using errcode='55000'; end if;
+    if authority is not null and exists(select 1 from public.weekly_source_invoice_line_bindings b
+      join public.invoice_lines line on line.id=b.invoice_line_id where b.presentation_line_id=row.id and b.state='CURRENT'
+        and (line.meta_json->'weekly_source_rounding_authority' is distinct from authority
+          or line.meta_json->>'presentation_disposition' is distinct from case when (authority->>'suppress_visible_rounding_line')::boolean
+            then 'SUPPRESS_ZERO_ROUNDING_AUTHORITY' else 'VISIBLE' end)) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ROUNDING_METADATA_INVALID' using errcode='55000'; end if;
+  end loop;
+end;
+$function$;

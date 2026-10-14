@@ -1,0 +1,22 @@
+-- A later unsigned hours-change belongs to the existing (a) episode only
+-- when its first native comparison proves the expected-week materialiser kind.
+create or replace function private.weekly_source_expected_week_question_v1(p_incident_id uuid)
+returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(select 1 from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions original on original.incident_id=incident.id and original.revision_number=1
+    join public.weekly_issue_comparison_revisions current_question on current_question.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work on work.id=incident.work_event_id
+    where incident.id=p_incident_id and original.issue_family='HEALTHROSTER_NOT_FINALISED'
+      and original.source_presence='UNFINALISED' and original.candidate_timesheet_id is null
+      and current_question.candidate_timesheet_id is null and current_question.issue_family in ('HEALTHROSTER_NOT_FINALISED','SOURCE_HOURS_DIFFER')
+      and original.contract_id=current_question.contract_id
+      and exists(select 1 from public.weekly_discrepancy_events original_event
+        where original_event.incident_id=incident.id and original_event.event_kind='SOURCE_RECHECKED'
+          and original_event.expected_comparison_fingerprint=original.material_comparison_fingerprint
+          and original_event.bounded_payload_json->>'origin'='EXPECTED_CONTRACT_WEEK'
+          and original_event.bounded_payload_json->>'comparison_revision_id'=original.id::text)
+      and private.weekly_source_is_import_authoritative_v1(incident.client_id,current_question.contract_id,work.work_date));
+$function$;
+alter function private.weekly_source_expected_week_question_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_expected_week_question_v1(uuid) from public,anon,authenticated,service_role;

@@ -1,0 +1,8 @@
+{
+  "schemaNames": [
+    "CandidateTimesheetCorrectionV1",
+    "ManagerCorrectionSummaryV1"
+  ],
+  "closureSha256": "087384c3038c63dad4e2f77a667ae699d1ca868f71b8b69e9b3a17c7409b8193",
+  "validatorSha256": "3eb48eaf91e55fce5d60572e71c56a863eda17ec52c7441040799b0e3c514a99"
+}

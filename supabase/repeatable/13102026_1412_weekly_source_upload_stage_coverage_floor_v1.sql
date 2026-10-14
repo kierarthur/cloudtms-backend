@@ -1,0 +1,626 @@
+-- WP-F8 complete upload-stage successor from the latest admitted five-profile owner.
+-- Root report admission must union this hunk; never replace its new report arm.
+\set ON_ERROR_STOP on
+begin;
+create or replace function public.weekly_source_upload_stage_begin_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_keys constant text[]:=array[
+    'actor_user_id','environment','agency_id','source_group_id','source_cycle_id',
+    'report_scope_id','client_id','original_filename','content_sha256','byte_count',
+    'profile_code','profile_version','parser_version','normaliser_version',
+    'workbook_part_and_sheet_fingerprint','header_coordinate_map_json',
+    'header_coordinate_map_hash','money_lexical_authority_version','purpose',
+    'correction_session_id','expected_correction_session_version','declared_scope_fingerprint',
+    'suggested_coverage_start_local_date','suggested_coverage_end_local_date',
+    'confirmed_coverage_start_local_date','confirmed_coverage_end_local_date',
+    'coverage_timezone','coverage_confirmation_version','coverage_confirmed_at_utc',
+    'coverage_shrink_acknowledged','coverage_state','coverage_proof_kind',
+    'physical_row_count','header_count','trailer_count','continuation_count',
+    'accepted_count','blocking_economic_duplicate_count','malformed_count',
+    'blocked_count','file_metadata_json','parser_summary_json'
+  ]::text[];
+  v_actor uuid;
+  v_environment text;
+  v_agency uuid;
+  v_group_id uuid;
+  v_cycle_id uuid;
+  v_report_scope_id uuid;
+  v_client_id uuid;
+  v_group public.weekly_source_groups%rowtype;
+  v_correction public.weekly_final_source_correction_sessions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_purpose text;
+  v_content bytea;
+  v_workbook_fingerprint bytea;
+  v_header_map jsonb;
+  v_header_hash bytea;
+  v_declared bytea;
+  v_computed_scope bytea;
+  v_metadata jsonb;
+  v_summary jsonb;
+  v_report_number text;
+  v_existing public.weekly_source_uploads%rowtype;
+  v_upload_id uuid;
+  v_attempt_id uuid;
+  v_unknown_key text;
+  v_profile_version integer;
+  v_physical integer;
+  v_header integer;
+  v_trailer integer;
+  v_continuation integer;
+  v_accepted integer;
+  v_duplicate integer;
+  v_malformed integer;
+  v_blocked integer;
+  v_byte_count bigint;
+  v_suggested_start date;
+  v_suggested_end date;
+  v_confirmed_start date;
+  v_confirmed_end date;
+  v_coverage_timezone text;
+  v_confirmation_version text;
+  v_coverage_state text;
+  v_proof_kind text;
+  v_profile_identity text;
+  v_expected_correction_version bigint;
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  select key into v_unknown_key
+  from pg_catalog.jsonb_object_keys(p_request) key
+  where not (key=any(v_allowed_keys))
+  order by key
+  limit 1;
+  if v_unknown_key is not null then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_REQUEST_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown_key;
+  end if;
+
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_environment:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'environment','')));
+    v_agency:=(p_request->>'agency_id')::uuid;
+    v_group_id:=(p_request->>'source_group_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_report_scope_id:=nullif(p_request->>'report_scope_id','')::uuid;
+    v_client_id:=nullif(p_request->>'client_id','')::uuid;
+    v_profile_version:=(p_request->>'profile_version')::integer;
+    v_byte_count:=(p_request->>'byte_count')::bigint;
+    v_physical:=(p_request->>'physical_row_count')::integer;
+    v_header:=coalesce((p_request->>'header_count')::integer,0);
+    v_trailer:=coalesce((p_request->>'trailer_count')::integer,0);
+    v_continuation:=coalesce((p_request->>'continuation_count')::integer,0);
+    v_accepted:=coalesce((p_request->>'accepted_count')::integer,0);
+    v_duplicate:=coalesce((p_request->>'blocking_economic_duplicate_count')::integer,0);
+    v_malformed:=coalesce((p_request->>'malformed_count')::integer,0);
+    v_blocked:=coalesce((p_request->>'blocked_count')::integer,0);
+    v_suggested_start:=nullif(p_request->>'suggested_coverage_start_local_date','')::date;
+    v_suggested_end:=nullif(p_request->>'suggested_coverage_end_local_date','')::date;
+    v_confirmed_start:=nullif(p_request->>'confirmed_coverage_start_local_date','')::date;
+    v_confirmed_end:=nullif(p_request->>'confirmed_coverage_end_local_date','')::date;
+    v_expected_correction_version:=nullif(p_request->>'expected_correction_session_version','')::bigint;
+  exception when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_REQUEST_TYPE_INVALID' using errcode='22023';
+  end;
+
+  if v_environment not in ('TEST','LIVE') or v_agency is null
+     or v_group_id is null or v_cycle_id is null or v_actor is null then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_SCOPE_REQUIRED' using errcode='22023';
+  end if;
+  if nullif(pg_catalog.btrim(coalesce(p_request->>'original_filename','')),'') is null
+     or pg_catalog.char_length(p_request->>'original_filename')>255 then
+    raise exception 'WEEKLY_SOURCE_FILENAME_INVALID' using errcode='22023';
+  end if;
+  if v_byte_count is null or v_byte_count<=0
+     or v_physical is null or least(v_physical,v_header,v_trailer,v_continuation,
+       v_accepted,v_duplicate,v_malformed,v_blocked)<0 then
+    raise exception 'WEEKLY_SOURCE_DECLARED_COUNTS_INVALID' using errcode='22023';
+  end if;
+
+  v_content:=private.weekly_source_hex32_v1(
+    p_request->>'content_sha256','WEEKLY_SOURCE_CONTENT_HASH_INVALID'
+  );
+  v_header_map:=coalesce(p_request->'header_coordinate_map_json','{}'::jsonb);
+  v_metadata:=coalesce(p_request->'file_metadata_json','{}'::jsonb);
+  v_summary:=coalesce(p_request->'parser_summary_json','{}'::jsonb);
+  if pg_catalog.jsonb_typeof(v_header_map)<>'object'
+     or pg_catalog.jsonb_typeof(v_metadata)<>'object'
+     or pg_catalog.jsonb_typeof(v_summary)<>'object' then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_OBJECT_INVALID' using errcode='22023';
+  end if;
+  v_header_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_HEADER_COORDINATE_MAP_V1',v_header_map
+  );
+  if nullif(p_request->>'header_coordinate_map_hash','') is not null
+     and private.weekly_source_hex32_v1(
+       p_request->>'header_coordinate_map_hash','WEEKLY_SOURCE_HEADER_MAP_HASH_INVALID'
+     ) is distinct from v_header_hash then
+    raise exception 'WEEKLY_SOURCE_HEADER_MAP_HASH_MISMATCH' using errcode='22023';
+  end if;
+  v_workbook_fingerprint:=case
+    when nullif(p_request->>'workbook_part_and_sheet_fingerprint','') is null then null
+    else private.weekly_source_hex32_v1(
+      p_request->>'workbook_part_and_sheet_fingerprint',
+      'WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_INVALID'
+    ) end;
+
+  select * into v_group from public.weekly_source_groups where id=v_group_id;
+  if not found or not v_group.active
+     or v_group.environment is distinct from v_environment
+     or v_group.agency_id is distinct from v_agency then
+    raise exception 'WEEKLY_SOURCE_GROUP_SCOPE_MISMATCH' using errcode='22023';
+  end if;
+  select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;
+  if not found or v_cycle.source_group_id is distinct from v_group_id then
+    raise exception 'WEEKLY_SOURCE_CYCLE_SCOPE_MISMATCH' using errcode='22023';
+  end if;
+  select * into v_profile
+  from public.weekly_source_format_profiles
+  where profile_code=pg_catalog.btrim(coalesce(p_request->>'profile_code',''))
+    and version=v_profile_version;
+  if not found or not v_profile.active or v_profile.scheduled_hours_fallback then
+    raise exception 'WEEKLY_SOURCE_PROFILE_NOT_RELEASED' using errcode='22023';
+  end if;
+  if v_profile.profile_code not in (
+    'NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1',
+    'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+    'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1',
+    'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
+  ) or v_profile.version<>1 then
+    raise exception 'WEEKLY_SOURCE_PROFILE_NOT_ADMITTED' using errcode='22023';
+  end if;
+  -- An approved workbook profile may also arrive as one self-contained
+  -- data-bearing HTML table (including NHSP's Excel-exported .xls). Only
+  -- the server parser identifies that container; HTML has no OOXML part to
+  -- fingerprint, while an actual XLSX must retain its selected-part proof.
+  if v_profile.container_kind='XLSX' then
+    if pg_catalog.upper(pg_catalog.btrim(coalesce(v_summary->>'source_kind','XLSX')))
+       not in ('XLSX','HTML')
+       or (pg_catalog.upper(pg_catalog.btrim(coalesce(v_summary->>'source_kind','XLSX')))='XLSX')
+          is distinct from (v_workbook_fingerprint is not null) then
+      raise exception 'WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED' using errcode='22023';
+    end if;
+  elsif v_workbook_fingerprint is not null then
+    raise exception 'WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED' using errcode='22023';
+  end if;
+  if v_profile.profile_code in ('NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1') then
+    if nullif(p_request->>'money_lexical_authority_version','') is distinct from
+       'XLSX_BINARY64_SAME_VALUE_PENCE_V1' then
+      raise exception 'WEEKLY_SOURCE_NHSP_MONEY_AUTHORITY_INVALID' using errcode='22023';
+    end if;
+  elsif nullif(p_request->>'money_lexical_authority_version','') is not null then
+    raise exception 'WEEKLY_SOURCE_MONEY_AUTHORITY_NOT_ALLOWED' using errcode='22023';
+  end if;
+
+  v_purpose:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'purpose','ORDINARY')));
+  if v_purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION') then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_PURPOSE_INVALID' using errcode='22023';
+  end if;
+  if nullif(pg_catalog.btrim(coalesce(p_request->>'parser_version','')),'') is null
+     or nullif(pg_catalog.btrim(coalesce(p_request->>'normaliser_version','')),'') is null then
+    raise exception 'WEEKLY_SOURCE_PARSER_VERSION_REQUIRED' using errcode='22023';
+  end if;
+  v_coverage_timezone:=nullif(pg_catalog.btrim(coalesce(p_request->>'coverage_timezone','')),'');
+  v_confirmation_version:=nullif(pg_catalog.btrim(coalesce(p_request->>'coverage_confirmation_version','')),'');
+  v_coverage_state:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'coverage_state','')));
+  v_proof_kind:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'coverage_proof_kind','')));
+
+  if v_profile.profile_code='NHSP_FINAL_BACKING_V1' then
+    if v_group.source_family<>'NHSP' or v_report_scope_id is null
+       or v_profile.final_authority_kind<>'NHSP_TRUST_BACKING_REPORT'
+       or v_profile.omission_meaning<>'NO_INFERENCE'
+       or not v_profile.report_number_required
+       or not v_profile.fmc_must_equal_zero then
+      raise exception 'WEEKLY_SOURCE_NHSP_FINAL_PROFILE_INVALID' using errcode='22023';
+    end if;
+    select * into v_scope
+    from public.weekly_source_report_scopes
+    where id=v_report_scope_id;
+    if not found or v_scope.source_cycle_id is distinct from v_cycle_id
+       or v_scope.environment is distinct from v_environment
+       or v_scope.agency_id is distinct from v_agency
+       or v_scope.source_group_id is distinct from v_group_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_NHSP_REPORT_SCOPE_MISMATCH' using errcode='22023';
+    end if;
+    v_client_id:=v_scope.client_id;
+    if nullif(p_request->>'client_id','') is not null
+       and (p_request->>'client_id')::uuid is distinct from v_client_id then
+      raise exception 'WEEKLY_SOURCE_NHSP_CLIENT_MISMATCH' using errcode='22023';
+    end if;
+    v_report_number:=private.weekly_source_canonical_report_number_v1(
+      v_metadata->>'nhsp_report_number'
+    );
+    if v_report_number is null
+       or nullif(pg_catalog.btrim(coalesce(v_metadata->>'nhsp_report_heading_name','')),'')
+          is distinct from pg_catalog.btrim(v_group.nhsp_report_heading_name)
+       or v_proof_kind<>'NHSP_TRUST_REPORT_SCOPE'
+       or v_confirmed_start is not null or v_confirmed_end is not null then
+      raise exception 'WEEKLY_SOURCE_NHSP_REPORT_IDENTITY_INVALID' using errcode='22023';
+    end if;
+    v_metadata:=v_metadata||pg_catalog.jsonb_build_object(
+      'nhsp_report_number',v_report_number,'client_id',v_client_id
+    );
+  elsif v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1' then
+    if v_group.source_family<>'NHSP' or v_report_scope_id is not null
+       or v_profile.profile_json->>'purpose'<>'PREFINAL_CHECKING'
+       or v_profile.row_finalisation_capability<>'CHECKING_ONLY' then
+      raise exception 'WEEKLY_SOURCE_NHSP_PREFINAL_SCOPE_INVALID' using errcode='22023';
+    end if;
+  else
+    if v_group.source_family<>'ROSTER' or v_report_scope_id is not null then
+      raise exception 'WEEKLY_SOURCE_ROSTER_SCOPE_INVALID' using errcode='22023';
+    end if;
+    if v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_client_id then
+      raise exception 'WEEKLY_SOURCE_CONTEXT_CLIENT_SCOPE_MISMATCH' using errcode='22023';
+    end if;
+    if v_profile.single_client_required and v_client_id is null then
+      raise exception 'WEEKLY_SOURCE_CLIENT_SCOPE_REQUIRED' using errcode='22023';
+    end if;
+    if v_client_id is not null then
+      if not exists(
+        select 1 from public.weekly_source_group_clients membership
+        where membership.source_group_id=v_group_id
+          and membership.client_id=v_client_id
+          and v_cycle.finalisation_week_ending between membership.valid_from
+            and coalesce(membership.valid_to,'infinity'::date)
+      ) then
+        raise exception 'WEEKLY_SOURCE_CLIENT_SCOPE_MISMATCH' using errcode='22023';
+      end if;
+      v_metadata:=v_metadata||pg_catalog.jsonb_build_object('client_id',v_client_id);
+    end if;
+    if v_profile.final_authority_kind='HEALTHROSTER_ACTUAL_ROWS'
+       and (pg_catalog.jsonb_typeof(v_metadata->'saved_finalisation_profile_map') is distinct from 'object'
+            or v_metadata->'saved_finalisation_profile_map'='{}'::jsonb) then
+      raise exception 'WEEKLY_SOURCE_HEALTHROSTER_FINALISATION_MAP_REQUIRED' using errcode='22023';
+    end if;
+  end if;
+
+  if v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' then
+    if v_coverage_state<>'COMPLETE'
+       or v_confirmed_start is null or v_confirmed_end is null
+       or v_confirmed_start>v_confirmed_end
+       or v_coverage_timezone<>'Europe/London'
+       or v_confirmation_version is null
+       or v_proof_kind not in (
+         'FORMAT_MANIFEST','OFFICE_COMPLETE_EXPORT_ATTESTATION',
+         'EXPLICIT_EMPTY_CONFIRMATION','HEALTHROSTER_COMPLETE_EXPORT_ATTESTATION'
+       ) then
+      raise exception 'WEEKLY_SOURCE_COMPLETE_COVERAGE_REQUIRED' using errcode='22023';
+    end if;
+  end if;
+  if (v_suggested_start is null)<>(v_suggested_end is null)
+     or (v_confirmed_start is null)<>(v_confirmed_end is null)
+     or (v_suggested_start is not null and v_suggested_start>v_suggested_end) then
+    raise exception 'WEEKLY_SOURCE_COVERAGE_RANGE_INVALID' using errcode='22023';
+  end if;
+  -- 14 section 5.4.3.  The service SUGGESTS inclusive coverage from the file's
+  -- own earliest and latest valid work Date; Office then CONFIRMS the range for
+  -- which the export is complete.  Confirmation is therefore NOT the same fact
+  -- as the evidence and must not be forced to equal it: 5.4.5 bullet 4 makes a
+  -- Request Id that is "absent inside confirmed coverage" a full cancellation
+  -- reversal, so a shift the Trust withdraws at the edge of the week can only
+  -- ever be noticed by a confirmed range WIDER than the rows that arrived.  The
+  -- same section already contemplates a confirmation with no rows at all ("a
+  -- genuinely empty complete export requires explicit start/end dates and
+  -- attestation"), which is the same freedom at its limit.
+  --
+  -- A confirmed range NARROWER than the evidence is refused here: every
+  -- accepted row must stay inside the final scope, and the finaliser admits
+  -- nothing outside confirmed coverage
+  -- (WEEKLY_SOURCE_RESOLUTION_OUTSIDE_FINAL_SCOPE), so a narrower confirmation
+  -- could only produce an upload that can never be finalised.  The suggestion
+  -- itself is still evidence and is re-checked against the real rows at the
+  -- seal.
+  if v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' then
+    if v_accepted>0 and v_suggested_start is null then
+      raise exception 'WEEKLY_SOURCE_COVERAGE_CONFIRMATION_MISMATCH' using errcode='22023';
+    end if;
+    if v_accepted>0 and (
+         v_confirmed_start>v_suggested_start
+         or v_confirmed_end<v_suggested_end
+       ) then
+      raise exception 'WEEKLY_SOURCE_COVERAGE_CONFIRMATION_NARROWER_THAN_EVIDENCE'
+        using errcode='22023';
+    end if;
+    if v_accepted=0 and (v_suggested_start is not null or v_suggested_end is not null) then
+      raise exception 'WEEKLY_SOURCE_EMPTY_COVERAGE_SUGGESTION_INVALID' using errcode='22023';
+    end if;
+  end if;
+
+  v_computed_scope:=private.weekly_source_scope_fingerprint_v1(
+    v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_client_id
+  );
+  if nullif(p_request->>'declared_scope_fingerprint','') is not null then
+    v_declared:=private.weekly_source_hex32_v1(
+      p_request->>'declared_scope_fingerprint','WEEKLY_SOURCE_DECLARED_SCOPE_HASH_INVALID'
+    );
+    if v_declared is distinct from v_computed_scope then
+      raise exception 'WEEKLY_SOURCE_DECLARED_SCOPE_MISMATCH' using errcode='22023';
+    end if;
+  end if;
+  v_declared:=v_computed_scope;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(pg_catalog.encode(v_declared,'hex'),73241837)
+  );
+  if v_report_scope_id is null then
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_cycle_id for update;
+  else
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_cycle_id;
+  end if;
+  if v_cycle.source_group_id is distinct from v_group_id then
+    raise exception 'WEEKLY_SOURCE_CYCLE_SCOPE_MISMATCH' using errcode='22023';
+  end if;
+  if v_report_scope_id is not null then
+    select * into strict v_scope
+    from public.weekly_source_report_scopes where id=v_report_scope_id for update;
+    if v_scope.source_cycle_id is distinct from v_cycle_id
+       or v_scope.environment is distinct from v_environment
+       or v_scope.agency_id is distinct from v_agency
+       or v_scope.source_group_id is distinct from v_group_id
+       or v_scope.client_id is distinct from v_client_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_CHANGED' using errcode='55000';
+    end if;
+  end if;
+  if private.weekly_source_scope_fingerprint_v1(
+       v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_client_id
+     ) is distinct from v_declared then
+    raise exception 'WEEKLY_SOURCE_SCOPE_CHANGED' using errcode='55000';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'UPLOAD_SOURCE',v_group_id,v_client_id,v_cycle.finalisation_week_ending
+  );
+
+  -- WP-F8: complete authority has been checked under the native scope lock.
+  -- A direct stage request cannot bypass the server's first rule-set week.
+  perform private.weekly_source_upload_coverage_floor_assert_v1(
+    v_client_id,v_cycle.id,v_profile.profile_code,v_confirmed_start);
+
+  if v_purpose='FINAL_SOURCE_CORRECTION' then
+    if nullif(p_request->>'correction_session_id','') is null then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_REQUIRED' using errcode='22023';
+    end if;
+    select * into v_correction
+    from public.weekly_final_source_correction_sessions
+    where id=(p_request->>'correction_session_id')::uuid for update;
+    if not found or v_correction.source_cycle_id is distinct from v_cycle_id
+       or v_correction.authority_scope_kind is distinct from
+          (case when v_report_scope_id is null then 'CYCLE' else 'NHSP_REPORT_SCOPE' end)
+       or v_correction.report_scope_id is distinct from v_report_scope_id
+       or v_correction.actor_user_id is distinct from v_actor
+       or (v_expected_correction_version is not null
+           and v_correction.version is distinct from v_expected_correction_version)
+       or v_correction.state not in ('DRAFT','STAGING','READY')
+       or (v_correction.state='DRAFT' and v_correction.replacement_correction_upload_id is not null)
+       or (v_correction.state in ('STAGING','READY') and v_correction.replacement_correction_upload_id is null) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_INVALID' using errcode='22023';
+    end if;
+    if v_correction.replacement_correction_upload_id is not null then
+      select * into strict v_existing
+      from public.weekly_source_uploads
+      where id=v_correction.replacement_correction_upload_id;
+      if v_existing.content_sha256=v_content
+         and v_existing.byte_count=v_byte_count
+         and v_existing.source_format_profile_id=v_profile.id
+         and (v_profile.profile_code='NHSP_FINAL_BACKING_V1'
+              or (v_existing.parser_version=p_request->>'parser_version'
+                  and v_existing.normaliser_version=p_request->>'normaliser_version'
+                  and v_existing.workbook_part_and_sheet_fingerprint is not distinct from v_workbook_fingerprint
+                  and v_existing.header_coordinate_map_hash=v_header_hash
+                  and v_existing.confirmed_coverage_start_local_date is not distinct from v_confirmed_start
+                  and v_existing.confirmed_coverage_end_local_date is not distinct from v_confirmed_end
+                  and v_existing.coverage_confirmation_version is not distinct from v_confirmation_version)) then
+        v_attempt_id:=private.weekly_source_attempt_append_without_upload_v1(
+          v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_purpose,
+          v_declared,v_correction.id,v_actor,p_request->>'original_filename',v_byte_count,
+          v_content,p_request->>'parser_version',
+          v_profile.profile_code||':'||v_profile.version::text,
+          p_request->>'normaliser_version','DUPLICATE',
+          'CORRECTION_UPLOAD_EXACT_REPLAY',v_existing.id
+        );
+        return pg_catalog.jsonb_build_object(
+          'ok',true,'status','DUPLICATE','logical_upload_id',v_existing.id,
+          'attempt_id',v_attempt_id,'current_pointer_moved',false
+        );
+      end if;
+      v_attempt_id:=private.weekly_source_attempt_append_without_upload_v1(
+        v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_purpose,
+        v_declared,v_correction.id,v_actor,p_request->>'original_filename',v_byte_count,
+        v_content,p_request->>'parser_version',
+        v_profile.profile_code||':'||v_profile.version::text,
+        p_request->>'normaliser_version','CONFLICT',
+        'CORRECTION_SESSION_REPLACEMENT_CONFLICT',v_existing.id
+      );
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'status','CONFLICT',
+        'reason_code','CORRECTION_SESSION_REPLACEMENT_CONFLICT',
+        'logical_upload_id',v_existing.id,'attempt_id',v_attempt_id,
+        'current_pointer_moved',false
+      );
+    end if;
+  elsif nullif(p_request->>'correction_session_id','') is not null
+        or v_expected_correction_version is not null then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_ALLOWED' using errcode='22023';
+  end if;
+
+  -- Validate even duplicate attempts; a reused byte stream is not authority
+  -- to change a checking-only profile's use.
+  if coalesce(v_metadata->>'import_use','CHECKING') not in ('CHECKING','PREPARE_FINALISATION')
+    or (v_profile.row_finalisation_capability='CHECKING_ONLY'
+      and v_metadata->>'import_use'='PREPARE_FINALISATION') then
+    raise exception 'WEEKLY_SOURCE_IMPORT_USE_INVALID' using errcode='22023';
+  end if;
+  if v_metadata->>'import_use'='PREPARE_FINALISATION' then
+    perform private.weekly_source_office_authority_v1(v_actor,'FINALISE_WEEK',v_group_id,
+      v_client_id,v_cycle.finalisation_week_ending);
+  end if;
+
+  if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_purpose='ORDINARY' then
+    select upload.* into v_existing
+    from public.weekly_source_uploads upload
+    join public.weekly_source_format_profiles profile
+      on profile.id=upload.source_format_profile_id
+    where upload.source_cycle_id=v_cycle_id
+      and upload.report_scope_id=v_report_scope_id
+      and profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'
+      and private.weekly_source_canonical_report_number_v1(
+        upload.file_metadata_json->>'nhsp_report_number'
+      )=v_report_number
+      and upload.content_sha256=v_content
+      and upload.byte_count=v_byte_count
+      and upload.state<>'REJECTED'
+    order by (upload.state='CURRENT') desc,upload.uploaded_at_utc desc,upload.id desc
+    limit 1;
+    if found then
+      v_attempt_id:=private.weekly_source_attempt_append_without_upload_v1(
+        v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_purpose,
+        v_declared,null,v_actor,p_request->>'original_filename',v_byte_count,v_content,
+        p_request->>'parser_version',v_profile.profile_code||':'||v_profile.version::text,
+        p_request->>'normaliser_version','DUPLICATE','NHSP_REPORT_IDENTICAL_REPLAY',
+        v_existing.id
+      );
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status','DUPLICATE','logical_upload_id',v_existing.id,
+        'attempt_id',v_attempt_id,'current_pointer_moved',false
+      );
+    end if;
+
+    select upload.* into v_existing
+    from public.weekly_source_uploads upload
+    join public.weekly_source_format_profiles profile
+      on profile.id=upload.source_format_profile_id
+    where upload.source_cycle_id=v_cycle_id
+      and upload.report_scope_id=v_report_scope_id
+      and profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'
+      and private.weekly_source_canonical_report_number_v1(
+        upload.file_metadata_json->>'nhsp_report_number'
+      )=v_report_number
+      and upload.state<>'REJECTED'
+    order by upload.uploaded_at_utc,upload.id
+    limit 1;
+
+    if found then
+      v_attempt_id:=private.weekly_source_attempt_append_without_upload_v1(
+        v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_purpose,
+        v_declared,null,v_actor,p_request->>'original_filename',v_byte_count,v_content,
+        p_request->>'parser_version',v_profile.profile_code||':'||v_profile.version::text,
+        p_request->>'normaliser_version','CONFLICT','NHSP_REPORT_IDENTITY_BYTES_CONFLICT',
+        v_existing.id
+      );
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'status','CONFLICT','reason_code','NHSP_REPORT_IDENTITY_BYTES_CONFLICT',
+        'logical_upload_id',v_existing.id,'attempt_id',v_attempt_id,
+        'current_pointer_moved',false
+      );
+    end if;
+  elsif v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' then
+    v_profile_identity:=v_profile.profile_code||':'||v_profile.version::text;
+    select upload.* into v_existing
+    from public.weekly_source_uploads upload
+    where upload.source_cycle_id=v_cycle_id
+      and upload.report_scope_id is not distinct from v_report_scope_id
+      and upload.purpose=v_purpose
+      and upload.content_sha256=v_content
+      and upload.byte_count=v_byte_count
+      and upload.source_format_profile_id=v_profile.id
+      and upload.parser_version=coalesce(nullif(p_request->>'parser_version',''),'')
+      and upload.normaliser_version=coalesce(nullif(p_request->>'normaliser_version',''),'')
+      and upload.workbook_part_and_sheet_fingerprint is not distinct from v_workbook_fingerprint
+      and upload.header_coordinate_map_hash=v_header_hash
+      and upload.money_lexical_authority_version is not distinct from
+          nullif(p_request->>'money_lexical_authority_version','')
+      and upload.correction_session_id is not distinct from
+          nullif(p_request->>'correction_session_id','')::uuid
+      and upload.declared_scope_fingerprint=v_declared
+      and upload.confirmed_coverage_start_local_date is not distinct from v_confirmed_start
+      and upload.confirmed_coverage_end_local_date is not distinct from v_confirmed_end
+      and upload.coverage_confirmation_version is not distinct from v_confirmation_version
+      and coalesce(upload.file_metadata_json->'saved_finalisation_profile_map','null'::jsonb)
+          =coalesce(v_metadata->'saved_finalisation_profile_map','null'::jsonb)
+      and coalesce(upload.file_metadata_json->>'import_use','CHECKING')
+          =coalesce(v_metadata->>'import_use','CHECKING')
+      and upload.state<>'REJECTED'
+    order by upload.uploaded_at_utc,upload.id
+    limit 1;
+    if found then
+      v_attempt_id:=private.weekly_source_attempt_append_without_upload_v1(
+        v_environment,v_agency,v_group_id,v_cycle_id,v_report_scope_id,v_purpose,
+        v_declared,nullif(p_request->>'correction_session_id','')::uuid,v_actor,
+        p_request->>'original_filename',v_byte_count,v_content,p_request->>'parser_version',
+        v_profile_identity,p_request->>'normaliser_version','DUPLICATE',
+        'WEEKLY_SOURCE_EXACT_DUPLICATE',v_existing.id
+      );
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status','DUPLICATE','logical_upload_id',v_existing.id,
+        'attempt_id',v_attempt_id,'current_pointer_moved',false
+      );
+    end if;
+  end if;
+
+  insert into public.weekly_source_uploads(
+    source_cycle_id,report_scope_id,original_filename,content_sha256,byte_count,
+    source_format_profile_id,parser_version,normaliser_version,
+    workbook_part_and_sheet_fingerprint,header_coordinate_map_json,
+    header_coordinate_map_hash,money_lexical_authority_version,purpose,
+    correction_session_id,declared_scope_fingerprint,
+    suggested_coverage_start_local_date,suggested_coverage_end_local_date,
+    confirmed_coverage_start_local_date,confirmed_coverage_end_local_date,
+    coverage_timezone,coverage_confirmation_version,coverage_confirmed_by_user_id,
+    coverage_confirmed_at_utc,coverage_shrink_acknowledged,coverage_state,
+    coverage_proof_kind,physical_row_count,header_count,trailer_count,
+    continuation_count,accepted_count,blocking_economic_duplicate_count,
+    malformed_count,blocked_count,state,uploaded_by_user_id,file_metadata_json,
+    parser_summary_json
+  ) values (
+    v_cycle_id,v_report_scope_id,p_request->>'original_filename',v_content,v_byte_count,
+    v_profile.id,p_request->>'parser_version',p_request->>'normaliser_version',
+    v_workbook_fingerprint,v_header_map,v_header_hash,
+    nullif(p_request->>'money_lexical_authority_version',''),v_purpose,
+    nullif(p_request->>'correction_session_id','')::uuid,v_declared,
+    v_suggested_start,v_suggested_end,v_confirmed_start,v_confirmed_end,
+    case when v_confirmed_start is null then null else v_coverage_timezone end,
+    case when v_confirmed_start is null then null else v_confirmation_version end,
+    case when v_confirmed_start is null then null else v_actor end,
+    case when v_confirmed_start is null then null
+      else coalesce(nullif(p_request->>'coverage_confirmed_at_utc','')::timestamptz,
+        pg_catalog.transaction_timestamp()) end,
+    case when p_request?'coverage_shrink_acknowledged'
+      then (p_request->>'coverage_shrink_acknowledged')::boolean else null end,
+    nullif(v_coverage_state,''),v_proof_kind,v_physical,v_header,v_trailer,
+    v_continuation,v_accepted,v_duplicate,v_malformed,v_blocked,'STAGING',v_actor,
+    v_metadata,v_summary
+  ) returning id into v_upload_id;
+
+  if v_purpose='FINAL_SOURCE_CORRECTION' then
+    update public.weekly_final_source_correction_sessions
+    set state='STAGING',replacement_correction_upload_id=v_upload_id,
+        version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_correction.id;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','STAGING','logical_upload_id',v_upload_id,
+    'declared_scope_fingerprint',pg_catalog.encode(v_declared,'hex'),
+    'header_coordinate_map_hash',pg_catalog.encode(v_header_hash,'hex'),
+    'current_pointer_moved',false
+  );
+end;
+$function$;
+alter function public.weekly_source_upload_stage_begin_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_upload_stage_begin_atomic_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_upload_stage_begin_atomic_v1(jsonb) to service_role;
+notify pgrst, 'reload schema';
+commit;

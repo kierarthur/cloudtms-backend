@@ -1,0 +1,47 @@
+-- Synthetic, data-free immutable helper vectors. Run only in root's rollback
+-- release rehearsal after the full schema/function closure has compiled.
+do $report_row_vectors$
+declare row_fact jsonb; changed jsonb; first_hash bytea; stored jsonb; manifest jsonb; refused boolean;
+begin
+  row_fact:=jsonb_build_object('source_row_ordinal',2,'external_source_key','0000123','source_candidate_identity','Fixture Worker',
+    'source_client_identity','Fixture Client','work_date','2026-10-04','start_at_local','2026-10-04T20:00:00','end_at_local','2026-10-05T08:00:00',
+    'source_shift_charge_pence','100','source_vat_pence','20','source_gross_pence','120',
+    'bounded_raw_columns_json',jsonb_build_object('reportTimes',jsonb_build_object('start','20:00','end','08:00','overnight',true),
+      'requestedOn','2026-10-01T10:00:00','components',jsonb_build_object(
+      'net','{"coordinate":"F2","sourceKind":"XLSX_STRING_TOKEN","cellKind":"STRING","formulaPresent":false,"originalToken":"1.00","decodedToken":"1.00","tokenTruncated":false,"parseState":"PARSED","parsedPence":"100"}'::jsonb,
+      'vat','{"coordinate":"G2","sourceKind":"XLSX_STRING_TOKEN","cellKind":"STRING","formulaPresent":false,"originalToken":"0.20","decodedToken":"0.20","tokenTruncated":false,"parseState":"PARSED","parsedPence":"20"}'::jsonb,
+      'gross','{"coordinate":"H2","sourceKind":"XLSX_STRING_TOKEN","cellKind":"STRING","formulaPresent":false,"originalToken":"1.20","decodedToken":"1.20","tokenTruncated":false,"parseState":"PARSED","parsedPence":"120"}'::jsonb)));
+  stored:=private.weekly_source_self_bill_report_row_dto_v1(row_fact);
+  if stored->>'external_source_key'<>'0000123' or jsonb_typeof(stored->'source_shift_charge_pence')<>'number' then
+    raise exception 'REPORT_VECTOR_LEXICAL_REQUEST_OR_PENCE_FAILED'; end if;
+  first_hash:=private.weekly_source_self_bill_report_row_hash_v1(row_fact);
+  if first_hash<>private.weekly_source_self_bill_report_row_hash_v1(stored) then raise exception 'REPORT_VECTOR_PARSED_STORED_HASH_FAILED'; end if;
+  changed:=jsonb_set(row_fact,'{external_source_key}','"123"'::jsonb);
+  if first_hash=private.weekly_source_self_bill_report_row_hash_v1(changed) then raise exception 'REPORT_VECTOR_REQUEST_LEADING_ZERO_LOSS_FAILED'; end if;
+  manifest:=private.weekly_source_self_bill_report_manifest_v1(jsonb_build_array(row_fact));
+  if manifest->>'line_count'<>'1' or manifest->>'net_pence'<>'100' or manifest->>'vat_pence'<>'20' or manifest->>'gross_pence'<>'120' then
+    raise exception 'REPORT_VECTOR_LITERAL_MANIFEST_FAILED'; end if;
+  -- A gross mismatch remains staged literal evidence. The finalizer, not the
+  -- row DTO/import, refuses it; do not silently reprice/recompute any amount.
+  changed:=jsonb_set(jsonb_set(row_fact,'{source_gross_pence}','"121"'::jsonb),
+    '{bounded_raw_columns_json,components,gross,parsedPence}','"121"'::jsonb);
+  if private.weekly_source_self_bill_report_row_dto_v1(changed)->>'source_gross_pence'<>'121' then
+    raise exception 'REPORT_VECTOR_LITERAL_MISMATCH_REWRITTEN'; end if;
+  refused:=false;
+  begin perform private.weekly_source_self_bill_report_row_dto_v1(row_fact||'{"break_minutes":0}'::jsonb);
+  exception when sqlstate '22023' then refused:=true; end;
+  if not refused then raise exception 'REPORT_VECTOR_HOURS_FIELD_ADMITTED'; end if;
+  refused:=false;
+  begin perform private.weekly_source_self_bill_report_row_dto_v1(jsonb_set(row_fact,'{bounded_raw_columns_json,privateHeader}','"hidden"'::jsonb));
+  exception when sqlstate '22023' then refused:=true; end;
+  if not refused then raise exception 'REPORT_VECTOR_UNKNOWN_RAW_FIELD_ADMITTED'; end if;
+  refused:=false;
+  begin perform private.weekly_source_self_bill_report_row_dto_v1(jsonb_set(row_fact,'{bounded_raw_columns_json,components,net,formulaPresent}','true'::jsonb));
+  exception when sqlstate '22023' then refused:=true; end;
+  if not refused then raise exception 'REPORT_VECTOR_FORMULA_ADMITTED'; end if;
+  refused:=false;
+  begin perform private.weekly_source_self_bill_report_manifest_v1(jsonb_build_array(row_fact,jsonb_set(row_fact,'{source_row_ordinal}','3'::jsonb)));
+  exception when sqlstate '22023' then refused:=true; end;
+  if not refused then raise exception 'REPORT_VECTOR_DUPLICATE_REQUEST_ADMITTED'; end if;
+end;
+$report_row_vectors$;

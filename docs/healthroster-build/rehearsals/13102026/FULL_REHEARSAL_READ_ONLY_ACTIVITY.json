@@ -1,0 +1,86 @@
+{
+  "applying": 0,
+  "database": "cloudtms_test_clone",
+  "sessions": [
+    {
+      "wait": "relation",
+      "state": "active",
+      "blockers": [
+        {
+          "state": "active",
+          "same_role": true,
+          "application": "psql",
+          "transaction_seconds": 631
+        }
+      ],
+      "wait_type": "Lock",
+      "application": "psql",
+      "blocked_by_count": 1,
+      "transaction_seconds": 230
+    },
+    {
+      "wait": null,
+      "state": null,
+      "blockers": [
+        {
+          "state": "active",
+          "same_role": true,
+          "application": "psql",
+          "transaction_seconds": 631
+        }
+      ],
+      "wait_type": null,
+      "application": "PostgREST 14.17",
+      "blocked_by_count": 1,
+      "transaction_seconds": null
+    },
+    {
+      "wait": null,
+      "state": null,
+      "blockers": [
+        {
+          "state": "active",
+          "same_role": true,
+          "application": "psql",
+          "transaction_seconds": 631
+        }
+      ],
+      "wait_type": null,
+      "application": "PostgREST 14.17",
+      "blocked_by_count": 1,
+      "transaction_seconds": null
+    },
+    {
+      "wait": null,
+      "state": null,
+      "blockers": [
+        {
+          "state": "active",
+          "same_role": true,
+          "application": "psql",
+          "transaction_seconds": 631
+        }
+      ],
+      "wait_type": null,
+      "application": "PostgREST 14.17",
+      "blocked_by_count": 1,
+      "transaction_seconds": null
+    },
+    {
+      "wait": null,
+      "state": null,
+      "blockers": [
+        {
+          "state": "active",
+          "same_role": true,
+          "application": "psql",
+          "transaction_seconds": 631
+        }
+      ],
+      "wait_type": null,
+      "application": "PostgREST 14.17",
+      "blocked_by_count": 1,
+      "transaction_seconds": null
+    }
+  ]
+}

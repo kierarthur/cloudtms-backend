@@ -1,0 +1,46 @@
+-- Existing accepted batch stays the authority for unchanged business facts.
+create or replace function private.weekly_source_query_manager_row_owned_v1(
+  p_recipient_route_id uuid,
+  p_incident_id uuid,
+  p_incident_episode integer
+) returns boolean
+language sql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  select case
+    when p_recipient_route_id is null or p_incident_id is null
+      or p_incident_episode is null
+    then true
+    else exists(
+      select 1
+      from public.weekly_manager_review_items owning_item
+      join public.weekly_manager_review_batches owning_batch
+        on owning_batch.id=owning_item.review_batch_id
+      join public.weekly_manager_recipient_generations owning_generation
+        on owning_generation.id=owning_batch.recipient_generation_id
+      join public.weekly_message_renders owning_render
+        on owning_render.id=owning_batch.message_render_id
+      join public.weekly_discrepancy_incidents current_incident on current_incident.id=owning_item.incident_id
+      join public.weekly_issue_comparison_revisions current_comparison on current_comparison.id=current_incident.current_comparison_revision_id
+      join public.weekly_issue_comparison_revisions sent_comparison on sent_comparison.id=owning_item.sent_comparison_revision_id
+      join public.weekly_work_events actual_work on actual_work.id=current_incident.work_event_id
+      where owning_item.incident_id=p_incident_id
+        and (not private.weekly_source_is_import_authoritative_v1(current_incident.client_id,current_comparison.contract_id,actual_work.work_date)
+          or (current_comparison.contract_id,current_comparison.issue_family,current_comparison.source_presence,
+            current_comparison.candidate_start_at_local,current_comparison.candidate_end_at_local,current_comparison.candidate_break_minutes,
+            current_comparison.system_start_at_local,current_comparison.system_end_at_local,current_comparison.system_break_minutes)
+          is not distinct from (sent_comparison.contract_id,sent_comparison.issue_family,sent_comparison.source_presence,
+            sent_comparison.candidate_start_at_local,sent_comparison.candidate_end_at_local,sent_comparison.candidate_break_minutes,
+            sent_comparison.system_start_at_local,sent_comparison.system_end_at_local,sent_comparison.system_break_minutes))
+        and owning_item.incident_episode=p_incident_episode
+        and owning_generation.recipient_route_id=p_recipient_route_id
+        and owning_batch.state in ('ACTIVE','COMPLETE')
+        and owning_render.state in ('SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+        and owning_item.response_state in ('UNANSWERED','ANSWERED')
+    )
+  end;
+$function$;
+alter function private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer) owner to postgres;
+revoke all on function private.weekly_source_query_manager_row_owned_v1(uuid,uuid,integer) from public,anon,authenticated,service_role;

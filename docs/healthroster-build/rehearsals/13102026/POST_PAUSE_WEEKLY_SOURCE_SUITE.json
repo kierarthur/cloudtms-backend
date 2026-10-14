@@ -1,0 +1,18 @@
+{
+  "status": "SOURCE_SUITE_PASS",
+  "finished": "2026-10-13T19:02:47.090Z",
+  "exitCode": 0,
+  "counts": {
+    "tests": 529,
+    "pass": 513,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 16,
+    "todo": 0
+  },
+  "mytmsSourceCommit": "8e17d185087f577a80ed53373d39df2e5e081911",
+  "mytmsMain": "6413f17693105c8699b52450de881237dfe524fa",
+  "stdoutSha256": "7d3258531bbdeecce2f187861634e5f90c8b742a6950ad80a92f39e31bbda6db",
+  "rawOutputSaved": false,
+  "databaseAcceptanceClaimed": false
+}

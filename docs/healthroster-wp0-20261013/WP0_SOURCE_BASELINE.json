@@ -1,0 +1,75 @@
+{
+  "atUtc": "2026-10-13T08:51:58.208815+00:00",
+  "accountConfirmedByOwner": "arthurrai2006@gmail.com",
+  "authority": "Current user REVIEW AND PROCEED IN FULL adopts the named WP-0 handover scope; document-only previous round is complete; WP-0 only then STOP",
+  "approvedZIP": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\HEALTHROSTER_SELFBILL_IMPLEMENTATION_PLAN_V2_CURRENT_REFRESH_13102026.zip",
+  "approvedZIPSHA256": "07b5f265205a7d3b36da1bb5cc4d1f8a01c3a6e69f5ddbbd9451f310c62a04bf",
+  "archiveMembersVerified": 183,
+  "planPayloadsVerified": 88,
+  "instructions": {
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\AGENTS.md": "e525510439963a3dac7a5a63bd8630ef1dda9f311a0ee6c06b889f59025ad43e",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\AGENTS.md": "6c44eb64e77eadebbf08b1fae3cbf9e844de5a0a5fe790d58e554930c9a5869c",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\TEST-Frontend\\AGENTS.md": "1deec9f472525e5f5b6ecf125c8a52644f92f1c3f0de8cd3557c08d394ac847d",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\mytms-app\\AGENTS.md": "f751d8411602b1bb67715fe9bccdc49d7329abd82da39c69e93056657d9f25ca",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\SEND_2_TO_HEALTHROSTER_IMPLEMENTATION_CHAT_WP0.md": "b50e8e5457782070f30770e041cb9ac4394131ea44bb2489a401da0e9e1a3e28",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\IMPLEMENTATION_START_PLAN.md": "01921466522fa94dc37fca9eab99c87087424a9d01657cf29b9f3005f7ecb91f",
+    "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\HEALTHROSTER_PLAN_V2_CONSOLIDATION_13102026\\OWNER_DECISIONS_FOR_IMPLEMENTATION.md": "28dac1d803862e5f48f9200906dc2b324c9fbbd83f94677cd55e4202d30686a6"
+  },
+  "savedRepositories": {
+    "backend": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend",
+      "HEAD": "3ae9c929f1b9e94f406958bf75da10daa84bc275",
+      "branch": "codex/delete-guard-dbfix-release-20260905",
+      "statusSHA256": "c8efb7a64bf37dd0c8707dfe956f09431870dfd91b9d5156f2cebd29080bf902",
+      "statusEntries": 116,
+      "trackedDirtyPaths": 10,
+      "untrackedEntries": 106
+    },
+    "office": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\TEST-Frontend",
+      "HEAD": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "branch": "codex/office-paper-evidence-fix-20260906",
+      "statusSHA256": "70a60d9912116cda0c3f24f6938ed41007a0998510d35ab2feab5005bb0a6de3",
+      "statusEntries": 1,
+      "trackedDirtyPaths": 1,
+      "untrackedEntries": 0
+    },
+    "mytms": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\mytms-app",
+      "HEAD": "2f9beb4fd820ce1dfe2460e3713a4ebe21b0063c",
+      "branch": "main",
+      "statusSHA256": "ebaeb353180b3e2c852fe2ce470639428f80131ef446e021ed34e42a1660d7ad",
+      "statusEntries": 67,
+      "trackedDirtyPaths": 38,
+      "untrackedEntries": 29
+    }
+  },
+  "separatelyOwnedCurrentWorktrees": {
+    "next": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "HEAD": "497fb059f186de97ae7df4d5fc7558ff229c0b9f",
+      "branch": "codex/bpay-next-build-20261009",
+      "statusSHA256": "be703a22e96c68a53c4736c4adb4c6b94ad6f89f8f7dfcc89fd2aa3d21587524",
+      "statusEntries": 23,
+      "trackedDirtyPaths": 7,
+      "untrackedEntries": 16
+    },
+    "mytmsActive": {
+      "path": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\candidate-approved-hours-20261003",
+      "HEAD": "3d26ed757bc5fed8208e3534abb7ad50a8bd45d3",
+      "branch": "codex/candidate-approved-hours-20261003",
+      "statusSHA256": "fdb78096660e54934bbc5bffcbf70e5ead661b7d504b50e7cc7b2fec01428ad2",
+      "statusEntries": 11,
+      "trackedDirtyPaths": 10,
+      "untrackedEntries": 1
+    }
+  },
+  "limits": [
+    "No feature implementation",
+    "No canonical branch promotion",
+    "No release/deployment/activation",
+    "No durable TEST setup",
+    "No MyTMS rollback",
+    "No Banking chat or builder writes"
+  ]
+}

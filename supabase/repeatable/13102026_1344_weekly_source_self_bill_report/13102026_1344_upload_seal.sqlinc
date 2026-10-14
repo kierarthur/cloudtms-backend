@@ -1,0 +1,691 @@
+-- Complete native successor; bounded report arm only. Root composes later shared owner hunks.
+create or replace function private.weekly_source_upload_seal_core_v1(
+  p_upload_id uuid,
+  p_actor_user_id uuid
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_upload public.weekly_source_uploads%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_correction public.weekly_final_source_correction_sessions%rowtype;
+  v_prior_upload public.weekly_source_uploads%rowtype;
+  v_client_id uuid;
+  v_expected_scope bytea;
+  v_manifest_hash bytea;
+  v_version_before bigint;
+  v_version_after bigint;
+  v_attempt_id uuid;
+  v_actual_physical integer;
+  v_actual_header integer;
+  v_actual_trailer integer;
+  v_actual_continuation integer;
+  v_actual_accepted integer;
+  v_actual_duplicate integer;
+  v_actual_malformed integer;
+  v_actual_blocked integer;
+  v_normalised_count integer;
+  v_money_count integer;
+  v_expense_count integer;
+  v_actual_coverage_start date;
+  v_actual_coverage_end date;
+begin
+  if p_upload_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_SEAL_INPUT_INVALID' using errcode='22023';
+  end if;
+  select * into v_upload
+  from public.weekly_source_uploads where id=p_upload_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_upload.uploaded_by_user_id is distinct from p_actor_user_id then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_ACTOR_MISMATCH' using errcode='42501';
+  end if;
+  if v_upload.state in ('CURRENT','SUPERSEDED','CORRECTION_READY') then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status',v_upload.state,'logical_upload_id',v_upload.id,
+      'row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex'),
+      'current_pointer_moved',false,'idempotent',true
+    );
+  end if;
+  if v_upload.state<>'STAGING' then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_NOT_STAGING' using errcode='55000';
+  end if;
+
+  select * into strict v_cycle
+  from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into strict v_group
+  from public.weekly_source_groups where id=v_cycle.source_group_id;
+  select * into strict v_profile
+  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  if not v_group.active or not v_profile.active
+     or v_profile.profile_code not in (
+       'NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1',
+       'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+       'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1',
+       'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1','ACACIUM_SELF_BILL_REPORT_V1'
+     ) or v_profile.version<>1 then
+    raise exception 'WEEKLY_SOURCE_RELEASE_PROFILE_STALE' using errcode='55000';
+  end if;
+  if v_upload.header_coordinate_map_hash is distinct from
+     private.weekly_source_sha256_jsonb_v1(
+       'WEEKLY_SOURCE_HEADER_COORDINATE_MAP_V1',v_upload.header_coordinate_map_json
+     ) then
+    raise exception 'WEEKLY_SOURCE_HEADER_MAP_HASH_MISMATCH' using errcode='55000';
+  end if;
+
+  if v_upload.report_scope_id is not null then
+    if v_profile.profile_code not in ('NHSP_FINAL_BACKING_V1','ACACIUM_SELF_BILL_REPORT_V1') then
+      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_PROFILE_INVALID' using errcode='55000';
+    end if;
+    select * into strict v_scope
+    from public.weekly_source_report_scopes
+    where id=v_upload.report_scope_id;
+    if v_scope.source_cycle_id is distinct from v_cycle.id
+       or v_scope.source_group_id is distinct from v_group.id
+       or v_scope.environment is distinct from v_group.environment
+       or v_scope.agency_id is distinct from v_group.agency_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_MISMATCH' using errcode='55000';
+    end if;
+    v_client_id:=v_scope.client_id;
+  else
+    begin
+      v_client_id:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_CLIENT_SCOPE_INVALID' using errcode='55000';
+    end;
+  end if;
+  v_expected_scope:=private.weekly_source_scope_fingerprint_v1(
+    v_group.environment,v_group.agency_id,v_group.id,v_cycle.id,
+    v_upload.report_scope_id,v_client_id
+  );
+  if v_upload.declared_scope_fingerprint is distinct from v_expected_scope then
+    raise exception 'WEEKLY_SOURCE_DECLARED_SCOPE_STALE' using errcode='55000';
+  end if;
+  if v_profile.profile_code='ACACIUM_SELF_BILL_REPORT_V1' then
+    perform 1 from public.weekly_source_groups where id=v_group.id for update;
+    perform 1 from public.weekly_source_cycles where id=v_cycle.id for update;
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(pg_catalog.encode(v_expected_scope,'hex'),73241837)
+  );
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=p_upload_id for update;
+  if v_upload.uploaded_by_user_id is distinct from p_actor_user_id then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_ACTOR_MISMATCH' using errcode='42501';
+  end if;
+  if v_upload.state in ('CURRENT','SUPERSEDED','CORRECTION_READY') then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status',v_upload.state,'logical_upload_id',v_upload.id,
+      'row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex'),
+      'current_pointer_moved',false,'idempotent',true
+    );
+  end if;
+  if v_upload.state<>'STAGING'
+     or v_upload.declared_scope_fingerprint is distinct from v_expected_scope then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_NOT_STAGING' using errcode='55000';
+  end if;
+  if v_upload.report_scope_id is null then
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_upload.source_cycle_id for update;
+  else
+    -- NHSP authority is per Trust.  Do not serialize independent Trusts by
+    -- taking the shared cycle row lock; the exact report-scope row is its head.
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+    select * into strict v_scope
+    from public.weekly_source_report_scopes where id=v_upload.report_scope_id for update;
+    if v_scope.source_cycle_id is distinct from v_cycle.id
+       or v_scope.source_group_id is distinct from v_group.id
+       or v_scope.environment is distinct from v_group.environment
+       or v_scope.agency_id is distinct from v_group.agency_id
+       or v_scope.client_id is distinct from v_client_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_CHANGED' using errcode='55000';
+    end if;
+  end if;
+  if private.weekly_source_scope_fingerprint_v1(
+       v_group.environment,v_group.agency_id,v_group.id,v_cycle.id,
+       v_upload.report_scope_id,v_client_id
+     ) is distinct from v_expected_scope then
+    raise exception 'WEEKLY_SOURCE_SCOPE_CHANGED' using errcode='55000';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    p_actor_user_id,'SEAL_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+
+  select
+    count(*)::integer,
+    count(*) filter(where classification='HEADER')::integer,
+    count(*) filter(where classification='TRAILER')::integer,
+    count(*) filter(where classification='PROFILE_PROVED_NON_ECONOMIC_CONTINUATION')::integer,
+    count(*) filter(where classification='ACCEPTED_SHIFT')::integer,
+    count(*) filter(where classification='BLOCKING_ECONOMIC_DUPLICATE')::integer,
+    count(*) filter(where classification='BLOCKING_MALFORMED')::integer
+  into v_actual_physical,v_actual_header,v_actual_trailer,v_actual_continuation,
+       v_actual_accepted,v_actual_duplicate,v_actual_malformed
+  from public.weekly_source_physical_rows where upload_id=v_upload.id;
+  select count(*)::integer,
+         count(*) filter(where row_finalisation_state in (
+           'BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE'
+         ))::integer
+    into v_normalised_count,v_actual_blocked
+  from public.weekly_source_upload_rows where upload_id=v_upload.id;
+  v_actual_blocked:=v_actual_blocked+v_actual_duplicate+v_actual_malformed;
+
+  if v_actual_physical<>v_upload.physical_row_count
+     or v_actual_header<>v_upload.header_count
+     or v_actual_trailer<>v_upload.trailer_count
+     or v_actual_continuation<>v_upload.continuation_count
+     or v_actual_accepted<>v_upload.accepted_count
+     or v_actual_duplicate<>v_upload.blocking_economic_duplicate_count
+     or v_actual_malformed<>v_upload.malformed_count
+     or v_actual_blocked<>v_upload.blocked_count
+     or v_actual_physical<>v_actual_header+v_actual_trailer+v_actual_continuation+
+       v_actual_accepted+v_actual_duplicate+v_actual_malformed
+     or v_normalised_count<>v_actual_accepted then
+    raise exception 'WEEKLY_SOURCE_ROW_COUNTS_MISMATCH' using errcode='55000';
+  end if;
+  if exists(
+    select 1 from public.weekly_source_upload_rows normalised
+    left join public.weekly_source_physical_rows physical
+      on physical.upload_id=normalised.upload_id
+     and physical.source_row_ordinal=normalised.source_row_ordinal
+    where normalised.upload_id=v_upload.id
+      and (physical.id is null or physical.classification<>'ACCEPTED_SHIFT')
+  ) or exists(
+    select 1 from public.weekly_source_physical_rows physical
+    left join public.weekly_source_upload_rows normalised
+      on normalised.upload_id=physical.upload_id
+     and normalised.source_row_ordinal=physical.source_row_ordinal
+    where physical.upload_id=v_upload.id
+      and physical.classification='ACCEPTED_SHIFT'
+      and normalised.id is null
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACCEPTED_ROW_EVIDENCE_MISMATCH' using errcode='55000';
+  end if;
+  if v_actual_duplicate<>0 or v_actual_malformed<>0 or v_actual_blocked<>0 then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_HAS_BLOCKERS' using errcode='55000';
+  end if;
+
+  -- The sealed row state is profile authority, not a caller-selected label.
+  -- A source-zero row is retained as evidence only by the one released
+  -- no-finalisation-column profile which proves that zero means source absence.
+  if exists(
+    select 1
+    from public.weekly_source_upload_rows source_row
+    where source_row.upload_id=v_upload.id
+      and (
+        (v_profile.profile_code='ACACIUM_SELF_BILL_REPORT_V1' and source_row.row_finalisation_state<>'SOURCE_REPORT_LINE')
+        or (v_profile.profile_code in ('NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1')
+          and source_row.row_finalisation_state<>'SOURCE_WORKED')
+        or (v_profile.profile_code in (
+              'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+              'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1'
+            ) and source_row.row_finalisation_state not in ('SOURCE_WORKED','SOURCE_UNFINALISED'))
+        or (v_profile.profile_code='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
+            and source_row.row_finalisation_state not in ('SOURCE_WORKED','SOURCE_ABSENT_ZERO'))
+        or (source_row.row_finalisation_state='SOURCE_WORKED' and (
+              source_row.start_at_local is null
+              or source_row.end_at_local is null
+              or source_row.break_minutes is null
+              or source_row.actual_net_minutes is null
+              or source_row.actual_net_minutes<=0
+              or pg_catalog.mod(
+                   extract(epoch from (source_row.end_at_local-source_row.start_at_local))::numeric,
+                   60::numeric
+                 )<>0
+              or source_row.actual_net_minutes<>
+                 (extract(epoch from (source_row.end_at_local-source_row.start_at_local))/60)::integer
+                 - source_row.break_minutes
+            ))
+        or (source_row.row_finalisation_state='SOURCE_ABSENT_ZERO'
+            and source_row.actual_net_minutes is distinct from 0)
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_ROW_FINALISATION_STATE_INVALID' using errcode='55000';
+  end if;
+
+  -- WP-54.  Two source-row admission rules the pack states and that nothing
+  -- enforced.  They are placed HERE, after the state validation immediately
+  -- above, because that validation is what guarantees every SOURCE_WORKED row
+  -- has a complete, internally consistent Actual tuple; a guard that reads
+  -- start and end before that check could silently skip a row whose times were
+  -- absent.  Both raise, and public.weekly_source_upload_seal_atomic_v1 turns
+  -- the raise into a typed REJECTED attempt with the code as its reason, so a
+  -- refused report is refused as a whole -- pack 14 section 4.1.7, "Finalisation
+  -- is all or nothing.  A blocker cannot be removed, unticked or ignored".
+  --
+  -- NHSP-BR-006 (pack 14 section 4.1.3): the confirmed cutoff occurrence may
+  -- not predate any row's real Actual finish, overnight finishes included.  The
+  -- cutoff handed over is v_cycle.cutoff_at_utc, which for a report scope this
+  -- function has already proved equal to v_scope.cutoff_at_utc under the scope
+  -- row lock above.
+  if v_profile.profile_code<>'ACACIUM_SELF_BILL_REPORT_V1' then
+  perform private.weekly_source_cutoff_admission_assert_v1(
+    v_upload.id,v_profile.profile_code,v_cycle.cutoff_at_utc
+  );
+  -- Pack 03 section 7 with pack 14 section 4.2.8: one person cannot work two
+  -- intersecting intervals, and two overlapping records are not made valid by
+  -- differing references.
+  perform private.weekly_source_overlap_admission_assert_v1(v_upload.id);
+  end if;
+
+  if v_actual_accepted=0
+     and v_upload.coverage_proof_kind<>'EXPLICIT_EMPTY_CONFIRMATION'
+     and coalesce((v_upload.file_metadata_json->>'explicit_empty_attestation')::boolean,false)=false then
+    raise exception 'WEEKLY_SOURCE_EMPTY_ATTESTATION_REQUIRED' using errcode='55000';
+  end if;
+
+  if v_profile.profile_code='ACACIUM_SELF_BILL_REPORT_V1' then
+    perform private.weekly_source_self_bill_report_seal_assert_v1(v_upload.id);
+  elsif v_profile.profile_code='NHSP_FINAL_BACKING_V1' then
+    if v_upload.coverage_proof_kind<>'NHSP_TRUST_REPORT_SCOPE'
+       or v_upload.confirmed_coverage_start_local_date is not null
+       or v_upload.confirmed_coverage_end_local_date is not null
+       or private.weekly_source_canonical_report_number_v1(
+         v_upload.file_metadata_json->>'nhsp_report_number'
+       ) is null
+       or v_upload.money_lexical_authority_version<>
+          'XLSX_BINARY64_SAME_VALUE_PENCE_V1' then
+      raise exception 'WEEKLY_SOURCE_NHSP_FINAL_EVIDENCE_INVALID' using errcode='55000';
+    end if;
+    select count(*)::integer into v_money_count
+    from public.weekly_source_money_cell_evidence where upload_id=v_upload.id;
+    if v_money_count not in (v_actual_accepted*3,v_actual_accepted*3+1)
+       or (v_money_count=v_actual_accepted*3+1 and not exists(
+         select 1 from public.weekly_source_money_cell_evidence money
+         join public.weekly_source_physical_rows physical
+           on physical.upload_id=money.upload_id
+          and physical.source_row_ordinal=money.source_row_ordinal
+         where money.upload_id=v_upload.id and money.money_field_kind='BOTTOM_TOTAL_COST'
+           and physical.classification='TRAILER'
+       ))
+       or exists(
+         select 1
+         from public.weekly_source_upload_rows source_row
+         where source_row.upload_id=v_upload.id
+           and (
+             source_row.source_money_parse_state<>'VALID'
+             or source_row.source_commission_pence is null
+             or source_row.source_total_cost_pence is null
+             or source_row.source_shift_charge_pence is null
+             or source_row.source_shift_charge_pence<>
+                source_row.source_commission_pence+source_row.source_total_cost_pence
+             or sign(source_row.source_commission_pence) not in (0,sign(source_row.source_shift_charge_pence))
+             or sign(source_row.source_total_cost_pence) not in (0,sign(source_row.source_shift_charge_pence))
+             or (select count(*) from public.weekly_source_money_cell_evidence money
+                 where money.upload_id=source_row.upload_id
+                   and money.source_row_ordinal=source_row.source_row_ordinal
+                    and money.money_field_kind in ('COMMISSION','TOTAL_COST','FMC')
+                    and money.parse_state='VALID'
+                    and not money.formula_present
+                    and (
+                      (v_upload.parser_summary_json->>'source_kind'='HTML'
+                       and money.source_kind='HTML_DECODED_TEXT')
+                      or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                          and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+                    )
+                    and nullif(money.cell_coordinate,'') is not null)<>3
+             or (select money.parsed_pence from public.weekly_source_money_cell_evidence money
+                 where money.upload_id=source_row.upload_id
+                   and money.source_row_ordinal=source_row.source_row_ordinal
+                   and money.money_field_kind='COMMISSION')
+                is distinct from source_row.source_commission_pence
+             or (select money.parsed_pence from public.weekly_source_money_cell_evidence money
+                 where money.upload_id=source_row.upload_id
+                   and money.source_row_ordinal=source_row.source_row_ordinal
+                   and money.money_field_kind='TOTAL_COST')
+                is distinct from source_row.source_total_cost_pence
+             or (select money.parsed_pence from public.weekly_source_money_cell_evidence money
+                 where money.upload_id=source_row.upload_id
+                   and money.source_row_ordinal=source_row.source_row_ordinal
+                   and money.money_field_kind='FMC') is distinct from 0
+           )
+       )
+       or exists(
+          select 1 from public.weekly_source_money_cell_evidence money
+          where money.upload_id=v_upload.id
+            and (
+              money.source_file_sha256 is distinct from v_upload.content_sha256
+              or not (
+                (v_upload.parser_summary_json->>'source_kind'='HTML'
+                 and money.source_kind='HTML_DECODED_TEXT')
+                or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                    and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+              )
+              or nullif(money.cell_coordinate,'') is null
+              or (money.formula_present is distinct from (money.parse_state='FORMULA'))
+              or (money.money_field_kind='BOTTOM_TOTAL_COST'
+                  and (money.parse_state<>'VALID' or money.formula_present))
+            )
+        ) then
+      raise exception 'WEEKLY_SOURCE_NHSP_MONEY_EVIDENCE_INVALID' using errcode='55000';
+    end if;
+  elsif v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1' then
+    -- Pre-final NHSP money is checking evidence only.  It must be retained
+    -- exactly, but an unparseable component remains a non-blocking pricing
+    -- issue for the comparison owner rather than rejecting the hours upload.
+    if v_upload.money_lexical_authority_version<>
+         'XLSX_BINARY64_SAME_VALUE_PENCE_V1' then
+      raise exception 'WEEKLY_SOURCE_NHSP_PREFINAL_EVIDENCE_INVALID' using errcode='55000';
+    end if;
+    select count(*)::integer into v_money_count
+    from public.weekly_source_money_cell_evidence where upload_id=v_upload.id;
+    if v_money_count<>v_actual_accepted*2
+       or exists(
+         select 1
+         from public.weekly_source_upload_rows source_row
+         where source_row.upload_id=v_upload.id
+           and (
+             (select count(*) from public.weekly_source_money_cell_evidence money
+              where money.upload_id=source_row.upload_id
+                and money.source_row_ordinal=source_row.source_row_ordinal
+                and money.money_field_kind in ('COMMISSION','TOTAL_COST'))<>2
+             or (
+               source_row.source_money_parse_state='VALID'
+               and (
+                 source_row.source_commission_pence is null
+                 or source_row.source_total_cost_pence is null
+                 or source_row.source_shift_charge_pence is null
+                 or source_row.source_shift_charge_pence<>
+                    source_row.source_commission_pence+source_row.source_total_cost_pence
+                 or sign(source_row.source_commission_pence) not in
+                    (0,sign(source_row.source_shift_charge_pence))
+                 or sign(source_row.source_total_cost_pence) not in
+                    (0,sign(source_row.source_shift_charge_pence))
+                 or (select count(*) from public.weekly_source_money_cell_evidence money
+                     where money.upload_id=source_row.upload_id
+                       and money.source_row_ordinal=source_row.source_row_ordinal
+                       and money.money_field_kind in ('COMMISSION','TOTAL_COST')
+                       and money.parse_state='VALID'
+                       and not money.formula_present)<>2
+                 or (select money.parsed_pence
+                     from public.weekly_source_money_cell_evidence money
+                     where money.upload_id=source_row.upload_id
+                       and money.source_row_ordinal=source_row.source_row_ordinal
+                       and money.money_field_kind='COMMISSION')
+                    is distinct from source_row.source_commission_pence
+                 or (select money.parsed_pence
+                     from public.weekly_source_money_cell_evidence money
+                     where money.upload_id=source_row.upload_id
+                       and money.source_row_ordinal=source_row.source_row_ordinal
+                       and money.money_field_kind='TOTAL_COST')
+                    is distinct from source_row.source_total_cost_pence
+               )
+             )
+             or (
+               source_row.source_money_parse_state<>'VALID'
+               and (
+                 source_row.source_money_parse_state not in (
+                   'MISSING','INVALID','EXCESS_PRECISION','FORMULA',
+                   'UNSUPPORTED_CELL_TYPE','OVERFLOW'
+                 )
+                 or source_row.source_commission_pence is not null
+                 or source_row.source_total_cost_pence is not null
+                 or source_row.source_shift_charge_pence is not null
+                 or not exists(
+                   select 1 from public.weekly_source_money_cell_evidence money
+                   where money.upload_id=source_row.upload_id
+                     and money.source_row_ordinal=source_row.source_row_ordinal
+                     and money.parse_state<>'VALID'
+                 )
+               )
+             )
+           )
+       )
+       or exists(
+         select 1 from public.weekly_source_money_cell_evidence money
+         where money.upload_id=v_upload.id
+           and (
+             money.money_field_kind not in ('COMMISSION','TOTAL_COST')
+             or money.source_file_sha256 is distinct from v_upload.content_sha256
+             or not (
+               (v_upload.parser_summary_json->>'source_kind'='HTML'
+                and money.source_kind='HTML_DECODED_TEXT')
+               or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                   and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+             )
+             or nullif(money.cell_coordinate,'') is null
+             or (money.formula_present is distinct from (money.parse_state='FORMULA'))
+           )
+       ) then
+      raise exception 'WEEKLY_SOURCE_NHSP_PREFINAL_MONEY_EVIDENCE_INVALID'
+        using errcode='55000';
+    end if;
+  elsif (private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle.id)#>>'{values,invoice_sender}')='CLIENT_SELF_BILL'
+    and (private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle.id)#>>'{values,invoice_amount_basis}')='SOURCE_AMOUNT'
+    and (private.weekly_source_effective_rule_set_v1(v_client_id,v_cycle.id)#>>'{values,source_amount_basis}')='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY' then
+    if v_profile.profile_code not in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1')
+      or exists(select 1 from public.weekly_source_upload_rows s where s.upload_id=v_upload.id and (
+        s.source_commission_pence is not null or s.source_total_cost_pence is not null
+        or (s.row_finalisation_state='SOURCE_WORKED' and (s.source_money_parse_state<>'VALID'
+          or s.source_qualification_profile_version is distinct from 'SOURCE_INVOICE_MONEY_PENCE_V1'
+          or s.source_shift_charge_pence is null or s.source_gross_pence is null or s.source_vat_pence is null
+          or s.source_shift_charge_pence<0 or s.source_gross_pence<0 or s.source_shift_charge_pence+s.source_vat_pence<>s.source_gross_pence
+          or s.finalised_at_utc is null or nullif(btrim(s.finalised_by),'') is null
+          or (select count(*) from public.weekly_source_money_cell_evidence e where e.upload_id=s.upload_id and e.source_row_ordinal=s.source_row_ordinal
+            and e.money_field_kind in ('SOURCE_NET','SOURCE_GROSS') and e.parse_state='VALID' and not e.formula_present and e.source_file_sha256=v_upload.content_sha256
+            and e.parsed_pence=case e.money_field_kind when 'SOURCE_NET' then s.source_shift_charge_pence else s.source_gross_pence end)<>2))
+        or (s.row_finalisation_state<>'SOURCE_WORKED' and (s.source_money_parse_state<>'NOT_APPLICABLE' or s.source_shift_charge_pence is not null
+          or s.source_gross_pence is not null or s.source_vat_pence is not null or s.finalised_at_utc is not null))))
+      or exists(select 1 from public.weekly_source_money_cell_evidence e where e.upload_id=v_upload.id
+        and e.money_field_kind not in ('SOURCE_NET','SOURCE_GROSS')) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MONEY_EVIDENCE_INVALID' using errcode='55000'; end if;
+  else
+    if exists(select 1 from public.weekly_source_money_cell_evidence where upload_id=v_upload.id)
+       or exists(select 1 from public.weekly_source_upload_rows source_row where source_row.upload_id=v_upload.id
+         and (source_row.source_money_parse_state<>'NOT_APPLICABLE' or source_row.source_commission_pence is not null
+           or source_row.source_total_cost_pence is not null or source_row.source_shift_charge_pence is not null
+           or source_row.source_gross_pence is not null or source_row.source_vat_pence is not null)) then
+      raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_NOT_ALLOWED' using errcode='55000'; end if;
+  end if;
+
+  select count(*)::integer into v_expense_count
+  from public.weekly_source_expense_cell_evidence where upload_id=v_upload.id;
+  if v_profile.profile_code='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' then
+    if v_expense_count<>v_actual_accepted
+       or exists(
+         select 1 from public.weekly_source_upload_rows source_row
+         left join public.weekly_source_expense_cell_evidence expense
+           on expense.upload_id=source_row.upload_id
+          and expense.source_row_ordinal=source_row.source_row_ordinal
+         where source_row.upload_id=v_upload.id
+           and (
+             expense.id is null
+             or expense.source_file_sha256 is distinct from v_upload.content_sha256
+             or source_row.source_expense_parse_state not in ('VALID','OMITTED_ZERO')
+             or expense.parse_state is distinct from source_row.source_expense_parse_state
+             or expense.parsed_pence is distinct from source_row.source_expense_pence
+           )
+       ) then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_INVALID' using errcode='55000';
+    end if;
+  elsif v_expense_count<>0 or exists(
+    select 1 from public.weekly_source_upload_rows source_row
+    where source_row.upload_id=v_upload.id
+      and (source_row.source_expense_parse_state<>'NOT_APPLICABLE'
+           or source_row.source_expense_pence is not null)
+  ) then
+    raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_NOT_ALLOWED' using errcode='55000';
+  end if;
+
+  if v_profile.profile_code not in ('NHSP_FINAL_BACKING_V1','ACACIUM_SELF_BILL_REPORT_V1') then
+    if v_upload.coverage_state<>'COMPLETE'
+       or v_upload.confirmed_coverage_start_local_date is null
+       or v_upload.confirmed_coverage_end_local_date is null
+       or v_upload.confirmed_coverage_start_local_date>v_upload.confirmed_coverage_end_local_date
+       or v_upload.coverage_timezone<>'Europe/London'
+       or nullif(v_upload.coverage_confirmation_version,'') is null
+       or v_upload.coverage_confirmed_by_user_id is null
+       or v_upload.coverage_confirmed_at_utc is null then
+      raise exception 'WEEKLY_SOURCE_COMPLETE_COVERAGE_INVALID' using errcode='55000';
+    end if;
+    if v_actual_accepted>0 then
+      select pg_catalog.min(source_row.work_date),pg_catalog.max(source_row.work_date)
+        into v_actual_coverage_start,v_actual_coverage_end
+      from public.weekly_source_upload_rows source_row
+      where source_row.upload_id=v_upload.id;
+      -- 14 section 5.4.3, first sentence: the SUGGESTION is the file's own
+      -- earliest and latest valid work Date, so it is evidence and is still
+      -- checked exactly against the rows that were actually staged.  A caller
+      -- may not widen the suggestion to manufacture coverage.
+      if v_upload.suggested_coverage_start_local_date is distinct from v_actual_coverage_start
+         or v_upload.suggested_coverage_end_local_date is distinct from v_actual_coverage_end then
+        raise exception 'WEEKLY_SOURCE_COVERAGE_EVIDENCE_MISMATCH' using errcode='55000';
+      end if;
+      -- 14 section 5.4.3, second sentence: "Office must confirm that the export
+      -- is complete for that date range."  The CONFIRMATION is Office's own
+      -- attestation and is deliberately independent of the rows present, so
+      -- that 5.4.5 bullet 4 -- "absent inside confirmed coverage: create one
+      -- full cancellation reversal" -- can reach a shift the source has
+      -- stopped sending.  Coverage derived from what arrived can never notice
+      -- what stopped arriving.  It must still CONTAIN the evidence, because the
+      -- finaliser admits no resolution outside confirmed coverage.
+      if v_upload.confirmed_coverage_start_local_date>v_actual_coverage_start
+         or v_upload.confirmed_coverage_end_local_date<v_actual_coverage_end then
+        raise exception 'WEEKLY_SOURCE_COVERAGE_CONFIRMATION_NARROWER_THAN_EVIDENCE'
+          using errcode='55000';
+      end if;
+    elsif v_upload.suggested_coverage_start_local_date is not null
+       or v_upload.suggested_coverage_end_local_date is not null then
+      raise exception 'WEEKLY_SOURCE_EMPTY_COVERAGE_SUGGESTION_INVALID' using errcode='55000';
+    end if;
+  end if;
+
+  v_manifest_hash:=private.weekly_source_upload_manifest_hash_v1(v_upload.id);
+  if v_upload.purpose='FINAL_SOURCE_CORRECTION' then
+    select * into v_correction
+    from public.weekly_final_source_correction_sessions
+    where id=v_upload.correction_session_id for update;
+    if not found or v_correction.source_cycle_id is distinct from v_cycle.id
+       or v_correction.report_scope_id is distinct from v_upload.report_scope_id
+       or v_correction.replacement_correction_upload_id is distinct from v_upload.id
+       or v_correction.state<>'STAGING' then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='55000';
+    end if;
+    update public.weekly_source_uploads
+    set row_manifest_hash=v_manifest_hash,state='CORRECTION_READY'
+    where id=v_upload.id;
+    update public.weekly_final_source_correction_sessions
+    set state='READY',version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_correction.id;
+    v_attempt_id:=private.weekly_source_upload_attempt_append_v1(
+      v_upload.id,p_actor_user_id,'ACCEPTED','CORRECTION_UPLOAD_READY'
+    );
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status','CORRECTION_READY','logical_upload_id',v_upload.id,
+      'row_manifest_hash',pg_catalog.encode(v_manifest_hash,'hex'),
+      'attempt_id',v_attempt_id,'current_pointer_moved',false
+    );
+  end if;
+
+  if v_upload.report_scope_id is null then
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_upload.source_cycle_id for update;
+    if v_cycle.state not in ('OPEN','FINALISABLE') then
+      raise exception 'WEEKLY_SOURCE_CYCLE_NOT_OPEN' using errcode='55000';
+    end if;
+    v_version_before:=v_cycle.version;
+    if v_cycle.current_complete_upload_id is not null then
+      select * into strict v_prior_upload
+      from public.weekly_source_uploads
+      where id=v_cycle.current_complete_upload_id for update;
+      if v_prior_upload.source_cycle_id is distinct from v_cycle.id
+         or v_prior_upload.report_scope_id is not null
+         or v_prior_upload.state<>'CURRENT' then
+        raise exception 'WEEKLY_SOURCE_CURRENT_POINTER_CORRUPT' using errcode='55000';
+      end if;
+      -- The longitudinal coverage/omission acknowledgement does not apply to
+      -- NHSP previously released shifts. This is provisional checking evidence;
+      -- omitted rows never cancel NHSP work or create a financial movement.
+      if v_profile.profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+         and (v_upload.confirmed_coverage_start_local_date>
+            v_prior_upload.confirmed_coverage_start_local_date
+          or v_upload.confirmed_coverage_end_local_date<
+            v_prior_upload.confirmed_coverage_end_local_date)
+         and coalesce(v_upload.coverage_shrink_acknowledged,false)=false then
+        raise exception 'WEEKLY_SOURCE_COVERAGE_SHRINK_ACKNOWLEDGEMENT_REQUIRED'
+          using errcode='55000';
+      end if;
+      update public.weekly_source_uploads set state='SUPERSEDED'
+      where id=v_prior_upload.id;
+    end if;
+    update public.weekly_source_projection_publications
+    set state='STALE',failure_code='SUPERSEDED_BY_COMPLETE_UPLOAD'
+    where source_cycle_id=v_cycle.id and authority_scope_kind='CYCLE'
+      and report_scope_id is null and state in ('BUILDING','CURRENT');
+    v_version_after:=v_version_before+1;
+    update public.weekly_source_uploads
+    set row_manifest_hash=v_manifest_hash,state='CURRENT' where id=v_upload.id;
+    update public.weekly_source_cycles
+    set current_complete_upload_id=v_upload.id,version=v_version_after,
+        current_projection_publication_id=null,projection_state='REBUILDING'
+    where id=v_cycle.id;
+    insert into public.weekly_source_upload_supersessions(
+      source_cycle_id,authority_scope_kind,report_scope_id,superseding_upload_id,
+      superseded_upload_id,cycle_version_before,cycle_version_after
+    ) values (
+      v_cycle.id,'CYCLE',null,v_upload.id,v_prior_upload.id,
+      v_version_before,v_version_after
+    );
+  else
+    select * into strict v_scope
+    from public.weekly_source_report_scopes where id=v_upload.report_scope_id for update;
+    if v_scope.state not in ('OPEN','FINALISABLE') then
+      raise exception 'WEEKLY_SOURCE_REPORT_SCOPE_NOT_OPEN' using errcode='55000';
+    end if;
+    v_version_before:=v_scope.version;
+    if v_scope.current_complete_upload_id is not null then
+      select * into strict v_prior_upload
+      from public.weekly_source_uploads
+      where id=v_scope.current_complete_upload_id for update;
+      if v_prior_upload.source_cycle_id is distinct from v_cycle.id
+         or v_prior_upload.report_scope_id is distinct from v_scope.id
+         or v_prior_upload.state<>'CURRENT' then
+        raise exception 'WEEKLY_SOURCE_CURRENT_POINTER_CORRUPT' using errcode='55000';
+      end if;
+      update public.weekly_source_uploads set state='SUPERSEDED'
+      where id=v_prior_upload.id;
+    end if;
+    update public.weekly_source_projection_publications
+    set state='STALE',failure_code='SUPERSEDED_BY_COMPLETE_UPLOAD'
+    where source_cycle_id=v_cycle.id and authority_scope_kind=case when v_scope.self_bill_report_id is null then 'NHSP_REPORT_SCOPE' else 'SELF_BILL_REPORT_SCOPE' end
+      and report_scope_id=v_scope.id and state in ('BUILDING','CURRENT');
+    v_version_after:=v_version_before+1;
+    update public.weekly_source_uploads
+    set row_manifest_hash=v_manifest_hash,state='CURRENT' where id=v_upload.id;
+    update public.weekly_source_report_scopes
+    set current_complete_upload_id=v_upload.id,version=v_version_after,
+        current_projection_publication_id=null,projection_state='REBUILDING',
+        updated_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_scope.id;
+    insert into public.weekly_source_upload_supersessions(
+      source_cycle_id,authority_scope_kind,report_scope_id,superseding_upload_id,
+      superseded_upload_id,cycle_version_before,cycle_version_after
+    ) values (
+      v_cycle.id,case when v_scope.self_bill_report_id is null then 'NHSP_REPORT_SCOPE' else 'SELF_BILL_REPORT_SCOPE' end,v_scope.id,v_upload.id,v_prior_upload.id,
+      v_version_before,v_version_after
+    );
+  end if;
+
+  v_attempt_id:=private.weekly_source_upload_attempt_append_v1(
+    v_upload.id,p_actor_user_id,'ACCEPTED','NEW_COMPLETE_UPLOAD'
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','CURRENT','logical_upload_id',v_upload.id,
+    'superseded_upload_id',v_prior_upload.id,
+    'authority_scope_kind',case when v_upload.report_scope_id is null
+      then 'CYCLE' when v_scope.self_bill_report_id is null then 'NHSP_REPORT_SCOPE' else 'SELF_BILL_REPORT_SCOPE' end,
+    'authority_scope_version',v_version_after,
+    'row_manifest_hash',pg_catalog.encode(v_manifest_hash,'hex'),
+    'attempt_id',v_attempt_id,'current_pointer_moved',true,
+    'projection_state','REBUILDING'
+  );
+end;
+$function$;

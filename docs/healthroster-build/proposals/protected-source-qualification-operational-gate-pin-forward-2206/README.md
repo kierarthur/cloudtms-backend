@@ -1,0 +1,9 @@
+# Root verifier pin forward
+
+This separate source receipt rebases integration of the frozen strict qualification proposal from root `b65df0997ac69188eadf4de2a88f70226fa99532` to `cdaf300c62a0d94b0fd0f5a57b41a42d1c7f2b83`. The 45-file predecessor, backed up at `adec5f8b8a3955ac725c0da15ee344ac891b7674`, remains byte-identical. Its manifest is `66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700`.
+
+The full committed eight-file root diff is preserved. Its sole execution-file change replaces the retained-owner verifier subquery alias `p` with `retained_proc`; reversing that exact hunk reproduces the entire former verifier. The other changes preserve root's progress, preparation and original failed-trial evidence. Fifteen of sixteen pinned release/ACL/2205 Local/receipt/helper inputs are byte-identical; only the 2206 verifier pin moves. No function body, signature, ACL, release registration or proposed closure changes. The complete literal proposed union stays 258 private signatures, preserving root232 plus all26 distinct predecessor/new dependencies, with 105 tables and 142 service signatures.
+
+This is a source pin forward, not execution equivalence between b65 and cdaf: verifiers belong to the strict selected execution inventory. The actual b65 trial failure stays bound to b65. It proves neither the repaired refusal statements nor native financial/activation/HTTP/UI/phone acceptance. A new qualification must carry its real execution identity and pass the protected committed-tree comparison; no receipt is relabelled.
+
+`generate-pin-forward.mjs` reads exact Git objects and hashes the immutable predecessor, records the complete diff, and proves the one alias reversal and preserved input set. It never calls a database, release, external service or Banking owner. Root remains responsible for native compilation, the full literal catalogue/security union and all actual business, document and app gates.

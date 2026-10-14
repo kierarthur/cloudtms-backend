@@ -1,0 +1,62 @@
+create or replace function private.weekly_source_report_prepared_output_insert_guard_v1()
+returns trigger language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_context record; v_owner oid; v_fin public.timesheets_financials%rowtype; v_output jsonb; v_count integer;
+begin
+  if tg_op<>'INSERT' or tg_table_schema<>'public' or tg_table_name<>'weekly_source_ordinary_pay_projection_receipts' then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_GUARD_TARGET_INVALID' using errcode='55000'; end if;
+  -- Caller output is forbidden even when it happens to match a capture.
+  if new.prepared_writer_output_json is not null or new.prepared_writer_output_hash is not null then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CALLER_FIELDS_FORBIDDEN' using errcode='55000'; end if;
+  if new.outcome is distinct from 'PREPARED_FOR_AUTHORISATION'
+    or private.weekly_source_report_prepared_output_supported_v1(new.final_revision_id) is distinct from true then return new; end if;
+  perform private.weekly_source_report_prepared_context_assert_v1();
+  select oid into strict v_owner from pg_catalog.pg_roles where rolname=current_user;
+  select count(*) into v_count from pg_temp.weekly_source_report_prepared_output_context_v1;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CONTEXT_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict v_context from pg_temp.weekly_source_report_prepared_output_context_v1 where request_hash=new.request_hash;
+  if v_context.backend_pid is distinct from pg_catalog.pg_backend_pid()
+    or v_context.transaction_id is distinct from pg_catalog.txid_current() or v_context.owner_oid is distinct from v_owner
+    or new.source_mode is distinct from 'HEALTHROSTER_WEEKLY'
+    or new.source_profile_kind not in ('HEALTHROSTER_ACTUAL_ROWS','GENERIC_COMPLETE_SNAPSHOT')
+    or private.weekly_source_report_projection_receipt_assert_v1(new) is distinct from true
+    or v_context.scope_json->>'final_revision_id' is distinct from new.final_revision_id::text
+    or v_context.scope_json->>'source_cycle_id' is distinct from new.source_cycle_id::text
+    or not exists(select 1 from public.weekly_source_final_revisions r where r.id=new.final_revision_id
+      and r.rule_set_version_id::text=v_context.scope_json->>'rule_set_version_id')
+    or v_context.scope_json->>'client_id' is distinct from new.client_id::text
+    or v_context.scope_json->>'root_timesheet_id' is distinct from new.root_timesheet_id::text
+    or v_context.scope_json->>'published_timesheet_financial_id' is distinct from new.published_timesheet_financial_id::text
+    or v_context.scope_json->>'actor_user_id' is distinct from new.actor_user_id::text
+    or v_context.scope_json->>'request_hash' is distinct from pg_catalog.encode(new.request_hash,'hex')
+    or v_context.scope_json->>'service_snapshot_hash' is distinct from pg_catalog.encode(new.service_snapshot_hash,'hex')
+    or v_context.scope_json->>'server_calculation_fingerprint' is distinct from pg_catalog.encode(new.server_calculation_fingerprint,'hex') then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CONTEXT_MISMATCH' using errcode='55000'; end if;
+  -- Native writer already holds this exact row's lock. No new family,
+  -- Timesheet, group or cycle lock is acquired by the sidecar.
+  select * into strict v_fin from public.timesheets_financials where id=new.published_timesheet_financial_id;
+  if private.weekly_source_report_prepared_financial_codec_v1(v_fin) is distinct from v_context.financial_output_json
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_PREPARED_NATIVE_ROW_V1',pg_catalog.to_jsonb(v_fin))
+      is distinct from v_context.financial_row_hash then
+    raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CHANGED_BEFORE_RECEIPT' using errcode='40001'; end if;
+  v_output:=pg_catalog.jsonb_build_object('schema_version','WEEKLY_SOURCE_REPORT_PREPARED_WRITER_OUTPUT_V1',
+    'native_writer_signature','public.tsfin_write_current_snapshot_single_bounded(uuid,integer,jsonb,uuid,timestamp with time zone)',
+    'scope',v_context.scope_json,'writer_result',v_context.writer_result_json,'financial_output',v_context.financial_output_json,
+    'financial_row_sha256',pg_catalog.encode(v_context.financial_row_hash,'hex'));
+  new.prepared_writer_output_json:=v_output;
+  new.prepared_writer_output_hash:=private.weekly_source_report_prepared_output_hash_v1(new.receipt_hash,v_output);
+  delete from pg_temp.weekly_source_report_prepared_output_context_v1 where request_hash=new.request_hash
+    and backend_pid=pg_catalog.pg_backend_pid() and transaction_id=pg_catalog.txid_current() and owner_oid=v_owner;
+  get diagnostics v_count=row_count;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CAPTURE_REUSED' using errcode='55000'; end if;
+  drop table pg_temp.weekly_source_report_prepared_output_context_v1;
+  return new;
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_PREPARED_OUTPUT_CONTEXT_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+drop trigger if exists weekly_source_report_prepared_output_insert_guard_v1 on public.weekly_source_ordinary_pay_projection_receipts;
+create trigger weekly_source_report_prepared_output_insert_guard_v1
+  before insert on public.weekly_source_ordinary_pay_projection_receipts
+  for each row execute function private.weekly_source_report_prepared_output_insert_guard_v1();

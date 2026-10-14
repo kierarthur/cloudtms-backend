@@ -1,0 +1,44 @@
+create or replace function private.weekly_source_ordinary_projection_root_hash_v1(
+  p_timesheet_id uuid
+) returns bytea
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_payload jsonb;
+begin
+  select pg_catalog.jsonb_build_object(
+    'timesheet',pg_catalog.to_jsonb(timesheet_row),
+    'contract_week',case when contract_week.id is null then null
+      else pg_catalog.to_jsonb(contract_week) end,
+    'current_financial',case when current_financial.id is null then null
+      else pg_catalog.to_jsonb(current_financial) end
+  ) into v_payload
+  from public.timesheets timesheet_row
+  left join lateral (
+    select contract_week_inner.*
+    from public.contract_weeks contract_week_inner
+    where contract_week_inner.timesheet_id=timesheet_row.timesheet_id
+    order by contract_week_inner.additional_seq,contract_week_inner.updated_at desc,
+             contract_week_inner.id desc
+    limit 1
+  ) contract_week on true
+  left join lateral (
+    select financial.*
+    from public.timesheets_financials financial
+    where financial.timesheet_id=timesheet_row.timesheet_id
+      and financial.is_current=true
+    order by financial.computed_at_utc desc nulls last,
+             financial.updated_at desc nulls last,financial.id desc
+    limit 1
+  ) current_financial on true
+  where timesheet_row.timesheet_id=p_timesheet_id;
+
+  if v_payload is null then
+    raise exception 'WEEKLY_SOURCE_ROOT_TIMESHEET_NOT_FOUND' using errcode='P0002';
+  end if;
+  return private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_ORDINARY_ROOT_STATE_V1',v_payload
+  );
+end;
+$function$;

@@ -1,0 +1,50 @@
+{
+  "status": "COMPLETE_NATIVE_APPROVAL_SUCCESSOR_NOT_INSTALLED",
+  "input": {
+    "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+    "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+  },
+  "output": {
+    "file": "13102026_1127_approval.complete-proposed.sqlinc",
+    "sha256": "e38e0df8046c04919f074117faad17d8dcfc06fcbc268f5947809ed692449cf0"
+  },
+  "hunks": [
+    {
+      "anchor": "perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,",
+      "replacement": "perform private.timesheet_correction_canonical_input_assert_v1(v_original,v_request.reversed_timesheet_id,"
+    },
+    {
+      "anchor": "    select to_jsonb(tf) into strict v_original from public.timesheets_financials tf\n      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;\n  end if;",
+      "replacement": "    select to_jsonb(tf) into strict v_original from public.timesheets_financials tf\n      where tf.timesheet_id=v_request.reversed_timesheet_id and tf.is_current;\n    perform private.timesheet_correction_snapshot_identity_assert_v1(v_original,v_request.reversed_timesheet_id,\n      v_request.reversed_version,v_request.candidate_id,v_request.client_id);\n  end if;"
+    },
+    {
+      "anchor": "perform private.timesheet_correction_snapshot_identity_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,",
+      "replacement": "perform private.timesheet_correction_canonical_input_assert_v1(p_prepared->'replacement_snapshot',v_p,v_version,"
+    },
+    {
+      "anchor": "  v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);",
+      "replacement": "  select to_jsonb(tf) into strict v_after_fin from public.timesheets_financials tf where tf.timesheet_id=v_p and tf.is_current;\n  perform private.timesheet_correction_snapshot_identity_assert_v1(v_after_fin,v_p,v_version,\n    v_request.candidate_id,v_request.client_id);\n  v_leg:=private.timesheet_correction_leg_create_v1(v_request,'WHOLE_TIMESHEET_REVERSAL','[]'::jsonb,v_now);"
+    },
+    {
+      "anchor": "  v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');",
+      "replacement": "  if v_fin.id is null and v_original.sheet_scope::text='WEEKLY' then\n    -- Exact server-owned scope participates in the native PREPARE/CAS hash.\n    -- Missing A0 never silently changes Source/Rule/ordinary pricing origin.\n    v_context:=v_context||jsonb_build_object('original_a0_clock_scope',\n      private.timesheet_correction_a0_clock_scope_v1(v_request.id));\n  end if;\n  v_hash:=encode(extensions.digest(v_context::text,'sha256'),'hex');"
+    }
+  ],
+  "newPrivateOwners": [
+    "private.timesheet_correction_canonical_input_assert_v1(jsonb,uuid,integer,uuid,uuid)",
+    "private.timesheet_correction_a0_clock_scope_v1(uuid)"
+  ],
+  "integration": "Define both new private owners after existing strict assertion and before PREPARE/atomic owner, replace complete1127 approval include, union exact owner-only signatures in root registries; no public signature/route change.",
+  "retained": [
+    "same atomic unit",
+    "actual original stored reread/sign-copy",
+    "existing Original FIN hash fence",
+    "R0 targeted real queue/batch writer",
+    "postwrite reversal assertion",
+    "3/2 member native bulk authorisation",
+    "request/CAS/replay",
+    "P0 notification only",
+    "D1 existing round trip",
+    "SIGNED/AGENCY origin and real manager witnesses"
+  ]
+}

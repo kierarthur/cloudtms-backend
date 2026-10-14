@@ -1,0 +1,234 @@
+{
+  "schema_version": "PROTECTED_SOURCE_CAPABILITY_SOURCE_PROPOSAL_V1",
+  "inputs": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/SCHEMA.sqlinc",
+      "bytes": 1858,
+      "sha256": "22a4292f35bf78caf1b8367a8166b0eaefa1ced1cb59509e2b551f93de54a150"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/SOURCE_CAS.sqlinc",
+      "bytes": 17357,
+      "sha256": "a85220784725b2a386dfd9de6c9a57cabdc0659ca273e73c6ebcf03e257a7554"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "bytes": 14636,
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/ORIGINAL_CLIENTS.sqlinc",
+      "bytes": 3452,
+      "sha256": "d419bdedb56d365f0e6800704d5d714e8288c567e198cee1976a1de712b0ee4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/NONSELFBILL_ADMISSION.sqlinc",
+      "bytes": 2045,
+      "sha256": "54ea107efe38c511deb38407574ad6fec2177d56b1494e851d83fa0730d94010"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101268,
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "bytes": 13027,
+      "sha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "bytes": 18312,
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+      "bytes": 15012,
+      "sha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "bytes": 28880,
+      "sha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+      "bytes": 13515,
+      "sha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+      "bytes": 25065,
+      "sha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+      "bytes": 55231,
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/scripts/cloudtms-managed-release.mjs",
+      "bytes": 28936,
+      "sha256": "1eb863f9be8021e93c1f6de149660fbb843b1ce3c00409d83bb83feee0d5bd60"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "bytes": 18312,
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "bytes": 23651,
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "bytes": 83915,
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+      "bytes": 11373,
+      "sha256": "63c8329ea9455fa1eb984e964349296dfcc6c2e7bf24eca4dd1516e97e64c7ba"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "bytes": 13073,
+      "sha256": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+      "bytes": 2957,
+      "sha256": "fe00fbecb9a79d3f13c089f9c755912cd74cccb3164e7f7adda6345b9d2a02bf"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/01_schema.sqlinc",
+      "bytes": 1936,
+      "sha256": "8ee0b906e4c6c15cdf8020920a0c4bdc6f11b14aceb23f6b0d7eaa5e8d973a49"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/02_source_cas.sqlinc",
+      "bytes": 17435,
+      "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/03_capability_owners.sqlinc",
+      "bytes": 14714,
+      "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/04_original_clients.sqlinc",
+      "bytes": 3530,
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/05_complete_existing_activation.sqlinc",
+      "bytes": 20106,
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/06_complete_selection.sqlinc",
+      "bytes": 8378,
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/07_complete_stage_proof.sqlinc",
+      "bytes": 4480,
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/08_complete_bulk_command.sqlinc",
+      "bytes": 14792,
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/09_exact_acl_delta.sqlinc",
+      "bytes": 4693,
+      "sha256": "b62ad3de7fc48126d0d415c255b68395d0596cf073b6e8f0d0151f749e9bb4f7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/10_complete_managed_release.mjs",
+      "bytes": 30229,
+      "sha256": "766b11e184c69d48f28af096cf95bba52932a2ac5d34d22dfc5ba99c11ae27fa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/11_non_self_bill_admission.sqlinc",
+      "bytes": 2123,
+      "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_17_prepare_family.sqlinc",
+      "bytes": 28806,
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_18_prepare_action.sqlinc",
+      "bytes": 13428,
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_19_action_context.sqlinc",
+      "bytes": 24978,
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_20_stage_request.sqlinc",
+      "bytes": 55130,
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    }
+  ],
+  "private_signatures": [
+    "weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+    "weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+    "weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+    "weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+    "weekly_source_protected_capability_receipt_v1(uuid)",
+    "weekly_source_bulk_producer_ready_v1(uuid)",
+    "weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+    "weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+    "weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+    "weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+    "weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+    "weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)"
+  ],
+  "public_signatures": [
+    "weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+    "weekly_source_protect_all_signed_atomic_v1(jsonb)",
+    "weekly_exceptional_pay_prepare_family_v1(jsonb)",
+    "weekly_exceptional_pay_prepare_action_v1(jsonb)",
+    "weekly_exceptional_pay_action_context_v1(jsonb)",
+    "weekly_exceptional_pay_stage_c1_request_v1(jsonb)"
+  ],
+  "new_tables": 0,
+  "new_columns": 0,
+  "source_runtime_acceptance": false,
+  "sql_install_order": [
+    "01_schema.sqlinc",
+    "02_source_cas.sqlinc",
+    "03_capability_owners.sqlinc",
+    "04_original_clients.sqlinc",
+    "11_non_self_bill_admission.sqlinc",
+    "05_complete_existing_activation.sqlinc",
+    "06_complete_selection.sqlinc",
+    "07_complete_stage_proof.sqlinc",
+    "08_complete_bulk_command.sqlinc",
+    "12_complete_17_prepare_family.sqlinc",
+    "12_complete_18_prepare_action.sqlinc",
+    "12_complete_19_action_context.sqlinc",
+    "12_complete_20_stage_request.sqlinc",
+    "09_exact_acl_delta.sqlinc"
+  ],
+  "registry_integration": "Root union only; retain every current private/helper/service row and grants; no replacement base census."
+}

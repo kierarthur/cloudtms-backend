@@ -1,0 +1,65 @@
+--- a/broker/src/timesheet-correction-orchestrator.mjs
++++ b/broker/src/timesheet-correction-orchestrator.mjs
+@@ -18,6 +18,7 @@
+ 
+ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const HASH = /^[0-9a-f]{64}$/;
++const CORRECTION_ID = /^awc:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+ const STATES = new Set(['WAITING', 'APPLIED', 'CANCELLED']);
+ const ORIGINS = new Set(['SIGNED_TIMESHEET_CORRECTION', 'AGENCY_INVOICE_CORRECTION']);
+ const MAX_ITEMS = 100;
+@@ -90,6 +91,13 @@ function integer(value, code = 'CORRECTION_PAYLOAD_INVALID') {
+ }
+ function hash(value) { if (typeof value !== 'string' || !HASH.test(value)) fail('CORRECTION_RECEIPT_INVALID'); }
+ function positive(value) { return typeof value === 'number' && Number.isSafeInteger(value) && value > 0; }
++function correctionIdentity(value, requestId, rootId = null) {
++  const match = typeof value === 'string' ? CORRECTION_ID.exec(value) : null;
++  if (!match || !sameUuid(match[2], requestId) || (rootId !== null && !sameUuid(match[1], rootId))) {
++    fail('CORRECTION_RECEIPT_IDENTITY_MISMATCH');
++  }
++  return value;
++}
+ function cloneJson(value) {
+   let nodes = 0;
+   const visit = (v, depth) => {
+@@ -277,8 +285,9 @@ function terminalRevision(receipt, payload, replayAllowed) {
+ function appliedReceipt(value, payload, prepare = null) {
+   const r = rpcSuccess(value);
+   if (r.state !== 'APPLIED') fail('CORRECTION_REQUEST_NOT_APPLIED');
+-  for (const k of ['request_id', 'correction_id', 'reversed_timesheet_id', 'reversal_timesheet_id', 'replacement_timesheet_id',
++  for (const k of ['request_id', 'reversed_timesheet_id', 'reversal_timesheet_id', 'replacement_timesheet_id',
+     'original_financial_id', 'reversal_financial_id', 'replacement_financial_id']) uuid(r[k], 'CORRECTION_RECEIPT_INVALID');
++  correctionIdentity(r.correction_id, r.request_id, prepare?.authority?.root_timesheet_id ?? null);
+   if (new Set([r.reversed_timesheet_id, r.reversal_timesheet_id, r.replacement_timesheet_id].map(x => x.toLowerCase())).size !== 3 ||
+       new Set([r.original_financial_id, r.reversal_financial_id, r.replacement_financial_id].map(x => x.toLowerCase())).size !== 3 ||
+       typeof r.original_authorisation_required !== 'boolean') fail('CORRECTION_RECEIPT_INVALID');
+@@ -317,7 +326,7 @@ function waitingPrepare(value, payload) {
+   if (!sameUuid(a.request_id, payload.request_id) || a.state_revision !== payload.expected_state_revision) fail('CORRECTION_REQUEST_CAS_STALE');
+   for (const k of ['root_timesheet_id', 'original_timesheet_id', 'replacement_timesheet_id', 'planned_reversal_timesheet_id']) uuid(a[k], 'CORRECTION_PREPARE_AUTHORITY_INVALID');
+   uuid(value.candidate_id, 'CORRECTION_PREPARE_AUTHORITY_INVALID'); uuid(value.client_id, 'CORRECTION_PREPARE_AUTHORITY_INVALID');
+-  if (!positive(a.original_timesheet_version) || !positive(a.replacement_version) || !positive(a.target_revision) || a.proposal_revision !== 1 ||
++  if (!positive(a.original_timesheet_version) || !positive(a.replacement_version) || typeof a.target_revision !== 'string' || !HASH.test(a.target_revision) || a.proposal_revision !== 1 ||
+       !ORIGINS.has(a.origin) || typeof value.original_materialisation_required !== 'boolean' ||
+       typeof value.original_authorisation_required !== 'boolean' ||
+       new Set([a.original_timesheet_id, a.replacement_timesheet_id, a.planned_reversal_timesheet_id].map(x => x.toLowerCase())).size !== 3) {
+@@ -326,6 +335,7 @@ function waitingPrepare(value, payload) {
+   const frozen = object(value.frozen_original, 'CORRECTION_PREPARE_AUTHORITY_INVALID');
+   const t0 = object(frozen.timesheet, 'CORRECTION_PREPARE_AUTHORITY_INVALID');
+   const p0 = object(value.replacement_timesheet, 'CORRECTION_PREPARE_AUTHORITY_INVALID');
++  correctionIdentity(p0.correction_id, payload.request_id, a.root_timesheet_id);
+   if (!sameUuid(t0.timesheet_id, a.original_timesheet_id) || t0.version !== a.original_timesheet_version ||
+       !sameUuid(p0.timesheet_id, a.replacement_timesheet_id) || p0.version !== a.replacement_version ||
+       !sameUuid(p0.parent_timesheet_id, a.root_timesheet_id) || p0.correction_kind !== 'WHOLE_TIMESHEET_REPLACEMENT' ||
+@@ -498,8 +508,10 @@ export function createTimesheetCorrectionOrchestrator(deps) {
+     uuid(r.request_id, 'CORRECTION_RECEIPT_INVALID'); uuid(r.replacement_timesheet_id, 'CORRECTION_RECEIPT_INVALID');
+     if (!STATES.has(r.state) || !positive(r.state_revision) ||
+         (r.replacement_booking_id != null && (typeof r.replacement_booking_id !== 'string' || !r.replacement_booking_id.trim())) ||
+-        (r.replayed !== true && (r.state !== 'WAITING' || r.state_revision !== 1 || r.proposal_revision !== 1 || !positive(r.target_revision) ||
+-          typeof r.replacement_booking_id !== 'string' || !r.replacement_booking_id.trim()))) {
++        (r.replayed !== true && (r.state !== 'WAITING' || r.state_revision !== 1 || r.proposal_revision !== 1 || typeof r.target_revision !== 'string' || !HASH.test(r.target_revision) ||
++          typeof r.replacement_booking_id !== 'string' || !r.replacement_booking_id.trim())) ||
++        (OWN(r, 'target_revision') && (typeof r.target_revision !== 'string' || !HASH.test(r.target_revision))) ||
++        (OWN(r, 'proposal_revision') && r.proposal_revision !== 1)) {
+       fail('CORRECTION_SEND_RECEIPT_INVALID');
+     }
+     return r;

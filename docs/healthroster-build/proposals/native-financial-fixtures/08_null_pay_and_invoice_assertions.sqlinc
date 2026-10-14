@@ -1,0 +1,12 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+do $nfx_exact$ declare s pg_temp.nfx_state%rowtype;begin
+ select * into strict s from pg_temp.nfx_state;
+ if (select count(*) from public.weekly_source_ordinary_pay_projection_receipts where final_revision_id=s.revision_id)<>1 then raise exception 'NFX_NATIVE_PAY_RECEIPT_NOT_EXACT';end if;
+ if exists(select 1 from public.weekly_source_billing_movements where final_revision_id=s.revision_id and source_line_kind='INVOICE_VAT_ROUNDING') then raise exception 'NFX_NULL_PATH_NEW_ROUND_LINE';end if;
+ if exists(select 1 from public.weekly_source_upload_rows where upload_id=s.upload_id and (source_gross_pence is not null or source_vat_pence is not null or finalised_at_utc is not null)) then raise exception 'NFX_NULL_PATH_SOURCE_FIELDS_CHANGED';end if;
+ if exists(select 1 from public.weekly_source_final_snapshot_lines where final_revision_id=s.revision_id and invoice_economics_sha256 is not null) then raise exception 'NFX_NULL_PATH_INVOICE_HASH_CHANGED';end if;
+ if private.weekly_source_effective_rule_set_v1(s.client_id,s.cycle_id) is not null then raise exception 'NFX_NULL_PATH_RULES_CHANGED';end if;
+ if not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1) then raise exception 'NFX_MODULE_CHANGED';end if;
+end;$nfx_exact$;
+set constraints all immediate;

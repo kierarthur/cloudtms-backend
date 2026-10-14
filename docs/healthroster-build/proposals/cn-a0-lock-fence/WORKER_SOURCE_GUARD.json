@@ -1,0 +1,35 @@
+{
+  "status": "UNMOUNTED_FACTORY_PROPOSAL",
+  "input": {
+    "file": "broker/src/index.js",
+    "sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86"
+  },
+  "hunks": [
+    {
+      "anchor": "START_OF_MODULE",
+      "replacement": "import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';\nimport { buildExactRequestA0WeeklyClockSnapshot } from './exact-request-a0-weekly-clock-arm.mjs';\nimport { createTimesheetCorrectionOrchestrator } from './timesheet-correction-orchestrator.mjs';\n"
+    },
+    {
+      "anchor": "async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {",
+      "replacement": "// Complete caller-side producer binding. Root mounts it only with the existing\n// qualified Office actor/RPC/cleanup/lifecycle adapters and compatible release.\n// The function contains actual existing read transports/calculator references.\nfunction createTimesheetCorrectionNativeFinancialCallbacks(env) {\n  return createNativeCorrectionSnapshotProducers({\n    env,\n    readContext: timesheetIds => rpcTsfinLoadContextBatch(env, { timesheetIds }),\n    readWeeklyContext: timesheetIds => sbRpc(env, 'tsfin_load_weekly_context_batch', { p_timesheet_ids: timesheetIds }),\n    readShifts: timesheetIds => sbRpc(env, 'tsfin_load_nhsp_shifts_batch', { p_timesheet_ids: timesheetIds }),\n    readWeeklyValidation: async timesheetId => {\n      const { rows } = await sbFetch(env,\n        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +\n        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +\n        '&select=timesheet_id,status,reason_code,validated_at_utc,updated_at' +\n        '&order=updated_at.desc&limit=2');\n      return rows;\n    },\n    resolveRates: items => rpcTsfinResolveRatesBatch(env, { items }),\n    buildWeekly: input => buildExactRequestA0WeeklyClockSnapshot(input, {\n      buildWeeklyScheduleSegmentsSnapshot,\n      buildNhspWeeklySnapshotCached,\n      rebuildFromExistingSegmentsEvidence,\n      enrichTsfinWithHrCrosscheck\n    }),\n    deriveDaily: deriveCanonicalDailyFinancialContext,\n    buildDaily: buildCanonicalDailyFinancialSnapshot,\n    toLocalParts, subtractBreak, classifyMinutes, resolveEffectivePayChannel, anyMissingRates\n  });\n}\n\nfunction createTimesheetCorrectionNativeOrchestrator(env, dependencies) {\n  return createTimesheetCorrectionOrchestrator({\n    ...dependencies,\n    ...createTimesheetCorrectionNativeFinancialCallbacks(env)\n  });\n}\n\n// Root's guarded route mounting supplies its existing qualified Office actor,\n// RPC, request-read, cleanup and ordinary lifecycle dependencies to this factory.\n// They remain exactly the original adapter dependencies; no new route/auth is\n// mounted by this source proposal.\n\nasync function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, forceUnprocessedTimesheetIds = null } = {}) {"
+    }
+  ],
+  "retainedNativeOwnerReferences": [
+    "rpcTsfinLoadContextBatch",
+    "sbRpc",
+    "sbFetch",
+    "rpcTsfinResolveRatesBatch",
+    "buildWeeklyScheduleSegmentsSnapshot",
+    "buildNhspWeeklySnapshotCached",
+    "rebuildFromExistingSegmentsEvidence",
+    "enrichTsfinWithHrCrosscheck",
+    "deriveCanonicalDailyFinancialContext",
+    "buildCanonicalDailyFinancialSnapshot",
+    "toLocalParts",
+    "subtractBreak",
+    "classifyMinutes",
+    "resolveEffectivePayChannel",
+    "anyMissingRates"
+  ],
+  "boundary": "No route mount. Root must review and supply existing qualified actor/RPC/cleanup/ordinary adapters; public/private Candidate transport and manager authorities are unchanged."
+}

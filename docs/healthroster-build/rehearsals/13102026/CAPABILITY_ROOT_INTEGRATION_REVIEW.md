@@ -1,0 +1,19 @@
+# Protected Source integration review
+
+Source review at backend `b9e2cbfcdf061a4e8fe07044e658c2daf043a362`; frozen proposal and native-fixture forward inputs retained unchanged. This is an integration direction, not database or producer qualification.
+
+The frozen package adds ten owner-only signatures and changes six existing service owners through complete native successors. It retains every existing actor, signature, I-1, financial, replay, policy and legacy/NHSP branch. Its strict operational readiness requires exact dated enabled assignment evidence and the latest actual VERIFIED release; source presence cannot supply that evidence.
+
+The two assignment CHECK replacements in `protected-source-capability/SCHEMA.sqlinc` belong in one additive immutable migration. They deliberately reject an already-extended constraint set. They must not be included in a repeatable closure, which would fail on a subsequent UPGRADE. The migration must precede all capability definitions; its locked bytes and exact generated contract remain required.
+
+Use the complete `native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc` successor after independently verifying its recorded input hash. The frozen predecessor refers to absent native Timesheet Candidate/family-booking and TSFIN Contract columns. The forward owner resolves actual Candidate through the root Contract and historical financial Contract through complete immutable source movement identities/hashes, with missing, malformed, foreign and ambiguous witnesses refused. Do not install the invalid predecessor and call definition compilation a positive query proof.
+
+The Source CAS must retain the original sorted ADMIT Client census after a Client completes. Its full39-category/36-relation native facts require genuine before/after stage proof. In particular, review every actual own-stage write against the hashed root Client and cycle/group fields; a legal nullable identity materialisation cannot be assumed absent or excluded broadly. Protection's independent request/vector/approval/financial/WAIT evidence remains separately required.
+
+The frozen activation and release collector have a circular qualification boundary. The existing single self-bill Source path can establish some disabled-first prerequisites, but gated bulk/non-self-bill/automatic/API paths cannot certify their own readiness. R1 execution receipts also cannot be relabelled as future R2 execution. The adjacent bounded qualification proposal must retain actual R1 release/source/contract identities, exact native source equivalence and scope, actual native callers and rollback expiry, while operational/browser readiness stays false. The protected release caller must supply a concrete reviewed evidence channel; the frozen optional internal argument alone has no actual workflow caller.
+
+Root's source-integrated Report FIN overload has the same operational binding requirement: its internal A/B argument has no default, and public FIN dispatch remains unchanged. Separate actual A and B financial/admission/render/pay-isolation proof must precede deterministic existing-release evidence selection. No browser, payload, environment, GUC, function-presence or guessed constant supplies that selection.
+
+Both central ACL inventories and the independent verifier must be unioned from the current105-table/221-private/142-service census. No original signature, table classification, guard or grant is replaced by an older packet. Follow each changed recursive closure with its own complete final ACL. Generate the native contract/security fingerprints before installation.
+
+Remaining work: review the complete adjacent qualification/evidence successor and lock graph, compose all current Source/automatic owners, run source checks, then obtain real short-turn/native and post-Banking full-rehearsal evidence. No capability schema/runtime source has yet been installed or exposed.

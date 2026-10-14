@@ -1,0 +1,155 @@
+-- Complete current recheck owner; native signed comparison plus unsigned expected-week materialiser.
+create or replace function private.weekly_source_candidate_prefinal_publish_recheck_v1(
+  p_actor_user_id uuid,
+  p_projection_publication_id uuid
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_profile_code text;
+  v_profile_id uuid;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_signed record;
+  v_result jsonb;
+  v_checked integer:=0;
+  v_new integer:=0;
+  v_changed integer:=0;
+  v_resolved integer:=0;
+  v_restart_keys text[]:='{}'::text[];
+  v_restart_key text;
+  v_not_compared integer:=0; v_refusal text; v_unsigned jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict v_publication
+  from public.weekly_source_projection_publications
+  where id=p_projection_publication_id and state='CURRENT';
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_publication.source_cycle_id;
+  select profile.profile_code,profile.id into strict v_profile_code,v_profile_id
+  from public.weekly_source_uploads upload
+  join public.weekly_source_format_profiles profile
+    on profile.id=upload.source_format_profile_id
+  where upload.id=v_publication.upload_id;
+  if (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' and not exists(select 1 from public.weekly_source_groups g
+       where g.id=v_cycle.source_group_id and g.source_family='ROSTER'))
+     or v_publication.authority_scope_kind<>'CYCLE'
+     or v_cycle.current_projection_publication_id is distinct from v_publication.id then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_RECHECK_SCOPE_INVALID' using errcode='55000';
+  end if;
+  select * into strict v_upload from public.weekly_source_uploads
+  where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  if v_upload.confirmed_coverage_start_local_date is null
+     or v_upload.confirmed_coverage_end_local_date is null then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    p_actor_user_id,'RECHECK_SOURCE',v_cycle.source_group_id,null,
+    v_cycle.finalisation_week_ending
+  );
+
+  -- Recheck signed weeks only for days in this upload's confirmed export
+  -- period. A week may straddle that period; compare_sync applies the same
+  -- day boundary to candidate rows and incident resolution.
+  for v_signed in
+    select distinct sheet.timesheet_id,contract.candidate_id,contract.client_id,
+      contract.id as contract_id
+    from public.timesheets sheet
+    join public.contracts contract
+      on contract.id=sheet.contract_id
+    where sheet.is_current and sheet.revoked_at is null
+      and sheet.archived_at_utc is null and sheet.sheet_scope='WEEKLY'
+      and sheet.line_type='HOURS' and sheet.authorised_at_server is null
+      and sheet.r2_nurse_key is not null and sheet.img_sha256_nurse is not null
+      and (private.weekly_source_checking_client_scope_v1(v_publication.id) is null
+        or contract.client_id=private.weekly_source_checking_client_scope_v1(v_publication.id))
+      and (v_profile_code='NHSP_PREFINAL_RELEASED_V1' or private.weekly_source_is_import_authoritative_v1(
+        contract.client_id,contract.id,sheet.week_ending_date))
+      and sheet.week_ending_date>=v_upload.confirmed_coverage_start_local_date
+      and sheet.week_ending_date-6<=v_upload.confirmed_coverage_end_local_date
+      and (exists (
+        select 1
+        from public.weekly_source_uploads historical_upload
+        join public.weekly_source_upload_rows source_row
+          on source_row.upload_id=historical_upload.id
+        join public.weekly_source_row_resolutions resolution
+          on resolution.upload_row_id=source_row.id
+         and resolution.mapping_state='RESOLVED'
+        where historical_upload.source_cycle_id=v_cycle.id
+          and historical_upload.source_format_profile_id=v_profile_id
+          and source_row.work_date between sheet.week_ending_date-6
+            and sheet.week_ending_date
+          and source_row.work_date between
+            v_upload.confirmed_coverage_start_local_date
+            and v_upload.confirmed_coverage_end_local_date
+          and resolution.candidate_id=contract.candidate_id
+          and resolution.client_id=contract.client_id
+          and resolution.contract_id=contract.id
+      ) or exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(
+          private.weekly_source_candidate_app_schedule_v1(
+            sheet.actual_schedule_json,sheet.additional_units_per_day
+          )
+        ) candidate_shift
+        where (candidate_shift.value->>'date')::date between
+          v_upload.confirmed_coverage_start_local_date
+          and v_upload.confirmed_coverage_end_local_date
+          and private._weekly_source_effective_policy_v1(
+            contract.client_id,contract.id,(candidate_shift.value->>'date')::date
+          )->>'source_group_id'=v_cycle.source_group_id::text
+      ))
+    order by sheet.timesheet_id
+  loop
+    -- Each sheet is one native subtransaction. A refusal rolls back only its
+    -- comparison effects; the native append-only audit records NOT_COMPARED.
+    begin
+      v_result:=private.weekly_source_candidate_submission_compare_sync_v1(
+        null,v_publication.id,null,v_signed.timesheet_id,
+        private.weekly_source_query_candidate_timesheet_hash_v1(v_signed.timesheet_id));
+      perform private.weekly_source_publication_comparison_record_v1(v_publication.id,v_signed.timesheet_id,'COMPARED',null);
+    exception when others then
+      v_refusal:=coalesce(substring(sqlerrm from '^[A-Z][A-Z0-9_]{0,119}$'),'WEEKLY_SOURCE_COMPARISON_REFUSED');
+      perform private.weekly_source_publication_comparison_record_v1(v_publication.id,v_signed.timesheet_id,'NOT_COMPARED',v_refusal);
+      v_not_compared:=v_not_compared+1;
+      continue;
+    end;
+    v_checked:=v_checked+1;
+    v_new:=v_new+(v_result->>'new_incidents')::integer;
+    v_changed:=v_changed+(v_result->>'changed_comparisons')::integer;
+    v_resolved:=v_resolved+(v_result->>'resolved_incidents')::integer;
+    if (v_result->>'new_incidents')::integer+(v_result->>'changed_comparisons')::integer>0 then
+      v_restart_keys:=pg_catalog.array_append(
+        v_restart_keys,v_signed.candidate_id::text||':'||v_signed.client_id::text
+      );
+    end if;
+  end loop;
+  for v_restart_key in
+    select distinct key_value collate "C"
+    from pg_catalog.unnest(v_restart_keys) key_value
+    order by key_value
+  loop
+    perform private.weekly_source_query_restart_activated_cohort_v1(
+      v_cycle.id,pg_catalog.split_part(v_restart_key,':',1)::uuid,
+      pg_catalog.split_part(v_restart_key,':',2)::uuid,v_publication.id
+    );
+  end loop;
+  if v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' then
+    v_unsigned:=private.weekly_source_expected_week_unsigned_materialise_v1(v_publication.id);
+    v_new:=v_new+(v_unsigned->>'new_incidents')::integer;
+    v_changed:=v_changed+(v_unsigned->>'changed_comparisons')::integer;
+    v_resolved:=v_resolved+(v_unsigned->>'resolved_incidents')::integer;
+    perform private.weekly_source_not_finalised_dispatch_v1(v_publication.id);
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'not_compared',v_not_compared,'signed_weeks_checked',v_checked,'new_incidents',v_new,
+    'changed_comparisons',v_changed,'resolved_incidents',v_resolved
+  );
+end;
+$function$;
+alter function private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_candidate_prefinal_publish_recheck_v1(uuid,uuid) from public,anon,authenticated,service_role;

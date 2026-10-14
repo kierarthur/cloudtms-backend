@@ -1,0 +1,65 @@
+{
+  "schema_version": "AUTOMATIC_FORWARD_INPUTS_V1",
+  "inputs": [
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "08_automatic_reconcile_delta.sqlinc",
+      "bytes": 18638,
+      "sha256": "a8861b3726843507024ecbbc5fecf01bcf53e6ecdb210282edebc46222d092a0"
+    },
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "reference-comparison.mjs",
+      "bytes": 3900,
+      "sha256": "db6b1d73c15a65fbe250b33b76af1e4bd5f57c3f2b138e8cf3adbcf28e414b24"
+    },
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "03_approved_detail_evidence.sqlinc",
+      "bytes": 5083,
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8"
+    },
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "06_expense_evidence.sqlinc",
+      "bytes": 8551,
+      "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+    },
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "07_staged_entitlement_components.sqlinc",
+      "bytes": 15071,
+      "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261"
+    },
+    {
+      "authority": "FROZEN_AUTOMATIC23",
+      "path": "10_complete_stage_request.sqlinc",
+      "bytes": 55231,
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "authority": "CURRENT_ROOT_NATIVE_CODEC",
+      "path": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "bytes": 173042,
+      "sha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade"
+    },
+    {
+      "authority": "FROZEN_MONEY_CAPABILITY",
+      "path": "docs/healthroster-build/proposals/protected-source-capability/SOURCE_CAS.sqlinc",
+      "bytes": 17357,
+      "sha256": "a85220784725b2a386dfd9de6c9a57cabdc0659ca273e73c6ebcf03e257a7554"
+    },
+    {
+      "authority": "CURRENT_MONEY_SCHEMA_FORWARD",
+      "path": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "bytes": 20104,
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+    },
+    {
+      "authority": "CURRENT_MONEY_CALLEE_CENSUS",
+      "path": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_OWN_STAGE_SOURCE_CENSUS.json",
+      "bytes": 14234,
+      "sha256": "bf557b02794a60dc60e75e86906d7f2c4892233c1ce1b62018c9f14d74b3d82f"
+    }
+  ]
+}

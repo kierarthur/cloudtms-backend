@@ -1,0 +1,121 @@
+{
+  "contract": "HEALTHROSTER_A0_CREATOR_SOURCE_CHECKS_V1",
+  "status": "PASS_SOURCE_ONLY_NATIVE_HELD",
+  "rootInputGitHead": "b65df0997ac69188eadf4de2a88f70226fa99532",
+  "rootInputs": {
+    "count": 1319,
+    "allExact": true
+  },
+  "tests": {
+    "suites": [
+      "tests/healthroster-cn-a0-callbacks.test.mjs",
+      "tests/healthroster-cn-a0-producers.test.mjs",
+      "tests/healthroster-cn-a0-clock-scope.test.mjs",
+      "tests/healthroster-cn-a0-lock-fence.test.mjs",
+      "tests/healthroster-cn-a0-phantom-writers.test.mjs"
+    ],
+    "tests": 92,
+    "pass": 92,
+    "fail": 0,
+    "new": 17
+  },
+  "syntax": {
+    "files": [
+      "build-creator-audit.mjs",
+      "build-creator-successors.mjs",
+      "census-first-creators.mjs",
+      "freeze-creator-packet.mjs"
+    ],
+    "count": 4,
+    "pass": true
+  },
+  "rootApplyCheck": {
+    "patch": "REQUEST_ROOT.diff",
+    "pass": true,
+    "mutatedRoot": false
+  },
+  "reverse": {
+    "successors": 2,
+    "byteExact": true
+  },
+  "frozenPriorFiles": {
+    "count": 170,
+    "allByteIdentical": true,
+    "manifests": [
+      {
+        "path": "docs/healthroster-build/PROTECTION_SOURCE_MANIFEST.json",
+        "sha256": "2d0947db59f875da1fd4aeed4b49c6566174b19cc244c41785670248c3fd1070"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/f4-ai/F4_AI_SOURCE_MANIFEST.json",
+        "sha256": "6de00fa2d72625b8b3d39b38b14dd4765ab76989ae297abfcf2c97b7ae5010a8"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/cn-a0-native-normalisation/A0_SOURCE_MANIFEST.json",
+        "sha256": "f04bd3656846b5ba1e395095b64689fef839ada1e4dcc0102aa7f030cb16709e"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/cn-a0-lock-fence/LOCK_SOURCE_MANIFEST.json",
+        "sha256": "0c1c69391c772ec5fda1b2945094fdd14128159e6514fa02772fcdc71383ec1d"
+      }
+    ]
+  },
+  "schema": {
+    "relations": 7,
+    "fields": 35,
+    "missing": 0,
+    "beforeTriggers": 16,
+    "compiled": false
+  },
+  "sourceCensus": {
+    "migrationRoots": 304,
+    "repeatableRoots": 835,
+    "controllingLiteralWriters": 73,
+    "firstCreators": 30,
+    "nativeOwners": 25
+  },
+  "noDatabaseCalls": true,
+  "noSqlCompile": true,
+  "noRuntimeOrApiCalls": true,
+  "noBuildDeploy": true,
+  "noHostedSideEffects": true,
+  "isolation": {
+    "savedSourceEnforcesRc": false,
+    "qualifiedRuntimeIsolation": null,
+    "newPurposeNonRcRefusals": [
+      "missing-A0 signed SEND",
+      "exact missing-A0 atomic fence",
+      "visible active missing-A0 creator"
+    ],
+    "hiddenRequestStatus": "HELD: an earlier RR snapshot can hide newly committed P0/WAITING. Parent row locking alone neither changes the row version nor refreshes transaction visibility.",
+    "ordinaryRr": "Preserved. No global transaction mode change, parent timestamp/revision bump, fake FK, new mutex/key or alternate authority."
+  },
+  "holds": [
+    {
+      "kind": "VALIDATION_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "New exact signed-precursor parent intent and visible-active native Candidate/I-1 admission; no Timesheet FK invented."
+    },
+    {
+      "kind": "INVOICE_FIRST_INSERT",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Retain native archived guard KEY SHARE including booking fallback. New visible-active guard only precedes it; absent exact family still native refusal."
+    },
+    {
+      "kind": "CANDIDATE_ALIAS_RANK",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "ALL Candidate mutations use exact key/JSON-alias matching. SEND checks normal canonical context against real Contract. No Candidate resolver fork."
+    },
+    {
+      "kind": "RAW_BOOKING_SIBLING",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Earliest BEFORE new scoped admission; null/foreign/trimmed collision under active request refused. SEND checks complete native family before allocation."
+    },
+    {
+      "kind": "NATIVE_FIN_LATE_HOOKS",
+      "status": "HELD_NATIVE_PROOF_REQUIRED",
+      "sourceDisposition": "Unchanged call-only closure. Existing creator-trigger locks do not certify the complete late Banking/document/expense graph."
+    }
+  ],
+  "nativeAcceptance": "NONE. Source checks do not qualify absent-row/RR/concurrency, native financial/document/NEXT/phone or installed ACL/trigger proof."
+}

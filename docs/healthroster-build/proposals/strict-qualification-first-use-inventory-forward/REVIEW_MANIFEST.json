@@ -1,0 +1,133 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_FIRST_USE_INVENTORY_CORRECTION_REVIEW_V1",
+  "status": "FROZEN_SOURCE_CORRECTION_NATIVE_OPEN_CLOSE_REVOKE_AND_OPERATIONAL_GATES_HELD",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/FORWARD_TEST_RESULTS.tap",
+      "bytes": 2005,
+      "sha256": "76a48a61fad6bd1d117c9da156261bfff99691e9285731eeba9bb9d213cef872"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18377,
+      "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/README.md",
+      "bytes": 3448,
+      "sha256": "1fb5180552bbfbfb0b752608f336ae7cf4f2920e70af2265d43d600d16278091"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/SOURCE_DELTAS_AND_AUDIT.json",
+      "bytes": 37416,
+      "sha256": "c0d77028a3bd3dab66cc9d49fc0434593115228e17e883d884bcced821095bbb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/STRICT_QUALIFICATION_SOURCE_CRITIC.md",
+      "bytes": 18693,
+      "sha256": "5fe44bacfbbafc6ac5c793fd1932bc5021b745d6ddada405b2b8f864c748d9d5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/TEST_JOURNEY_SCOPE.sqlinc",
+      "bytes": 18453,
+      "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/forward.test.mjs",
+      "bytes": 5357,
+      "sha256": "8a2b8b133bbdd7b93f7bbabf3ea0a62c2d27cf58243bb495e4ecca381714c3e2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/generate-corrections.mjs",
+      "bytes": 8038,
+      "sha256": "18cb64fdf3ddce02a7dbc9ebcd3e513d95bbff07c3373c37a984b121a0f9e2c1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/source-equivalence.mjs",
+      "bytes": 11197,
+      "sha256": "f624c98cf7542d9091131455fc8e7ff4ee73dfaf5f9ba5db358a0434ca5a212e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/verify-and-freeze.mjs",
+      "bytes": 4523,
+      "sha256": "c30f92ab943e6acf02642ecda289767385d3b51f7ec9b6734b41068f82a40e77"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/weekly-source-protected-execution-tree.mjs",
+      "bytes": 11192,
+      "sha256": "33361a5028275216e3bb6d660abbcdd2534be46a053e13034313af950a745878"
+    }
+  ],
+  "frozen_predecessors": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-rounding/REVIEW_MANIFEST.json",
+      "sha256": "12a605ad6e2b7d5fb2a46d0d8b898bd66d9784ca5ac91695aabd8608252f875d",
+      "verified_declared_inputs": 11
+    },
+    {
+      "file": "docs/healthroster-build/proposals/m1-whole-shift/REVIEW_MANIFEST.json",
+      "sha256": "c343deb47ec16d476612d34e16c48815b806cfe4438fdf852299f62cba22e92e",
+      "verified_declared_inputs": 10
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/REVIEW_MANIFEST.json",
+      "sha256": "b57c4601fd792b3489e5fab6178ad325819b829e4fde36d517ed3af9132045c7",
+      "verified_declared_inputs": 34
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/REVIEW_MANIFEST.json",
+      "sha256": "6c30256b4d12d0c76a95db3b0c013055cc362d5cc11fa21f3b34513afbeb96d3",
+      "verified_declared_inputs": 33
+    },
+    {
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/NATIVE_FIXTURE_REVIEW_MANIFEST.json",
+      "sha256": "8a4381e977af3ccfd1d6f5236e7b64486c3c47e9d44e8f31aacb4ab1a7a85a4e",
+      "verified_declared_inputs": 44
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/REVIEW_MANIFEST.json",
+      "sha256": "92761006ed24966678f98a28c3988143873c70acf69a9df9d4c720dd64b57aa7",
+      "verified_declared_inputs": 24
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/REVIEW_MANIFEST.json",
+      "sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700",
+      "verified_declared_inputs": 44
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206/REVIEW_MANIFEST.json",
+      "sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f",
+      "verified_declared_inputs": 5
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate-pin-forward-2206-trial2/REVIEW_MANIFEST.json",
+      "sha256": "4784752bda1a9c5df7edad45d99715fa114efd25b85c7810e9cdc7c01dd1e272",
+      "verified_declared_inputs": 5
+    }
+  ],
+  "critic_sha256": "5fe44bacfbbafc6ac5c793fd1932bc5021b745d6ddada405b2b8f864c748d9d5",
+  "source_tests_passed": 8,
+  "source_tests_failed": 0,
+  "javascript_syntax_passed": true,
+  "full_owner_reverse_proofs": 4,
+  "root_source_commit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "runtime_verifier_source_identity": "d67f94e19000a612ee4f1099c14429d8a8b4bee1",
+  "source_inventory": "ALL_TRACKED_GIT_OBJECTS",
+  "new_signatures": 0,
+  "new_tables": 0,
+  "new_grants": 0,
+  "root_private_preserved": 232,
+  "planned_complete_private_union": 258,
+  "tables_preserved": 105,
+  "service_signatures_preserved": 142,
+  "actual_sql_execution": false,
+  "actual_native_financial_acceptance": false,
+  "actual_remote_http_ui_phone": false,
+  "actual_activation": false,
+  "lane_database_calls": 0,
+  "next_separate_interfaces": [
+    "Literal native SECURITY active_admin_activation collector/owner proof; no renamed lease OPEN",
+    "Lawful OFF automatic independent-session assignment/effective-rule qualification after all-consumer census"
+  ],
+  "root_integration": "Replace only four exact Q45 predecessor artifacts during root composition. Preserve frozen45/pin12/prior156 and current root runtime. No new operational certificate/readiness evidence is supplied."
+}

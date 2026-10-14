@@ -73,12 +73,10 @@ test('Contract writes persist the canonical weekly source alongside the legacy r
 
 test('Contract date boundaries use actual protected work dates rather than whole week edges', () => {
   const replace = section('async function handleContractsReplace', 'async function handleContractsDelete');
-  assert.match(replace, /select=work_date,status/);
-  assert.match(replace, /nonProtectedStatuses/);
-  assert.match(replace, /minProtectedWorkDate/);
-  assert.match(replace, /maxProtectedWorkDate/);
-  assert.match(replace, /start_date cannot be after earliest protected work date/);
-  assert.match(replace, /end_date cannot be before latest protected work date/);
+  assert.match(replace, /await contractWorkedDateBoundary/);
+  assert.match(replace, /contractWorkedDateRefusal\(protectedWorkBoundary, newStart, newEnd\)/);
+  assert.match(replace, /const \{ min_ts_date, max_ts_date \} = protectedWorkBoundary/);
+  assert.doesNotMatch(replace, /select=work_date,status/);
   assert.doesNotMatch(replace, /start_date cannot be after start of earliest submitted week/);
   assert.doesNotMatch(replace, /end_date cannot be before latest submitted week ending/);
 });

@@ -1,0 +1,2943 @@
+-- Isolated complete source proposal. No installation/runtime acceptance.
+create or replace function private.weekly_source_correct_final_preconditions_v1(
+  p_prior_final_revision_id uuid,
+  p_actor_user_id uuid,
+  p_excluding_correction_session_id uuid,
+  p_lock_roots boolean
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_profile public.weekly_source_format_profiles%rowtype;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+  v_root record;
+  v_preflight jsonb;
+  v_roots jsonb;
+  v_family uuid[];
+  v_family_after_lock uuid[];
+  v_current_lock_upload public.weekly_source_uploads%rowtype;
+  v_current_lock_publication public.weekly_source_projection_publications%rowtype;
+  v_current_lock_generation integer;
+  v_current_lock_operation uuid;
+begin
+  if p_prior_final_revision_id is null or p_actor_user_id is null then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PRECONDITION_INPUT_INVALID'
+      using errcode='22023';
+  end if;
+
+  select * into v_revision
+  from public.weekly_source_final_revisions
+  where id=p_prior_final_revision_id;
+  if not found or v_revision.state<>'CURRENT' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_STALE'
+      using errcode='40001';
+  end if;
+  select * into strict v_cycle
+  from public.weekly_source_cycles where id=v_revision.source_cycle_id;
+  select * into strict v_group
+  from public.weekly_source_groups where id=v_cycle.source_group_id;
+  select * into strict v_upload
+  from public.weekly_source_uploads where id=v_revision.upload_id;
+  select * into strict v_profile
+  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+
+  select * into v_manifest
+  from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_revision.id;
+  if not found or exists(
+    select 1 from public.weekly_source_client_manifests other_manifest
+    where coalesce(other_manifest.invoice_window_cycle_id,other_manifest.source_cycle_id)=other_manifest.source_cycle_id and other_manifest.final_revision_id=v_revision.id
+      and other_manifest.id<>v_manifest.id
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CLIENT_SCOPE_INVALID'
+      using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from public.weekly_source_final_revisions later_revision
+    join public.weekly_source_cycles later_cycle
+      on later_cycle.id=later_revision.source_cycle_id
+    join public.weekly_source_client_manifests later_manifest
+      on later_manifest.final_revision_id=later_revision.id
+     and later_manifest.client_id=v_manifest.client_id
+    join public.weekly_source_uploads later_upload on later_upload.id=later_revision.upload_id
+    join public.weekly_source_format_profiles later_profile
+      on later_profile.id=later_upload.source_format_profile_id
+    where later_revision.state='CURRENT'
+      and later_cycle.source_group_id=v_group.id
+      and later_cycle.finalisation_week_ending>v_cycle.finalisation_week_ending
+      and later_profile.final_authority_kind=v_profile.final_authority_kind
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_LATER_FINAL_CYCLE_EXISTS'
+      using errcode='55000';
+  end if;
+
+  if exists(
+    select 1 from public.weekly_source_final_revisions descendant
+    where descendant.predecessor_revision_id=v_revision.id
+      and not exists(
+        select 1
+        from public.weekly_final_source_correction_sessions own_correction
+        where own_correction.id=p_excluding_correction_session_id
+          and own_correction.expected_current_final_revision_id=v_revision.id
+          and own_correction.prepared_final_revision_id=descendant.id
+          and descendant.state='PREPARED'
+      )
+  ) or exists(
+    select 1 from public.weekly_final_source_correction_sessions correction
+    where correction.expected_current_final_revision_id=v_revision.id
+      and correction.id is distinct from p_excluding_correction_session_id
+      and correction.state not in ('CANCELLED','FAILED')
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_DESCENDANT_EXISTS'
+      using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from public.weekly_exceptional_pay_target_events target_event
+    where target_event.triggering_final_revision_id=v_revision.id
+  ) or exists(
+    select 1
+    from public.weekly_exceptional_pending_reconciliation_targets pending_target
+    where pending_target.current_final_revision_id=v_revision.id
+      and pending_target.state='ACTIVE'
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_DESCENDANT_EXISTS'
+      using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement
+      on movement.id=binding.billing_movement_id
+    where movement.final_revision_id=v_revision.id
+  ) or exists(
+    select 1
+    from public.weekly_source_invoice_placements placement
+    join public.weekly_source_billing_movements movement
+      on movement.id=placement.billing_movement_id
+    where movement.final_revision_id=v_revision.id
+      and placement.placement_state='PLACED'
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_INVOICE_LINE_EXISTS'
+      using errcode='55000';
+  end if;
+
+  if exists(
+    select 1 from public.invoice_operations operation
+    where operation.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+      and operation.operation_type in ('GENERATE_INVOICES','BUILD_DOCUMENT','ISSUE_INVOICES')
+      and (
+        (operation.entity_type='CLIENT' and operation.entity_id=v_manifest.client_id)
+        or operation.input_json->>'client_id'=v_manifest.client_id::text
+        or operation.input_json->'client_ids' @> pg_catalog.jsonb_build_array(v_manifest.client_id::text)
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_ACTIVE_INVOICE_OPERATION'
+      using errcode='55000';
+  end if;
+
+  -- Establish the complete sorted booking inventory BEFORE this owner's
+  -- first old-family row lock. PREPARE/APPLY also include actual replacement
+  -- upload roots and maintained prior-only CURRENT HR/expense coverage roots;
+  -- OPEN has no replacement and locks only genuine exact prior membership.
+  if coalesce(p_lock_roots,true) and (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    if p_excluding_correction_session_id is not null then
+      select u.* into v_current_lock_upload from public.weekly_final_source_correction_sessions s
+        join public.weekly_source_uploads u on u.id=s.replacement_correction_upload_id
+        where s.id=p_excluding_correction_session_id;
+      if found then
+        select p.* into strict v_current_lock_publication from public.weekly_final_source_correction_sessions s
+          join public.weekly_source_projection_publications p on p.id=s.replacement_projection_publication_id
+          where s.id=p_excluding_correction_session_id and p.upload_id=v_current_lock_upload.id;
+        if v_current_lock_publication.authority_scope_version>2147483647 then
+          raise exception 'WEEKLY_SOURCE_GENERATION_OVERFLOW' using errcode='22003';end if;
+        v_current_lock_generation:=coalesce(v_current_lock_publication.projection_generation,v_current_lock_publication.authority_scope_version::integer);
+      end if;
+    end if;
+    v_current_lock_operation:=private.bpay_next_source_current_lock_inventory_v1(
+      v_current_lock_upload.id,v_current_lock_generation,v_revision.id,v_group.id,v_manifest.client_id,
+      v_current_lock_upload.confirmed_coverage_start_local_date,v_current_lock_upload.confirmed_coverage_end_local_date
+    );
+  end if;
+
+  for v_receipt in
+    select receipt.*
+    from public.weekly_source_ordinary_pay_projection_receipts receipt
+    where receipt.final_revision_id=v_revision.id
+      and receipt.outcome in ('PREPARED_FOR_AUTHORISATION','PROPOSED')
+    order by receipt.root_timesheet_id
+  loop
+    -- Gate 13 hostile review F5 / standing rule 3.  These preconditions guard
+    -- one ordinary Weekly root against protected-pay ownership and against an
+    -- existing invoice line.  After S8 the physical root id is not a family
+    -- identity, so a protected family or an invoice line recorded against a
+    -- rotated sibling was invisible here and the correction proceeded.
+    --
+    -- The lock is taken BEFORE the guarded state is read.  The family has to be
+    -- named before its rows can be locked, so the identity is resolved, its
+    -- rows are locked in a deterministic order, and the identity is then
+    -- re-resolved and required to be unchanged (the same shape as the
+    -- lock-and-resolve helper's post-lock re-read).  A membership change across
+    -- the lock fails closed.
+    v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(
+      v_receipt.root_timesheet_id
+    );
+    if v_family is null or pg_catalog.cardinality(v_family)=0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_FAMILY_UNRESOLVED'
+        using errcode='55000';
+    end if;
+    if coalesce(p_lock_roots,true) then
+      perform 1 from public.timesheets family_row
+      where family_row.timesheet_id=any(v_family)
+      order by family_row.timesheet_id
+      for update;
+      v_family_after_lock:=private.weekly_source_invoice_family_timesheet_ids_v1(
+        v_receipt.root_timesheet_id
+      );
+      if v_family_after_lock is null
+         or pg_catalog.cardinality(v_family_after_lock)=0
+         or not (v_family_after_lock @> v_family and v_family @> v_family_after_lock)
+      then
+        raise exception 'WEEKLY_SOURCE_CORRECTION_FAMILY_UNRESOLVED'
+          using errcode='40001';
+      end if;
+      v_family:=v_family_after_lock;
+    end if;
+    if exists(
+      select 1 from public.weekly_exceptional_pay_target_families family
+      where family.root_timesheet_id=any(v_family)
+        and family.ownership_state='TARGET_MANAGED'
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PROTECTED_TARGET_EXISTS'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.invoice_lines invoice_line
+      where invoice_line.timesheet_id=any(v_family)
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_INVOICE_LINE_EXISTS'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.timesheets timesheet_row
+      where timesheet_row.timesheet_id=v_receipt.root_timesheet_id
+        and timesheet_row.active_document_operation_id is not null
+    ) or exists(
+      select 1 from public.invoice_operations operation
+      where operation.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        and operation.entity_type='TIMESHEET'
+        and operation.entity_id=v_receipt.root_timesheet_id
+    ) or exists(
+      select 1 from public.invoice_operation_chunks chunk
+      where chunk.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        and chunk.entity_type='TIMESHEET'
+        and chunk.entity_id=v_receipt.root_timesheet_id
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ACTIVE_INVOICE_OPERATION'
+        using errcode='55000';
+    end if;
+
+    v_preflight:=public.import_timesheet_financial_preflight_v1(
+      array[v_receipt.root_timesheet_id],
+      'WEEKLY_SOURCE_CORRECT_FINAL_SOURCE',p_actor_user_id,'{}'::jsonb,
+      coalesce(p_lock_roots,true),1
+    );
+    if coalesce((v_preflight->>'blocking_batch_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ACTIVE_PAY_DRAFT'
+        using errcode='55000',detail=v_preflight::text;
+    elsif coalesce((v_preflight->>'paid_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ALREADY_PAID'
+        using errcode='55000',detail=v_preflight::text;
+    elsif coalesce((v_preflight->>'invoice_lined_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_INVOICE_LINE_EXISTS'
+        using errcode='55000',detail=v_preflight::text;
+    elsif coalesce((v_preflight->>'allowed')::boolean,false) is not true
+       or v_preflight->>'required_path' not in (
+         -- Gate 2 / XSG-032.  UNAUTHORISE_AMEND_RECALCULATE_REAUTHORISE is
+         -- deliberately NOT admitted: Correct Final Source stays the narrow
+         -- same-cycle correction for a root that is not yet authorised.  An
+         -- already-authorised root always goes to proposal and Office decision.
+         'DIRECT_AMEND_RECALCULATE'
+       ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ROOT_NOT_MUTABLE'
+        using errcode='55000',detail=v_preflight::text;
+    end if;
+  end loop;
+
+  if v_current_lock_operation is not null then
+    perform private.bpay_next_source_current_lock_release_v1(v_current_lock_operation);
+  end if;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'root_timesheet_id',receipt.root_timesheet_id,
+    'prior_projection_receipt_id',receipt.id,
+    'client_id',receipt.client_id,
+    'source_profile_kind',receipt.source_profile_kind,
+    'source_mode',receipt.source_mode,
+    'root_after_hash',pg_catalog.encode(receipt.root_after_hash,'hex')
+  ) order by receipt.root_timesheet_id),'[]'::jsonb)
+  into v_roots
+  from public.weekly_source_ordinary_pay_projection_receipts receipt
+  where receipt.final_revision_id=v_revision.id
+    and receipt.outcome in ('PREPARED_FOR_AUTHORISATION','PROPOSED');
+
+  return pg_catalog.jsonb_build_object(
+    'prior_final_revision_id',v_revision.id,
+    'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+    'authority_scope_kind',v_revision.authority_scope_kind,
+    'report_scope_id',v_revision.report_scope_id,
+    'client_id',v_manifest.client_id,
+    'source_profile_kind',v_profile.final_authority_kind,
+    'source_mode',case when v_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT'
+      then 'NHSP_WEEKLY' else 'HEALTHROSTER_WEEKLY' end,
+    'final_manifest_hash',pg_catalog.encode(v_revision.manifest_hash,'hex'),
+    'affected_roots',v_roots
+  );
+end;
+$function$;
+
+create or replace function public.weekly_source_correct_final_open_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array[
+    'actor_user_id','authority_scope_kind','expected_current_final_revision_id',
+    'expected_final_manifest_hash','idempotency_key','reason','report_scope_id',
+    'schema_version','source_cycle_id'
+  ];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_cycle_id uuid;
+  v_scope_kind text;
+  v_report_scope_id uuid;
+  v_revision_id uuid;
+  v_expected_manifest bytea;
+  v_idempotency_key text;
+  v_reason text;
+  v_request_hash bytea;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_existing public.weekly_final_source_correction_sessions%rowtype;
+  v_existing_by_key public.weekly_final_source_correction_sessions%rowtype;
+  v_existing_by_hash public.weekly_final_source_correction_sessions%rowtype;
+  v_existing_key_count bigint;
+  v_existing_hash_count bigint;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_guard jsonb;
+  v_group_id uuid;
+  v_client_id uuid;
+  v_guard_fingerprint bytea;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_OPEN_V1' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_scope_kind:=pg_catalog.upper(pg_catalog.btrim(p_request->>'authority_scope_kind'));
+    v_report_scope_id:=nullif(p_request->>'report_scope_id','')::uuid;
+    v_revision_id:=(p_request->>'expected_current_final_revision_id')::uuid;
+    v_expected_manifest:=pg_catalog.decode(p_request->>'expected_final_manifest_hash','hex');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_VALUE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  if v_actor is null or v_cycle_id is null or v_revision_id is null
+     or v_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE')
+     or (v_scope_kind='NHSP_REPORT_SCOPE') is distinct from (v_report_scope_id is not null)
+     or pg_catalog.octet_length(v_expected_manifest)<>32
+     or pg_catalog.char_length(v_idempotency_key) not between 1 and 200
+     or pg_catalog.char_length(v_reason) not between 1 and 1000 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_OPEN_V1',p_request-'idempotency_key'
+  );
+  -- WP-59.  Two defects lived in this one replay lookup.
+  --
+  -- (1) It chose between an idempotency-key match and a request-hash match with
+  --     `order by ... limit 1`.  That is a safety decision taken by an
+  --     ordering, which this programme forbids.  Both candidates are now read
+  --     explicitly, each with its own cardinality check, and a disagreement
+  --     between them fails closed instead of being silently ranked away.
+  --
+  -- (2) It matched a session in ANY state.  Before WP-59 that was harmless
+  --     because no session could ever leave the live set.  Now that
+  --     public.weekly_source_correct_final_cancel_atomic_v1 exists, re-sending
+  --     the request that opened a since-cancelled session would have returned
+  --     that cancelled session as an idempotent replay -- telling Office it
+  --     still has a correction session when it has none.  A terminal session is
+  --     never replayed as if it were live; the caller is told so in a typed
+  --     refusal and must open the new correction with its own key.
+  select pg_catalog.count(*) into v_existing_key_count
+  from public.weekly_final_source_correction_sessions correction
+  where correction.actor_user_id=v_actor
+    and correction.idempotency_key=v_idempotency_key;
+  select pg_catalog.count(*) into v_existing_hash_count
+  from public.weekly_final_source_correction_sessions correction
+  where correction.request_hash=v_request_hash;
+  if v_existing_key_count>1 or v_existing_hash_count>1 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_IDEMPOTENCY_AMBIGUOUS'
+      using errcode='55000',
+        detail='key_matches='||v_existing_key_count::text
+               ||' request_hash_matches='||v_existing_hash_count::text;
+  end if;
+  if v_existing_key_count=1 then
+    select * into v_existing_by_key
+    from public.weekly_final_source_correction_sessions correction
+    where correction.actor_user_id=v_actor
+      and correction.idempotency_key=v_idempotency_key;
+  end if;
+  if v_existing_hash_count=1 then
+    select * into v_existing_by_hash
+    from public.weekly_final_source_correction_sessions correction
+    where correction.request_hash=v_request_hash;
+  end if;
+  if v_existing_key_count=1 and v_existing_hash_count=1
+     and v_existing_by_key.id is distinct from v_existing_by_hash.id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_IDEMPOTENCY_COLLISION'
+      using errcode='22023';
+  end if;
+  if v_existing_key_count=1 then
+    v_existing:=v_existing_by_key;
+  elsif v_existing_hash_count=1 then
+    v_existing:=v_existing_by_hash;
+  end if;
+  if v_existing_key_count=1 or v_existing_hash_count=1 then
+    if v_existing.request_hash is distinct from v_request_hash then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    if v_existing.state in ('CANCELLED','FAILED') then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_OPEN_SESSION_TERMINAL'
+        using errcode='22023',
+          detail='correction session '||v_existing.id::text||' is '
+                 ||v_existing.state||'. Open the new correction with its own '
+                 'idempotency key and its own reason; a terminal session is '
+                 'never replayed as a live one.';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'status',v_existing.state,'correction_session_id',v_existing.id,
+      'version',v_existing.version,'idempotent_replay',true
+    );
+  end if;
+
+  select * into v_cycle from public.weekly_source_cycles
+  where id=v_cycle_id for update;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CYCLE_NOT_FOUND' using errcode='22023';
+  end if;
+  select source_group_id into v_group_id
+  from public.weekly_source_cycles where id=v_cycle.id;
+  if v_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into v_scope from public.weekly_source_report_scopes
+    where id=v_report_scope_id for update;
+    if not found or v_scope.source_cycle_id is distinct from v_cycle.id then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SCOPE_INVALID' using errcode='22023';
+    end if;
+    v_client_id:=v_scope.client_id;
+    if v_scope.current_final_revision_id is distinct from v_revision_id then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_STALE' using errcode='40001';
+    end if;
+  elsif v_cycle.current_final_revision_id is distinct from v_revision_id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_STALE' using errcode='40001';
+  end if;
+  select * into v_revision from public.weekly_source_final_revisions
+  where id=v_revision_id for update;
+  if not found or v_revision.state<>'CURRENT'
+     or v_revision.source_cycle_id is distinct from v_cycle.id
+     or v_revision.authority_scope_kind is distinct from v_scope_kind
+     or v_revision.report_scope_id is distinct from v_report_scope_id
+     or v_revision.manifest_hash is distinct from v_expected_manifest then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_STALE' using errcode='40001';
+  end if;
+  if v_client_id is null then
+    select client_id into strict v_client_id
+    from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_revision.id;
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'CORRECT_FINAL_SOURCE',v_group_id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  v_guard:=private.weekly_source_correct_final_preconditions_v1(
+    v_revision.id,v_actor,null::uuid,false
+  );
+  v_guard_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_GUARD_V1',v_guard
+  );
+  insert into public.weekly_final_source_correction_sessions(
+    source_cycle_id,authority_scope_kind,report_scope_id,
+    expected_current_final_revision_id,expected_final_manifest_hash,state,version,
+    actor_user_id,reason,idempotency_key,request_hash,guard_fingerprint
+  ) values (
+    v_cycle.id,v_scope_kind,v_report_scope_id,v_revision.id,v_revision.manifest_hash,
+    'DRAFT',1,v_actor,v_reason,v_idempotency_key,v_request_hash,v_guard_fingerprint
+  ) returning * into v_session;
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_final_source_correction_sessions',v_session.id::text,
+         'WEEKLY_SOURCE_CORRECT_FINAL_OPENED',
+         pg_catalog.jsonb_build_object(
+           'current_final_revision_id',v_revision.id,
+           'current_manifest_hash',pg_catalog.encode(v_revision.manifest_hash,'hex')
+         ),
+         pg_catalog.jsonb_build_object(
+           'state','DRAFT','source_cycle_id',v_cycle.id,
+           'authority_scope_kind',v_scope_kind,'report_scope_id',v_report_scope_id,
+           'affected_root_count',pg_catalog.jsonb_array_length(v_guard->'affected_roots'),
+           'guard_fingerprint',pg_catalog.encode(v_guard_fingerprint,'hex')
+         ),v_reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','DRAFT','correction_session_id',v_session.id,
+    'version',v_session.version,'affected_root_count',
+      pg_catalog.jsonb_array_length(v_guard->'affected_roots'),
+    'guard_fingerprint',pg_catalog.encode(v_guard_fingerprint,'hex'),
+    'idempotent_replay',false
+  );
+end;
+$function$;
+
+create or replace function public.weekly_source_correct_final_review_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array[
+    'actor_user_id','correction_session_id','expected_authority_scope_version',
+    'expected_comparison_manifest_hash','expected_issue_set_hash',
+    'expected_row_manifest_hash','expected_session_version','idempotency_key',
+    'replacement_projection_publication_id','replacement_upload_id','schema_version'
+  ];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_session_id uuid;
+  v_upload_id uuid;
+  v_publication_id uuid;
+  v_expected_session_version bigint;
+  v_scope_version bigint;
+  v_expected_row_hash bytea;
+  v_expected_comparison_hash bytea;
+  v_expected_issue_hash bytea;
+  v_idempotency_key text;
+  v_request_hash bytea;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_prior_revision public.weekly_source_final_revisions%rowtype;
+  v_prior_upload public.weekly_source_uploads%rowtype;
+  v_prior_publication public.weekly_source_projection_publications%rowtype;
+  v_prior_profile public.weekly_source_format_profiles%rowtype;
+  v_replacement_upload public.weekly_source_uploads%rowtype;
+  v_replacement_publication public.weekly_source_projection_publications%rowtype;
+  v_replacement_profile public.weekly_source_format_profiles%rowtype;
+  v_guard jsonb;
+  v_guard_hash bytea;
+  v_client_id uuid;
+  v_office_preview jsonb;
+  v_result jsonb;
+  v_result_hash bytea;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_V1' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_session_id:=(p_request->>'correction_session_id')::uuid;
+    v_upload_id:=(p_request->>'replacement_upload_id')::uuid;
+    v_publication_id:=(p_request->>'replacement_projection_publication_id')::uuid;
+    v_expected_session_version:=(p_request->>'expected_session_version')::bigint;
+    v_scope_version:=(p_request->>'expected_authority_scope_version')::bigint;
+    v_expected_row_hash:=pg_catalog.decode(p_request->>'expected_row_manifest_hash','hex');
+    v_expected_comparison_hash:=pg_catalog.decode(p_request->>'expected_comparison_manifest_hash','hex');
+    v_expected_issue_hash:=pg_catalog.decode(p_request->>'expected_issue_set_hash','hex');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_VALUE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  if v_actor is null or v_session_id is null or v_upload_id is null
+     or v_publication_id is null or v_expected_session_version is null
+     or v_scope_version is null or v_scope_version<1
+     or pg_catalog.octet_length(v_expected_row_hash)<>32
+     or pg_catalog.octet_length(v_expected_comparison_hash)<>32
+     or pg_catalog.octet_length(v_expected_issue_hash)<>32
+     or pg_catalog.char_length(v_idempotency_key) not between 1 and 200 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_V1',p_request-'idempotency_key'
+  );
+
+  select * into v_session
+  from public.weekly_final_source_correction_sessions where id=v_session_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_session.review_idempotency_key=v_idempotency_key then
+    if v_session.actor_user_id is distinct from v_actor
+       or v_session.review_request_hash is distinct from v_request_hash then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    return v_session.review_result_json||pg_catalog.jsonb_build_object(
+      'idempotent_replay',true
+    );
+  end if;
+  if v_session.state not in ('READY','REVIEWED') then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_session.source_cycle_id for update;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into strict v_scope from public.weekly_source_report_scopes
+    where id=v_session.report_scope_id for update;
+  end if;
+  select * into strict v_session from public.weekly_final_source_correction_sessions
+  where id=v_session_id for update;
+  if v_session.state not in ('READY','REVIEWED')
+     or v_session.actor_user_id is distinct from v_actor
+     or v_session.version<>v_expected_session_version
+     or v_session.replacement_correction_upload_id is distinct from v_upload_id
+     or v_session.replacement_projection_publication_id is distinct from v_publication_id
+     or coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+          is distinct from v_session.expected_current_final_revision_id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+  select * into strict v_prior_revision from public.weekly_source_final_revisions
+  where id=v_session.expected_current_final_revision_id for share;
+  select * into strict v_prior_upload from public.weekly_source_uploads
+  where id=v_prior_revision.upload_id for share;
+  select * into strict v_prior_publication
+  from public.weekly_source_projection_publications
+  where id=coalesce(v_scope.current_projection_publication_id,
+                    v_cycle.current_projection_publication_id)
+  for share;
+  select * into strict v_prior_profile from public.weekly_source_format_profiles
+  where id=v_prior_upload.source_format_profile_id;
+  select * into strict v_replacement_upload from public.weekly_source_uploads
+  where id=v_upload_id for share;
+  select * into strict v_replacement_publication
+  from public.weekly_source_projection_publications where id=v_publication_id for share;
+  select * into strict v_replacement_profile from public.weekly_source_format_profiles
+  where id=v_replacement_upload.source_format_profile_id;
+  if v_prior_revision.state<>'CURRENT'
+     or v_prior_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+     or v_prior_upload.state<>'CURRENT'
+     or v_prior_publication.state<>'CURRENT'
+     or v_replacement_upload.state<>'CORRECTION_READY'
+     or v_replacement_upload.purpose<>'FINAL_SOURCE_CORRECTION'
+     or v_replacement_upload.correction_session_id is distinct from v_session.id
+     or v_replacement_upload.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_upload.report_scope_id is distinct from v_session.report_scope_id
+     or v_replacement_upload.row_manifest_hash is distinct from v_expected_row_hash
+     or v_replacement_publication.state<>'CORRECTION_READY'
+     or v_replacement_publication.correction_session_id is distinct from v_session.id
+     or v_replacement_publication.upload_id is distinct from v_replacement_upload.id
+     or v_replacement_publication.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_publication.authority_scope_kind is distinct from v_session.authority_scope_kind
+     or v_replacement_publication.report_scope_id is distinct from v_session.report_scope_id
+      or v_replacement_publication.authority_scope_version<>v_scope_version
+      or v_replacement_publication.comparison_manifest_hash is distinct from v_expected_comparison_hash
+      or v_replacement_publication.issue_set_hash is distinct from v_expected_issue_hash then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE' using errcode='40001';
+  end if;
+  if v_replacement_profile.final_authority_kind is distinct from v_prior_profile.final_authority_kind
+     or (v_replacement_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT')
+          is distinct from (v_group.source_family='NHSP') then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SOURCE_FAMILY_MISMATCH'
+      using errcode='55000';
+  end if;
+  select client_id into strict v_client_id
+  from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_prior_revision.id;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'CORRECT_FINAL_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  v_guard:=private.weekly_source_correct_final_preconditions_v1(
+    v_prior_revision.id,v_actor,v_session.id,false
+  );
+  v_guard_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_GUARD_V1',v_guard
+  );
+  if v_guard_hash is distinct from v_session.guard_fingerprint then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_GUARD_STALE' using errcode='40001';
+  end if;
+  v_office_preview:=private.weekly_source_correct_final_office_preview_v1(v_session.id);
+  v_result:=pg_catalog.jsonb_build_object(
+    'ok',true,
+    'status',case when pg_catalog.jsonb_array_length(v_office_preview->'blockers')>0
+      then 'BLOCKED' else 'READY_FOR_CONFIRMATION' end,
+    'correction_session_id',v_session.id,
+    'prior_final_revision_id',v_prior_revision.id,
+    'upload_id',v_replacement_upload.id,
+    'version',v_expected_session_version+1,
+    'office_preview',v_office_preview,
+    'idempotent_replay',false
+  );
+  v_result_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_result
+  );
+  update public.weekly_final_source_correction_sessions
+  set state='REVIEWED',review_idempotency_key=v_idempotency_key,
+      review_request_hash=v_request_hash,review_result_json=v_result,
+      review_result_hash=v_result_hash,version=version+1,
+      updated_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state in ('READY','REVIEWED')
+    and version=v_expected_session_version;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_final_source_correction_sessions',v_session.id::text,
+         'WEEKLY_SOURCE_CORRECT_FINAL_REVIEWED',
+         pg_catalog.jsonb_build_object('state',v_session.state,'version',v_expected_session_version),
+         pg_catalog.jsonb_build_object(
+           'state','REVIEWED','version',v_expected_session_version+1,
+           'status',v_result->>'status',
+           'change_count',pg_catalog.jsonb_array_length(v_office_preview->'changes'),
+           'blocker_count',pg_catalog.jsonb_array_length(v_office_preview->'blockers'),
+           'review_result_hash',pg_catalog.encode(v_result_hash,'hex')
+         ),v_session.reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+  return v_result;
+end;
+$function$;
+
+create or replace function public.weekly_source_correct_final_prepare_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array[
+    'actor_user_id','correction_session_id','expected_authority_scope_version',
+    'expected_comparison_manifest_hash','expected_issue_set_hash',
+    'expected_preview_hash','expected_row_manifest_hash','expected_session_version',
+    'idempotency_key','reason','confirmation_text',
+    'replacement_projection_publication_id','replacement_upload_id','schema_version'
+  ];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_session_id uuid;
+  v_upload_id uuid;
+  v_publication_id uuid;
+  v_expected_session_version bigint;
+  v_scope_version bigint;
+  v_expected_row_hash bytea;
+  v_expected_comparison_hash bytea;
+  v_expected_issue_hash bytea;
+  v_expected_preview_hash bytea;
+  v_idempotency_key text;
+  v_reason text;
+  v_confirmation_text text;
+  v_request_hash bytea;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_prior_revision public.weekly_source_final_revisions%rowtype;
+  v_prior_upload public.weekly_source_uploads%rowtype;
+  v_prior_publication public.weekly_source_projection_publications%rowtype;
+  v_prior_profile public.weekly_source_format_profiles%rowtype;
+  v_replacement_upload public.weekly_source_uploads%rowtype;
+  v_replacement_publication public.weekly_source_projection_publications%rowtype;
+  v_replacement_profile public.weekly_source_format_profiles%rowtype;
+  v_guard jsonb;
+  v_guard_hash bytea;
+  v_client_id uuid;
+  v_core_result jsonb;
+  v_context jsonb;
+  v_result jsonb;
+  v_result_hash bytea;
+  v_prepared_revision_id uuid;
+  v_prepared_session_version bigint;
+  v_office_preview jsonb;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_V1' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_session_id:=(p_request->>'correction_session_id')::uuid;
+    v_upload_id:=(p_request->>'replacement_upload_id')::uuid;
+    v_publication_id:=(p_request->>'replacement_projection_publication_id')::uuid;
+    v_expected_session_version:=(p_request->>'expected_session_version')::bigint;
+    v_scope_version:=(p_request->>'expected_authority_scope_version')::bigint;
+    v_expected_row_hash:=pg_catalog.decode(p_request->>'expected_row_manifest_hash','hex');
+    v_expected_comparison_hash:=pg_catalog.decode(p_request->>'expected_comparison_manifest_hash','hex');
+    v_expected_issue_hash:=pg_catalog.decode(p_request->>'expected_issue_set_hash','hex');
+    v_expected_preview_hash:=pg_catalog.decode(p_request->>'expected_preview_hash','hex');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_VALUE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  v_confirmation_text:=pg_catalog.btrim(coalesce(p_request->>'confirmation_text',''));
+  if v_actor is null or v_session_id is null or v_upload_id is null
+     or v_publication_id is null or v_expected_session_version is null
+     or v_scope_version is null or v_scope_version<1
+     or pg_catalog.octet_length(v_expected_row_hash)<>32
+     or pg_catalog.octet_length(v_expected_comparison_hash)<>32
+     or pg_catalog.octet_length(v_expected_issue_hash)<>32
+     or pg_catalog.octet_length(v_expected_preview_hash)<>32
+     or pg_catalog.char_length(v_idempotency_key) not between 1 and 200
+     or pg_catalog.char_length(v_reason) not between 1 and 1000
+     or pg_catalog.char_length(v_confirmation_text) not between 1 and 500 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_V1',p_request-'idempotency_key'
+  );
+  select * into v_session
+  from public.weekly_final_source_correction_sessions where id=v_session_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_session.state in ('PREPARED','COMMITTING','APPLIED') then
+    if v_session.actor_user_id is distinct from v_actor
+       or v_session.prepare_idempotency_key is distinct from v_idempotency_key
+       or v_session.prepare_request_hash is distinct from v_request_hash then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    return v_session.prepare_result_json||pg_catalog.jsonb_build_object(
+      'status','PREPARED','idempotent_replay',true
+    );
+  end if;
+
+  -- Exact retained PREPARE replay above remains exempt. Fresh correction
+  -- admission precedes the outer cycle lock and the nested Final engine.
+  perform private.weekly_source_pay_query_admit_v2();
+
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_session.source_cycle_id for update;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into strict v_scope from public.weekly_source_report_scopes
+    where id=v_session.report_scope_id for update;
+  end if;
+  select * into strict v_session from public.weekly_final_source_correction_sessions
+  where id=v_session_id for update;
+  if v_session.state<>'REVIEWED' or v_session.actor_user_id is distinct from v_actor
+     or v_session.version<>v_expected_session_version
+     or v_session.replacement_correction_upload_id is distinct from v_upload_id
+     or v_session.replacement_projection_publication_id is distinct from v_publication_id
+     or v_session.review_result_json is null
+     or v_session.review_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_RESULT_V1',v_session.review_result_json
+        )
+     or coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+          is distinct from v_session.expected_current_final_revision_id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+  select * into strict v_prior_revision from public.weekly_source_final_revisions
+  where id=v_session.expected_current_final_revision_id for share;
+  select * into strict v_prior_upload from public.weekly_source_uploads
+  where id=v_prior_revision.upload_id for share;
+  select * into strict v_prior_publication
+  from public.weekly_source_projection_publications
+  where id=coalesce(v_scope.current_projection_publication_id,
+                    v_cycle.current_projection_publication_id)
+  for share;
+  select * into strict v_prior_profile from public.weekly_source_format_profiles
+  where id=v_prior_upload.source_format_profile_id;
+  select * into strict v_replacement_upload from public.weekly_source_uploads
+  where id=v_upload_id for update;
+  select * into strict v_replacement_publication
+  from public.weekly_source_projection_publications where id=v_publication_id for update;
+  select * into strict v_replacement_profile from public.weekly_source_format_profiles
+  where id=v_replacement_upload.source_format_profile_id;
+  if v_prior_revision.state<>'CURRENT'
+     or v_prior_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+     or v_prior_upload.state<>'CURRENT'
+     or v_prior_publication.state<>'CURRENT'
+     or v_replacement_upload.state<>'CORRECTION_READY'
+     or v_replacement_upload.purpose<>'FINAL_SOURCE_CORRECTION'
+     or v_replacement_upload.correction_session_id is distinct from v_session.id
+     or v_replacement_upload.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_upload.report_scope_id is distinct from v_session.report_scope_id
+     or v_replacement_upload.row_manifest_hash is distinct from v_expected_row_hash
+     or v_replacement_publication.state<>'CORRECTION_READY'
+     or v_replacement_publication.correction_session_id is distinct from v_session.id
+     or v_replacement_publication.upload_id is distinct from v_replacement_upload.id
+     or v_replacement_publication.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_publication.authority_scope_kind is distinct from v_session.authority_scope_kind
+     or v_replacement_publication.report_scope_id is distinct from v_session.report_scope_id
+     or v_replacement_publication.authority_scope_version<>v_scope_version
+     or v_replacement_publication.comparison_manifest_hash is distinct from v_expected_comparison_hash
+     or v_replacement_publication.issue_set_hash is distinct from v_expected_issue_hash then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE' using errcode='40001';
+  end if;
+  if v_replacement_profile.final_authority_kind is distinct from v_prior_profile.final_authority_kind
+     or (v_replacement_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT')
+          is distinct from (v_group.source_family='NHSP') then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SOURCE_FAMILY_MISMATCH'
+      using errcode='55000';
+  end if;
+  select client_id into strict v_client_id
+  from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_prior_revision.id;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'CORRECT_FINAL_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  v_guard:=private.weekly_source_correct_final_preconditions_v1(
+    v_prior_revision.id,v_actor,v_session.id,true
+  );
+  v_guard_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_GUARD_V1',v_guard
+  );
+  if v_guard_hash is distinct from v_session.guard_fingerprint then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_GUARD_STALE' using errcode='40001';
+  end if;
+  v_office_preview:=private.weekly_source_correct_final_office_preview_v1(v_session.id);
+  if v_session.review_result_json->'office_preview' is distinct from v_office_preview
+     or private.weekly_source_finalisation_hex32_v1(
+          v_office_preview->>'preview_hash','WEEKLY_SOURCE_CORRECTION_PREVIEW_HASH_INVALID'
+        ) is distinct from v_expected_preview_hash
+     or v_confirmation_text is distinct from v_office_preview->>'confirmation_text'
+     or pg_catalog.jsonb_array_length(v_office_preview->'blockers')<>0 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREVIEW_STALE' using errcode='40001';
+  end if;
+  update public.weekly_final_source_correction_sessions
+  set state='PREPARING',prepare_idempotency_key=v_idempotency_key,
+      prepare_request_hash=v_request_hash,reason=v_reason,version=version+1,
+      updated_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state='REVIEWED' and version=v_expected_session_version;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+
+  v_core_result:=private.weekly_source_finalise_engine_v1(
+    pg_catalog.jsonb_build_object(
+      'actor_user_id',v_actor,'source_cycle_id',v_cycle.id,
+      'authority_scope_kind',v_session.authority_scope_kind,
+      'report_scope_id',v_session.report_scope_id,
+      'upload_id',v_replacement_upload.id,
+      'projection_publication_id',v_replacement_publication.id,
+      'expected_authority_scope_version',v_scope_version,
+      'expected_row_manifest_hash',pg_catalog.encode(v_expected_row_hash,'hex'),
+      'expected_comparison_manifest_hash',pg_catalog.encode(v_expected_comparison_hash,'hex'),
+      'expected_issue_set_hash',pg_catalog.encode(v_expected_issue_hash,'hex')
+    ),v_session.id,true
+  );
+  if coalesce((v_core_result->>'ok')::boolean,false) is not true
+     or v_core_result->>'status'<>'PREPARED' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_FAILED'
+      using errcode='55000',detail=v_core_result::text;
+  end if;
+  v_prepared_revision_id:=(v_core_result->>'final_revision_id')::uuid;
+  update public.weekly_final_source_correction_sessions
+  set prepared_final_revision_id=v_prepared_revision_id
+  where id=v_session.id and state='PREPARING'
+    and prepare_request_hash=v_request_hash;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+  v_context:=private.weekly_source_correct_final_prepared_context_v1(v_session.id);
+  v_office_preview:=private.weekly_source_correct_final_office_preview_v1(v_session.id);
+  v_prepared_session_version:=v_expected_session_version+2;
+  v_result:=v_core_result||pg_catalog.jsonb_build_object(
+    'correction_session_id',v_session.id,
+    'prior_final_revision_id',v_prior_revision.id,
+    'root_contexts',v_context->'root_contexts',
+    'office_preview',v_office_preview,
+    'version',v_prepared_session_version,
+    'idempotent_replay',false
+  );
+  v_result_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_RESULT_V1',v_result
+  );
+  update public.weekly_final_source_correction_sessions
+  set state='PREPARED',prepare_result_json=v_result,prepare_result_hash=v_result_hash,
+      version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state='PREPARING'
+    and prepared_final_revision_id=v_prepared_revision_id
+    and prepare_request_hash=v_request_hash;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_final_source_correction_sessions',v_session.id::text,
+         'WEEKLY_SOURCE_CORRECT_FINAL_PREPARED',
+         pg_catalog.jsonb_build_object(
+           'state','READY','current_final_revision_id',v_prior_revision.id
+         ),
+         pg_catalog.jsonb_build_object(
+           'state','PREPARED','prepared_final_revision_id',v_prepared_revision_id,
+           'replacement_upload_id',v_replacement_upload.id,
+           'replacement_projection_publication_id',v_replacement_publication.id,
+           'affected_root_count',pg_catalog.jsonb_array_length(v_context->'root_contexts'),
+           'prepare_result_hash',pg_catalog.encode(v_result_hash,'hex')
+         ),v_session.reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+  return v_result;
+end;
+$function$;
+
+create or replace function public.weekly_source_correct_final_apply_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array[
+    'actor_user_id','correction_session_id','expected_authority_scope_version',
+    'expected_comparison_manifest_hash','expected_issue_set_hash',
+    'expected_preview_hash','expected_row_manifest_hash','expected_session_version',
+    'idempotency_key','reason','confirmation_text',
+    'replacement_projection_publication_id','replacement_upload_id',
+    'root_service_snapshots','schema_version'
+  ];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_session_id uuid;
+  v_upload_id uuid;
+  v_publication_id uuid;
+  v_expected_session_version bigint;
+  v_scope_version bigint;
+  v_expected_row_hash bytea;
+  v_expected_comparison_hash bytea;
+  v_expected_issue_hash bytea;
+  v_expected_preview_hash bytea;
+  v_idempotency_key text;
+  v_reason text;
+  v_confirmation_text text;
+  v_apply_request_hash bytea;
+  v_root_snapshots jsonb;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_prior_revision public.weekly_source_final_revisions%rowtype;
+  v_prior_upload public.weekly_source_uploads%rowtype;
+  v_prior_publication public.weekly_source_projection_publications%rowtype;
+  v_replacement_upload public.weekly_source_uploads%rowtype;
+  v_replacement_publication public.weekly_source_projection_publications%rowtype;
+  v_prior_profile public.weekly_source_format_profiles%rowtype;
+  v_replacement_profile public.weekly_source_format_profiles%rowtype;
+  v_prepared_revision public.weekly_source_final_revisions%rowtype;
+  v_guard jsonb;
+  v_guard_hash bytea;
+  v_prepared_context jsonb;
+  v_live_preview jsonb;
+  v_server_roots jsonb;
+  v_client_id uuid;
+  v_new_revision_id uuid;
+  v_root record;
+  v_snapshot jsonb;
+  v_prior_receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+  v_projection_result jsonb;
+  v_root_preflight jsonb;
+  v_impact_hash bytea;
+  v_result jsonb;
+  v_result_hash bytea;
+  v_completion_generation integer;
+  v_completion_hash bytea;
+  v_voided_count integer;
+  v_old_movement_count integer;
+  v_cas_count integer;
+  v_family uuid[];
+  v_family_after_lock uuid[];
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_APPLY_V1'
+     or pg_catalog.jsonb_typeof(p_request->'root_service_snapshots')<>'array' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_session_id:=(p_request->>'correction_session_id')::uuid;
+    v_upload_id:=(p_request->>'replacement_upload_id')::uuid;
+    v_publication_id:=(p_request->>'replacement_projection_publication_id')::uuid;
+    v_expected_session_version:=(p_request->>'expected_session_version')::bigint;
+    v_scope_version:=(p_request->>'expected_authority_scope_version')::bigint;
+    v_expected_row_hash:=pg_catalog.decode(p_request->>'expected_row_manifest_hash','hex');
+    v_expected_comparison_hash:=pg_catalog.decode(p_request->>'expected_comparison_manifest_hash','hex');
+    v_expected_issue_hash:=pg_catalog.decode(p_request->>'expected_issue_set_hash','hex');
+    v_expected_preview_hash:=pg_catalog.decode(p_request->>'expected_preview_hash','hex');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_VALUE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  v_confirmation_text:=pg_catalog.btrim(coalesce(p_request->>'confirmation_text',''));
+  v_root_snapshots:=p_request->'root_service_snapshots';
+  if v_actor is null or v_session_id is null or v_upload_id is null
+     or v_publication_id is null or v_expected_session_version is null
+     or v_scope_version is null or v_scope_version<1
+     or pg_catalog.octet_length(v_expected_row_hash)<>32
+     or pg_catalog.octet_length(v_expected_comparison_hash)<>32
+     or pg_catalog.octet_length(v_expected_issue_hash)<>32
+     or pg_catalog.octet_length(v_expected_preview_hash)<>32
+     or pg_catalog.char_length(v_idempotency_key) not between 1 and 200
+     or pg_catalog.char_length(v_reason) not between 1 and 1000
+     or pg_catalog.char_length(v_confirmation_text) not between 1 and 500 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_apply_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_APPLY_V1',p_request-'idempotency_key'
+  );
+
+  select * into v_session from public.weekly_final_source_correction_sessions
+  where id=v_session_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_session.state='APPLIED' then
+    if v_session.actor_user_id is distinct from v_actor
+       or v_session.apply_idempotency_key is distinct from v_idempotency_key
+       or v_session.apply_request_hash is distinct from v_apply_request_hash then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    return v_session.result_json||pg_catalog.jsonb_build_object('idempotent_replay',true);
+  end if;
+
+  -- Exact retained APPLIED replay above remains exempt. Fresh correction
+  -- admission precedes cycle/session locks and the CURRENT authority CAS.
+  perform private.weekly_source_pay_query_admit_v2();
+
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_session.source_cycle_id for update;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into strict v_scope from public.weekly_source_report_scopes
+    where id=v_session.report_scope_id for update;
+  end if;
+  select * into strict v_session from public.weekly_final_source_correction_sessions
+  where id=v_session_id for update;
+  if v_session.state<>'PREPARED' or v_session.actor_user_id is distinct from v_actor
+     or v_session.version<>v_expected_session_version
+     or v_session.replacement_correction_upload_id is distinct from v_upload_id
+     or v_session.replacement_projection_publication_id is distinct from v_publication_id
+     or coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+          is distinct from v_session.expected_current_final_revision_id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+  select * into strict v_prior_revision from public.weekly_source_final_revisions
+  where id=v_session.expected_current_final_revision_id for update;
+  select * into strict v_prepared_revision from public.weekly_source_final_revisions
+  where id=v_session.prepared_final_revision_id for update;
+  select * into strict v_prior_upload from public.weekly_source_uploads
+  where id=v_prior_revision.upload_id for update;
+  select * into strict v_prior_profile from public.weekly_source_format_profiles
+  where id=v_prior_upload.source_format_profile_id;
+  select * into strict v_prior_publication
+  from public.weekly_source_projection_publications
+  where id=coalesce(v_scope.current_projection_publication_id,v_cycle.current_projection_publication_id)
+  for update;
+  select * into strict v_replacement_upload from public.weekly_source_uploads
+  where id=v_upload_id for update;
+  select * into strict v_replacement_publication
+  from public.weekly_source_projection_publications where id=v_publication_id for update;
+
+  if v_prior_revision.state<>'CURRENT'
+     or v_prior_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+     or v_prepared_revision.state<>'PREPARED'
+     or v_prepared_revision.reason<>'CORRECT_FINAL_SOURCE'
+     or v_prepared_revision.predecessor_revision_id is distinct from v_prior_revision.id
+     or v_prepared_revision.source_cycle_id is distinct from v_cycle.id
+     or v_prepared_revision.upload_id is distinct from v_replacement_upload.id
+     or v_session.prepare_result_json->>'final_revision_id'
+          is distinct from v_prepared_revision.id::text
+     or v_session.prepare_result_hash is distinct from private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_RESULT_V1',v_session.prepare_result_json
+        )
+     or v_prior_upload.state<>'CURRENT'
+     or v_prior_publication.state<>'CURRENT'
+     or v_replacement_upload.state<>'CORRECTION_READY'
+     or v_replacement_upload.purpose<>'FINAL_SOURCE_CORRECTION'
+     or v_replacement_upload.correction_session_id is distinct from v_session.id
+     or v_replacement_upload.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_upload.report_scope_id is distinct from v_session.report_scope_id
+     or v_replacement_upload.row_manifest_hash is distinct from v_expected_row_hash
+     or v_replacement_publication.state<>'CORRECTION_READY'
+     or v_replacement_publication.correction_session_id is distinct from v_session.id
+     or v_replacement_publication.upload_id is distinct from v_replacement_upload.id
+     or v_replacement_publication.source_cycle_id is distinct from v_cycle.id
+     or v_replacement_publication.authority_scope_kind is distinct from v_session.authority_scope_kind
+     or v_replacement_publication.report_scope_id is distinct from v_session.report_scope_id
+     or v_replacement_publication.authority_scope_version<>v_scope_version
+     or v_replacement_publication.comparison_manifest_hash is distinct from v_expected_comparison_hash
+     or v_replacement_publication.issue_set_hash is distinct from v_expected_issue_hash then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE' using errcode='40001';
+  end if;
+  select * into strict v_replacement_profile from public.weekly_source_format_profiles
+  where id=v_replacement_upload.source_format_profile_id;
+  if v_replacement_profile.final_authority_kind is distinct from v_prior_profile.final_authority_kind
+     or (v_replacement_profile.final_authority_kind='NHSP_TRUST_BACKING_REPORT')
+          is distinct from (v_group.source_family='NHSP') then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SOURCE_FAMILY_MISMATCH'
+      using errcode='55000';
+  end if;
+
+  select client_id into strict v_client_id
+  from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_prior_revision.id;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'CORRECT_FINAL_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  v_guard:=private.weekly_source_correct_final_preconditions_v1(
+    v_prior_revision.id,v_actor,v_session.id,true
+  );
+  v_guard_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_GUARD_V1',v_guard
+  );
+  if v_guard_hash is distinct from v_session.guard_fingerprint then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_GUARD_STALE' using errcode='40001';
+  end if;
+  v_prepared_context:=private.weekly_source_correct_final_prepared_context_v1(v_session.id);
+  v_server_roots:=v_prepared_context->'root_contexts';
+  if v_server_roots is distinct from v_session.prepare_result_json->'root_contexts' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARED_CONTEXT_STALE'
+      using errcode='40001';
+  end if;
+  v_live_preview:=private.weekly_source_correct_final_office_preview_v1(v_session.id);
+  if v_session.prepare_result_json->'office_preview' is distinct from v_live_preview
+     or private.weekly_source_finalisation_hex32_v1(
+          v_live_preview->>'preview_hash','WEEKLY_SOURCE_CORRECTION_PREVIEW_HASH_INVALID'
+        ) is distinct from v_expected_preview_hash
+     or v_confirmation_text is distinct from v_live_preview->>'confirmation_text'
+     or pg_catalog.jsonb_array_length(v_live_preview->'blockers')<>0 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREVIEW_STALE' using errcode='40001';
+  end if;
+
+  if exists(
+    select 1 from pg_catalog.jsonb_array_elements(v_root_snapshots) supplied(value)
+    where pg_catalog.jsonb_typeof(supplied.value)<>'object'
+       or not (supplied.value ? 'root_timesheet_id'
+               and supplied.value ? 'prepared_context_hash'
+               and supplied.value ? 'service_snapshot')
+       or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(supplied.value))<>3
+       or coalesce(supplied.value->>'root_timesheet_id','')
+            !~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(supplied.value->>'prepared_context_hash','') !~*'^[0-9a-f]{64}$'
+       or pg_catalog.jsonb_typeof(supplied.value->'service_snapshot')<>'object'
+  ) or (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(v_root_snapshots))
+       <>pg_catalog.jsonb_array_length(v_server_roots)
+     or exists(
+       select 1
+       from pg_catalog.jsonb_array_elements(v_root_snapshots) supplied(value)
+       group by supplied.value->>'root_timesheet_id'
+       having pg_catalog.count(*)<>1
+     ) or exists(
+       select 1 from pg_catalog.jsonb_array_elements(v_server_roots) server_root(value)
+       where not exists(
+         select 1 from pg_catalog.jsonb_array_elements(v_root_snapshots) supplied(value)
+         where supplied.value->>'root_timesheet_id'=server_root.value->>'root_timesheet_id'
+           and supplied.value->>'prepared_context_hash'=
+                 server_root.value->>'prepared_context_hash'
+       )
+     ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_ROOT_SNAPSHOT_SET_MISMATCH'
+      using errcode='40001';
+  end if;
+
+  -- PREPARE can create a replacement-only root that did not exist when OPEN
+  -- froze the prior-root guard.  Apply the same invoice/Banking/Draft
+  -- preconditions to every sealed union root immediately before COMMITTING so
+  -- a newly created root cannot enter another owner between PREPARE and APPLY.
+  for v_root in
+    select (server_root.value->>'root_timesheet_id')::uuid as root_timesheet_id
+    from pg_catalog.jsonb_array_elements(v_server_roots) server_root(value)
+    order by server_root.value->>'root_timesheet_id'
+  loop
+    -- Gate 13 hostile review F5 / standing rule 3, at COMMITTING time.  Same
+    -- family keying and same lock-before-read order as the OPEN-time
+    -- preconditions above: name the family, lock its rows in a deterministic
+    -- order, re-resolve, require the membership to be unchanged, and only then
+    -- read the protected-family and invoice-line state that is being guarded.
+    v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(
+      v_root.root_timesheet_id
+    );
+    if v_family is null or pg_catalog.cardinality(v_family)=0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_FAMILY_UNRESOLVED'
+        using errcode='55000';
+    end if;
+    perform 1 from public.timesheets family_row
+    where family_row.timesheet_id=any(v_family)
+    order by family_row.timesheet_id
+    for update;
+    v_family_after_lock:=private.weekly_source_invoice_family_timesheet_ids_v1(
+      v_root.root_timesheet_id
+    );
+    if v_family_after_lock is null
+       or pg_catalog.cardinality(v_family_after_lock)=0
+       or not (v_family_after_lock @> v_family and v_family @> v_family_after_lock)
+    then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_FAMILY_UNRESOLVED'
+        using errcode='40001';
+    end if;
+    v_family:=v_family_after_lock;
+    if exists(
+      select 1 from public.weekly_exceptional_pay_target_families family
+      where family.root_timesheet_id=any(v_family)
+        and family.ownership_state='TARGET_MANAGED'
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_PROTECTED_TARGET_EXISTS'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.invoice_lines invoice_line
+      where invoice_line.timesheet_id=any(v_family)
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_INVOICE_LINE_EXISTS'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.timesheets timesheet_row
+      where timesheet_row.timesheet_id=v_root.root_timesheet_id
+        and timesheet_row.active_document_operation_id is not null
+    ) or exists(
+      select 1 from public.invoice_operations operation
+      where operation.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        and operation.entity_type='TIMESHEET'
+        and operation.entity_id=v_root.root_timesheet_id
+    ) or exists(
+      select 1 from public.invoice_operation_chunks chunk
+      where chunk.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        and chunk.entity_type='TIMESHEET'
+        and chunk.entity_id=v_root.root_timesheet_id
+    ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ACTIVE_INVOICE_OPERATION'
+        using errcode='55000';
+    end if;
+    v_root_preflight:=public.import_timesheet_financial_preflight_v1(
+      array[v_root.root_timesheet_id],
+      'WEEKLY_SOURCE_CORRECT_FINAL_SOURCE',v_actor,'{}'::jsonb,true,1
+    );
+    if coalesce((v_root_preflight->>'blocking_batch_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ACTIVE_PAY_DRAFT'
+        using errcode='55000',detail=v_root_preflight::text;
+    elsif coalesce((v_root_preflight->>'paid_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ALREADY_PAID'
+        using errcode='55000',detail=v_root_preflight::text;
+    elsif coalesce((v_root_preflight->>'invoice_lined_count')::integer,0)>0 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_INVOICE_LINE_EXISTS'
+        using errcode='55000',detail=v_root_preflight::text;
+    elsif coalesce((v_root_preflight->>'allowed')::boolean,false) is not true
+       or v_root_preflight->>'required_path' not in (
+         -- Gate 2 / XSG-032, the same rule at COMMITTING time.
+         'DIRECT_AMEND_RECALCULATE'
+       ) then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ROOT_NOT_MUTABLE'
+        using errcode='55000',detail=v_root_preflight::text;
+    end if;
+  end loop;
+
+  update public.weekly_final_source_correction_sessions
+  set state='COMMITTING',apply_idempotency_key=v_idempotency_key,
+      apply_request_hash=v_apply_request_hash,reason=v_reason,version=version+1,
+      updated_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state='PREPARED' and version=v_expected_session_version
+    and prepared_final_revision_id=v_prepared_revision.id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+
+  update public.weekly_source_expense_materialisations materialisation
+  set state='SUPERSEDED'
+  where materialisation.state='MATERIALISED'
+    and materialisation.expense_authority_generation_id in (
+      select expense.id from public.weekly_expense_authority_generations expense
+      where expense.final_revision_id=v_prior_revision.id and expense.state='CURRENT'
+    );
+
+  -- Expense authority is activated in the same CAS as source authority.  The
+  -- prepared generation wins where one exists; otherwise correcting away an
+  -- erroneous same-cycle generation restores its exact predecessor (or zero
+  -- when there was no predecessor).
+  update public.weekly_expense_authority_generations current_expense
+  set state='SUPERSEDED'
+  where current_expense.state='CURRENT'
+    and current_expense.work_event_id in (
+      select old_expense.work_event_id
+      from public.weekly_expense_authority_generations old_expense
+      where old_expense.final_revision_id=v_prior_revision.id
+      union
+      select prepared_expense.work_event_id
+      from public.weekly_expense_authority_generations prepared_expense
+      where prepared_expense.final_revision_id=v_prepared_revision.id
+        and prepared_expense.state='PREPARED'
+    );
+  update public.weekly_expense_authority_generations prepared_expense
+  set state='CURRENT'
+  where prepared_expense.final_revision_id=v_prepared_revision.id
+    and prepared_expense.state='PREPARED';
+  update public.weekly_expense_authority_generations baseline_expense
+  set state='CURRENT'
+  where baseline_expense.state='SUPERSEDED'
+    and baseline_expense.id in (
+      select old_expense.prior_expense_authority_generation_id
+      from public.weekly_expense_authority_generations old_expense
+      where old_expense.final_revision_id=v_prior_revision.id
+        and old_expense.prior_expense_authority_generation_id is not null
+        and not exists(
+          select 1
+          from public.weekly_expense_authority_generations prepared_expense
+          where prepared_expense.final_revision_id=v_prepared_revision.id
+            and prepared_expense.work_event_id=old_expense.work_event_id
+            and prepared_expense.state='CURRENT'
+        )
+    );
+
+  perform pg_catalog.set_config(
+    'cloudtms.weekly_source_correction_owner',
+    'weekly_source_correct_final_apply_atomic_v1',true
+  );
+  select pg_catalog.count(*)::integer into v_old_movement_count
+  from public.weekly_source_billing_movements
+  where final_revision_id=v_prior_revision.id;
+  if exists(
+    select 1 from public.weekly_source_billing_movements
+    where final_revision_id=v_prior_revision.id and placement_state<>'UNPLACED'
+  ) or exists(
+    select 1 from public.weekly_source_billing_movements
+    where final_revision_id=v_prepared_revision.id and placement_state<>'UNPLACED'
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_MOVEMENT_STATE_STALE' using errcode='40001';
+  end if;
+  update public.weekly_source_billing_movements
+  set placement_state='VOIDED_BY_CORRECT_FINAL'
+  where final_revision_id=v_prior_revision.id and placement_state='UNPLACED';
+  get diagnostics v_voided_count=row_count;
+  if v_voided_count<>v_old_movement_count then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_MOVEMENT_CAS_LOST' using errcode='40001';
+  end if;
+  update public.weekly_source_final_revisions
+  set state='SUPERSEDED' where id=v_prior_revision.id and state='CURRENT';
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_CAS_LOST' using errcode='40001';
+  end if;
+  update public.weekly_source_final_revisions
+  set state='CURRENT' where id=v_prepared_revision.id and state='PREPARED';
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARED_REVISION_CAS_LOST'
+      using errcode='40001';
+  end if;
+  update public.weekly_source_uploads set state='SUPERSEDED'
+  where id=v_prior_upload.id and state='CURRENT';
+  get diagnostics v_cas_count=row_count;
+  if v_cas_count<>1 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PRIOR_UPLOAD_CAS_LOST'
+      using errcode='40001';
+  end if;
+  update public.weekly_source_projection_publications
+  set state='STALE',failure_code='SUPERSEDED_BY_CORRECT_FINAL_SOURCE'
+  where id=v_prior_publication.id and state='CURRENT';
+  get diagnostics v_cas_count=row_count;
+  if v_cas_count<>1 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PRIOR_PUBLICATION_CAS_LOST'
+      using errcode='40001';
+  end if;
+  update public.weekly_source_uploads set state='CURRENT'
+  where id=v_replacement_upload.id and state='CORRECTION_READY';
+  get diagnostics v_cas_count=row_count;
+  if v_cas_count<>1 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_UPLOAD_CAS_LOST'
+      using errcode='40001';
+  end if;
+  update public.weekly_source_projection_publications set state='CURRENT'
+  where id=v_replacement_publication.id and state='CORRECTION_READY';
+  get diagnostics v_cas_count=row_count;
+  if v_cas_count<>1 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_PUBLICATION_CAS_LOST'
+      using errcode='40001';
+  end if;
+
+  if v_session.authority_scope_kind='CYCLE' then
+    update public.weekly_source_cycles
+    set current_complete_upload_id=v_replacement_upload.id,
+        current_projection_publication_id=v_replacement_publication.id,
+        current_final_revision_id=v_prepared_revision.id,projection_state='CURRENT',
+        state='FINALISED',finalised_at_utc=pg_catalog.transaction_timestamp(),
+        finalised_by_user_id=v_actor
+    where id=v_cycle.id
+      and current_complete_upload_id=v_prior_upload.id
+      and current_projection_publication_id=v_prior_publication.id
+      and current_final_revision_id=v_prior_revision.id
+      and version=v_scope_version;
+  else
+    update public.weekly_source_report_scopes
+    set current_complete_upload_id=v_replacement_upload.id,
+        current_projection_publication_id=v_replacement_publication.id,
+        current_final_revision_id=v_prepared_revision.id,projection_state='CURRENT',
+        state='FINALISED',updated_at_utc=pg_catalog.transaction_timestamp()
+    where id=v_scope.id
+      and current_complete_upload_id=v_prior_upload.id
+      and current_projection_publication_id=v_prior_publication.id
+      and current_final_revision_id=v_prior_revision.id
+      and version=v_scope_version;
+  end if;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_AUTHORITY_CAS_LOST' using errcode='40001';
+  end if;
+  v_new_revision_id:=v_prepared_revision.id;
+
+  -- APPLIED replay returned earlier; only the successful new CURRENT CAS
+  -- resolves report-contained manual queries before the existing selector.
+  -- Keep the completion receipt below that selector in its original order.
+  perform private.weekly_source_manual_reviews_finalised_v1(v_new_revision_id,v_actor);
+
+  -- Source old/new and cycle/report CURRENT CAS succeeded. Retract only the
+  -- exact old captured revision, publish genuine new origins, and retain an
+  -- explicit new observation even for an empty correction. Outside readers
+  -- cannot observe this intermediate state: it is the same owner transaction.
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.bpay_next_source_current_apply_correction_v1(v_session.id);
+  end if;
+
+  update public.weekly_source_client_cycle_completions completion
+  set state='SUPERSEDED',superseded_at_utc=pg_catalog.transaction_timestamp()
+  where completion.source_cycle_id=v_cycle.id
+    and completion.client_id=v_client_id and completion.state='CURRENT';
+  select coalesce(pg_catalog.max(completion.completion_generation),0)+1
+  into v_completion_generation
+  from public.weekly_source_client_cycle_completions completion
+  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;
+  v_completion_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CLIENT_CYCLE_COMPLETION_V1',
+    pg_catalog.jsonb_build_object(
+      'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+      'client_id',v_client_id,'completion_generation',v_completion_generation,
+      'completion_kind','FINAL_SOURCE','final_revision_id',v_new_revision_id,
+      'actor_user_id',v_actor
+    )
+  );
+  insert into public.weekly_source_client_cycle_completions(
+    source_cycle_id,source_group_id,client_id,completion_generation,
+    completion_kind,final_revision_id,attested_by_user_id,attested_at_utc,
+    attestation_text,completion_hash,state
+  ) values (
+    v_cycle.id,v_group.id,v_client_id,v_completion_generation,
+    'FINAL_SOURCE',v_new_revision_id,v_actor,pg_catalog.transaction_timestamp(),
+    null,v_completion_hash,'CURRENT'
+  );
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    if not exists(
+      select 1
+      from public.weekly_source_group_clients membership
+      where membership.source_group_id=v_group.id
+        and v_cycle.finalisation_week_ending between membership.valid_from
+          and coalesce(membership.valid_to,'infinity'::date)
+        and not exists(
+          select 1
+          from public.weekly_source_client_cycle_completions completion
+          where completion.source_cycle_id=v_cycle.id
+            and completion.client_id=membership.client_id
+            and completion.state='CURRENT'
+        )
+    ) then
+      update public.weekly_source_cycles
+      set state='FINALISED',finalised_at_utc=pg_catalog.transaction_timestamp(),
+          finalised_by_user_id=v_actor
+      where id=v_cycle.id;
+    else
+      update public.weekly_source_cycles set state='FINALISABLE'
+      where id=v_cycle.id;
+    end if;
+  end if;
+
+  for v_root in
+    select (server_root.value->>'root_timesheet_id')::uuid as root_timesheet_id,
+           (server_root.value->>'prior_projection_receipt_id')::uuid as prior_receipt_id,
+           server_root.value->>'source_profile_kind' as source_profile_kind,
+           server_root.value->>'source_mode' as source_mode,
+           supplied.value->'service_snapshot' as service_snapshot
+    from pg_catalog.jsonb_array_elements(v_server_roots) server_root(value)
+    join pg_catalog.jsonb_array_elements(v_root_snapshots) supplied(value)
+      on supplied.value->>'root_timesheet_id'=server_root.value->>'root_timesheet_id'
+    order by server_root.value->>'root_timesheet_id'
+  loop
+    v_prior_receipt:=null;
+    if v_root.prior_receipt_id is not null then
+      select * into strict v_prior_receipt
+      from public.weekly_source_ordinary_pay_projection_receipts
+      where id=v_root.prior_receipt_id;
+      if v_prior_receipt.final_revision_id is distinct from v_prior_revision.id
+         or v_prior_receipt.root_timesheet_id is distinct from v_root.root_timesheet_id
+         or v_prior_receipt.outcome not in ('PREPARED_FOR_AUTHORISATION','PROPOSED') then
+        raise exception 'WEEKLY_SOURCE_CORRECTION_PRIOR_ROOT_RECEIPT_STALE'
+          using errcode='40001';
+      end if;
+    end if;
+    v_impact_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_CORRECT_FINAL_ROOT_IMPACT_V1',
+      pg_catalog.jsonb_build_object(
+        'correction_session_id',v_session.id,
+        'prior_final_revision_id',v_prior_revision.id,
+        'replacement_final_revision_id',v_new_revision_id,
+        'root_timesheet_id',v_root.root_timesheet_id,
+        'prior_projection_receipt_id',v_root.prior_receipt_id,
+        'client_id',v_client_id,
+        'source_profile_kind',v_root.source_profile_kind,
+        'source_mode',v_root.source_mode,
+        'submitted_service_snapshot_hash',pg_catalog.encode(
+          private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_ORDINARY_SERVICE_SNAPSHOT_V1',v_root.service_snapshot
+          ),'hex'
+        )
+      )
+    );
+    insert into public.weekly_final_source_correction_root_impacts(
+      correction_session_id,prior_final_revision_id,replacement_final_revision_id,
+      root_timesheet_id,prior_projection_receipt_id,client_id,source_profile_kind,
+      source_mode,impact_kind,submitted_service_snapshot_hash,impact_hash
+    ) values (
+      v_session.id,v_prior_revision.id,v_new_revision_id,v_root.root_timesheet_id,
+      v_root.prior_receipt_id,v_client_id,v_root.source_profile_kind,v_root.source_mode,
+      case when v_root.prior_receipt_id is null
+        then 'PUBLISHED_REPLACEMENT_ONLY_ROOT'
+        when exists(
+        select 1 from public.weekly_source_billing_movements movement
+        where movement.final_revision_id=v_new_revision_id
+          and movement.invoice_timesheet_id=v_root.root_timesheet_id
+      ) then 'REPROJECTED_WITH_CURRENT_REVISION_MOVEMENTS'
+        else 'REPROJECTED_WITHOUT_CURRENT_REVISION_MOVEMENTS' end,
+      private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_ORDINARY_SERVICE_SNAPSHOT_V1',v_root.service_snapshot
+      ),v_impact_hash
+    );
+    v_projection_result:=public.weekly_source_ordinary_pay_projection_apply_atomic_v1(
+      pg_catalog.jsonb_build_object(
+        'schema_version','WEEKLY_SOURCE_ORDINARY_PAY_PROJECTION_REQUEST_V1',
+        'actor_user_id',v_actor,'final_revision_id',v_new_revision_id,
+        'root_timesheet_id',v_root.root_timesheet_id,
+        'idempotency_key','correct-final:'||v_session.id::text||':'||v_root.root_timesheet_id::text,
+        'service_snapshot',v_root.service_snapshot
+      )
+    );
+    -- Gate 2: the projection no longer publishes.  The only outcome reachable
+    -- from here is PREPARED_FOR_AUTHORISATION, because the gates above now
+    -- admit DIRECT_AMEND_RECALCULATE only, i.e. a root that is not yet
+    -- authorised.  Anything else means the root moved under us.
+    if v_projection_result->>'outcome'<>'PREPARED_FOR_AUTHORISATION' then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_ROOT_REPROJECT_FAILED'
+        using errcode='55000',detail=v_projection_result::text;
+    end if;
+  end loop;
+
+  v_result:=(v_session.prepare_result_json-'root_contexts')||pg_catalog.jsonb_build_object(
+    'status','CORRECTED','correction_session_id',v_session.id,
+    'prior_final_revision_id',v_prior_revision.id,
+    'affected_root_count',pg_catalog.jsonb_array_length(v_server_roots),
+    'version',v_expected_session_version+2,
+    'idempotent_replay',false
+  );
+  v_result_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_RESULT_V1',v_result
+  );
+  update public.weekly_final_source_correction_sessions
+  set state='APPLIED',applied_final_revision_id=v_new_revision_id,
+      result_json=v_result,result_hash=v_result_hash,version=version+1,
+      updated_at_utc=pg_catalog.transaction_timestamp(),
+      completed_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state='COMMITTING';
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_final_source_correction_sessions',v_session.id::text,
+         'WEEKLY_SOURCE_CORRECT_FINAL_APPLIED',
+         pg_catalog.jsonb_build_object(
+           'state','CURRENT','final_revision_id',v_prior_revision.id,
+           'upload_id',v_prior_upload.id,'projection_publication_id',v_prior_publication.id
+         ),
+         pg_catalog.jsonb_build_object(
+           'state','APPLIED','final_revision_id',v_new_revision_id,
+           'upload_id',v_replacement_upload.id,
+           'projection_publication_id',v_replacement_publication.id,
+           'affected_root_count',pg_catalog.jsonb_array_length(v_server_roots),
+           'voided_prior_movement_count',v_voided_count,
+           'result_hash',pg_catalog.encode(v_result_hash,'hex')
+         ),v_reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+  return v_result;
+end;
+$function$;
+
+create or replace function private.weekly_source_office_query_groups_v1(
+  p_source_cycle_id uuid,
+  p_projection_publication_id uuid,
+  p_filters jsonb default '{}'::jsonb
+) returns table(
+  group_key text,
+  candidate_id uuid,
+  client_id uuid,
+  manager_recipient_route_key bytea,
+  candidate_name text,
+  client_name text,
+  incident_ids uuid[],
+  accept_incident_ids uuid[],
+  missing_scopes jsonb,
+  children jsonb,
+  issue_count integer,
+  candidate_asked boolean,
+  manager_informed boolean,
+  outreach_eligible boolean,
+  manager_eligible boolean,
+  candidate_app_available boolean,
+  first_seen_at_utc timestamptz,
+  status_text text,
+  status_tone text,
+  issue_summary text
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with cycle_context as (
+    select cycle.id,cycle.source_group_id,cycle.finalisation_week_ending,
+      source_group.environment,source_group.agency_id,source_group.source_family,
+      publication.upload_id,
+      current_upload.source_format_profile_id,
+      current_profile.profile_code
+    from public.weekly_source_cycles cycle
+    join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+    join public.weekly_source_projection_publications publication
+      on publication.id=p_projection_publication_id
+     and publication.source_cycle_id=cycle.id
+     and publication.state='CURRENT'
+    join public.weekly_source_uploads current_upload
+      on current_upload.id=publication.upload_id
+    join public.weekly_source_format_profiles current_profile
+      on current_profile.id=current_upload.source_format_profile_id
+    where cycle.id=p_source_cycle_id
+  ), incident_facts as (
+    select incident.id incident_id,incident.candidate_id,incident.client_id,
+      incident.work_event_id,cycle_context.source_group_id,
+      incident.candidate_action_state,incident.manager_action_state,
+      incident.manager_potential_state,incident.created_at_utc,
+      comparison.issue_family,comparison.contract_id,
+      comparison.candidate_timesheet_id,comparison.source_presence,comparison.source_row_id,
+      comparison.candidate_start_at_local,comparison.candidate_end_at_local,
+      comparison.candidate_break_minutes,comparison.system_start_at_local,
+      comparison.system_end_at_local,comparison.system_break_minutes,
+      work_event.work_date,contract.role job_role,route_context.value route_context,
+      candidate_reply.bounded_payload_json->>'choice' candidate_reply_choice,
+      candidate_reply.occurred_at_utc candidate_replied_at,
+      candidate_delivery.contacted_at_utc candidate_contacted_at,
+      manager_reply.bounded_payload_json->>'response_kind' manager_reply_kind,
+      manager_reply.occurred_at_utc manager_replied_at,
+      manager_delivery.contacted_at_utc manager_contacted_at,
+      manager_item.intended_start_at_local,manager_item.intended_end_at_local,
+      manager_item.intended_break_minutes
+    from cycle_context
+    join public.weekly_discrepancy_incidents incident
+      on incident.source_cycle_id=cycle_context.id and incident.state='OPEN'
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_source_uploads comparison_upload
+      on comparison_upload.id=comparison.comparison_upload_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    left join public.contracts contract on contract.id=comparison.contract_id
+    -- Replies belong to the current incident episode. A prior question's answer
+    -- must never be presented as the answer to materially changed hours.
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='CANDIDATE_RESPONDED'
+        and incident.candidate_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) candidate_reply on true
+    left join lateral (
+      select min(command.provider_accepted_at_utc) contacted_at_utc
+      from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_message_dispatch_commands command
+        on command.candidate_generation_id=membership.candidate_generation_id
+        and command.state='ACCEPTED'
+      where membership.incident_id=incident.id
+        and membership.comparison_revision_id=incident.current_comparison_revision_id
+    ) candidate_delivery on true
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='MANAGER_RESPONDED'
+        and incident.manager_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) manager_reply on true
+    left join lateral (
+      select min(command.provider_accepted_at_utc) contacted_at_utc
+      from public.weekly_manager_review_items review_item
+      join public.weekly_manager_review_batches review_batch on review_batch.id=review_item.review_batch_id
+      join public.weekly_message_dispatch_commands command
+        on command.message_render_id=review_batch.message_render_id
+        and command.state='ACCEPTED'
+      where review_item.incident_id=incident.id
+        and review_item.incident_episode=incident.episode_number
+    ) manager_delivery on true
+    left join public.weekly_manager_review_items manager_item
+      on manager_item.id=nullif(manager_reply.bounded_payload_json->>'review_item_id','')::uuid
+      and manager_item.incident_id=incident.id
+      and manager_item.incident_episode=incident.episode_number
+    cross join lateral (
+      select private.weekly_source_office_route_key_v1(
+        incident.source_cycle_id,incident.candidate_id,incident.client_id,
+        comparison.contract_id,work_event.work_date
+      ) value
+    ) route_context
+    -- A provisional comparison can remain byte-for-byte unchanged when a new
+    -- file covers its date. Its immutable revision still names the prior
+    -- publication; visibility is based on the OPEN incident, not a rewrite of
+    -- that revision or a second notification clock.
+    where comparison.issue_family<>'CANDIDATE_TIMESHEET_MISSING'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (comparison.projection_publication_id=p_projection_publication_id
+        or (cycle_context.profile_code='NHSP_PREFINAL_RELEASED_V1'
+          and comparison_upload.source_cycle_id=cycle_context.id
+          and comparison_upload.source_format_profile_id=cycle_context.source_format_profile_id))
+  ), manual_facts as (
+    select review.*,current_row.id current_source_row_id,
+      current_row.normalised_row_hash current_source_row_hash,
+      current_row.start_at_local,current_row.end_at_local,
+      current_row.break_minutes,contract.role job_role,
+      coalesce(nullif(office_user.display_name,''),'Office user') opened_by_name,
+      route_context.value route_context
+    from cycle_context
+    join private.weekly_source_manual_reviews review
+      on review.source_cycle_id=cycle_context.id and review.state='OPEN'
+    join public.weekly_source_upload_rows source_row on source_row.id=review.upload_row_id
+    join public.contracts contract on contract.id=review.contract_id
+    left join public.tms_users office_user on office_user.id=review.opened_by_user_id
+    left join lateral (
+      select candidate_row.*
+      from public.weekly_source_upload_rows candidate_row
+      join public.weekly_source_uploads candidate_upload on candidate_upload.id=candidate_row.upload_id
+      join lateral (
+        select mapping.work_event_id,mapping.mapping_state
+        from public.weekly_source_row_resolutions mapping
+        where mapping.upload_row_id=candidate_row.id
+        order by mapping.generation desc,mapping.id desc limit 1
+      ) current_mapping on current_mapping.work_event_id=review.work_event_id
+        and current_mapping.mapping_state='RESOLVED'
+      where candidate_upload.source_cycle_id=review.source_cycle_id
+        and candidate_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+        and (
+          exists(select 1 from public.weekly_source_client_manifests manifest
+            join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+            where manifest.source_cycle_id=review.source_cycle_id
+              and manifest.client_id=review.client_id
+              and revision.state='CURRENT' and revision.upload_id=candidate_upload.id)
+          or (not exists(select 1 from public.weekly_source_client_manifests manifest
+              join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+              where manifest.source_cycle_id=review.source_cycle_id
+                and manifest.client_id=review.client_id and revision.state='CURRENT')
+            and exists(select 1 from public.weekly_source_projection_publications publication
+              where publication.source_cycle_id=review.source_cycle_id
+                and publication.upload_id=candidate_upload.id and publication.state='CURRENT'))
+        )
+      order by candidate_row.created_at_utc desc,candidate_row.id desc limit 1
+    ) current_row on true
+    cross join lateral (select private.weekly_source_office_route_key_v1(
+      review.source_cycle_id,review.candidate_id,review.client_id,
+      review.contract_id,review.work_date) value) route_context
+  ), missing_rows as (
+    select cycle_context.id source_cycle_id,
+      resolution.candidate_id,resolution.client_id,resolution.contract_id,
+      row.id source_row_id,row.normalised_row_hash,row.work_date,
+      row.start_at_local,row.end_at_local,row.break_minutes,row.actual_net_minutes,
+      row.row_finalisation_state,row.created_at_utc,resolution.id row_resolution_id,
+      resolution.work_event_id,resolution.source_row_fingerprint,
+      resolution.contract_and_rate_fingerprint,resolution.effective_policy_fingerprint,
+      (date_trunc('week',row.work_date)::date+6) week_ending,
+      coalesce(lineage.timesheet_id,root_contract_week.timesheet_id) timesheet_id,
+      route_context.value route_context
+    from cycle_context
+    join public.weekly_source_upload_rows row on row.upload_id=cycle_context.upload_id
+    join lateral (
+      select candidate.* from public.weekly_source_row_resolutions candidate
+      where candidate.upload_row_id=row.id
+      order by candidate.generation desc,candidate.id desc limit 1
+    ) resolution on resolution.mapping_state='RESOLVED'
+    left join public.weekly_source_row_timesheet_lineages lineage
+      on lineage.row_resolution_id=resolution.id
+    left join lateral (
+      select contract_week.timesheet_id
+      from public.contract_weeks contract_week
+      where contract_week.contract_id=resolution.contract_id
+        and contract_week.week_ending_date=(date_trunc('week',row.work_date)::date+6)
+        and contract_week.additional_seq=0
+        and not contract_week.is_adjustment
+        and contract_week.status<>'CANCELLED'::public.contract_week_status_enum
+      order by contract_week.created_at desc,contract_week.id desc
+      limit 1
+    ) root_contract_week on true
+    left join public.timesheets timesheet
+      on timesheet.timesheet_id=coalesce(lineage.timesheet_id,root_contract_week.timesheet_id)
+     and timesheet.is_current and timesheet.revoked_at is null
+     and timesheet.archived_at_utc is null
+     and timesheet.sheet_scope='WEEKLY' and timesheet.line_type='HOURS'
+    cross join lateral (
+      select private.weekly_source_office_route_key_v1(
+        cycle_context.id,resolution.candidate_id,resolution.client_id,
+        resolution.contract_id,row.work_date
+      ) value
+    ) route_context
+    where row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+      and row.actual_net_minutes>0
+      and not exists (
+        select 1 from public.weekly_source_client_manifests manifest
+        join public.weekly_source_final_revisions final_revision
+          on final_revision.id=manifest.final_revision_id
+        where manifest.source_cycle_id=cycle_context.id
+          and manifest.client_id=resolution.client_id
+          and final_revision.state='CURRENT'
+      )
+      and route_context.value->>'authority_mode'='SOURCE_AUTHORITY'
+      and route_context.value->>'document_mode'='CHECK_ONLY'
+      and (timesheet.timesheet_id is null
+        or timesheet.r2_nurse_key is null or timesheet.img_sha256_nurse is null)
+  ), missing_scopes as (
+    select missing_rows.source_cycle_id,missing_rows.candidate_id,
+      missing_rows.client_id,missing_rows.contract_id,missing_rows.week_ending,
+      min(missing_rows.work_date) first_work_date,
+      (pg_catalog.array_agg(missing_rows.source_row_id order by
+        missing_rows.work_date,missing_rows.start_at_local,
+        missing_rows.end_at_local,missing_rows.source_row_id))[1] first_source_row_id,
+      min(missing_rows.created_at_utc) first_seen_at_utc,
+      (min(missing_rows.route_context->>'route_key'))::text route_key_hex,
+      bool_and(coalesce((missing_rows.route_context->>'candidate_queries_enabled')::boolean,false))
+        candidate_queries_enabled,
+      private.weekly_source_office_missing_scope_fingerprint_v1(
+        p_projection_publication_id,missing_rows.candidate_id,missing_rows.client_id,
+        missing_rows.contract_id,missing_rows.week_ending
+      ) expected_source_fingerprint,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'incident_id',null,'row_key','missing-'||missing_rows.source_row_id::text,
+        'day_date',to_char(missing_rows.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',coalesce(contract.role,''),
+        'candidate_hours','Timesheet not submitted',
+        'system_hours',case when missing_rows.start_at_local is null then pg_catalog.chr(8212)
+          else to_char(missing_rows.start_at_local,'HH24:MI')||'-'||to_char(missing_rows.end_at_local,'HH24:MI') end,
+        'issue','Timesheet missing',
+        'status',pg_catalog.jsonb_build_object('text','Waiting for Timesheet','tone','warning'),
+        'accept_eligible',false,'actions',pg_catalog.jsonb_build_array('View details')
+      ) order by missing_rows.work_date,missing_rows.start_at_local,
+        missing_rows.end_at_local,missing_rows.source_row_id) children
+    from missing_rows
+    join public.contracts contract on contract.id=missing_rows.contract_id
+    group by missing_rows.source_cycle_id,missing_rows.candidate_id,
+      missing_rows.client_id,missing_rows.contract_id,missing_rows.week_ending
+  ), incident_grouped as (
+    select (incident_facts.route_context->>'group_key')::text group_key,
+      incident_facts.candidate_id,incident_facts.client_id,
+      pg_catalog.decode(incident_facts.route_context->>'route_key','hex') manager_recipient_route_key,
+      pg_catalog.array_agg(incident_facts.incident_id order by incident_facts.incident_id) incident_ids,
+      coalesce(pg_catalog.array_agg(incident_facts.incident_id order by incident_facts.incident_id)
+        filter (where incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'),'{}'::uuid[])
+        accept_incident_ids,
+      min(incident_facts.created_at_utc) first_seen_at_utc,
+      bool_or(incident_facts.candidate_action_state in ('ASKED','RESPONDED')) candidate_asked,
+      bool_or(incident_facts.manager_action_state in ('SENT','RESPONDED')) manager_informed,
+      bool_and(coalesce((incident_facts.route_context->>'candidate_queries_enabled')::boolean,false))
+        candidate_queries_enabled,
+      bool_and(coalesce((incident_facts.route_context->>'manager_queries_enabled')::boolean,false)
+        and coalesce((incident_facts.route_context->>'manager_recipient_present')::boolean,false))
+        manager_queries_enabled,
+      bool_and(incident_facts.candidate_timesheet_id is not null
+        and incident_facts.manager_potential_state='AVAILABLE'
+        and incident_facts.manager_action_state not in ('RESPONDED','NOT_REQUIRED')) manager_eligible,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'incident_id',incident_facts.incident_id,
+        'candidate_shift_absent_from_import',incident_facts.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED'
+          and incident_facts.source_presence='ABSENT' and incident_facts.source_row_id is null
+          and incident_facts.candidate_timesheet_id is not null
+          and incident_facts.candidate_start_at_local is not null
+          and incident_facts.candidate_end_at_local>incident_facts.candidate_start_at_local,
+        'candidate_response',case incident_facts.candidate_reply_choice
+          when 'CANDIDATE_CORRECT' then 'My hours are correct'
+          when 'CANDIDATE_WRONG' then 'Accepted system hours'
+          when 'NEITHER_CORRECT' then 'Submitted corrected hours'
+          else null end,
+        'candidate_responded_at',to_char(incident_facts.candidate_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'candidate_contacted_at',to_char(incident_facts.candidate_contacted_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_response',case incident_facts.manager_reply_kind
+          when 'SYSTEM_CORRECT' then 'System hours are correct'
+          when 'CANDIDATE_DID_NOT_WORK' then 'Candidate did not work'
+          when 'MANAGER_CORRECTED_SOURCE' then 'Reported a source correction'
+          else null end,
+        'manager_responded_at',to_char(incident_facts.manager_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_contacted_at',to_char(incident_facts.manager_contacted_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_intended_hours',case when incident_facts.manager_reply_kind='MANAGER_CORRECTED_SOURCE'
+          then to_char(incident_facts.intended_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.intended_end_at_local,'HH24:MI')
+            ||' ('||incident_facts.intended_break_minutes||' min break)' else null end,
+        'protected_pay_seed',case when incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'
+          then pg_catalog.jsonb_build_object('source_group_id',incident_facts.source_group_id,
+            'client_id',incident_facts.client_id,'candidate_id',incident_facts.candidate_id,
+            'work_event_id',incident_facts.work_event_id,'contract_id',incident_facts.contract_id,
+            'work_date',incident_facts.work_date,
+            'start',to_char(coalesce(incident_facts.candidate_start_at_local,incident_facts.system_start_at_local),'HH24:MI'),
+            'end',to_char(coalesce(incident_facts.candidate_end_at_local,incident_facts.system_end_at_local),'HH24:MI'),
+            'break_minutes',coalesce(incident_facts.candidate_break_minutes,incident_facts.system_break_minutes)) end,
+        'row_key','incident-'||incident_facts.incident_id::text,
+        'day_date',to_char(incident_facts.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',coalesce(incident_facts.job_role,''),
+        'candidate_hours',case when incident_facts.candidate_start_at_local is null then 'Timesheet not submitted'
+          else to_char(incident_facts.candidate_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.candidate_end_at_local,'HH24:MI')
+            ||case when incident_facts.candidate_break_minutes is null then '' else ' ('||incident_facts.candidate_break_minutes||' min break)' end end,
+        'system_hours',case when incident_facts.source_presence<>'PRESENT' then 'Not included'
+          else to_char(incident_facts.system_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.system_end_at_local,'HH24:MI')
+            ||case when incident_facts.system_break_minutes is null then '' else ' ('||incident_facts.system_break_minutes||' min break)' end end,
+        'issue',case incident_facts.issue_family
+          when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+          when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+          when 'REFERENCE_MISSING' then 'Reference missing'
+          when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+          else 'Needs review' end,
+        'status',pg_catalog.jsonb_build_object(
+          'text',case when incident_facts.manager_action_state='RESPONDED' then 'Manager responded'
+            when incident_facts.manager_action_state='SENT' then 'Manager informed'
+            when incident_facts.candidate_action_state='RESPONDED' then 'Candidate responded'
+            when incident_facts.candidate_action_state='ASKED' then 'Candidate asked' else 'Needs action' end,
+          'tone',case when incident_facts.candidate_action_state='NOT_ASKED' then 'warning' else 'info' end
+        ),'accept_eligible',incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY',
+        'actions',pg_catalog.jsonb_build_array('View details')
+      ) order by incident_facts.work_date,
+        coalesce(incident_facts.system_start_at_local,incident_facts.candidate_start_at_local),
+        incident_facts.incident_id) children,
+      pg_catalog.string_agg(distinct case incident_facts.issue_family
+        when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+        when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+        when 'REFERENCE_MISSING' then 'Reference missing'
+        when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+        else 'Needs review' end,', ' order by case incident_facts.issue_family
+        when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+        when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+        when 'REFERENCE_MISSING' then 'Reference missing'
+        when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+        else 'Needs review' end) issue_summary
+    from incident_facts
+    group by incident_facts.route_context->>'group_key',incident_facts.candidate_id,
+      incident_facts.client_id,incident_facts.route_context->>'route_key'
+  ), manual_grouped as (
+    select (manual.route_context->>'group_key')::text group_key,
+      manual.candidate_id,manual.client_id,
+      pg_catalog.decode(manual.route_context->>'route_key','hex') manager_recipient_route_key,
+      count(*)::integer review_count,min(manual.opened_at_utc) first_seen_at_utc,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'manual_review_id',manual.id,'incident_id',null,
+        'source_row_id',manual.current_source_row_id,
+        'current_source_row_hash',pg_catalog.encode(manual.current_source_row_hash,'hex'),
+        'row_key','manual-'||manual.id::text,
+        'day_date',to_char(manual.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',manual.job_role,
+        'candidate_hours','See candidate Timesheet',
+        'system_hours',case when manual.current_source_row_id is null then 'Not in current import'
+          else to_char(manual.start_at_local,'HH24:MI')||'-'||
+            to_char(manual.end_at_local,'HH24:MI')||' ('||manual.break_minutes||' min break)' end,
+        'issue','Manually queried',
+        'manual_query',pg_catalog.jsonb_build_object(
+          'opened_by',manual.opened_by_name,
+          'opened_at_uk',to_char(manual.opened_at_utc at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+          'reason',manual.office_reason),
+        'status',pg_catalog.jsonb_build_object('text','Office review','tone','danger'),
+        'accept_eligible',false,
+        'protected_pay_seed',pg_catalog.jsonb_build_object(
+          'source_group_id',manual.source_group_id,
+          'client_id',manual.client_id,'candidate_id',manual.candidate_id,
+          'work_event_id',manual.work_event_id,'contract_id',manual.contract_id,
+          'manual_review_id',manual.id,
+          'work_date',manual.work_date,'start',to_char(manual.start_at_local,'HH24:MI'),
+          'end',to_char(manual.end_at_local,'HH24:MI'),
+          'break_minutes',manual.break_minutes),
+        'actions','[]'::jsonb
+      ) order by manual.work_date,manual.start_at_local,manual.id) children
+    from manual_facts manual
+    group by manual.route_context->>'group_key',manual.candidate_id,
+      manual.client_id,manual.route_context->>'route_key'
+  ), missing_grouped as (
+    select private.weekly_source_office_group_key_v1(
+        scope.source_cycle_id,scope.candidate_id,scope.client_id,
+        pg_catalog.decode(scope.route_key_hex,'hex')
+      ) group_key,
+      scope.candidate_id,scope.client_id,
+      pg_catalog.decode(scope.route_key_hex,'hex') manager_recipient_route_key,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'week_ending',scope.week_ending,'client_id',scope.client_id,
+        'contract_id',scope.contract_id,
+        'expected_source_fingerprint',pg_catalog.encode(scope.expected_source_fingerprint,'hex')
+      ) order by scope.week_ending,scope.client_id,scope.contract_id) scopes,
+      min(scope.first_seen_at_utc) first_seen_at_utc,
+      bool_and(scope.candidate_queries_enabled) candidate_queries_enabled,
+      pg_catalog.jsonb_agg(child.value order by scope.week_ending,scope.contract_id,child.ordinality) children
+    from missing_scopes scope
+    cross join lateral pg_catalog.jsonb_array_elements(scope.children) with ordinality child(value,ordinality)
+    group by scope.source_cycle_id,scope.candidate_id,scope.client_id,scope.route_key_hex
+  ), combined as (
+    select coalesce(incident.group_key,missing.group_key,manual.group_key) group_key,
+      coalesce(incident.candidate_id,missing.candidate_id,manual.candidate_id) candidate_id,
+      coalesce(incident.client_id,missing.client_id,manual.client_id) client_id,
+      coalesce(incident.manager_recipient_route_key,missing.manager_recipient_route_key,
+        manual.manager_recipient_route_key)
+        manager_recipient_route_key,
+      coalesce(incident.incident_ids,'{}'::uuid[]) incident_ids,
+      coalesce(incident.accept_incident_ids,'{}'::uuid[]) accept_incident_ids,
+      coalesce(missing.scopes,'[]'::jsonb) missing_scopes,
+      coalesce(incident.children,'[]'::jsonb)||coalesce(missing.children,'[]'::jsonb)
+        ||coalesce(manual.children,'[]'::jsonb) children,
+      coalesce(pg_catalog.array_length(incident.incident_ids,1),0)
+        +coalesce(pg_catalog.jsonb_array_length(missing.scopes),0)
+        +coalesce(manual.review_count,0) issue_count,
+      coalesce(incident.candidate_asked,false) candidate_asked,
+      coalesce(incident.manager_informed,false) manager_informed,
+      coalesce(incident.candidate_queries_enabled,true)
+        and coalesce(missing.candidate_queries_enabled,true) candidate_queries_enabled,
+      coalesce(incident.manager_eligible,false)
+        and pg_catalog.jsonb_array_length(coalesce(missing.scopes,'[]'::jsonb))=0 manager_eligible,
+      least(incident.first_seen_at_utc,missing.first_seen_at_utc,
+        manual.first_seen_at_utc) first_seen_at_utc,
+      case when manual.review_count>0 and (incident.group_key is not null or missing.group_key is not null)
+        then 'Multiple' when manual.review_count>0 then 'Manually queried'
+        else coalesce(incident.issue_summary,'Timesheet missing') end issue_summary
+    from incident_grouped incident
+    full join missing_grouped missing on missing.group_key=incident.group_key
+    full join manual_grouped manual on manual.group_key=coalesce(incident.group_key,missing.group_key)
+  ), named as (
+    select combined.*,coalesce(nullif(candidate.display_name,''),
+        nullif(pg_catalog.concat_ws(' ',candidate.first_name,candidate.last_name),''),
+        candidate.tms_ref,'Candidate') candidate_name,
+      client.name client_name,context.environment,
+      (select count(*)=1
+       from public.candidate_app_global_membership_links membership
+       join public.candidate_app_accounts account on account.id=membership.account_id
+       where membership.candidate_id=combined.candidate_id
+         and membership.state='ACTIVE' and account.status='ACTIVE') candidate_app_available
+    from combined
+    join public.candidates candidate on candidate.id=combined.candidate_id
+    join public.clients client on client.id=combined.client_id
+    cross join cycle_context context
+  )
+  select named.group_key,named.candidate_id,named.client_id,
+    named.manager_recipient_route_key,named.candidate_name,named.client_name,
+    named.incident_ids,named.accept_incident_ids,named.missing_scopes,named.children,named.issue_count,
+    named.candidate_asked,named.manager_informed,
+    named.candidate_queries_enabled and named.candidate_app_available
+      and (pg_catalog.cardinality(named.incident_ids)>0
+        or pg_catalog.jsonb_array_length(named.missing_scopes)>0) outreach_eligible,
+    named.manager_eligible,named.candidate_app_available,named.first_seen_at_utc,
+    case when not named.candidate_app_available then 'Candidate app unavailable'
+      when pg_catalog.jsonb_array_length(named.missing_scopes)>0 then 'Waiting for Timesheet'
+      when named.manager_informed then 'Manager informed'
+      when named.candidate_asked then 'Candidate asked' else 'Needs action' end status_text,
+    case when not named.candidate_app_available then 'warning'
+      when named.manager_informed or named.candidate_asked then 'info' else 'warning' end status_tone,
+    named.issue_summary
+  from named
+  where coalesce(p_filters->>'status','UNRESOLVED') in ('UNRESOLVED','ALL')
+    and (nullif(pg_catalog.btrim(coalesce(p_filters->>'candidate','')),'') is null
+      or private.weekly_source_query_ascii_fold_v1(named.candidate_name)
+        like '%'||private.weekly_source_query_ascii_fold_v1(p_filters->>'candidate')||'%')
+    and (coalesce(p_filters->>'issue','ALL')='ALL'
+      or (p_filters->>'issue'='TIMESHEET_MISSING' and pg_catalog.jsonb_array_length(named.missing_scopes)>0)
+      or (p_filters->>'issue'='HOURS_DIFFER' and named.issue_summary like '%Hours differ%')
+      or (p_filters->>'issue'='MISSING_SHIFT' and named.issue_summary like '%Missing%'));
+$function$;
+
+create or replace function public.weekly_source_correct_final_cancel_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array[
+    'actor_user_id','correction_session_id','expected_session_version',
+    'idempotency_key','reason','schema_version'
+  ];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_session_id uuid;
+  v_expected_session_version bigint;
+  v_idempotency_key text;
+  v_reason text;
+  v_request_hash bytea;
+  v_session public.weekly_final_source_correction_sessions%rowtype;
+  v_locked public.weekly_final_source_correction_sessions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_prior_revision public.weekly_source_final_revisions%rowtype;
+  v_client_id uuid;
+  v_manifest_count bigint;
+  v_state_before text;
+  v_upload record;
+  v_publication record;
+  v_rejected_uploads integer:=0;
+  v_superseded_uploads integer:=0;
+  v_staled_publications integer:=0;
+  v_live_uploads_before bigint;
+  v_live_publications_before bigint;
+  v_live_uploads_after bigint;
+  v_live_publications_after bigint;
+  v_rows integer;
+  v_result jsonb;
+  v_result_hash bytea;
+begin
+  perform pg_catalog.set_config('lock_timeout','5s',true);
+  if coalesce(current_setting('request.jwt.claim.role',true),
+       nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_CANCEL_V1' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_session_id:=(p_request->>'correction_session_id')::uuid;
+    v_expected_session_version:=(p_request->>'expected_session_version')::bigint;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_VALUE_INVALID' using errcode='22023';
+  end;
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  if v_actor is null or v_session_id is null
+     or v_expected_session_version is null or v_expected_session_version<1
+     or pg_catalog.char_length(v_idempotency_key) not between 1 and 200
+     or pg_catalog.char_length(v_reason) not between 1 and 1000 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_VALUE_INVALID' using errcode='22023';
+  end if;
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_CANCEL_V1',p_request-'idempotency_key'
+  );
+
+  -- Unlocked pre-read.  Its ONLY uses are (a) to answer an exact idempotent
+  -- replay, which writes nothing, and (b) to learn which cycle row to lock
+  -- first.  Every value this owner gates on is read again under the locks
+  -- below, and the session's own scope identity is re-proved after the lock.
+  select * into v_session
+  from public.weekly_final_source_correction_sessions where id=v_session_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_FOUND' using errcode='22023';
+  end if;
+  if v_session.state='CANCELLED'
+     and v_session.result_json->>'cancel_idempotency_key'=v_idempotency_key then
+    if v_session.actor_user_id is distinct from v_actor
+       or v_session.result_json->>'cancel_request_hash'
+            is distinct from pg_catalog.encode(v_request_hash,'hex') then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    return v_session.result_json||pg_catalog.jsonb_build_object('idempotent_replay',true);
+  end if;
+
+  -- Lock order, taken BEFORE any state this owner gates on is read.  It is the
+  -- order the four installed lifecycle owners already use -- cycle, then report
+  -- scope, then correction session, then the revision -- so a cancel racing a
+  -- review, a prepare or an apply queues behind the same first lock instead of
+  -- deadlocking against it.  WP-54 section 6.2's precondition list named only
+  -- the session lock; that is not enough to be deadlock-compatible with the
+  -- owners it has to race, and this owner follows the installed order instead.
+  select * into v_cycle from public.weekly_source_cycles
+  where id=v_session.source_cycle_id for update;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CYCLE_NOT_FOUND' using errcode='22023';
+  end if;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    select * into v_scope from public.weekly_source_report_scopes
+    where id=v_session.report_scope_id for update;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SCOPE_INVALID' using errcode='22023';
+    end if;
+  end if;
+  select * into v_locked from public.weekly_final_source_correction_sessions
+  where id=v_session_id for update;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_FOUND' using errcode='22023';
+  end if;
+  v_session:=v_locked;
+
+  -- The scope identity the locks were chosen from must still be the session's
+  -- own.  If it moved across the lock the locks are the wrong ones and nothing
+  -- read after them can be trusted, so fail closed rather than continue.
+  if v_session.source_cycle_id is distinct from v_cycle.id
+     or v_session.report_scope_id is distinct from v_scope.id
+     or (v_session.authority_scope_kind='NHSP_REPORT_SCOPE')
+          is distinct from (v_session.report_scope_id is not null) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+  if v_session.version<>v_expected_session_version then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+  end if;
+
+  -- Authority before disposition.  03 section 21 gives Correct final source the
+  -- "same active administrator predicate" with "no invented high-risk
+  -- permission", so cancel re-uses the CORRECT_FINAL_SOURCE verb through the
+  -- installed evaluator and adds no new operation key.  An actor who fails here
+  -- is told only that, and never learns the session's internal state.
+  if v_session.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    v_client_id:=v_scope.client_id;
+  else
+    select pg_catalog.count(*) into v_manifest_count
+    from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_session.expected_current_final_revision_id;
+    if v_manifest_count<>1 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_CLIENT_SCOPE_INVALID' using errcode='55000';
+    end if;
+    select client_id into v_client_id
+    from public.weekly_source_client_manifests where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_session.expected_current_final_revision_id;
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'CORRECT_FINAL_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+
+  -- WHO MAY CANCEL -- owner decision D-WP59-1, taken conservatively.
+  -- WP-54 section 6.2 offered three candidate policies and recommended the
+  -- third (the opening actor always; another holder of the authority only after
+  -- a stated idle interval) while refusing to invent the interval, because the
+  -- pack does not state one.  It is still not stated anywhere in the pack, so
+  -- this owner ships the policy that cannot be wrong: the opening actor only.
+  -- That is also the policy every other stage of this lifecycle already
+  -- enforces -- review, prepare and apply each require
+  -- v_session.actor_user_id = the calling actor.  Widening it to a second
+  -- holder of the authority is an owner decision and an additive change to this
+  -- one test; it is NOT taken here.
+  if v_session.actor_user_id is distinct from v_actor then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_ACTOR_NOT_OPENER'
+      using errcode='42501',
+        detail='Only the actor who opened this correction session may cancel it. '
+               'A second holder of CORRECT_FINAL_SOURCE may not, because the idle '
+               'interval that would make that claim auditable is not stated in the '
+               'pack and has not been ruled.';
+  end if;
+
+  -- WHAT THE SESSION HAS ALREADY COMMITTED.  Establish it before releasing
+  -- anything, and refuse rather than guess.  These six limbs are exhaustive
+  -- over the ten declared states, and the last one is the fail-closed branch
+  -- for a state this owner does not recognise.
+  v_state_before:=v_session.state;
+  if v_state_before='APPLIED' or v_session.applied_final_revision_id is not null then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_ALREADY_APPLIED'
+      using errcode='55000',
+        detail='This correction has already replaced the final source authority. '
+               'Cancelling it would claim to undo an applied correction.';
+  end if;
+  if v_state_before='COMMITTING' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_COMMIT_IN_FLIGHT'
+      using errcode='55000',
+        detail='A correction transaction is in flight. Cancelling it is how a '
+               'half-applied correction is produced; this is a case for the '
+               'existing failure path, not for cancel.';
+  end if;
+  if v_state_before='PREPARING' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_IN_FLIGHT'
+      using errcode='55000',
+        detail='PREPARE is in flight. Whether a replacement revision has been '
+               'materialised cannot be established from this state, so cancel '
+               'refuses rather than guess.';
+  end if;
+  if v_state_before='PREPARED' or v_session.prepared_final_revision_id is not null then
+    -- Owner decision D-WP59-2, and a correction to WP-54 section 6.2.  That
+    -- specification permits cancel from PREPARING and PREPARED and states that
+    -- "then the active_uq index frees the scope and the next correction opens
+    -- normally".  Executed, that is false.  PREPARE materialises an inactive
+    -- replacement revision whose predecessor_revision_id is the prior CURRENT
+    -- revision, and private.weekly_source_correct_final_preconditions_v1
+    -- refuses any later correction while a descendant of that prior revision
+    -- exists, whatever the descendant's own state and whatever happened to the
+    -- session that made it.  Cancelling a PREPARED session would therefore
+    -- release the session row and leave the Trust and cutoff blocked anyway --
+    -- a cancel that promises a release it cannot deliver.
+    -- Releasing it needs the descendant refusal to stop counting a cancelled
+    -- session's superseded descendant, and the pack states that refusal without
+    -- any such exception (03 section 17: "It refuses ... if a correction
+    -- descendant exists"; 05 CFS-008 and CFS-021).  The pack outranks this
+    -- package's judgement, so the exception is not invented here.
+    raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARED_REVISION_EXISTS'
+      using errcode='55000',
+        detail='A replacement final revision has already been materialised for '
+               'this session. It is a correction descendant of the prior '
+               'authority, so cancelling the session would not release the Trust '
+               'and cutoff. Releasing a prepared correction is an unruled owner '
+               'decision (WP-59 D-WP59-2).';
+  end if;
+  if v_state_before='CANCELLED' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_ALREADY_CANCELLED'
+      using errcode='55000',
+        detail='This correction session is already cancelled. Re-send the exact '
+               'cancel request with its original idempotency key for the '
+               'idempotent replay.';
+  end if;
+  if v_state_before='FAILED' then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_ALREADY_TERMINAL'
+      using errcode='55000',
+        detail='This correction session is already terminal.';
+  end if;
+  if v_state_before not in ('DRAFT','STAGING','READY','REVIEWED') then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_STATE_UNKNOWN'
+      using errcode='55000',detail='state='||v_state_before;
+  end if;
+
+  -- THE PRIOR AUTHORITY MUST NOT HAVE MOVED.  A cancel releases a scope on the
+  -- understanding that the authority it was opened against is still the live
+  -- one.  If it is not, the world changed under this session and the honest
+  -- answer is a stale refusal, not a release.
+  select * into v_prior_revision from public.weekly_source_final_revisions
+  where id=v_session.expected_current_final_revision_id for share;
+  if not found
+     or v_prior_revision.state<>'CURRENT'
+     or v_prior_revision.manifest_hash is distinct from v_session.expected_final_manifest_hash
+     or v_prior_revision.source_cycle_id is distinct from v_cycle.id
+     or v_prior_revision.authority_scope_kind is distinct from v_session.authority_scope_kind
+     or v_prior_revision.report_scope_id is distinct from v_session.report_scope_id
+     or coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+          is distinct from v_session.expected_current_final_revision_id then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_FINAL_REVISION_STALE' using errcode='40001';
+  end if;
+
+  -- A cancel must not promise a release it cannot deliver.  If a correction
+  -- descendant of the prior authority already exists, the scope stays blocked
+  -- by weekly_source_correct_final_preconditions_v1 whatever this owner does,
+  -- so say so instead of releasing the session row and leaving the caller to
+  -- discover it.  In a session this owner will cancel there is none, because
+  -- the only routine that makes one is PREPARE and a prepared session is
+  -- refused above.
+  if exists(
+    select 1 from public.weekly_source_final_revisions descendant
+    where descendant.predecessor_revision_id=v_prior_revision.id
+  ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_DESCENDANT_EXISTS'
+      using errcode='55000',
+        detail='A correction descendant of the prior final revision exists, so '
+               'cancelling this session would not release the Trust and cutoff.';
+  end if;
+
+  -- The session's staged artefacts.  A session can carry more than one upload
+  -- and more than one projection publication: the seal-failure and abort paths
+  -- return the session to DRAFT and null the pointer while leaving the rejected
+  -- upload row behind, and the rebuild path replaces
+  -- replacement_projection_publication_id with a newer publication.  Every row
+  -- bound to this session is therefore locked and disposed of, not only the two
+  -- the session currently points at.  The ORDER BY exists solely to make lock
+  -- acquisition deterministic; no decision below is taken by it.
+  for v_upload in
+    select id,state from public.weekly_source_uploads
+    where correction_session_id=v_session.id
+    order by id
+    for update
+  loop
+    if v_upload.state not in ('STAGING','CORRECTION_READY','REJECTED','SUPERSEDED') then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE'
+        using errcode='40001',
+          detail='correction upload '||v_upload.id::text||' is '||v_upload.state
+                 ||'; it has been promoted beyond this session and cancel will not '
+                 'discard accepted work.';
+    end if;
+  end loop;
+  for v_publication in
+    select id,state from public.weekly_source_projection_publications
+    where correction_session_id=v_session.id
+    order by id
+    for update
+  loop
+    if v_publication.state not in ('BUILDING','CORRECTION_READY','STALE','FAILED') then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE'
+        using errcode='40001',
+          detail='correction publication '||v_publication.id::text||' is '
+                 ||v_publication.state||'; it has been promoted beyond this session '
+                 'and cancel will not discard accepted work.';
+    end if;
+  end loop;
+
+  -- A cancel must never SILENTLY succeed.  Removing nothing where something was
+  -- expected is a refusal, not a success -- which is exactly the shape of the
+  -- defect next door, `public.invoice_remove_nhsp_shifts`, a routine that
+  -- returns cleanly and does nothing (WP-54 handoff N3).  Two guards make that
+  -- impossible here.
+  --
+  -- FIRST: a pointer the session still holds must resolve to a row that is
+  -- actually bound back to this session.  The disposal loops key on
+  -- correction_session_id, so a pointer at a row that is NOT bound would be
+  -- left live while the cancel reported success.
+  if v_session.replacement_correction_upload_id is not null
+     and not exists(
+       select 1 from public.weekly_source_uploads bound_upload
+       where bound_upload.id=v_session.replacement_correction_upload_id
+         and bound_upload.correction_session_id=v_session.id
+     ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE'
+      using errcode='40001',
+        detail='replacement_correction_upload_id '
+               ||v_session.replacement_correction_upload_id::text
+               ||' is not bound back to this correction session; cancel will not '
+               'report success over work it cannot account for.';
+  end if;
+  if v_session.replacement_projection_publication_id is not null
+     and not exists(
+       select 1 from public.weekly_source_projection_publications bound_publication
+       where bound_publication.id=v_session.replacement_projection_publication_id
+         and bound_publication.correction_session_id=v_session.id
+     ) then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_REPLACEMENT_STALE'
+      using errcode='40001',
+        detail='replacement_projection_publication_id '
+               ||v_session.replacement_projection_publication_id::text
+               ||' is not bound back to this correction session; cancel will not '
+               'report success over work it cannot account for.';
+  end if;
+
+  -- SECOND: count what is live before the effects, so the effects can be
+  -- required to account for exactly that much afterwards.
+  select pg_catalog.count(*) into v_live_uploads_before
+  from public.weekly_source_uploads
+  where correction_session_id=v_session.id
+    and state in ('STAGING','CORRECTION_READY');
+  select pg_catalog.count(*) into v_live_publications_before
+  from public.weekly_source_projection_publications
+  where correction_session_id=v_session.id
+    and state in ('BUILDING','CORRECTION_READY');
+
+  -- Effects.  One transaction, prior authority untouched.
+  --
+  -- WP-54 section 6.2 said to "move that upload to REJECTED".  Executed, that
+  -- is only possible for an upload that is still STAGING.  The table's
+  -- weekly_source_uploads_check3 is
+  --   (state in ('SEALED','CURRENT','SUPERSEDED','CORRECTION_READY'))
+  --     = (row_manifest_hash is not null)
+  -- so moving a sealed CORRECTION_READY upload to REJECTED raises 23514 unless
+  -- its row_manifest_hash is erased first -- which would destroy the very
+  -- evidence 05 CFS-015 says must remain ("Staged upload and preview remain
+  -- audit history only").  A sealed replacement therefore goes to SUPERSEDED,
+  -- the state the pack already uses for an upload that stays audit-only and
+  -- "cannot be promoted by the correction route" (05 CFS-011).  Both carry the
+  -- same typed attempt, so the Blocked/attempt history reads the same either way.
+  for v_upload in
+    select id from public.weekly_source_uploads
+    where correction_session_id=v_session.id
+      and state='STAGING'
+    order by id
+  loop
+    update public.weekly_source_uploads set state='REJECTED' where id=v_upload.id;
+    get diagnostics v_rows=row_count;
+    if v_rows<>1 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_INCOMPLETE'
+        using errcode='55000',
+          detail='correction upload '||v_upload.id::text||' did not move to REJECTED '
+                 '(rows='||v_rows::text||').';
+    end if;
+    perform private.weekly_source_upload_attempt_append_v1(
+      v_upload.id,v_actor,'REJECTED','CORRECTION_SESSION_CANCELLED'
+    );
+    v_rejected_uploads:=v_rejected_uploads+1;
+  end loop;
+  for v_upload in
+    select id from public.weekly_source_uploads
+    where correction_session_id=v_session.id
+      and state='CORRECTION_READY'
+    order by id
+  loop
+    update public.weekly_source_uploads set state='SUPERSEDED' where id=v_upload.id;
+    get diagnostics v_rows=row_count;
+    if v_rows<>1 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_INCOMPLETE'
+        using errcode='55000',
+          detail='correction upload '||v_upload.id::text||' did not move to SUPERSEDED '
+                 '(rows='||v_rows::text||').';
+    end if;
+    perform private.weekly_source_upload_attempt_append_v1(
+      v_upload.id,v_actor,'REJECTED','CORRECTION_SESSION_CANCELLED'
+    );
+    v_superseded_uploads:=v_superseded_uploads+1;
+  end loop;
+  for v_publication in
+    select id from public.weekly_source_projection_publications
+    where correction_session_id=v_session.id
+      and state in ('BUILDING','CORRECTION_READY')
+    order by id
+  loop
+    update public.weekly_source_projection_publications
+    set state='STALE',failure_code='CORRECTION_SESSION_CANCELLED'
+    where id=v_publication.id;
+    get diagnostics v_rows=row_count;
+    if v_rows<>1 then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_INCOMPLETE'
+        using errcode='55000',
+          detail='correction publication '||v_publication.id::text||' did not move to '
+                 'STALE (rows='||v_rows::text||').';
+    end if;
+    v_staled_publications:=v_staled_publications+1;
+  end loop;
+
+  -- The effects must account for exactly what was live before them, and
+  -- nothing bound to this session may still be live after them.  Either
+  -- mismatch means the cancel did less than it is about to report, and a cancel
+  -- that removed nothing where something was expected is a refusal, not a
+  -- success.
+  if (v_rejected_uploads+v_superseded_uploads)<>v_live_uploads_before
+     or v_staled_publications<>v_live_publications_before then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_INCOMPLETE'
+      using errcode='55000',
+        detail='expected to dispose '||v_live_uploads_before::text||' upload(s) and '
+               ||v_live_publications_before::text||' publication(s); disposed '
+               ||(v_rejected_uploads+v_superseded_uploads)::text||' and '
+               ||v_staled_publications::text||'.';
+  end if;
+  select pg_catalog.count(*) into v_live_uploads_after
+  from public.weekly_source_uploads
+  where correction_session_id=v_session.id
+    and state in ('STAGING','CORRECTION_READY');
+  select pg_catalog.count(*) into v_live_publications_after
+  from public.weekly_source_projection_publications
+  where correction_session_id=v_session.id
+    and state in ('BUILDING','CORRECTION_READY');
+  if v_live_uploads_after<>0 or v_live_publications_after<>0 then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_CANCEL_INCOMPLETE'
+      using errcode='55000',
+        detail=v_live_uploads_after::text||' upload(s) and '
+               ||v_live_publications_after::text||' publication(s) bound to this '
+               'correction session are still live after the cancel.';
+  end if;
+
+  v_result:=pg_catalog.jsonb_build_object(
+    'ok',true,'status','CANCELLED',
+    'correction_session_id',v_session.id,
+    'cancelled_from_state',v_state_before,
+    'version',v_expected_session_version+1,
+    'prior_final_revision_id',v_prior_revision.id,
+    'rejected_upload_count',v_rejected_uploads,
+    'superseded_upload_count',v_superseded_uploads,
+    'staled_publication_count',v_staled_publications,
+    'cancel_reason',v_reason,
+    'cancel_idempotency_key',v_idempotency_key,
+    'cancel_request_hash',pg_catalog.encode(v_request_hash,'hex')
+  );
+  v_result_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CORRECT_FINAL_CANCEL_RESULT_V1',v_result
+  );
+
+  -- state and completed_at_utc move in the SAME statement: the table's own
+  -- check ((state in ('APPLIED','CANCELLED','FAILED')) = (completed_at_utc is
+  -- not null)) refuses anything else, including a bare UPDATE.
+  -- The session's `reason` column is deliberately NOT overwritten: it holds the
+  -- reason the correction was opened for, which is audit history.  The cancel's
+  -- own reason is carried in result_json and in the audit event, which is what
+  -- 24 section 18 asks for ("actor, reason, decision time").
+  update public.weekly_final_source_correction_sessions
+  set state='CANCELLED',completed_at_utc=pg_catalog.transaction_timestamp(),
+      result_json=v_result,result_hash=v_result_hash,
+      version=version+1,updated_at_utc=pg_catalog.transaction_timestamp()
+  where id=v_session.id and state=v_state_before
+    and version=v_expected_session_version;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_CAS_LOST' using errcode='40001';
+  end if;
+
+  insert into public.audit_events(
+    ts_utc,actor_user_id,actor_display,actor_role_at_time,object_type,
+    object_id_text,action,before_json,after_json,reason
+  )
+  select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+         'weekly_final_source_correction_sessions',v_session.id::text,
+         'WEEKLY_SOURCE_CORRECT_FINAL_CANCELLED',
+         pg_catalog.jsonb_build_object(
+           'state',v_state_before,'version',v_expected_session_version,
+           'expected_current_final_revision_id',v_prior_revision.id,
+           'replacement_correction_upload_id',v_session.replacement_correction_upload_id,
+           'replacement_projection_publication_id',
+             v_session.replacement_projection_publication_id
+         ),
+         pg_catalog.jsonb_build_object(
+           'state','CANCELLED','version',v_expected_session_version+1,
+           'rejected_upload_count',v_rejected_uploads,
+           'superseded_upload_count',v_superseded_uploads,
+           'staled_publication_count',v_staled_publications,
+           'prior_final_revision_state',v_prior_revision.state,
+           'cancel_result_hash',pg_catalog.encode(v_result_hash,'hex')
+         ),v_reason
+  from public.tms_users actor where actor.id=v_actor;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_ACTOR_NOT_FOUND' using errcode='55000';
+  end if;
+
+  return v_result||pg_catalog.jsonb_build_object('idempotent_replay',false);
+end;
+$function$;
+
+create or replace function public.weekly_source_invoice_report_rows_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_invoice_ids uuid[];
+  v_rows jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('invoice_ids'))
+     or pg_catalog.jsonb_typeof(p_request->'invoice_ids') is distinct from 'array'
+     or pg_catalog.jsonb_array_length(p_request->'invoice_ids') not between 1 and 500 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    select pg_catalog.array_agg(value::uuid order by ordinality)
+      into v_invoice_ids
+    from pg_catalog.jsonb_array_elements_text(p_request->'invoice_ids')
+      with ordinality item(value,ordinality);
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_invoice_ids is null
+     or pg_catalog.cardinality(v_invoice_ids)<>pg_catalog.jsonb_array_length(p_request->'invoice_ids')
+     or pg_catalog.cardinality(v_invoice_ids)<>pg_catalog.cardinality(
+       (select pg_catalog.array_agg(distinct invoice_id) from pg_catalog.unnest(v_invoice_ids) invoice_id)) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  with movement_rows as materialized (
+    select binding.invoice_id,
+           movement.id movement_id,
+           movement.movement_role,
+           movement.invoice_timesheet_id,
+           movement.finalisation_cycle_id source_cycle_id,
+           movement.invoice_presentation_charge_pence,
+           manifest.backing_report_number
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement
+      on movement.id=binding.billing_movement_id
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    join public.weekly_source_client_manifests manifest
+      on manifest.id=presentation.client_manifest_id
+    where binding.state='CURRENT'
+      and binding.invoice_id=any(v_invoice_ids)
+  ), per_invoice as (
+    select invoice_id,
+           pg_catalog.count(*)::integer movement_count,
+           (pg_catalog.sum(invoice_presentation_charge_pence)::numeric/100.0)::numeric(12,2)
+             source_movement_ex_vat,
+           pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+             'movement_id',movement_id,
+             'movement_role',movement_role,
+             'timesheet_id',invoice_timesheet_id,
+             'source_cycle_id',source_cycle_id,
+             'charge_ex_vat',(invoice_presentation_charge_pence::numeric/100.0)::numeric(12,2)
+           ) order by movement_id) movements,
+           coalesce((select pg_catalog.jsonb_agg(cycle_id order by cycle_id)
+                     from (select distinct source_cycle_id cycle_id
+                           from movement_rows member
+                           where member.invoice_id=movement_rows.invoice_id) cycles),'[]'::jsonb)
+             source_cycle_ids,
+           coalesce((select pg_catalog.jsonb_agg(report_number order by report_number)
+                     from (select distinct backing_report_number report_number
+                           from movement_rows member
+                           where member.invoice_id=movement_rows.invoice_id
+                             and backing_report_number is not null) reports),'[]'::jsonb)
+             backing_report_numbers
+    from movement_rows
+    group by invoice_id
+  )
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+           'invoice_id',invoice_id,
+           'weekly_source',true,
+           'movement_count',movement_count,
+           'source_movement_ex_vat',source_movement_ex_vat,
+           'source_cycle_ids',source_cycle_ids,
+           'backing_report_numbers',backing_report_numbers,
+           'movements',movements
+         ) order by invoice_id),'[]'::jsonb)
+    into v_rows
+  from per_invoice;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,
+    'invoice_count',pg_catalog.jsonb_array_length(v_rows),
+    'rows',v_rows);
+end;
+$function$;
+
+create or replace function public.weekly_source_invoice_evidence_v1(p_request jsonb)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_invoice_id uuid;
+  v_invoice public.invoices%rowtype;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_binding_count bigint;
+  v_joined_count bigint;
+  v_rows jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists (select 1 from pg_catalog.jsonb_object_keys(p_request) key
+                where key not in ('actor_user_id','invoice_id'))
+     or not pg_catalog.pg_input_is_valid(coalesce(p_request->>'actor_user_id',''),'uuid')
+     or not pg_catalog.pg_input_is_valid(coalesce(p_request->>'invoice_id',''),'uuid') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EVIDENCE_INVALID' using errcode='22023';
+  end if;
+  v_actor := (p_request->>'actor_user_id')::uuid;
+  v_invoice_id := (p_request->>'invoice_id')::uuid;
+
+  select * into v_invoice from public.invoices where id=v_invoice_id;
+  if not found or v_invoice.header_snapshot_json->>'schema_version'<>'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1' then
+    return pg_catalog.jsonb_build_object('is_weekly_source_invoice',false,'evidence','[]'::jsonb);
+  end if;
+  if not pg_catalog.pg_input_is_valid(
+      coalesce(v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}',''),'uuid') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EVIDENCE_LINEAGE_INCOMPLETE' using errcode='P0001';
+  end if;
+  select * into strict v_manifest from public.weekly_source_client_manifests
+    where id=(v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'VIEW_SOURCE_PROGRESS',v_manifest.source_group_id,
+    v_manifest.client_id,v_manifest.finalisation_week_ending
+  );
+
+  select pg_catalog.count(*) into v_binding_count
+    from public.weekly_source_invoice_line_bindings binding
+    where binding.invoice_id=v_invoice_id and binding.state='CURRENT';
+  if v_binding_count>10000 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EVIDENCE_CENSUS_LIMIT' using errcode='54000';
+  end if;
+  select pg_catalog.count(*) into v_joined_count
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    join public.weekly_source_final_revisions revision
+      on revision.id=presentation.final_revision_id
+    join public.weekly_source_uploads upload on upload.id=revision.upload_id
+    where binding.invoice_id=v_invoice_id and binding.state='CURRENT';
+  if v_binding_count<>v_joined_count then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EVIDENCE_LINEAGE_INCOMPLETE' using errcode='P0001';
+  end if;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'upload_id',source.id,
+    'filename',source.original_filename,
+    'uploaded_at_utc',source.uploaded_at_utc,
+    'byte_count',source.byte_count,
+    'content_sha256',pg_catalog.encode(source.content_sha256,'hex'),
+    'source_file_r2_key',source.file_metadata_json->>'source_file_r2_key'
+  ) order by source.uploaded_at_utc,source.id),'[]'::jsonb) into v_rows
+  from (
+    select distinct upload.id,upload.original_filename,upload.uploaded_at_utc,
+      upload.byte_count,upload.content_sha256,upload.file_metadata_json
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    join public.weekly_source_final_revisions revision
+      on revision.id=presentation.final_revision_id
+    join public.weekly_source_uploads upload on upload.id=revision.upload_id
+    where binding.invoice_id=v_invoice_id and binding.state='CURRENT'
+  ) source;
+  return pg_catalog.jsonb_build_object('is_weekly_source_invoice',true,'evidence',v_rows);
+end;
+$function$;

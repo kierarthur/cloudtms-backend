@@ -1,0 +1,147 @@
+{
+  "status": "FOCUSED_COMPLETE_SOURCE_EFFECT_REVIEW_NOT_EXECUTED",
+  "sourceCommit": "ab26a5ff22200be037d215b1100c969d6c0bae73",
+  "scope": "Two new verifier roots only. Neither historical168 review/exclusions nor any frozen/native acceptance receipt is rewritten. Complete post-Banking composed-source review remains mandatory.",
+  "reviewedBodies": [
+    {
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "gitBlobBytes": 2308,
+      "gitBlobSha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "canonicalSha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "savedBytes": 2308,
+      "savedSha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "gitBlobBytes": 7115,
+      "gitBlobSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "canonicalSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "savedBytes": 7115,
+      "savedSha256": "28c053d075970324387d33d86402156fe7bcc55225c03c769abe15c14d18e273",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "gitBlobBytes": 23242,
+      "gitBlobSha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "canonicalSha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "savedBytes": 23242,
+      "savedSha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "gitBlobBytes": 1071,
+      "gitBlobSha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "canonicalSha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "savedBytes": 1071,
+      "savedSha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "gitBlobBytes": 19923,
+      "gitBlobSha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "canonicalSha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "savedBytes": 19923,
+      "savedSha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "gitBlobBytes": 18659,
+      "gitBlobSha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "canonicalSha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "savedBytes": 18659,
+      "savedSha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "gitBlobBytes": 18312,
+      "gitBlobSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "canonicalSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "savedBytes": 18312,
+      "savedSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "completeBodyRead": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "gitBlobBytes": 23651,
+      "gitBlobSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+      "canonicalSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+      "savedBytes": 23651,
+      "savedSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+      "completeBodyRead": true
+    }
+  ],
+  "verifiers": [
+    {
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "sourceDecision": "INCLUDE_DATA_FREE_DECLARATION_AND_NULL_NEGATIVES_AT_PIN",
+      "effects": [
+        "pg_proc ownership/defaults/proconfig/security kind and effective browser/service/PUBLIC EXECUTE inspection",
+        "No role impersonation, DDL, DML, row/advisory lock, queue claim/drain, payment, provider, email or network call"
+      ],
+      "applicationCalls": [
+        {
+          "name": "private.weekly_source_self_bill_report_pay_authority_v1",
+          "arguments": "NULL",
+          "path": "SELECT binding WHERE id=NULL returns no rows; immediate NULL before any nested inventory/financial/NEXT/submission reader"
+        },
+        {
+          "name": "private.weekly_source_self_bill_report_pay_witness_v1",
+          "arguments": "NULL",
+          "path": "Calls the same authority; immediate NULL before compact invoice witness construction"
+        }
+      ],
+      "metadataOnly": [
+        "private.weekly_source_report_projection_receipt_assert_v1",
+        "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)"
+      ],
+      "held": "Report A/B admission/rendering/pay isolation, positive native financial/capture/NEXT/transport proof and actual complete owner first use are not performed"
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sourceDecision": "INCLUDE_DATA_FREE_HASH_ACL_AND_EARLY_REFUSALS_AT_PIN",
+      "effects": [
+        "Exact eleven-helper body hash/ownership/security/STABLE/return-type/default/proconfig/effective ACL checks and four retained owner body hashes",
+        "NULL selectors raise22023 before table lookup or capability/component/financial branches",
+        "Missing sentinel is first proved absent, then SELECT STRICT raises no_data_found mapped to exact55000 before downstream native owners",
+        "Missing-dependency calls run only when their actual to_regprocedure absence is proved; wrappers raise exact55000 before their dynamic SELECTs"
+      ],
+      "applicationCalls": [
+        "private.weekly_source_staged_publication_context_v1(NULL,NULL)",
+        "private.weekly_source_automatic_reconcile_delta_assert_v1(NULL,NULL)",
+        "same two helpers with exact vacant sentinel13102026-2206-4000-8000-000000000001",
+        "private.weekly_source_automatic_reconcile_capability_assert_v1(NULL) only if producer-ready signature is absent",
+        "private.weekly_source_bulk_source_cas_assert_v1(NULL,empty uuid[]) only if either actual dependency is absent"
+      ],
+      "notInvoked": [
+        "Eleven helper/retained-owner hash list entries other than the exact early-refusal calls",
+        "public.weekly_source_automatic_reconcile_atomic_v1",
+        "financial producer/component/delta positive branches",
+        "Local/C1/NEXT completion and any receipt/queue writer"
+      ],
+      "held": "A present dependency is not readiness. Conditional absence arms legitimately do not run after actual dependencies are installed; their positive/false-readiness qualification needs separate complete native gates, never a made-up READY helper. The earlier79-statement lab subset receipt remains separate and does not certify the full release"
+    }
+  ],
+  "harnessRequirements": [
+    "One server-owned or approved full-fallback outer transaction; normalize only exact reviewed BEGIN/ROLLBACK/ON_ERROR_STOP envelopes and preserve body assertions",
+    "Existing isolated verifier savepoint/client-variable protocol, mandatory whole-run isolation review and fresh post-rollback comparison",
+    "Before any actual execution: completed Banking first-install and lock release, exact current TEST/source integration, SEND7 turn and no active protected release",
+    "Re-review any changed controlling callee, schema, trigger or release source; no generic reuse across changed commits"
+  ],
+  "actualDatabaseCalls": 0,
+  "actualNetworkBusinessCalls": 0,
+  "nativeAcceptanceClaimed": false,
+  "finalPartBCritic": false,
+  "originalReview": {
+    "reviewed": 168,
+    "eligible": 152,
+    "excluded": 16,
+    "unchanged": true
+  },
+  "sourceReviewDoesNotAuthorizeRelease": true
+}

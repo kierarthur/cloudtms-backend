@@ -1,0 +1,33 @@
+{
+  "sqlFile": "13102026_1021_wp0_installed_release_shared_catalogue.sql",
+  "statements": 5,
+  "newSharedNames": [
+    "timesheet_authorise_generic_atomic",
+    "timesheet_unauthorise_atomic",
+    "weekly_exceptional_pay_action_publication_status_v1",
+    "weekly_exceptional_pay_complete_c1_publication_v1",
+    "weekly_exceptional_pay_complete_local_v1",
+    "weekly_exceptional_pay_next_publication_status_v1",
+    "weekly_exceptional_pay_publish_next_v1",
+    "weekly_exceptional_pay_read_c1_request_v1",
+    "weekly_exceptional_pay_record_c1_checkpoint_v1",
+    "weekly_exceptional_pay_record_c1_recovery_v1",
+    "weekly_exceptional_pay_record_c1_unknown_v1",
+    "weekly_exceptional_pay_wait_atomic_v1",
+    "weekly_source_candidate_response_submit_atomic_v1",
+    "weekly_source_candidate_submission_compare_sync_v1",
+    "weekly_source_covered_hours_incident_v1",
+    "weekly_source_first_authorise_v1",
+    "weekly_source_manager_review_respond_atomic_v1",
+    "weekly_source_manual_review_open_v1",
+    "weekly_source_manual_review_resolve_v1",
+    "weekly_source_manual_reviews_finalised_v1",
+    "weekly_source_office_authority_v1",
+    "weekly_source_office_workspace_v1",
+    "weekly_source_pay_query_facts_v1",
+    "weekly_source_pay_query_gate_v1",
+    "weekly_source_query_accept_system_hours_atomic_v1",
+    "weekly_source_query_sync_atomic_v1"
+  ],
+  "mode": "SELECT-only catalogue/control metadata; no business rows or mutation"
+}

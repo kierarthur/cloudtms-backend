@@ -1,0 +1,2195 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"accepted\": true,\n  \"database\": \"cloudtms_test_clone\",\n  \"label\": \"HR Money complete definitions compile retry 3\",\n  \"sqlSha256\": \"efe690542427180b4fcdb253951b30a13a78db1f5afeb80a60b29417fd51d7e9\",\n  \"statementCount\": 203,\n  \"statements\": [\n    {\n      \"statement\": 1,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 2,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 3,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 4,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 5,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 6,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 7,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 8,\n      \"command\": \"COMMENT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 9,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 10,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 11,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 12,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 13,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 14,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 15,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 16,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 17,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 18,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 19,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 20,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 21,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 22,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 23,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 24,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 25,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 26,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 27,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 28,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 29,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 30,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 31,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 32,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 33,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 34,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 35,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 36,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 37,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 38,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 39,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 40,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 41,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 42,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 43,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 44,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 45,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 46,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 47,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 48,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 49,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 50,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 51,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 52,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 53,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 54,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 55,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 56,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 57,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 58,\n      \"command\": \"DROP\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 59,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 60,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 61,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 62,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 63,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 64,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 65,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 66,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 67,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 68,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 69,\n      \"command\": \"DROP\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 70,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 71,\n      \"command\": \"DROP\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 72,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 73,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 74,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 75,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 76,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 77,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 78,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 79,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 80,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 81,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 82,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 83,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 84,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 85,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 86,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 87,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 88,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 89,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 90,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 91,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 92,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 93,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 94,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 95,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 96,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 97,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 98,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 99,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 100,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 101,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 102,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 103,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 104,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 105,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 106,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 107,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 108,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 109,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 110,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 111,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 112,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 113,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 114,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 115,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 116,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 117,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 118,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 119,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 120,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 121,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 122,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 123,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 124,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 125,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 126,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 127,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 128,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 129,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 130,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 131,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 132,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 133,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 134,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 135,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 136,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 137,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 138,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 139,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 140,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 141,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 142,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 143,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 144,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 145,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 146,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 147,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 148,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 149,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 150,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 151,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 152,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 153,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 154,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 155,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 156,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 157,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 158,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 159,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 160,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 161,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 162,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 163,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 164,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 165,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 166,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 167,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 168,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 169,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 170,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 171,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 172,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 173,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 174,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 175,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 176,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 177,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 178,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 179,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 180,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 181,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 182,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 183,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 184,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 185,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 186,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 187,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 188,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 189,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 190,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 191,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 192,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 193,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 194,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 195,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 196,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 197,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 198,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 199,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 200,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 201,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 202,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 203,\n      \"command\": \"SELECT\",\n      \"rowCount\": 47,\n      \"fields\": [\n        \"signature\",\n        \"present\",\n        \"owner_current\",\n        \"security_definer\",\n        \"anon_denied\",\n        \"authenticated_denied\",\n        \"service_contract\"\n      ],\n      \"rows\": [\n        {\n          \"signature\": \"private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_source_amount_warnings_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_billing_movement_hash_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_frozen_rule_values_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_shift_on_self_bill_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_only_vector_v1(text,bigint)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_line_amounts_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_window_cycle_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_movement_money_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_rebill_movement_insert_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_placement_identity_guard_v1()\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_invoice_hold_release_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_upload_context_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_upload_stage_rows_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_upload_seal_core_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_charge_accept_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_finalisation_insert_reversal_v1(uuid,uuid,uuid,uuid,uuid,text,jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_ordinary_projection_expense_movement_assert_v1(uuid,uuid,uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_allocation_assert_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_invoice_admit_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_invoice_move_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_invoice_issue_validate_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_finalisation_pay_context_v1(uuid,uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_finalisation_pay_task_finish_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"public.weekly_source_finalisation_pay_task_recover_atomic_v1(jsonb)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private.weekly_source_office_proposal_revision_v1(uuid[],bytea)\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": true,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private._weekly_source_acl_table_contract_v1()\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private._weekly_source_acl_private_helper_contract_v1()\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        },\n        {\n          \"signature\": \"private._weekly_source_acl_service_rpc_contract_v1()\",\n          \"present\": true,\n          \"owner_current\": true,\n          \"security_definer\": false,\n          \"anon_denied\": true,\n          \"authenticated_denied\": true,\n          \"service_contract\": true\n        }\n      ],\n      \"rowsTruncated\": false\n    }\n  ],\n  \"rolledBack\": true,\n  \"rollbackVerification\": {\n    \"connectedFresh\": true,\n    \"database\": \"cloudtms_test_clone\",\n    \"statements\": [\n      {\n        \"statement\": 1,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"physical_database\",\n          \"functions_hash\",\n          \"tables_acl_hash\",\n          \"triggers_hash\",\n          \"policies_hash\"\n        ],\n        \"rows\": [\n          {\n            \"physical_database\": \"cloudtms_test_clone\",\n            \"functions_hash\": \"25e12a4aac94ad8fa60badfdea2035ac\",\n            \"tables_acl_hash\": \"7c7433ff59d513a4c37eb1e9bf636536\",\n            \"triggers_hash\": \"61ab0139de5e90bdb78f1eec12c694ac\",\n            \"policies_hash\": \"3d46c24766a7a69b19fd9eb504bf54b5\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 2,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"physical_database\",\n          \"request_table_absent\",\n          \"support_column_absent\",\n          \"rule_column_absent\",\n          \"rules_absent\",\n          \"rule_versions_absent\",\n          \"assignments_absent\",\n          \"pp_helper_absent\",\n          \"mail_outbox_count\",\n          \"invoice_count\",\n          \"timesheet_count\",\n          \"financial_count\",\n          \"financial_outbox_count\"\n        ],\n        \"rows\": [\n          {\n            \"physical_database\": \"cloudtms_test_clone\",\n            \"request_table_absent\": true,\n            \"support_column_absent\": true,\n            \"rule_column_absent\": true,\n            \"rules_absent\": true,\n            \"rule_versions_absent\": true,\n            \"assignments_absent\": true,\n            \"pp_helper_absent\": true,\n            \"mail_outbox_count\": \"332\",\n            \"invoice_count\": \"46\",\n            \"timesheet_count\": \"120\",\n            \"financial_count\": \"577\",\n            \"financial_outbox_count\": \"20\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 3,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"f8_helpers_absent\"\n        ],\n        \"rows\": [\n          {\n            \"f8_helpers_absent\": true\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 4,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"report_metadata_absent\",\n          \"report_bindings_absent\",\n          \"report_scope_column_absent\",\n          \"active_profile_count\"\n        ],\n        \"rows\": [\n          {\n            \"report_metadata_absent\": true,\n            \"report_bindings_absent\": true,\n            \"report_scope_column_absent\": true,\n            \"active_profile_count\": \"5\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 5,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"invoice_hold_releases_absent\",\n          \"money_columns_absent\"\n        ],\n        \"rows\": [\n          {\n            \"invoice_hold_releases_absent\": true,\n            \"money_columns_absent\": true\n          }\n        ],\n        \"rowsTruncated\": false\n      }\n    ]\n  },\n  \"warnings\": [\n    \"All transactional database and catalog changes were rolled back.\",\n    \"PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.\",\n    \"Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics.\"\n  ]\n}"
+    }
+  ],
+  "structuredContent": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "label": "HR Money complete definitions compile retry 3",
+    "sqlSha256": "efe690542427180b4fcdb253951b30a13a78db1f5afeb80a60b29417fd51d7e9",
+    "statementCount": 203,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "COMMENT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 21,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 22,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 23,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 24,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 25,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 26,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 27,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 28,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 29,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 30,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 31,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 32,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 33,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 34,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 35,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 36,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 37,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 38,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 39,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 40,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 41,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 42,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 43,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 44,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 45,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 46,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 47,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 48,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 49,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 50,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 51,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 52,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 53,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 54,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 55,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 56,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 57,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 58,
+        "command": "DROP",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 59,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 60,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 61,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 62,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 63,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 64,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 65,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 66,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 67,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 68,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 69,
+        "command": "DROP",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 70,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 71,
+        "command": "DROP",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 72,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 73,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 74,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 75,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 76,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 77,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 78,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 79,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 80,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 81,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 82,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 83,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 84,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 85,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 86,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 87,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 88,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 89,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 90,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 91,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 92,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 93,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 94,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 95,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 96,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 97,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 98,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 99,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 100,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 101,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 102,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 103,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 104,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 105,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 106,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 107,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 108,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 109,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 110,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 111,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 112,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 113,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 114,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 115,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 116,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 117,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 118,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 119,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 120,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 121,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 122,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 123,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 124,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 125,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 126,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 127,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 128,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 129,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 130,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 131,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 132,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 133,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 134,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 135,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 136,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 137,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 138,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 139,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 140,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 141,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 142,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 143,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 144,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 145,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 146,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 147,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 148,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 149,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 150,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 151,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 152,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 153,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 154,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 155,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 156,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 157,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 158,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 159,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 160,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 161,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 162,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 163,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 164,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 165,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 166,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 167,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 168,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 169,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 170,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 171,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 172,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 173,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 174,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 175,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 176,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 177,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 178,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 179,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 180,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 181,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 182,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 183,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 184,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 185,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 186,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 187,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 188,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 189,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 190,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 191,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 192,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 193,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 194,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 195,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 196,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 197,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 198,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 199,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 200,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 201,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 202,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 203,
+        "command": "SELECT",
+        "rowCount": 47,
+        "fields": [
+          "signature",
+          "present",
+          "owner_current",
+          "security_definer",
+          "anon_denied",
+          "authenticated_denied",
+          "service_contract"
+        ],
+        "rows": [
+          {
+            "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_source_amount_warnings_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_frozen_rule_values_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_line_amounts_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_source_amount_acceptance_policy_fingerprint_v1()",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_window_cycle_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_correction_insert_v1(uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_correction_unwind_v1(uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_movement_money_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_presentation_release_authority_v1(uuid[],uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_presentation_source_hash_v1(uuid[],uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_vat_rounding_movement_insert_v1(uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_rebill_movement_insert_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_placement_identity_guard_v1()",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_invoice_hold_release_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_upload_context_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_upload_stage_rows_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_upload_seal_core_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_charge_accept_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_finalisation_insert_reversal_v1(uuid,uuid,uuid,uuid,uuid,text,jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_ordinary_projection_expense_movement_assert_v1(uuid,uuid,uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_invoice_issue_validate_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_finalisation_pay_context_v1(uuid,uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_finalisation_pay_task_finish_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "public.weekly_source_finalisation_pay_task_recover_atomic_v1(jsonb)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private.weekly_source_office_proposal_revision_v1(uuid[],bytea)",
+            "present": true,
+            "owner_current": true,
+            "security_definer": true,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private._weekly_source_acl_table_contract_v1()",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          },
+          {
+            "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+            "present": true,
+            "owner_current": true,
+            "security_definer": false,
+            "anon_denied": true,
+            "authenticated_denied": true,
+            "service_contract": true
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "functions_hash",
+            "tables_acl_hash",
+            "triggers_hash",
+            "policies_hash"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "functions_hash": "25e12a4aac94ad8fa60badfdea2035ac",
+              "tables_acl_hash": "7c7433ff59d513a4c37eb1e9bf636536",
+              "triggers_hash": "61ab0139de5e90bdb78f1eec12c694ac",
+              "policies_hash": "3d46c24766a7a69b19fd9eb504bf54b5"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "request_table_absent",
+            "support_column_absent",
+            "rule_column_absent",
+            "rules_absent",
+            "rule_versions_absent",
+            "assignments_absent",
+            "pp_helper_absent",
+            "mail_outbox_count",
+            "invoice_count",
+            "timesheet_count",
+            "financial_count",
+            "financial_outbox_count"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "request_table_absent": true,
+              "support_column_absent": true,
+              "rule_column_absent": true,
+              "rules_absent": true,
+              "rule_versions_absent": true,
+              "assignments_absent": true,
+              "pp_helper_absent": true,
+              "mail_outbox_count": "332",
+              "invoice_count": "46",
+              "timesheet_count": "120",
+              "financial_count": "577",
+              "financial_outbox_count": "20"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 3,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "f8_helpers_absent"
+          ],
+          "rows": [
+            {
+              "f8_helpers_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 4,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "report_metadata_absent",
+            "report_bindings_absent",
+            "report_scope_column_absent",
+            "active_profile_count"
+          ],
+          "rows": [
+            {
+              "report_metadata_absent": true,
+              "report_bindings_absent": true,
+              "report_scope_column_absent": true,
+              "active_profile_count": "5"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 5,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "invoice_hold_releases_absent",
+            "money_columns_absent"
+          ],
+          "rows": [
+            {
+              "invoice_hold_releases_absent": true,
+              "money_columns_absent": true
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Effects outside PostgreSQL, if invoked by a database extension or privileged function, are outside transaction rollback semantics."
+    ]
+  }
+}

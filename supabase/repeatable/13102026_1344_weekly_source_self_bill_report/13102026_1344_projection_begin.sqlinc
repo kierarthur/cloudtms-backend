@@ -1,0 +1,404 @@
+-- Complete native successor; bounded report arm only. Root composes later shared owner hunks.
+create or replace function public.weekly_source_projection_begin_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_keys constant text[]:=array[
+    'actor_user_id','upload_id','expected_authority_scope_version',
+    'correction_session_id','expected_correction_session_version',
+    'expected_projection_publication_id','expected_row_manifest_hash',
+    'expected_comparison_manifest_hash','expected_issue_set_hash',
+    'rebuild_idempotency_key'
+  ]::text[];
+  v_rebuild_keys constant text[]:=array[
+    'correction_session_id','expected_correction_session_version',
+    'expected_projection_publication_id','expected_row_manifest_hash',
+    'expected_comparison_manifest_hash','expected_issue_set_hash',
+    'rebuild_idempotency_key'
+  ]::text[];
+  v_unknown_key text;
+  v_rebuild boolean;
+  v_actor uuid;
+  v_upload_id uuid;
+  v_expected_version bigint;
+  v_correction_id uuid;
+  v_expected_session_version bigint;
+  v_expected_publication_id uuid;
+  v_expected_row_hash bytea;
+  v_expected_comparison_hash bytea;
+  v_expected_issue_hash bytea;
+  v_rebuild_idempotency_key text;
+  v_rebuild_request_hash bytea;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_scope public.weekly_source_report_scopes%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_prior_publication public.weekly_source_projection_publications%rowtype;
+  v_correction public.weekly_final_source_correction_sessions%rowtype;
+  v_scope_kind text;
+  v_scope_version bigint;
+  v_scope_current_upload uuid;
+  v_client_id uuid;
+  v_empty_comparison_hash bytea;
+  v_empty_issue_hash bytea;
+  v_projection_generation integer;
+  v_resolution_count integer;
+  v_rows_applied boolean:=false;
+  v_rebuild_replay boolean:=false;
+  v_correction_found boolean:=false;
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_BEGIN_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select key into v_unknown_key
+  from pg_catalog.jsonb_object_keys(p_request) key
+  where not key=any(v_allowed_keys)
+  order by key limit 1;
+  if v_unknown_key is not null then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_BEGIN_REQUEST_INVALID'
+      using errcode='22023',detail=v_unknown_key;
+  end if;
+  v_rebuild:=p_request ?| v_rebuild_keys;
+  if v_rebuild and exists(
+    select 1 from pg_catalog.unnest(v_rebuild_keys) key
+    where not (p_request ? key)
+  ) then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_REBUILD_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_upload_id:=(p_request->>'upload_id')::uuid;
+    v_expected_version:=(p_request->>'expected_authority_scope_version')::bigint;
+    if v_rebuild then
+      v_correction_id:=(p_request->>'correction_session_id')::uuid;
+      v_expected_session_version:=(p_request->>'expected_correction_session_version')::bigint;
+      v_expected_publication_id:=(p_request->>'expected_projection_publication_id')::uuid;
+      v_expected_row_hash:=private.weekly_source_hex32_v1(
+        p_request->>'expected_row_manifest_hash','WEEKLY_SOURCE_ROW_MANIFEST_HASH_INVALID'
+      );
+      v_expected_comparison_hash:=private.weekly_source_hex32_v1(
+        p_request->>'expected_comparison_manifest_hash',
+        'WEEKLY_SOURCE_COMPARISON_MANIFEST_HASH_INVALID'
+      );
+      v_expected_issue_hash:=private.weekly_source_hex32_v1(
+        p_request->>'expected_issue_set_hash','WEEKLY_SOURCE_ISSUE_SET_HASH_INVALID'
+      );
+      v_rebuild_idempotency_key:=pg_catalog.btrim(
+        coalesce(p_request->>'rebuild_idempotency_key','')
+      );
+    end if;
+  exception when invalid_text_representation or numeric_value_out_of_range then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_BEGIN_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_upload_id is null or v_expected_version is null
+     or v_expected_version<1
+     or (v_rebuild and (
+       v_correction_id is null or v_expected_session_version is null
+       or v_expected_session_version<1 or v_expected_publication_id is null
+       or pg_catalog.octet_length(v_expected_row_hash)<>32
+       or pg_catalog.octet_length(v_expected_comparison_hash)<>32
+       or pg_catalog.octet_length(v_expected_issue_hash)<>32
+       or pg_catalog.char_length(v_rebuild_idempotency_key) not between 1 and 200
+     )) then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_BEGIN_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if v_rebuild then
+    v_rebuild_request_hash:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PROJECTION_REBUILD_V1',p_request-'rebuild_idempotency_key'
+    );
+  end if;
+  select * into v_upload
+  from public.weekly_source_uploads where id=v_upload_id;
+  if not found or v_upload.row_manifest_hash is null
+     or (v_upload.purpose='ORDINARY' and v_upload.state<>'CURRENT')
+     or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and v_upload.state<>'CORRECTION_READY') then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'status','STALE','reason_code','WEEKLY_SOURCE_UPLOAD_NOT_CURRENT'
+    );
+  end if;
+  select * into strict v_cycle
+  from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+  select * into strict v_group
+  from public.weekly_source_groups where id=v_cycle.source_group_id;
+  if v_upload.purpose<>'FINAL_SOURCE_CORRECTION' and v_upload.correction_session_id is not null then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  if v_upload.report_scope_id is null then
+    v_scope_kind:='CYCLE';
+    v_scope_version:=v_cycle.version;
+    v_scope_current_upload:=v_cycle.current_complete_upload_id;
+    begin
+      v_client_id:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
+    end;
+  else
+    select * into strict v_scope
+    from public.weekly_source_report_scopes where id=v_upload.report_scope_id;
+    if v_scope.source_cycle_id is distinct from v_cycle.id
+       or v_scope.source_group_id is distinct from v_group.id then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
+    end if;
+    v_scope_kind:=case when v_scope.self_bill_report_id is null then 'NHSP_REPORT_SCOPE' else 'SELF_BILL_REPORT_SCOPE' end;
+    if v_scope.self_bill_report_id is not null then
+      if v_upload.purpose<>'ORDINARY' or v_rebuild then
+        raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_CORRECT_FINAL_UNSUPPORTED' using errcode='55000'; end if;
+      perform private.weekly_source_self_bill_report_seal_assert_v1(v_upload.id);
+      perform 1 from public.weekly_source_groups where id=v_group.id for update;
+      perform 1 from public.weekly_source_cycles where id=v_cycle.id for update;
+    end if;
+    v_scope_version:=v_scope.version;
+    v_scope_current_upload:=v_scope.current_complete_upload_id;
+    v_client_id:=v_scope.client_id;
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(pg_catalog.encode(v_upload.declared_scope_fingerprint,'hex'),73241837)
+  );
+  if v_scope_kind='CYCLE' then
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_upload.source_cycle_id for update;
+    v_scope_version:=v_cycle.version;
+    v_scope_current_upload:=v_cycle.current_complete_upload_id;
+  else
+    -- Each NHSP Trust publishes independently under its report-scope head.
+    select * into strict v_cycle
+    from public.weekly_source_cycles where id=v_upload.source_cycle_id;
+    select * into strict v_scope
+    from public.weekly_source_report_scopes where id=v_upload.report_scope_id for update;
+    if v_scope.source_cycle_id is distinct from v_cycle.id
+       or v_scope.source_group_id is distinct from v_group.id
+       or v_scope.environment is distinct from v_group.environment
+       or v_scope.agency_id is distinct from v_group.agency_id
+       or v_scope.client_id is distinct from v_client_id
+       or v_scope.cutoff_at_utc is distinct from v_cycle.cutoff_at_utc then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='55000';
+    end if;
+    v_scope_version:=v_scope.version;
+    v_scope_current_upload:=v_scope.current_complete_upload_id;
+  end if;
+  if v_upload.purpose='FINAL_SOURCE_CORRECTION' then
+    select * into v_correction
+    from public.weekly_final_source_correction_sessions
+    where id=v_upload.correction_session_id for update;
+    v_correction_found:=found;
+    if v_correction_found and v_rebuild then
+      select * into v_publication
+      from public.weekly_source_projection_publications publication
+      where publication.correction_session_id=v_correction.id
+        and publication.rebuild_idempotency_key=v_rebuild_idempotency_key
+      for update;
+      if found then
+        if v_publication.rebuild_request_hash is distinct from v_rebuild_request_hash then
+          raise exception 'WEEKLY_SOURCE_PROJECTION_REBUILD_IDEMPOTENCY_COLLISION'
+            using errcode='22023';
+        end if;
+        if v_publication.state='BUILDING' then
+          if v_correction.state<>'REVIEWED'
+             or v_correction.version<>v_expected_session_version
+             or v_correction.replacement_projection_publication_id
+                  is distinct from v_expected_publication_id then
+            raise exception 'WEEKLY_SOURCE_CORRECTION_REBUILD_STALE' using errcode='40001';
+          end if;
+        elsif v_publication.state='CORRECTION_READY' then
+          if v_correction.replacement_projection_publication_id
+               is distinct from v_publication.id
+             or v_publication.ready_session_version is null then
+            raise exception 'WEEKLY_SOURCE_CORRECTION_REBUILD_STALE' using errcode='40001';
+          end if;
+        else
+          raise exception 'WEEKLY_SOURCE_CORRECTION_REBUILD_STALE' using errcode='40001';
+        end if;
+        v_rebuild_replay:=true;
+      end if;
+    end if;
+    if not v_correction_found
+       or v_correction.source_cycle_id is distinct from v_cycle.id
+       or v_correction.authority_scope_kind is distinct from v_scope_kind
+       or v_correction.report_scope_id is distinct from v_upload.report_scope_id
+       or v_correction.replacement_correction_upload_id is distinct from v_upload.id
+       or v_correction.actor_user_id is distinct from v_actor
+       or (v_rebuild and not v_rebuild_replay and (
+         v_correction.id is distinct from v_correction_id
+         or v_correction.state<>'REVIEWED'
+         or v_correction.version<>v_expected_session_version
+         or v_correction.replacement_projection_publication_id
+              is distinct from v_expected_publication_id
+       ))
+       or (not v_rebuild and v_correction.state<>'READY') then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
+    end if;
+  elsif v_rebuild then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_REBUILD_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if private.weekly_source_scope_fingerprint_v1(
+       v_group.environment,v_group.agency_id,v_group.id,v_cycle.id,
+       v_upload.report_scope_id,v_client_id
+     ) is distinct from v_upload.declared_scope_fingerprint then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='55000';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'RECHECK_SOURCE',v_group.id,v_client_id,v_cycle.finalisation_week_ending
+  );
+  if v_scope_version<>v_expected_version
+     or (v_upload.purpose='ORDINARY' and v_scope_current_upload is distinct from v_upload.id)
+     or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and
+       coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id)
+         is distinct from v_correction.expected_current_final_revision_id) then
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'status','STALE','reason_code','WEEKLY_SOURCE_SCOPE_VERSION_STALE',
+      'current_upload_id',v_scope_current_upload,'current_authority_scope_version',v_scope_version
+    );
+  end if;
+
+  if v_rebuild then
+    select * into v_publication
+    from public.weekly_source_projection_publications publication
+    where publication.correction_session_id=v_correction.id
+      and publication.rebuild_idempotency_key=v_rebuild_idempotency_key
+    for update;
+    if found then
+      if v_publication.state not in ('BUILDING','CORRECTION_READY')
+         or v_publication.upload_id is distinct from v_upload.id
+         or v_publication.authority_scope_version<>v_scope_version then
+        return pg_catalog.jsonb_build_object(
+          'ok',false,'status','STALE',
+          'reason_code','WEEKLY_SOURCE_CORRECTION_REBUILD_STALE',
+          'publication_id',v_publication.id
+        );
+      end if;
+      if v_publication.state='CORRECTION_READY'
+         and v_correction.replacement_projection_publication_id
+               is distinct from v_publication.id then
+        return pg_catalog.jsonb_build_object(
+          'ok',false,'status','STALE',
+          'reason_code','WEEKLY_SOURCE_CORRECTION_REBUILD_POINTER_STALE',
+          'publication_id',v_publication.id
+        );
+      end if;
+      select pg_catalog.count(*)::integer into v_resolution_count
+      from public.weekly_source_row_resolutions resolution
+      join public.weekly_source_upload_rows source_row
+        on source_row.id=resolution.upload_row_id
+      where source_row.upload_id=v_upload.id
+        and resolution.generation=coalesce(
+          v_publication.projection_generation,
+          v_publication.authority_scope_version::integer
+        );
+      v_rows_applied:=v_resolution_count=v_upload.accepted_count;
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status',v_publication.state,
+        'publication_id',v_publication.id,'upload_id',v_upload.id,
+        'authority_scope_version',v_scope_version,
+        'projection_generation',v_publication.projection_generation,
+        'ready_session_version',v_publication.ready_session_version,
+        'comparison_manifest_hash',pg_catalog.encode(v_publication.comparison_manifest_hash,'hex'),
+        'issue_set_hash',pg_catalog.encode(v_publication.issue_set_hash,'hex'),
+        'rows_applied',v_rows_applied,'idempotent',true
+      );
+    end if;
+    select * into v_prior_publication
+    from public.weekly_source_projection_publications publication
+    where publication.id=v_expected_publication_id for share;
+    if not found or v_upload.row_manifest_hash is distinct from v_expected_row_hash
+       or v_prior_publication.state<>'CORRECTION_READY'
+       or v_prior_publication.correction_session_id is distinct from v_correction.id
+       or v_prior_publication.upload_id is distinct from v_upload.id
+       or v_prior_publication.source_cycle_id is distinct from v_cycle.id
+       or v_prior_publication.authority_scope_kind is distinct from v_scope_kind
+       or v_prior_publication.report_scope_id is distinct from v_upload.report_scope_id
+       or v_prior_publication.authority_scope_version<>v_scope_version
+       or v_prior_publication.comparison_manifest_hash is distinct from v_expected_comparison_hash
+       or v_prior_publication.issue_set_hash is distinct from v_expected_issue_hash then
+      raise exception 'WEEKLY_SOURCE_CORRECTION_REBUILD_STALE' using errcode='40001';
+    end if;
+  end if;
+
+  select * into v_publication
+  from public.weekly_source_projection_publications
+  where source_cycle_id=v_cycle.id
+    and authority_scope_kind=v_scope_kind
+    and report_scope_id is not distinct from v_upload.report_scope_id
+    and authority_scope_version=v_scope_version
+    and upload_id=v_upload.id
+    and projection_generation is null
+    and rebuild_idempotency_key is null
+  for update;
+  if found and not v_rebuild then
+    if v_publication.state in ('BUILDING','CURRENT','CORRECTION_READY') then
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status',v_publication.state,'publication_id',v_publication.id,
+        'upload_id',v_upload.id,'authority_scope_version',v_scope_version,
+        'idempotent',true
+      );
+    elsif v_publication.state='FAILED' then
+      update public.weekly_source_projection_publications
+      set state='BUILDING',failure_code=null,published_at_utc=null
+      where id=v_publication.id;
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'status','BUILDING','publication_id',v_publication.id,
+        'upload_id',v_upload.id,'authority_scope_version',v_scope_version,
+        'retry',true
+      );
+    else
+      return pg_catalog.jsonb_build_object(
+        'ok',false,'status','STALE','reason_code','WEEKLY_SOURCE_PUBLICATION_STALE',
+        'publication_id',v_publication.id
+      );
+    end if;
+  end if;
+
+  v_empty_comparison_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_COMPARISON_MANIFEST_V1',
+    pg_catalog.jsonb_build_object(
+      'manifest_version','WEEKLY_SOURCE_COMPARISON_MANIFEST_V1',
+      'source_authority','[]'::jsonb,'timesheet_authority','[]'::jsonb
+    )
+  );
+  v_empty_issue_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_ISSUE_SET_V1',
+    pg_catalog.jsonb_build_object('issue_set_version','WEEKLY_SOURCE_ISSUE_SET_V1','issues','[]'::jsonb)
+  );
+  if v_rebuild then
+    if v_scope_version>2147483647 then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_GENERATION_OVERFLOW' using errcode='22003';
+    end if;
+    select pg_catalog.max(coalesce(
+      publication.projection_generation,
+      publication.authority_scope_version::integer
+    )) into v_projection_generation
+    from public.weekly_source_projection_publications publication
+    where publication.upload_id=v_upload.id;
+    if coalesce(v_projection_generation,0)>=2147483647 then
+      raise exception 'WEEKLY_SOURCE_PROJECTION_GENERATION_OVERFLOW' using errcode='22003';
+    end if;
+    v_projection_generation:=coalesce(v_projection_generation,0)+1;
+  else
+    v_projection_generation:=null;
+  end if;
+  insert into public.weekly_source_projection_publications(
+    source_cycle_id,authority_scope_kind,report_scope_id,upload_id,correction_session_id,
+    authority_scope_version,projection_generation,rebuild_idempotency_key,
+    rebuild_request_hash,ready_session_version,
+    comparison_manifest_hash,issue_set_hash,state
+  ) values (
+    v_cycle.id,v_scope_kind,v_upload.report_scope_id,v_upload.id,v_upload.correction_session_id,
+    v_scope_version,v_projection_generation,v_rebuild_idempotency_key,
+    v_rebuild_request_hash,case when v_rebuild then v_expected_session_version end,
+    v_empty_comparison_hash,v_empty_issue_hash,'BUILDING'
+  ) returning * into v_publication;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','BUILDING','publication_id',v_publication.id,
+    'upload_id',v_upload.id,'authority_scope_kind',v_scope_kind,
+    'authority_scope_version',v_scope_version,
+    'projection_generation',v_publication.projection_generation,
+    'ready_session_version',v_publication.ready_session_version,
+    'rows_applied',false,'idempotent',false
+  );
+end;
+$function$;

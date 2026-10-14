@@ -1,0 +1,30 @@
+{
+  "status": "SOURCE_ONLY_ENVELOPE_CHECK_PASS_NO_DATABASE_EXECUTION",
+  "file": "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
+  "sourceSqlHash": "d63c766ee4a26eed5038b8c10840686eb007334761d2c770d82901e0352a4669",
+  "nativeAssertionBodySha256": "e045ddf5b44621848df26d4a819945641939ed1291f1b5ad1d0c1fdfb659376b",
+  "nativeAssertionBodyRetainedByteExact": true,
+  "neutralSqlSha256": "e6558b45f3237242db182cdea6ed199a277e840e76f58bf6feee780f282a34e7",
+  "removedEnvelope": [
+    {
+      "command": "\\set ON_ERROR_STOP on",
+      "start": 84,
+      "end": 105,
+      "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+    },
+    {
+      "command": "BEGIN READ ONLY",
+      "start": 106,
+      "end": 122,
+      "sha256": "0743dca44b64d54885b3e7afa0393b419148c30b3f2716bdad303ee4307aa61c"
+    },
+    {
+      "command": "ROLLBACK",
+      "start": 4007,
+      "end": 4016,
+      "sha256": "1a2a6843809b2d5f416e827d4bc648bbbbe7a9c6c92594700751c675fc6f9420"
+    }
+  ],
+  "renderedSha256": "083d0643642c1774095d5ef55b52ac9db6c0466ea334823ab0b65526f5341ee4",
+  "scope": "Complete saved body reread: catalogue/helper/role/trigger bindings only. Removal review applies only to this exact source hash and explicit three-command envelope. No post-Banking plan, installed check, permission to execute, or native/full rehearsal proof."
+}

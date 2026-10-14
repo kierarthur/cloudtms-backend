@@ -1,0 +1,20 @@
+{
+  "status": "FROZEN_SOURCE_EVIDENCE_PRESERVED_NO_RUNTIME_INTEGRATION",
+  "runtimeFilesChanged": 0,
+  "files": 12,
+  "packets": [
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206",
+      "manifestSha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f",
+      "fileCount": 6,
+      "status": "HISTORICAL_CDAF_VERIFIER_PIN_FORWARD_ONLY"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206-trial2",
+      "manifestSha256": "4784752bda1a9c5df7edad45d99715fa114efd25b85c7810e9cdc7c01dd1e272",
+      "fileCount": 6,
+      "status": "D67_COMPLETE_VERIFIER_FORWARD_ONLY_NATIVE_GATES_HELD"
+    }
+  ],
+  "scope": "Immutable proposal evidence only. Current root2205/2206/registry/runtime owners untouched; canonical2206 forward and separate pin-forward receipts remain distinct. No native acceptance or final PartB."
+}

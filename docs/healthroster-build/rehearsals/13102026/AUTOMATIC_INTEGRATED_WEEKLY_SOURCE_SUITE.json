@@ -1,0 +1,15 @@
+{
+  "status": "SOURCE_SUITE_PASS_NATIVE_ACCEPTANCE_HELD",
+  "sourceInputCommit": "9fc45b9a4cc3a8dce400887f1640cfaf233f23be",
+  "integratedPackage": "Automatic native delta plus actual final ACL source test",
+  "command": "node --test --test-reporter=tap tests/weekly-source/*.test.mjs",
+  "authoritativeMyTmsPath": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-mytms-13102026",
+  "exitCode": 0,
+  "tests": 571,
+  "pass": 555,
+  "fail": 0,
+  "skipped": 16,
+  "infrastructureOrNativeSkips": true,
+  "fullDatabaseRehearsal": false,
+  "featuresActivated": false
+}

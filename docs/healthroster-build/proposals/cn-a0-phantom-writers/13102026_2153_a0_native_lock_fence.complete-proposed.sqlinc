@@ -1,0 +1,139 @@
+-- Bounded exact-request successor proposal. Call-only native Candidate/I-1.
+-- No global table mutex, new lock key, calculator, financial or readiness store.
+create or replace function private.timesheet_correction_a0_native_lock_fence_v1(p_request_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  r private.timesheet_correction_requests%rowtype; v_scope jsonb; v_after jsonb;
+  v_ids uuid[]; v_members uuid[]; v_groups uuid[]; v_groups_after uuid[]; v_workflows uuid[];
+  v_gate jsonb; v_locks jsonb; v_before_families jsonb; v_after_families jsonb;
+  v_old_timeout text:=current_setting('lock_timeout'); v_umbrella uuid;
+begin
+  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+  select q.* into strict r from private.timesheet_correction_requests q where q.id=p_request_id;
+  if current_setting('transaction_isolation')<>'read committed' then
+    raise exception 'CORRECTION_A0_TRANSACTION_SNAPSHOT_UNPROVED' using errcode='55000'; end if;
+  v_scope:=private.timesheet_correction_a0_clock_scope_v1(r.id);
+  select array_agg(distinct x.id order by x.id) into v_ids from unnest(
+    array[r.root_timesheet_id,r.reversed_timesheet_id,r.replacement_timesheet_id]) x(id);
+  select array_agg(distinct gc.source_group_id order by gc.source_group_id) into v_groups
+    from public.weekly_source_group_clients gc where gc.client_id=r.client_id;
+  if v_groups is null or cardinality(v_groups)>64 then
+    raise exception 'CORRECTION_A0_LOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id)
+    into v_before_families from public._pay_timesheet_rotation_scope(v_ids) s;
+  -- The installed I-1 helper itself locks Timesheet family rows. A Candidate
+  -- or expense writer may already own an earlier workflow/component/TS row.
+  -- Bound that native acquisition, then use NOWAIT on every later row class.
+  -- Refusal raises through the atomic caller, rolling back all unit mutations.
+  begin
+    perform set_config('lock_timeout','1ms',true);
+    v_gate:=private.weekly_source_candidate_serial_gate_v1(r.candidate_id,
+      'WORKBENCH_CANDIDATE_FIRST_AUTHORISATION',r.id,'CORRECTION_A0_FIRST_AUTHORISATION');
+    if v_gate->'ok' is distinct from 'true'::jsonb or v_gate->>'gate' is distinct from 'GRANTED' then
+      raise exception 'CORRECTION_A0_AUTHORITY_BUSY' using errcode='55P03'; end if;
+    -- Reassert the acquisition bound at the native I-1 boundary. Future gate
+    -- successor bodies must not silently widen this exact-request envelope.
+    perform set_config('lock_timeout','1ms',true);
+    v_locks:=private.weekly_source_lock_family_rows_v1(v_ids,r.candidate_id);
+    if v_locks->'ok' is distinct from 'true'::jsonb then
+      raise exception 'CORRECTION_A0_LOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+    perform set_config('lock_timeout',v_old_timeout,true);
+  exception when others then
+    perform set_config('lock_timeout',v_old_timeout,true);
+    raise;
+  end;
+  select jsonb_agg(to_jsonb(s) order by s.requested_timesheet_id,s.family_version,s.family_timesheet_id)
+    into v_after_families from public._pay_timesheet_rotation_scope(v_ids) s;
+  if v_before_families is null or v_after_families is distinct from v_before_families then
+    raise exception 'CORRECTION_A0_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  select array_agg(distinct s.family_timesheet_id order by s.family_timesheet_id) into v_members
+    from public._pay_timesheet_rotation_scope(v_ids) s;
+  if v_members is null or cardinality(v_members)>256 then
+    raise exception 'CORRECTION_A0_LOCK_SCOPE_UNPROVED' using errcode='55000'; end if;
+  if not pg_try_advisory_xact_lock(hashtextextended('CORRECTION_CHAIN|'||r.root_timesheet_id::text,21072026)) then
+    raise exception 'CORRECTION_A0_AUTHORITY_BUSY' using errcode='55P03'; end if;
+  perform 1 from private.timesheet_correction_requests q where q.id=r.id for update nowait;
+  -- Sorted native groups precede Client/configuration locks. No later family
+  -- acquisition is permitted except native reentry or the fresh unpublished R0.
+  perform 1 from public.weekly_source_groups g where g.id=any(v_groups) order by g.id for update nowait;
+  perform 1 from public.clients c where c.id=r.client_id for update nowait;
+  perform 1 from public.candidates c where c.id=r.candidate_id for update nowait;
+  select c.umbrella_id into v_umbrella from public.candidates c where c.id=r.candidate_id;
+  perform 1 from public.umbrellas u where u.id=v_umbrella for share nowait;
+  perform 1 from public.tms_users a where a.id=p_actor_user_id for share nowait;
+  perform 1 from public.contracts c where c.id=r.contract_id for update nowait;
+  perform 1 from public.weekly_source_group_clients gc where gc.client_id=r.client_id order by gc.id for update nowait;
+  perform 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=any(v_groups) order by a.id for update nowait;
+  perform 1 from public.weekly_source_client_policies p where p.client_id=r.client_id order by p.id for update nowait;
+  perform 1 from public.client_settings c where c.client_id=r.client_id order by c.id for update nowait;
+  select array_agg(distinct w.id order by w.id) into v_workflows from public.candidate_submission_workflows w
+    where w.target_timesheet_id=any(v_members) or w.anchor_timesheet_id=any(v_members)
+      or w.id in(select t.candidate_workflow_id from public.timesheets t where t.timesheet_id=any(v_members));
+  perform 1 from public.candidate_submission_workflows w where w.id=any(v_workflows) order by w.id for update nowait;
+  perform 1 from public.contract_weeks w where w.timesheet_id=any(v_members) or w.id=r.replacement_week_id
+    or w.id in(select f.contract_week_id from public.candidate_submission_workflows f where f.id=any(v_workflows))
+    order by w.id for update nowait;
+  perform 1 from public.candidate_approval_requests a where a.workflow_id=any(v_workflows) order by a.id for update nowait;
+  perform 1 from public.candidate_submission_components c where c.workflow_id=any(v_workflows)
+    or c.timesheet_id=any(v_members) order by c.id for update nowait;
+  -- Include inactive/history rows: an UPDATE can reactivate without touching
+  -- its FK and would not contend with the parent alone.
+  perform 1 from public.timesheets_financials f where f.timesheet_id=any(v_members) order by f.id for update nowait;
+  perform 1 from public.nhsp_shifts s where s.timesheet_id=any(v_members) order by s.id for update nowait;
+  perform 1 from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_members) order by l.id for update nowait;
+  perform 1 from public.candidate_expense_components e where e.owning_timesheet_id=any(v_members)
+    or e.workflow_id=any(v_workflows) order by e.expense_component_id for update nowait;
+  perform 1 from public.timesheet_evidence e where e.timesheet_id=any(v_members) order by e.id for update nowait;
+  -- No Timesheet FK exists on validations. This fences existing rows only;
+  -- the actual insertion owner must separately prove native family admission.
+  perform 1 from public.timesheet_validations v where v.timesheet_id=any(v_members) order by v.id for update nowait;
+  -- Likewise, invoice_lines.timesheet_id has no Timesheet FK. This protects
+  -- existing lines; absence requires qualification of the actual invoice owner.
+  perform 1 from public.invoice_lines l where l.timesheet_id=any(v_members) order by l.id for update nowait;
+  -- Row locks also hold native RowShare relation locks until unit completion.
+  -- Require the actual FK fence and enabled RI triggers, never a guessed FK.
+  if current_setting('session_replication_role')<>'origin' or exists(
+    select 1 from (values
+      ('public.timesheets_financials','timesheets_financials_timesheet_id_fkey','timesheet_id','public.timesheets','timesheet_id'),
+      ('public.nhsp_shifts','nhsp_shifts_timesheet_id_fkey','timesheet_id','public.timesheets','timesheet_id'),
+      ('public.candidate_expense_components','candidate_expense_components_owning_timesheet_id_fkey','owning_timesheet_id','public.timesheets','timesheet_id'),
+      ('public.weekly_source_row_timesheet_lineages','weekly_source_row_timesheet_lineages_timesheet_id_fkey','timesheet_id','public.timesheets','timesheet_id'),
+      ('public.weekly_source_group_clients','weekly_source_group_clients_client_id_fkey','client_id','public.clients','id'),
+      ('public.weekly_source_group_clients','weekly_source_group_clients_source_group_id_fkey','source_group_id','public.weekly_source_groups','id'),
+      ('public.weekly_source_client_policies','weekly_source_client_policies_client_id_fkey','client_id','public.clients','id'),
+      ('public.client_settings','client_settings_client_id_fkey','client_id','public.clients','id'),
+      ('public.weekly_source_group_rule_assignments','weekly_source_group_rule_assignments_source_group_id_fkey','source_group_id','public.weekly_source_groups','id'),
+      ('public.candidate_approval_requests','candidate_approval_requests_workflow_id_fkey','workflow_id','public.candidate_submission_workflows','id'),
+      ('public.candidate_submission_components','candidate_submission_components_workflow_id_fkey','workflow_id','public.candidate_submission_workflows','id'),
+      ('public.candidate_submission_components','candidate_submission_components_timesheet_id_fkey','timesheet_id','public.timesheets','timesheet_id'),
+      ('public.timesheet_evidence','timesheet_evidence_timesheet_id_fkey','timesheet_id','public.timesheets','timesheet_id'),
+      ('public.candidate_submission_workflows','candidate_submission_workflows_target_timesheet_id_fkey','target_timesheet_id','public.timesheets','timesheet_id'),
+      ('public.candidate_submission_workflows','candidate_submission_workflows_anchor_timesheet_id_fkey','anchor_timesheet_id','public.timesheets','timesheet_id'),
+      ('public.contract_weeks','contract_weeks_contract_id_fkey','contract_id','public.contracts','id')
+    ) expected(child,name,child_column,parent,parent_column)
+    where not exists(select 1 from pg_catalog.pg_constraint c
+      where c.conrelid=to_regclass(expected.child) and c.conname=expected.name and c.contype='f'
+        and c.confrelid=to_regclass(expected.parent) and c.convalidated and not c.condeferrable
+        and c.conkey=array(select a.attnum from pg_catalog.pg_attribute a
+          where a.attrelid=c.conrelid and a.attname=expected.child_column and not a.attisdropped)
+        and c.confkey=array(select a.attnum from pg_catalog.pg_attribute a
+          where a.attrelid=c.confrelid and a.attname=expected.parent_column and not a.attisdropped)
+        and exists(select 1 from pg_catalog.pg_trigger t where t.tgconstraint=c.oid and t.tgisinternal
+          and t.tgrelid=c.conrelid and (t.tgtype&4)=4 and t.tgenabled in('O','A'))
+        and exists(select 1 from pg_catalog.pg_trigger t where t.tgconstraint=c.oid and t.tgisinternal
+          and t.tgrelid=c.conrelid and (t.tgtype&16)=16 and t.tgenabled in('O','A'))
+        and not exists(select 1 from pg_catalog.pg_trigger t where t.tgconstraint=c.oid and t.tgisinternal and t.tgenabled not in('O','A')))) then
+    raise exception 'CORRECTION_A0_FOREIGN_KEY_FENCE_UNPROVED' using errcode='55000'; end if;
+  select array_agg(distinct gc.source_group_id order by gc.source_group_id) into v_groups_after
+    from public.weekly_source_group_clients gc where gc.client_id=r.client_id;
+  v_after:=private.timesheet_correction_a0_clock_scope_v1(r.id);
+  if v_groups_after is distinct from v_groups or v_after is distinct from v_scope then
+    raise exception 'CORRECTION_A0_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  perform private.timesheet_correction_actor_assert_v1(p_actor_user_id);
+  return jsonb_build_object('contract','TIMESHEET_CORRECTION_A0_NATIVE_LOCK_FENCE_V1',
+    'request_id',r.id,'candidate_id',r.candidate_id,'family_member_ids',v_members,'source_group_ids',v_groups);
+end;
+$function$;
+alter function private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid) from public,anon,authenticated,service_role;

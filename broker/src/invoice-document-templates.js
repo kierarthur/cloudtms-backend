@@ -1,4 +1,4 @@
-import { validateFrozenPresentationModel } from './invoice-presentation-contract.js';
+import { validateFrozenPresentationModel, validateZeroRoundingSuppressions } from './invoice-presentation-contract.js';
 
 const ESCAPE = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
 export function escapeInvoiceDocumentHtml(value) { return String(value ?? '').replace(/[&<>"']/g, character => ESCAPE[character]); }
@@ -104,6 +104,7 @@ export function renderInvoiceReferencePanel(model = {}) {
   return `<section class="references">${cells}</section>${credit.is_credit_note ? `<section class="payment"><strong>Credit reason:</strong> ${escapeInvoiceHtml(credit.reason)}</section>` : ''}`;
 }
 export function renderInvoiceLineTable(model = {}) {
+  validateZeroRoundingSuppressions(model);
   const currency = model.currency;
   const rows = Array.isArray(model.lines) ? model.lines : [];
   const weekEndingLayout = model.template_version === 'invoice-professional-v2'

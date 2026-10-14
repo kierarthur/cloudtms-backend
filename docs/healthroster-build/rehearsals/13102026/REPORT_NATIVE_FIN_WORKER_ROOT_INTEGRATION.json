@@ -1,0 +1,402 @@
+{
+  "status": "SOURCE_INTEGRATED_NATIVE_FINANCIAL_API_RELEASE_GATES_PENDING",
+  "sourceCommit": "8f711251725269b2aed5b0491731fab9cdaeeec5",
+  "frozenManifestSha256": "68f37566589858c2b536a3755f74d9fd691a25693d3c50fb0d3ffab021e36af1",
+  "inputChecks": [
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+      "current": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "current": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "current": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+      "current": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/13_private_acl.sqlinc",
+      "current": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "current": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "current": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+      "current": "fe00fbecb9a79d3f13c089f9c755912cd74cccb3164e7f7adda6345b9d2a02bf"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "current": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "current": "01405bc854fb7b2e23cd740154f0302a8956cdd144b44c1f3e4eda67db80dcdd"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "current": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "current": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+    },
+    {
+      "path": "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+      "current": "2fee6c5413c1378610790e909642f5d6ea4966274f0d1436af96ec9f1d5f63bc"
+    },
+    {
+      "path": "supabase/repeatable/04102026_2106_banking_pay_next_source_origin_state_v1.sql",
+      "current": "1b91f4b5de40d4d18606dd89d65bfa4d93e9198c3c7a2d7bc3e56b0642d911ec"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0114_weekly_source_pay_query_evidence_v1.sql",
+      "current": "bb6290374ea7857d1ec995565c78267ff9dc761b7d7f4fe05f460ed2903f9b2f"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0245_weekly_source_pay_query_c1_receipt_v1.sql",
+      "current": "e7e7717499f6e081fb2d2a5445167814efeb1c98ec6848cf828fd874b549a9bf"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0258_weekly_source_pay_query_next_receipt_v1.sql",
+      "current": "9888caaf5720e1078340474354a41cf55b0d90ed721b1366d24f133d9ec77978"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "current": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "current": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "current": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+    },
+    {
+      "path": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "current": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "current": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+      "current": "18317d4152fa8e8df4c17ac7895046453a3e26d534b10c45b1fafb50b91a983d"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "current": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "current": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/migrations/15092026_2335_weekly_source_finalisation_pay_orchestration.sql",
+      "current": "b45715070254d4c0c411500fc4933f62d1f42b545d6d9db475a57b18fc33351c"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_37_tsfin_write_current_snapshot_single_bounded.sql",
+      "current": "9f82588a4c16e4cbbf7285560b5ee1701b021eee51c854658d92c50ed08650aa"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_38_tsfin_write_snapshots_and_complete.sql",
+      "current": "175903f7dd7b6f48af6209cf29173a5e05372d05ba8c59d87399833e1d008693"
+    },
+    {
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "current": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908"
+    },
+    {
+      "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "current": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "current": "fba7ef740e4576b0ba7a1ae85ba3167ea7645f36fe063c859ac64ec6ee78c50b"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "current": "17e5026dfdbfb2ebac23cfe525a5448cc02dcc4205b98ae655e592fdcbcc3dee"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+      "current": "5260e6c9aecde3ea0dff9dc4d72e4a21ed2edc00ec698b58661afa50d7bd6aea"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "before": "42cf28b30ae154724db8450098538c1a9a98cd2940559d307f0887353900d703",
+      "current": "8218421d0732c10c3b2c2b3f49c2b5a982956d9d70d7920db846d7cdb1cd44e1",
+      "acceptedOnlyRecordedLiteralRepair": true
+    },
+    {
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "before": "4a9425b79d3ed98579095b9fd09d7ee1eb698f2b1fb5c966ee1277601083557b",
+      "current": "d05872065c382d3d4d63330a91dfbf09ce0903ee58bc76c7590b1b3cc1be2c28",
+      "acceptedOnlyRecordedLiteralRepair": true
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "current": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "current": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "current": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "current": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "current": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "current": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "current": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "current": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "current": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "current": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "current": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "current": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "current": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "current": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "current": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "current": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "current": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "current": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "current": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "current": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "current": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "current": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "current": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "current": "783d138fbc36dd3ecf795a981743bab40a7e5333b44de098b6e17059bd28a3f4"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+      "current": "50e03822490065314f9e625c1a253f50271279e0c727f305b0cdaa601e13ea3f"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+      "current": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+      "current": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175"
+    },
+    {
+      "path": "tests/weekly-source/weekly-source-upload-publication-owner.test.mjs",
+      "current": "43dc140f964d0c23bbf8222e9e13f401745291c31dee1fcc0df22631630fd7a5"
+    },
+    {
+      "path": "tests/weekly-source/parsers/acacium-report.test.js",
+      "current": "10fcc9ad137f59716b9e35de1853bd502828a6a1f1a2a8aae708395fa2c1e98d"
+    }
+  ],
+  "reverseProofs": {
+    "completeFIN": true,
+    "ordinaryNHSPBankHooksRetained": true,
+    "completeWorkers": true,
+    "completeUploadContext": true
+  },
+  "alreadyAppliedLiteralRepairs": [
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "beforeSha256": "42cf28b30ae154724db8450098538c1a9a98cd2940559d307f0887353900d703",
+      "afterSha256": "8218421d0732c10c3b2c2b3f49c2b5a982956d9d70d7920db846d7cdb1cd44e1",
+      "completeDefinitionSha256": "130f212d85966d060266ee0dd75c0c20de170a06a0d32d53497acb901a48de2c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "beforeSha256": "4a9425b79d3ed98579095b9fd09d7ee1eb698f2b1fb5c966ee1277601083557b",
+      "afterSha256": "d05872065c382d3d4d63330a91dfbf09ce0903ee58bc76c7590b1b3cc1be2c28",
+      "completeDefinitionSha256": "f137d7b0cb918dd79f7d9cbe102ee3ee8f217548ed07cd62b3f186be0f960e48"
+    }
+  ],
+  "signatureChanges": [
+    "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+    "private.weekly_source_report_projection_receipt_assert_v1(public.weekly_source_ordinary_pay_projection_receipts)",
+    "private.weekly_source_self_bill_report_pay_authority_v1(uuid)"
+  ],
+  "privateCount": 221,
+  "serviceCount": 142,
+  "tableCount": 105,
+  "noOperationalABDispatch": true,
+  "holds": [
+    "Separate real A/B financial, admission, render and pay isolation proof",
+    "Deterministic existing protected release binding",
+    "Fresh calendar/rules and actual native positive receipts",
+    "Prepared immutable output amount recovery",
+    "Protected reconcile-only publication and exact NEXT active/withheld money join",
+    "Browser/Office/app/phone acceptance"
+  ],
+  "outputs": [
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "before": "fba7ef740e4576b0ba7a1ae85ba3167ea7645f36fe063c859ac64ec6ee78c50b",
+      "after": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "bytes": 20759
+    },
+    {
+      "file": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "before": "17e5026dfdbfb2ebac23cfe525a5448cc02dcc4205b98ae655e592fdcbcc3dee",
+      "after": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "bytes": 53302
+    },
+    {
+      "file": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "before": null,
+      "after": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "bytes": 12480
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+      "before": null,
+      "after": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20",
+      "bytes": 2340
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "before": null,
+      "after": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9",
+      "bytes": 23242
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "before": null,
+      "after": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11",
+      "bytes": 1071
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "before": null,
+      "after": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7",
+      "bytes": 103685
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "before": null,
+      "after": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561",
+      "bytes": 27489
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/07_private_acl.sqlinc",
+      "before": null,
+      "after": "7bdfc266230363d6b03125ac4f7779cd76b43b8937d70ca24cd28eabe3fe2357",
+      "bytes": 2493
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+      "before": null,
+      "after": "fe9b8fb19a463229c08959121edf1d95b3902225af672ab7cce19d7aee684842",
+      "bytes": 717
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "before": "1f3fc5207d2ae5145447265ee80420fb4dffe0c8fa969fe1d76b9a96b0c7ec3d",
+      "after": "8e51ba850e6075d541a8a0e76c3c28fa331a7bcd088176494509f24f1f08d983",
+      "bytes": 58040
+    },
+    {
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "before": "316a020532690e9a8014c587d3a2a3c46c318fb720ea8ab636bdda4038a6c12d",
+      "after": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7",
+      "bytes": 34870
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "before": "9faac0c5578175c44fce579a8b51e64c4f88f0183e15876353eb4658bfff345c",
+      "after": "badf08f9122db3dddbf8b5f56dc5247873bb2a70d92624553a9a5005a84209d3",
+      "bytes": 67594
+    },
+    {
+      "file": "tests/weekly-source/weekly-source-acl-contract.test.mjs",
+      "before": "9abca7a8d3adebaf4d17c852e09a9d4609b8dfbcd8bdb185d88592de779cbdab",
+      "after": "a8cbc1970757f62c9a489f5f12ff4caa72223df4298ab2a2a59d9d25e34fe1bf",
+      "bytes": 14187
+    },
+    {
+      "file": "tests/weekly-source/report-native-upload-protocol.test.mjs",
+      "before": null,
+      "after": "c13e60bbf9d7aebb7e7c587b38479f9629487aa1558350a44ccce037cf880283",
+      "bytes": 12937
+    }
+  ],
+  "receiptRecovery": {
+    "reason": "Initial receipt write failed because output URL pathname retained percent-encoded spaces",
+    "sourceRead": "Exact pre-integration Git commit",
+    "allAppliedOutputsByteVerified": true,
+    "sourceWritesDuringRecovery": 0
+  }
+}

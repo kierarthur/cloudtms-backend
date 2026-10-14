@@ -1,0 +1,32 @@
+-- Unexecuted, read-only datatype cases for Root's later SEND_7 trial.
+-- No financial record/receipt/publication is created or accepted here.
+do $native_array_text_cases$
+declare r record; restored text[]; encoded text;
+  original_array_nulls text:=pg_catalog.current_setting('array_nulls');
+begin
+  for r in select * from (values
+    ('TWO_DIMENSIONS',ARRAY[['RATE_A','RATE_B'],['RATE_C','RATE_D']]::text[]),
+    ('NON_ONE_LOWER_BOUNDS',$array$[0:1][3:4]={{RATE_A,RATE_B},{RATE_C,RATE_D}}$array$::text[]),
+    ('ONE_DIMENSION',ARRAY['RATE_A','RATE_B']::text[]),
+    ('NULL_STRING_QUOTES_BACKSLASH',ARRAY[null::text,'NULL','a,b',$item$a"b$item$,$item$a\b$item$]::text[]),
+    ('EMPTY_ARRAY',ARRAY[]::text[]),
+    ('SQL_NULL_ARRAY',null::text[])
+  ) cases(case_name,native_array) loop
+    encoded:=r.native_array::text;
+    -- Same fixed parser semantics as the two complete forward owners. This
+    -- local setting is datatype configuration, never financial authority.
+    perform pg_catalog.set_config('array_nulls','on',true);
+    restored:=encoded::text[];
+    if restored is distinct from r.native_array or restored::text is distinct from encoded
+      or pg_catalog.array_dims(restored) is distinct from pg_catalog.array_dims(r.native_array)
+      or pg_catalog.array_lower(restored,1) is distinct from pg_catalog.array_lower(r.native_array,1)
+      or pg_catalog.array_lower(restored,2) is distinct from pg_catalog.array_lower(r.native_array,2) then
+      raise exception 'REPORT_PREPARED_NATIVE_ARRAY_ROUNDTRIP_FAILED' using errcode='55000',detail=r.case_name;
+    end if;
+  end loop;
+  perform pg_catalog.set_config('array_nulls',original_array_nulls,true);
+exception when others then
+  perform pg_catalog.set_config('array_nulls',original_array_nulls,true);
+  raise;
+end;
+$native_array_text_cases$;

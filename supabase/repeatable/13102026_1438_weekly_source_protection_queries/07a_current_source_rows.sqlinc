@@ -1,0 +1,54 @@
+-- Native current row set, with scoped confirmed-date narrowing and actual projection generation.
+create or replace function private.weekly_source_candidate_current_rows_v1(
+  p_projection_publication_id uuid,
+  p_candidate_id uuid,
+  p_client_id uuid,
+  p_contract_id uuid,
+  p_week_ending date
+) returns table(
+  source_row_id uuid,
+  source_link_id uuid,
+  work_event_id uuid,
+  work_date date,
+  start_at_local timestamp without time zone,
+  end_at_local timestamp without time zone,
+  break_minutes integer,
+  row_finalisation_state text
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  select source_row.id,source_link.id,work_event.id,source_row.work_date,
+    source_row.start_at_local,source_row.end_at_local,source_row.break_minutes,
+    source_row.row_finalisation_state
+  from public.weekly_source_projection_publications publication
+  join public.weekly_source_upload_rows source_row
+    on source_row.upload_id=publication.upload_id
+  join public.weekly_source_row_resolutions resolution
+    on resolution.upload_row_id=source_row.id
+   and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+   and resolution.mapping_state='RESOLVED'
+   and resolution.candidate_id=p_candidate_id
+   and resolution.client_id=p_client_id
+   and resolution.contract_id=p_contract_id
+  join public.weekly_work_event_source_links source_link
+    on source_link.upload_row_id=source_row.id
+   and source_link.row_resolution_id=resolution.id
+   and source_link.work_event_id=resolution.work_event_id
+  join public.weekly_work_events work_event
+    on work_event.id=resolution.work_event_id
+   and work_event.candidate_id=p_candidate_id
+   and work_event.client_id=p_client_id
+  where publication.id=p_projection_publication_id
+    and publication.state='CURRENT'
+    and source_row.work_date between p_week_ending-6 and p_week_ending
+    and (not private.weekly_source_is_import_authoritative_v1(p_client_id,p_contract_id,source_row.work_date)
+      or exists(select 1 from public.weekly_source_uploads upload where upload.id=publication.upload_id
+        and source_row.work_date between upload.confirmed_coverage_start_local_date and upload.confirmed_coverage_end_local_date))
+  order by source_row.work_date,source_row.start_at_local,
+    source_row.end_at_local,source_row.id;
+$function$;
+alter function private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date) owner to postgres;
+revoke all on function private.weekly_source_candidate_current_rows_v1(uuid,uuid,uuid,uuid,date) from public,anon,authenticated,service_role;

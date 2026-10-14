@@ -1,0 +1,91 @@
+{
+  "contract": "HEALTHROSTER_CN_A0_NATIVE_JOURNEY_V1",
+  "status": "COMPLETE_SOURCE_PACKET_UNMOUNTED_ALL_NATIVE_ROUTES_HELD",
+  "store_owner": "existing private.timesheet_correction_requests / public.timesheets / public.timesheets_financials / native authorisation/outbox owners",
+  "no_new_financial_or_correction_store": true,
+  "proof_owner": "root",
+  "journeys": [
+    {
+      "case": "SIGNED_A0_WEEKLY_MISSING_FIN",
+      "source": "Exact signed original and real worker FINAL-submitted P0 manager/evidence pair; original FIN absent; current dated native Contract/settings/rate context.",
+      "oracle": "One atomic unit materialises actual Original, rereads strict stored output, native-signs R0, normal-writes P0 and proves exactly three native approved members; original plus R0 each canonical economic/component fact cancels exactly.",
+      "negative": "Actual bad rate/channel/component/policy, stale request/physical version, missing manager/document, source/CW redirect, writer failure or postwrite reversal drift rolls back every business mutation.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "AGENCY_A0_WEEKLY_MISSING_FIN",
+      "source": "Current actual agency SEND requires ISSUED/PAID parent and nonnull original_invoice_id. No native missing-finance parent reconstruction is proved.",
+      "oracle": "Refuse the new missing-finance clock arm; never qualify an uninvoiced synthetic agency fixture. Existing agency FIN uses unchanged frozen Original/sign-copy path.",
+      "negative": "SIGNED-to-AGENCY origin override, permission failure, unknown pricing/VAT/source authority or unsupported ordinary route refuses before mutation.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "SIGNED_OR_AGENCY_A0_DAILY_MISSING_FIN",
+      "source": "Exact original/P0 TEXT bookings, actual physical DAILY worked times/breaks/overnight/DST context and actual native rate request.",
+      "oracle": "Unchanged DAILY canonical producer; native Original storage/reread/sign-copy in same unit; physical P0-only notification; approved pair and actual rendered document/phone final schedule agree.",
+      "negative": "Ambiguous clock/break/date, foreign candidate/client/rate key, current Rota substitution, missing native evidence or unknown source refuses.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "EXISTING_ORIGINAL_FIN_A0_OR_APPROVED",
+      "source": "Exact stored frozen Original FIN ID/hash, original actual status, immutable historical policy/rates/components/expenses/mileage.",
+      "oracle": "Original callback never runs. Frozen Original remains unchanged where already authorised; exact existing Node/native sign-copy and postwrite assert produce R0; original-authorisation-required determines exactly three versus two members.",
+      "negative": "FIN/hash/component growth, paid/invoice/provenance mismatch, failed sign-copy, D1 or native busy/admission conflict refuses without partial correction commit.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "REPEATED_CORRECTION_AND_REPLAY",
+      "source": "Multiple request-bound awc TEXT identities sharing one immutable root; exact current physical P0/request targets and saved native terminal receipt.",
+      "oracle": "Each unit remains distinct; replay rebuilds no finance or document, produces no repeated authorisation/notification, and returns actual saved materialisation/financial identities.",
+      "negative": "Old workflow/alias redirect, stale/new request substitution, reused P0, fabricated ID/hash, unsafe numeric CAS or changed proposal revision refuses.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "NATIVE_NORMALISATION_DIFFERENCE",
+      "source": "Real ordinary canonical input with native normalisation of aggregate/segment/additional/ERNI/expense/mileage/policy totals.",
+      "oracle": "Compare actual stored Original to actual stored R0 and exact native approved component vector, not calculator hash to stored hash. Receipt publishes actual three distinct FIN IDs and actual hashes.",
+      "negative": "Any complete component/rate/policy/quantity/expense mismatch or postwrite pence drift aborts the unit; no fabricated zero, policy fallback, arbitrary amount or calculator-origin replacement.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    },
+    {
+      "case": "CANCEL_RETURN_AND_GENERIC_LIFECYCLE",
+      "source": "Current1649 exact decimal-text request authority, original native cleanup and complete transition-item owners.",
+      "oracle": "Cancel only exact waiting P0 through existing native owner; committed cleanup identity retained; Return uses existing D1 route; mixed lifecycle expands native complete unit once and reports per-unit committed results.",
+      "negative": "Foreign/missing members or receipt/cleanup witness, missing actor/authority, malformed financial fields and client origin/actor injection refuse; ordinary route DTO/owner is unchanged.",
+      "native_status": "HELD_ACTUAL_FIRST_USE_NOT_RUN"
+    }
+  ],
+  "pending_gates": [
+    "Actual signed NULL-rule activation/settings/Contract scope owner first use and private owner/schema checks",
+    "Root complete source integration and generated contract/private-owner registry/browser isolation",
+    "PostgreSQL17 compilation of exact1127 complete successor and private input assertion",
+    "Actual native same-unit Original/P0 writes, stored reread, R0 sign-copy/batch writer and full-component money/VAT/rate/expense oracle",
+    "Locked original/source/policy/rate/validation/physical CW and request CAS concurrency/rollback proof",
+    "Joined native I-1/Candidate gates and published NEXT compatibility",
+    "Actual SIGNED workflow/approval/manifest document page proof; agency permission/ordinary negatives",
+    "Protected commit-bound release and installed actual RPC/runtime body proof with feature flags OFF until qualified",
+    "Actual MyTMS TEST build/TestFlight and phone journey",
+    "SEND7 root-held shared turn; Banking first install before full rehearsal; no lane database calls"
+  ],
+  "rehearsal_boundary": "Root's SEND5B full rollback rehearsal excludes actual queue-draining verifier commands. The native R0 unit uses its established targeted financial outbox/lease owner, so its functional journey must be qualified through root's separately bounded native acceptance authority, never silently added as an eligible SEND5B verifier or treated as external payment/email permission.",
+  "lane_actions": {
+    "database": false,
+    "docker": false,
+    "hosted_runtime": false,
+    "app_build": false,
+    "external_email": false,
+    "git_backup": "own feature branch only under SEND5B"
+  },
+  "scope_boundary": {
+    "owner": "private.timesheet_correction_a0_clock_scope_v1(uuid)",
+    "admitted_source_proposal": "Exact signed NULL-rule CHECK_ONLY Contract clocks with controlled activation/settings/dates and absent FIN/import/lineage/unmaterialised claims",
+    "withheld": [
+      "SOURCE_AMOUNT / enabled Rule pricing",
+      "Disabled activated Rule history or ambiguous dated source scope",
+      "Agency issued-parent with missing FIN",
+      "Unmaterialised native expense/mileage claim",
+      "Unknown/missing immutable settings, signed evidence, native rates/channel/additional authority"
+    ],
+    "concurrency": "Readonly PREPARE CAS does not replace the pending complete Candidate/I-1/group/Contract/source locks and phantom proof."
+  }
+}

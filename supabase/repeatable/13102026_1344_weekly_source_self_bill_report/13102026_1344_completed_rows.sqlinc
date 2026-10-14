@@ -1,0 +1,54 @@
+-- Complete native completed rows plus invoice-only report members; no inferred break/hours.
+create or replace function private.weekly_source_completed_rows_v1(
+  p_cycle_id uuid,p_client_id uuid default null,p_report_scope_id uuid default null
+) returns jsonb language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  with completed as (
+    select snapshot.id,revision.id final_revision_id,snapshot.candidate_id,snapshot.client_id,
+      snapshot.work_date,snapshot.start_at_local,snapshot.end_at_local,snapshot.break_minutes,
+      revision.finalised_at_utc,'Finalised'::text outcome
+    from public.weekly_source_final_revisions revision
+    join public.weekly_source_final_snapshot_lines snapshot on snapshot.final_revision_id=revision.id
+    where revision.source_cycle_id=p_cycle_id and revision.state='CURRENT'
+      and revision.authority_scope_kind='CYCLE'
+      and (p_client_id is null or snapshot.client_id=p_client_id)
+      and p_report_scope_id is null
+    union all
+    select movement.id,revision.id,movement.candidate_id,movement.actual_client_id,
+      source_row.work_date,source_row.start_at_local,source_row.end_at_local,source_row.break_minutes,
+      revision.finalised_at_utc,'Finalised'
+    from public.weekly_source_final_revisions revision
+    join public.weekly_source_billing_movements movement on movement.final_revision_id=revision.id
+    join public.weekly_source_upload_rows source_row on source_row.id=movement.nhsp_upload_row_id
+    where revision.source_cycle_id=p_cycle_id and revision.state='CURRENT'
+      and revision.authority_scope_kind='NHSP_REPORT_SCOPE'
+      and (p_client_id is null or movement.actual_client_id=p_client_id)
+      and (p_report_scope_id is null or revision.report_scope_id=p_report_scope_id)
+    union all
+    select movement.id,revision.id,movement.candidate_id,movement.actual_client_id,
+      source_row.work_date,source_row.start_at_local,source_row.end_at_local,null::integer,
+      revision.finalised_at_utc,'Report invoice finalised'
+    from public.weekly_source_final_revisions revision
+    join public.weekly_source_billing_movements movement on movement.final_revision_id=revision.id and movement.source_line_kind='SELF_BILL_REPORT_LINE'
+    join public.weekly_source_upload_rows source_row on source_row.id=movement.self_bill_report_row_id
+    where revision.source_cycle_id=p_cycle_id and revision.state='CURRENT' and revision.authority_scope_kind='SELF_BILL_REPORT_SCOPE'
+      and (p_client_id is null or movement.actual_client_id=p_client_id) and revision.report_scope_id=p_report_scope_id
+  )
+  select jsonb_build_object('rows',coalesce(jsonb_agg(jsonb_build_object(
+    'row_key','completed-'||completed.id::text,'final_revision_id',completed.final_revision_id,
+    'candidate',coalesce(candidate.display_name,candidate.tms_ref,'Candidate'),
+    'candidate_sort',coalesce(nullif(candidate.last_name,''),candidate.display_name,candidate.tms_ref,''),
+    'work_date',completed.work_date,
+    'client',client.name,'day_date',to_char(completed.work_date,'Dy FMDD Mon YYYY'),
+    'system_hours',to_char(completed.start_at_local,'HH24:MI')||'–'||to_char(completed.end_at_local,'HH24:MI')
+      ||case when completed.break_minutes is null then '' else ' · '||completed.break_minutes::text||' min break' end,
+    'finalised_at',to_char(completed.finalised_at_utc at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+    'finalised_at_utc',completed.finalised_at_utc,
+    'status',jsonb_build_object('text',completed.outcome,'tone','positive'),'actions','[]'::jsonb
+    ) order by client.name,candidate.last_name,candidate.first_name,completed.work_date,completed.id),'[]'::jsonb),
+    'total_count',count(*),'next_cursor','','has_more',false,'stale',false)
+  from completed
+  join public.clients client on client.id=completed.client_id
+  left join public.candidates candidate on candidate.id=completed.candidate_id;
+$function$;

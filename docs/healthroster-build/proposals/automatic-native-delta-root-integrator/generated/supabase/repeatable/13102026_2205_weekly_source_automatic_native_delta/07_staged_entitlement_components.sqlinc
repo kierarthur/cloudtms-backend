@@ -1,0 +1,155 @@
+-- One producer for both the assertion and the actual authorised Local arm.
+-- I1 components come only from native stable-ID composers. C1 UUIDs remain
+-- transport identities, separately checked against the sealed native snapshot.
+create or replace function private.weekly_source_staged_entitlement_components_v1(p_request_id uuid,p_actor_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_context jsonb; v_snapshot jsonb; v_segments jsonb; v_expenses jsonb; v_ids jsonb; v_evidence jsonb;
+  v_components jsonb; v_expected jsonb:='[]'; v_common jsonb; v_item jsonb; v_raw jsonb; v_row jsonb; v_doc jsonb; v_stored jsonb;
+  v_entry record; t public.weekly_exceptional_c1_component_records%rowtype;
+  r public.weekly_exceptional_c1_publication_requests%rowtype; a public.weekly_exceptional_payment_approvals%rowtype;
+  v_code text; v_source_key text; v_count integer; v_key text; v_i integer:=0; v_ordinal integer:=0;
+begin
+  v_context:=private.weekly_source_staged_publication_context_v1(p_request_id,p_actor_id);
+  select * into strict r from public.weekly_exceptional_c1_publication_requests where id=p_request_id;
+  select * into strict a from public.weekly_exceptional_payment_approvals where id=(v_context->>'approval_id')::uuid;
+  v_snapshot:=v_context#>'{target_snapshot,tsfin_snapshot_json}'; v_segments:=v_snapshot#>'{invoice_breakdown_json,segments}';
+  if jsonb_typeof(v_segments) is distinct from 'array' or v_snapshot#>>'{invoice_breakdown_json,mode}' is distinct from 'SEGMENTS'
+    or jsonb_array_length(v_segments)>100 or jsonb_typeof(v_snapshot->'additional_units_json') is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_STAGED_COMPONENTS_UNAVAILABLE' using errcode='55000'; end if;
+  -- This is the exact current native Local expense selection, not an arbitrary
+  -- later resolution. Each selected ID must also exist in the sealed C1 source.
+  select coalesce(jsonb_agg(expense.id order by expense.work_event_id),'[]') into v_ids from (
+    select authority.*,row_number() over(partition by authority.work_event_id order by cycle.finalisation_week_ending desc,
+      revision.finalised_at_utc desc,authority.generation desc,authority.id desc) event_rank
+    from public.weekly_expense_authority_generations authority
+    join public.weekly_source_final_revisions revision on revision.id=authority.final_revision_id and revision.state='CURRENT'
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+    join public.weekly_source_cycles action_cycle on action_cycle.id=a.source_cycle_id
+    where authority.contract_id=r.contract_id and authority.state='CURRENT' and cycle.source_group_id=action_cycle.source_group_id
+      and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage where lineage.work_event_id=authority.work_event_id
+        and lineage.contract_id=authority.contract_id and lineage.timesheet_id=any(private.weekly_source_invoice_family_timesheet_ids_v1(r.root_timesheet_id)))
+  ) expense where expense.event_rank=1 and expense.source_expense_pence>0;
+  v_evidence:=private.weekly_source_expense_authority_evidence_v1(r.root_timesheet_id,v_ids);
+  if jsonb_array_length(v_evidence)<>(select count(*) from jsonb_array_elements(v_context->'source_documents') x where x->>'authority_kind'='SOURCE_EXPENSE')
+    or exists(select 1 from jsonb_array_elements(v_evidence) e where
+      (select count(*) from jsonb_array_elements(v_context->'source_documents') d where d->>'authority_kind'='SOURCE_EXPENSE'
+        and d#>>'{document,source_expense_id}'=e->>'authority_id' and d->>'external_identity'=e->>'authority_id'
+        and d->>'source_document_sha256'=e->>'authority_hash'
+        and d#>>'{document,expense_code}'=upper('SOURCE_SUPPLIED:'||(e->>'work_event_id'))
+        and (d#>>'{document,pay_ex_vat}')::numeric=(e->>'candidate_reimbursement_ex_vat')::numeric
+        and (d#>>'{document,charge_ex_vat}')::numeric=(e->>'client_charge_ex_vat')::numeric)<>1) then
+    raise exception 'WEEKLY_SOURCE_STAGED_EXPENSE_CHANGED' using errcode='40001'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('work_event_id',e->'work_event_id','source_observation_kind',e->'source_observation_kind',
+    'candidate_reimbursement_ex_vat',e->'candidate_reimbursement_ex_vat','client_charge_ex_vat',e->'client_charge_ex_vat') order by e->>'work_event_id'),'[]')
+    into v_expenses from jsonb_array_elements(v_evidence) e;
+  v_components:=private.weekly_source_initial_additional_components_v2(
+    private.weekly_source_entitlement_components_v1(v_segments,v_expenses),v_snapshot->'additional_units_json',
+    (v_snapshot->>'additional_pay_ex_vat')::numeric,(v_snapshot->>'additional_charge_ex_vat')::numeric,
+    v_context#>>'{scope,family_booking_id}');
+  if exists(select 1 from jsonb_array_elements(v_components) c group by c->>'component_id' having count(*)<>1)
+    or (select coalesce(sum((c->>'pay_ex_vat')::numeric) filter(where not (c->>'exclude_from_pay')::boolean),0)
+      from jsonb_array_elements(v_components) c) is distinct from a.approved_target_gross then
+    raise exception 'WEEKLY_SOURCE_STAGED_COMPONENTS_UNAVAILABLE' using errcode='55000'; end if;
+  -- Exact existing C1 carrier projection. No total-only equivalence or reuse
+  -- of transport IDs in the I1 component namespace.
+  v_common:=jsonb_build_object('component_id',null,'component_kind',null,'economic_key_type',null,'economic_key_value',null,
+    'component_member_identity',null,'segment_id',null,'segment_key',null,'segment_stable_key',null,'work_date',null,'reference_number',null,
+    'hours_day',null,'hours_night',null,'hours_sat',null,'hours_sun',null,'hours_bh',null,'additional_code_raw',null,
+    'unit_count',null,'unit_pay_rate',null,'unit_charge_rate',null,'expense_code',null,'pay_ex_vat','0.00','charge_ex_vat',null,
+    'exclude_from_pay',false,'origin','WEEKLY_SOURCE_APPROVED_TARGET','movement_id',null,'movement_group_id',null);
+  for v_raw in select value from jsonb_array_elements(v_segments) loop
+    v_i:=v_i+1; v_source_key:='10:'||r.root_timesheet_id::text||':SEGMENT:'||lpad(v_i::text,12,'0');
+    v_item:=v_common||jsonb_build_object('source_key',v_source_key,'component_kind','WORKED_TIME','economic_key_type','TS_DAY',
+      'economic_key_value',v_raw->>'date','component_member_identity',coalesce(v_raw->>'segment_stable_key',v_raw->>'segment_id',v_raw->>'segment_key'),
+      'segment_id',v_raw->>'segment_id','segment_key',coalesce(v_raw->>'segment_key',v_raw->>'segment_id'),
+      'segment_stable_key',coalesce(v_raw->>'segment_stable_key',v_raw->>'segment_id',v_raw->>'segment_key'),
+      'work_date',v_raw->>'date','reference_number',nullif(btrim(v_raw->>'ref_num'),''),
+      'pay_ex_vat',case when v_raw->'exclude_from_pay'='true'::jsonb then '0.00' else v_raw->>'pay_amount' end,
+      'charge_ex_vat',v_raw->>'charge_amount','exclude_from_pay',coalesce((v_raw->>'exclude_from_pay')::boolean,false));
+    foreach v_key in array array['day','night','sat','sun','bh'] loop
+      v_item:=v_item||jsonb_build_object('hours_'||v_key,coalesce(v_raw->>('hours_'||v_key),'0'));
+    end loop;
+    v_expected:=v_expected||jsonb_build_array(v_item);
+  end loop;
+  for v_entry in select key,value from jsonb_each(v_snapshot->'additional_units_json') loop
+    v_raw:=v_entry.value; v_code:=btrim(v_entry.key);
+    if (coalesce(v_raw->>'pay_ex_vat',v_raw->>'amount_ex_vat'))::numeric=0 then continue; end if;
+    v_source_key:='10:'||r.root_timesheet_id::text||':ADDITIONAL:'||lpad(octet_length(convert_to(v_code,'UTF8'))::text,10,'0')||':'||encode(convert_to(v_code,'UTF8'),'hex');
+    v_expected:=v_expected||jsonb_build_array(v_common||jsonb_build_object('source_key',v_source_key,'component_kind','ADDITIONAL_UNIT',
+      'economic_key_type','ADDITIONAL_CODE','economic_key_value',upper(v_code),'component_member_identity','additional:'||upper(v_code),
+      'additional_code_raw',v_code,'unit_count',coalesce(v_raw->>'unit_count',v_raw->>'units_week'),
+      'unit_pay_rate',coalesce(v_raw->>'pay_rate',v_raw->>'rate'),'unit_charge_rate',v_raw->>'charge_rate',
+      'pay_ex_vat',coalesce(v_raw->>'pay_ex_vat',v_raw->>'amount_ex_vat'),'charge_ex_vat',coalesce(v_raw->>'charge_ex_vat',v_raw->>'charge_amount_ex_vat')));
+  end loop;
+  for v_raw in select value from jsonb_array_elements(v_evidence) loop
+    v_code:=upper('SOURCE_SUPPLIED:'||(v_raw->>'work_event_id'));
+    v_expected:=v_expected||jsonb_build_array(v_common||jsonb_build_object('source_key','10:'||r.root_timesheet_id::text||':EXPENSE:'||v_code,
+      'component_kind','EXPENSE','economic_key_type','EXPENSE_CODE','economic_key_value',v_code,'component_member_identity','expense:'||v_code,
+      'expense_code',v_code,'pay_ex_vat',v_raw->>'candidate_reimbursement_ex_vat','charge_ex_vat',v_raw->>'client_charge_ex_vat'));
+  end loop;
+  -- Ordinary non-source expenses have no native I1 mapper in this publisher.
+  -- Refuse an unmapped authority; never discard it to make a zero-delta claim.
+  if exists(select 1 from jsonb_array_elements(v_context->'source_documents') x where x->>'authority_kind'='ORDINARY_EXPENSE') then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_ORDINARY_EXPENSE_UNMAPPED' using errcode='55000'; end if;
+  if (select count(*) from public.weekly_exceptional_c1_component_records where publication_request_id=r.id)
+      is distinct from r.expected_component_count or jsonb_array_length(v_expected) is distinct from r.expected_component_count then
+    raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+  for v_item in select value from jsonb_array_elements(v_expected) order by value->>'source_key' collate "C" loop
+    v_ordinal:=v_ordinal+1;
+    select * into strict t from public.weekly_exceptional_c1_component_records where publication_request_id=r.id and source_key=v_item->>'source_key';
+    select x into strict v_row from public.weekly_exceptional_c1_publication_requests request
+      join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id
+      cross join lateral jsonb_array_elements(generation.complete_next_vector_json->'components') x
+      where request.id=r.id and x->>'component_id'=t.component_id::text;
+    v_doc:=null;
+    select x into strict v_doc from jsonb_array_elements(v_context->'source_documents') x where (x->>'source_ordinal')::integer=t.source_ordinal;
+    v_stored:=(to_jsonb(t)-array['id','publication_request_id','created_at_utc','component_sha256','source_ordinal','source_key'])
+      ||jsonb_build_object('movement_id',null,'movement_group_id',null);
+    -- The native closed component codec requires decimal STRINGS. SQL numeric
+    -- columns are losslessly cast to text before invoking that existing codec.
+    foreach v_key in array array['hours_day','hours_night','hours_sat','hours_sun','hours_bh',
+      'unit_count','unit_pay_rate','unit_charge_rate','pay_ex_vat','charge_ex_vat'] loop
+      v_stored:=v_stored||jsonb_build_object(v_key,to_jsonb(t)->>v_key);
+    end loop;
+    if t.component_ordinal is distinct from v_ordinal or t.component_sha256 is distinct from decode(v_row->>'component_sha256','hex')
+      or v_row->>'source_key' is distinct from t.source_key or (v_row->>'source_ordinal')::integer is distinct from t.source_ordinal
+      or private.weekly_source_publication_component_canonical_v1(v_stored,'staged.transport.row') is distinct from
+        private.weekly_source_publication_component_canonical_v1(
+          (v_row-array['source_ordinal','source_key','component_sha256','record_type'])
+            ||jsonb_build_object('movement_id',null,'movement_group_id',null),'staged.transport.vector')
+      or private.weekly_source_publication_component_canonical_v1(
+        (v_item-'source_key')||jsonb_build_object('component_id',t.component_id,'component_ordinal',v_ordinal),'staged.transport.expected') is distinct from
+        private.weekly_source_publication_component_canonical_v1(
+          (v_row-array['source_ordinal','source_key','component_sha256','record_type'])
+            ||jsonb_build_object('movement_id',null,'movement_group_id',null),'staged.transport.vector') then
+      raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+    if t.component_kind in ('WORKED_TIME','ADDITIONAL_UNIT') then
+      if v_doc->>'authority_kind' is distinct from 'APPROVED_COMPONENT' or v_doc->>'external_identity' is distinct from t.component_id::text
+        or v_doc#>>'{document,source_key}' is distinct from t.source_key
+        or (v_doc#>>'{document,source_ordinal}')::integer is distinct from t.source_ordinal
+        or private.weekly_source_publication_component_canonical_v1(
+          (v_doc->'document'-array['contract','source_id','source_system','external_identity','external_revision','root_timesheet_id','candidate_id','contract_id','week_ending_date','document_sha256','source_ordinal','source_key'])
+            ||jsonb_build_object('movement_id',null,'movement_group_id',null),'staged.transport.document') is distinct from
+          private.weekly_source_publication_component_canonical_v1(
+            (v_row-array['source_ordinal','source_key','component_sha256','record_type'])
+              ||jsonb_build_object('movement_id',null,'movement_group_id',null),'staged.transport.vector') then
+        raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+    elsif t.component_kind='EXPENSE' then
+      if v_doc->>'authority_kind' is distinct from 'SOURCE_EXPENSE' or v_doc#>>'{document,expense_code}' is distinct from t.expense_code
+        or (v_doc#>>'{document,pay_ex_vat}')::numeric is distinct from t.pay_ex_vat
+        or (v_doc#>>'{document,charge_ex_vat}')::numeric is distinct from t.charge_ex_vat then
+        raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+    else raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+  end loop;
+  if (select count(*) from jsonb_array_elements(v_context->'source_documents') x where x->>'authority_kind'='APPROVED_COMPONENT')<>
+      (select count(*) from jsonb_array_elements(v_expected) x where x->>'component_kind' in ('WORKED_TIME','ADDITIONAL_UNIT')) then
+    raise exception 'WEEKLY_SOURCE_STAGED_TRANSPORT_COMPONENTS_CHANGED' using errcode='40001'; end if;
+  return jsonb_build_object('context',v_context,'components',v_components,'expenses',v_expenses,'expense_evidence',v_evidence,
+    'transport_component_count',v_ordinal);
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_STAGED_COMPONENTS_UNAVAILABLE' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_staged_entitlement_components_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_staged_entitlement_components_v1(uuid,uuid) from public,anon,authenticated,service_role;

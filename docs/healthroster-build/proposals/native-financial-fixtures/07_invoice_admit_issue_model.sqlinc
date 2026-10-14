@@ -1,0 +1,21 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+do $nfx_invoice$ declare s pg_temp.nfx_state%rowtype;admitted jsonb;i uuid;issued record;m record;verdict jsonb;begin
+ select * into strict s from pg_temp.nfx_state;
+ admitted:=public.weekly_source_invoice_admit_atomic_v1(jsonb_build_object('actor_user_id',s.actor_id,'client_manifest_id',s.manifest_id,'expected_manifest_hash',(select encode(manifest_hash,'hex') from public.weekly_source_client_manifests where id=s.manifest_id)));
+ if admitted->>'ok' is distinct from 'true' or admitted->>'status'<>'ADMITTED' or jsonb_array_length(admitted->'invoice_ids')<>1 then raise exception 'NFX_NATIVE_INVOICE_ADMISSION_FAILED';end if;
+ i:=(admitted#>>'{invoice_ids,0}')::uuid;
+ perform private.weekly_source_invoice_allocation_assert_v1(i);
+ verdict:=private.weekly_source_invoice_issue_validate_v1(i);
+ if verdict->>'is_source_invoice' is distinct from 'true' then raise exception 'NFX_INVOICE_SOURCE_IDENTITY_LOST';end if;
+ if not exists(select 1 from public.invoices where id=i and subtotal_ex_vat=240 and vat_amount=48 and total_inc_vat=288) then raise exception 'NFX_NATIVE_INVOICE_MONEY_FAILED';end if;
+ -- DRAFT_PREVIEW is the actual native purpose literal. No wall-clock argument is supplied.
+ select * into strict m from private._invoice_presentation_snapshot_batch(jsonb_build_array(jsonb_build_object('request_key','NFX_NATIVE_PREVIEW','entity_type','INVOICE','entity_id',i,'purpose','DRAFT_PREVIEW','template_version','invoice-professional-v2')));
+ if m.valid is distinct from true then raise exception 'NFX_NATIVE_MODEL_HELD_%',m.error_code;end if;
+ update pg_temp.nfx_state set invoice_id=i,model=m.presentation_model;
+ select * into strict issued from public.invoice_issue_one(i,s.actor_id);
+ if issued.status<>'ISSUED' then raise exception 'NFX_NATIVE_ISSUE_HELD_%',issued.on_hold_reason;end if;
+ select * into strict m from private._invoice_presentation_snapshot_batch(jsonb_build_array((select jsonb_build_object('request_key','NFX_NATIVE_FINAL_ISSUE','entity_type','INVOICE','entity_id',id,'purpose','FINAL_ISSUE','template_version','invoice-professional-v2','issue_at_utc',issued_at_utc,'tax_point_utc',coalesce(nullif(header_snapshot_json->>'tax_point_utc','')::timestamptz,issued_at_utc),'due_at_utc',due_at_utc) from public.invoices where id=i)));
+ if m.valid is distinct from true then raise exception 'NFX_NATIVE_FINAL_ISSUE_MODEL_HELD_%',m.error_code;end if;
+ -- Native model readiness is distinct from actual PDF/R2 document rendering.
+end;$nfx_invoice$;

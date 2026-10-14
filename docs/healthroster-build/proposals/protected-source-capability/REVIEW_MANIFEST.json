@@ -1,0 +1,215 @@
+{
+  "schema_version": "PROTECTED_SOURCE_CAPABILITY_REVIEW_PACKAGE_V1",
+  "status": "FROZEN_SOURCE_PROPOSAL_ROOT_REVIEW",
+  "source_artifacts": [
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "bytes": 14636,
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/FROZEN_GENERATOR_AUDIT.json",
+      "bytes": 7011,
+      "sha256": "a376bbe43fb51a2a9f954dae97a5c8cfe4b1a6b2d91e3013660e0f8d5d60f80d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/NATIVE_JOURNEYS.json",
+      "bytes": 7692,
+      "sha256": "8c941f701079cde3f84d55e38690fe3f8e3abc1ffe2bb1ec384d35d6b11fd9a0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/NATIVE_SOURCE_VERIFY.sqlinc",
+      "bytes": 4533,
+      "sha256": "75926faf8582020f80c53486d4f45eb643dc8972de8646ea5e8d1ae8099734ca"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/NONSELFBILL_ADMISSION.sqlinc",
+      "bytes": 2045,
+      "sha256": "54ea107efe38c511deb38407574ad6fec2177d56b1494e851d83fa0730d94010"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/ORIGINAL_CLIENTS.sqlinc",
+      "bytes": 3452,
+      "sha256": "d419bdedb56d365f0e6800704d5d714e8288c567e198cee1976a1de712b0ee4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/README.md",
+      "bytes": 7779,
+      "sha256": "cb8b53cb9a7f99894dd6881b2da31ccfc5061bb8e60b3e307ef9b3268d1f0ffa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/SCHEMA.sqlinc",
+      "bytes": 1858,
+      "sha256": "22a4292f35bf78caf1b8367a8166b0eaefa1ced1cb59509e2b551f93de54a150"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/SOURCE_CAS.sqlinc",
+      "bytes": 17357,
+      "sha256": "a85220784725b2a386dfd9de6c9a57cabdc0659ca273e73c6ebcf03e257a7554"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/SOURCE_INVENTORY.json",
+      "bytes": 7364,
+      "sha256": "7f7b547c8c0270408148d0f0283132ce00cbe915040afdd0b7380e75c93d6a70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/audit-frozen-generators.mjs",
+      "bytes": 2111,
+      "sha256": "0f85ad22cd65cc8f334a9dd2e81febd54163591dd6d639a1a4bf696649a49f65"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/cas-vectors.mjs",
+      "bytes": 1280,
+      "sha256": "5dbe78f6cf596033284c1d3e332d61e4da5eac3ae08ffedd723ea1cd10f7d0c0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/freeze-review.mjs",
+      "bytes": 3546,
+      "sha256": "0cd384abec7633f895da82e8a976315b50241ae6c6bed06d6403dd8ca4c67b41"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generate-complete-owners.mjs",
+      "bytes": 16705,
+      "sha256": "35b34dbcd8c6c79600393bece22803d5b51bebd36e10e9ad1fb0a40454e6bf8d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/01_schema.sqlinc",
+      "bytes": 1936,
+      "sha256": "8ee0b906e4c6c15cdf8020920a0c4bdc6f11b14aceb23f6b0d7eaa5e8d973a49"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/02_source_cas.sqlinc",
+      "bytes": 17435,
+      "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/03_capability_owners.sqlinc",
+      "bytes": 14714,
+      "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/04_original_clients.sqlinc",
+      "bytes": 3530,
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/05_complete_existing_activation.sqlinc",
+      "bytes": 20106,
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/06_complete_selection.sqlinc",
+      "bytes": 8378,
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/07_complete_stage_proof.sqlinc",
+      "bytes": 4480,
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/08_complete_bulk_command.sqlinc",
+      "bytes": 14792,
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/09_exact_acl_delta.sqlinc",
+      "bytes": 4693,
+      "sha256": "b62ad3de7fc48126d0d415c255b68395d0596cf073b6e8f0d0151f749e9bb4f7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/10_complete_managed_release.mjs",
+      "bytes": 30229,
+      "sha256": "766b11e184c69d48f28af096cf95bba52932a2ac5d34d22dfc5ba99c11ae27fa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/11_non_self_bill_admission.sqlinc",
+      "bytes": 2123,
+      "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_17_prepare_family.sqlinc",
+      "bytes": 28806,
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_18_prepare_action.sqlinc",
+      "bytes": 13428,
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_19_action_context.sqlinc",
+      "bytes": 24978,
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_20_stage_request.sqlinc",
+      "bytes": 55130,
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/SOURCE_MANIFEST.json",
+      "bytes": 11051,
+      "sha256": "302f893fb442619021ec07df36f40c861e118f03653b69d591134584469622f3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/proposal.test.mjs",
+      "bytes": 12206,
+      "sha256": "c375423f28f07a70ecde1cc9ac5545705e5f2d07cea74d115d0cd926083904bd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    }
+  ],
+  "source_manifest": {
+    "file": "docs/healthroster-build/proposals/protected-source-capability/generated/SOURCE_MANIFEST.json",
+    "bytes": 11051,
+    "sha256": "302f893fb442619021ec07df36f40c861e118f03653b69d591134584469622f3"
+  },
+  "complete_sql_definitions": 18,
+  "new_private_signatures": 10,
+  "replaced_private_signatures": 2,
+  "replaced_service_rpcs": 6,
+  "new_service_rpcs": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "local_tests": {
+    "command": "node --test docs/healthroster-build/proposals/protected-source-capability/proposal.test.mjs",
+    "passing": 14,
+    "qualification_fixtures": "SYNTHETIC_UNIT_ONLY_NOT_ACTIVATION_EVIDENCE"
+  },
+  "native_financial_acceptance": false,
+  "db_git_network_mutations": 0,
+  "frozen_money28_unchanged": true,
+  "frozen_window_proposal_unchanged": true,
+  "prior_manifest_proofs": [
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/REVIEW_MANIFEST.json",
+      "bytes": 8983,
+      "sha256": "b57c4601fd792b3489e5fab6178ad325819b829e4fde36d517ed3af9132045c7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/f5-window-receipt-complete/generated/SOURCE_MANIFEST.json",
+      "bytes": 51731,
+      "sha256": "273ccce5151c3433ccb97d888bf5c289c0aa997338af7a84f763bfc59cbe7430"
+    }
+  ],
+  "remaining_gates": [
+    "root schema/complete-owner compile and exact ACL union",
+    "actual native Source CAS C01/C02/C03 and identity fixtures",
+    "actual activation/evidence bootstrap sequence",
+    "non-self-bill whole native Candidate/Bank financial journey",
+    "Root1745 owned-stage/shared four-fact proof",
+    "credit-owned automatic full component proof",
+    "whole native G1/I-1 caller graph and concurrency",
+    "source/report/protected pay witness closure",
+    "actual Client/API/document/FINAL_ISSUE/early-window proof"
+  ]
+}

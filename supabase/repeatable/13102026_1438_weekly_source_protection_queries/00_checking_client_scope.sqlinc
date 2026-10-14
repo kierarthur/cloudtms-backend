@@ -1,0 +1,22 @@
+-- Reuse the existing declared upload/cycle Client scope. Legacy NULL group
+-- scope keeps its existing meaning; no minimum-row, name or browser inference.
+create or replace function private.weekly_source_checking_client_scope_v1(p_publication_id uuid)
+returns uuid language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_publication public.weekly_source_projection_publications%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype; v_upload public.weekly_source_uploads%rowtype; v_client uuid;
+begin
+  select * into strict v_publication from public.weekly_source_projection_publications where id=p_publication_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  v_client:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+  if v_cycle.scope_client_id is not null and v_client is not null and v_cycle.scope_client_id is distinct from v_client then
+    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000'; end if;
+  return coalesce(v_cycle.scope_client_id,v_client);
+exception when invalid_text_representation or no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function private.weekly_source_checking_client_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_checking_client_scope_v1(uuid) from public,anon,authenticated,service_role;

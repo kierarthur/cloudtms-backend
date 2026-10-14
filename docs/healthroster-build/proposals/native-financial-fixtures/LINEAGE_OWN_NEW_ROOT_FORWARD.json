@@ -1,0 +1,41 @@
+{
+  "contract": "NFX_LINEAGE_OWN_NEW_ROOT_FORWARD_V1",
+  "native_acceptance": false,
+  "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+  "input": {
+    "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+    "source_file_sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+    "complete_definition_sha256": "56e4d474d54ef500c286091bf3a030cf8b8eab44da4a32617dae7558f41981be"
+  },
+  "output": {
+    "file": "LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+    "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+    "bytes": 48358
+  },
+  "deltas": [
+    "two new local declarations",
+    "one bounded append after genuine native INSERT RETURNING and successful native I-1"
+  ],
+  "reverse_hunk_matches_entire_input_definition": true,
+  "native_next_hook_equal": true,
+  "unchanged": [
+    "service actor/admission",
+    "complete G1 two-phase discovery/locked CAS",
+    "all external/preexisting-root 40001 fences",
+    "native NEXT own new-member hook",
+    "native INSERT/immutable lineage/settings/audit writes",
+    "native family/current/rotation/root-authorization guards",
+    "original FIN context restoration on success/exception"
+  ],
+  "pending_hosted_cases": [
+    "two Source rows one newly created Contract/week LEGACY root",
+    "positive source-expense row sharing own created root",
+    "external root after EMPTY census before creation ->40001",
+    "external rotation/root change ->40001",
+    "changed entry GUC ->40001",
+    "malformed/sentinel parser",
+    "standalone no inherited context unchanged",
+    "published NEXT exact operation member/replay unchanged",
+    "whole native sorted-family concurrency"
+  ]
+}

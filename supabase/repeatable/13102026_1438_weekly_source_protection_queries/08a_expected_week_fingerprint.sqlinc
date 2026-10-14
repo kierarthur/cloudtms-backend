@@ -1,0 +1,36 @@
+-- Existing inputs retain identical hash domain and JSON. New unsigned materialiser adds its exact Contract Week witness only.
+create or replace function private.weekly_source_query_comparison_fingerprint_v1(
+  p_incident_id uuid,
+  p_episode integer,
+  p_work_event_id uuid,
+  p_issue jsonb
+) returns bytea
+language sql
+stable
+security definer
+set search_path to 'private','pg_catalog','pg_temp'
+as $function$
+  select private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_MATERIAL_COMPARISON_V1',
+    pg_catalog.jsonb_build_object(
+      'incident_id',p_incident_id,
+      'episode_number',p_episode,
+      'work_event_id',p_work_event_id,
+      'candidate_timesheet_id',nullif(p_issue->>'candidate_timesheet_id','')::uuid,
+      'candidate_timesheet_revision',nullif(p_issue->>'candidate_timesheet_revision','')::integer,
+      'candidate_shift_fingerprint',pg_catalog.lower(nullif(p_issue->>'candidate_shift_fingerprint','')),
+      'contract_id',nullif(p_issue->>'contract_id','')::uuid,
+      'issue_family',pg_catalog.upper(pg_catalog.btrim(coalesce(p_issue->>'issue_family',''))),
+      'source_presence',pg_catalog.upper(pg_catalog.btrim(coalesce(p_issue->>'source_presence',''))),
+      'candidate_start_at_local',nullif(p_issue->>'candidate_start_at_local','')::timestamp,
+      'candidate_end_at_local',nullif(p_issue->>'candidate_end_at_local','')::timestamp,
+      'candidate_break_minutes',nullif(p_issue->>'candidate_break_minutes','')::integer,
+      'system_start_at_local',nullif(p_issue->>'system_start_at_local','')::timestamp,
+      'system_end_at_local',nullif(p_issue->>'system_end_at_local','')::timestamp,
+      'system_break_minutes',nullif(p_issue->>'system_break_minutes','')::integer
+    )||case when p_issue ? 'contract_week_id' then jsonb_build_object(
+      'contract_week_id',nullif(p_issue->>'contract_week_id','')::uuid) else '{}'::jsonb end
+  );
+$function$;
+alter function private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_query_comparison_fingerprint_v1(uuid,integer,uuid,jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,1063 @@
+-- Complete native owner: immutable replay preserved; I-1 precedes Source locks; group precedes cycle.
+create or replace function public.weekly_exceptional_pay_stage_c1_request_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_top_keys constant text[]:=array[
+    'schema_version','actor_user_id','family_id','orchestration_run_id',
+    'source_cycle_id','client_id','work_event_id','evidence_timesheet_id',
+    'expected_family_bound_version','protected_schedule','rate_classification',
+    'source_proposal','target_snapshot','current_comparison_revision_id',
+    'current_final_revision_id','c1_request','c1_sources','c1_components',
+    'reason','idempotency_key'
+  ];
+  v_c1_keys constant text[]:=array[
+    'request_id','request_sequence','actor_user_id','candidate_id','contract_id',
+    'root_timesheet_id','week_ending_date','source_mode',
+    'expected_head_revision','expected_source_count','expected_component_count',
+    'expected_payload_bytes','source_manifest_sha256','entitlement_sha256',
+    'approval_sha256','is_zero_entitlement','financial_row_id','request_sha256'
+  ];
+  v_source_keys constant text[]:=array[
+    'source_ordinal','source_id','authority_kind','source_system',
+    'external_identity','external_revision','source_document_sha256',
+    'payload_bytes','part_count','work_date','root_timesheet_id','candidate_id',
+    'contract_id','source_row_sha256','record_type','parts'
+  ];
+  v_part_keys constant text[]:=array[
+    'source_ordinal','part_ordinal','payload_utf8','fragment_sha256','record_type'
+  ];
+  v_component_keys constant text[]:=array[
+    'component_ordinal','component_id','source_ordinal','source_key',
+    'component_kind','economic_key_type','economic_key_value',
+    'component_member_identity','segment_id','segment_key','segment_stable_key',
+    'work_date','reference_number','hours_day','hours_night','hours_sat',
+    'hours_sun','hours_bh','additional_code_raw','unit_count','unit_pay_rate',
+    -- S7 (WB-007, WB-013, 24 section 5): `adjustment_id` is deliberately absent
+    -- from this exact-key allowlist and from the C1 component relation.  An
+    -- adjustment is never copied into a head, because an adjustment created
+    -- later would make the snapshot stale and create a second owner.  A caller
+    -- that still sends the key now fails closed here.
+    'unit_charge_rate','expense_code','pay_ex_vat',
+    'charge_ex_vat','exclude_from_pay','origin','component_sha256','record_type'
+  ];
+  v_schedule_keys constant text[]:=array[
+    'work_date','start_at_local','end_at_local','break_minutes'
+  ];
+  v_actor_user_id uuid;
+  v_family_id uuid;
+  v_run_id uuid;
+  v_source_cycle_id uuid;
+  v_client_id uuid;
+  v_work_event_id uuid;
+  v_evidence_timesheet_id uuid;
+  v_expected_bound_version bigint;
+  v_comparison_revision_id uuid;
+  v_final_revision_id uuid;
+  v_reason text;
+  v_idempotency_key text;
+  v_schedule jsonb;
+  v_rate_classification jsonb;
+  v_source_proposal jsonb;
+  v_selected_source_witness jsonb;
+  v_target_snapshot jsonb;
+  v_component_identity_context jsonb;
+  v_component_identity_basis jsonb;
+  v_bulk_signed_proof jsonb;
+  v_automatic_reconcile_proof jsonb;
+  v_start jsonb;
+  v_sources jsonb;
+  v_components jsonb;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_lock_family jsonb; v_lock_group uuid;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_root public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_evidence public.timesheets%rowtype;
+  v_signed_evidence jsonb;
+  v_event public.weekly_work_events%rowtype;
+  v_prior_generation public.weekly_exceptional_pay_generations%rowtype;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_generation public.weekly_exceptional_pay_generations%rowtype;
+  v_publication public.weekly_exceptional_c1_publication_requests%rowtype;
+  v_policy jsonb;
+  v_source_mode text;
+  v_work_date date;
+  v_start_at timestamp without time zone;
+  v_end_at timestamp without time zone;
+  v_break_minutes integer;
+  v_expected_source_count integer;
+  v_expected_component_count integer;
+  v_expected_payload_bytes integer;
+  v_request_sequence bigint;
+  v_expected_head_revision bigint;
+  v_financial_row_id uuid;
+  v_request_id uuid;
+  v_source_manifest_hash bytea;
+  v_entitlement_hash bytea;
+  v_outer_approval_hash bytea;
+  v_c1_request_hash bytea;
+  v_rate_policy_hash bytea;
+  v_schedule_hash bytea;
+  v_source_proposal_hash bytea;
+  v_prior_vector jsonb;
+  v_prior_vector_hash bytea;
+  v_next_vector jsonb;
+  v_next_vector_hash bytea;
+  v_fixed_source_hash bytea;
+  v_local_approval_hash bytea;
+  v_family_event_hash bytea;
+  v_target_event_hash bytea;
+  v_prior_family_event_hash bytea;
+  v_prior_target_event_hash bytea;
+  v_issue_ids uuid[]:='{}'::uuid[];
+  v_issue_ids_hash bytea;
+  v_signed_revision integer;
+  v_signed_hash bytea;
+  v_signed_at timestamptz;
+  v_generation_number integer;
+  v_generation_reason text;
+  v_family_event_state text;
+  v_resulting_lifecycle_state text;
+  v_pending_outcome text;
+  v_payment_event_kind text;
+  v_other_wait_count integer:=0;
+  v_family_event_sequence bigint;
+  v_family_event_id uuid;
+  v_target_event_sequence bigint;
+  v_total_pay numeric(12,2):=0;
+  v_payload_total bigint:=0;
+  v_previous_source_key text:=null;
+  v_source_entry jsonb;
+  v_part_entry jsonb;
+  v_component_entry jsonb;
+  v_source_id uuid;
+  v_source_ordinal integer;
+  v_source_counter integer:=0;
+  v_part_ordinal integer;
+  v_component_ordinal integer;
+  v_part_payload bytea;
+  v_part_concat bytea;
+  v_source_part_count integer;
+  v_source_payload_bytes integer;
+  v_source_kind text;
+  v_source_document jsonb;
+  v_count_client integer:=0;
+  v_count_candidate integer:=0;
+  v_count_root integer:=0;
+  v_count_provider integer:=0;
+  v_count_office integer:=0;
+  v_step_sequence integer;
+  v_request_body_hash bytea;
+  v_before_hash bytea;
+  v_after_hash bytea;
+begin
+  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_top_keys||array['bulk_signed_selection_proof','automatic_reconcile_selection_sha256'])
+     or not (p_request ?& v_top_keys)
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_C1_STAGE_REQUEST_V1'
+     or pg_catalog.jsonb_typeof(p_request->'protected_schedule')<>'object'
+     or pg_catalog.jsonb_typeof(p_request->'rate_classification')<>'object'
+     or pg_catalog.jsonb_typeof(p_request->'source_proposal')<>'object'
+     or pg_catalog.jsonb_typeof(p_request->'target_snapshot')<>'object'
+     or pg_catalog.jsonb_typeof(p_request->'c1_request')<>'object'
+     or pg_catalog.jsonb_typeof(p_request->'c1_sources')<>'array'
+     or pg_catalog.jsonb_typeof(p_request->'c1_components')<>'array' then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if pg_catalog.octet_length(pg_catalog.convert_to(p_request::text,'UTF8'))>4194304 then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_REQUEST_TOO_LARGE' using errcode='54000';
+  end if;
+  begin
+    v_actor_user_id:=(p_request->>'actor_user_id')::uuid;
+    v_family_id:=(p_request->>'family_id')::uuid;
+    v_run_id:=(p_request->>'orchestration_run_id')::uuid;
+    v_source_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_client_id:=(p_request->>'client_id')::uuid;
+    v_work_event_id:=(p_request->>'work_event_id')::uuid;
+    v_evidence_timesheet_id:=nullif(p_request->>'evidence_timesheet_id','')::uuid;
+    v_expected_bound_version:=(p_request->>'expected_family_bound_version')::bigint;
+    v_comparison_revision_id:=nullif(p_request->>'current_comparison_revision_id','')::uuid;
+    v_final_revision_id:=nullif(p_request->>'current_final_revision_id','')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  v_idempotency_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  if pg_catalog.char_length(v_reason) not between 1 and 1000
+     or pg_catalog.char_length(v_idempotency_key) not between 16 and 240 then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  v_schedule:=p_request->'protected_schedule';
+  if not private.weekly_exceptional_json_keys_exact_v1(v_schedule,v_schedule_keys)
+     or not (v_schedule ?& v_schedule_keys) then
+    raise exception 'WEEKLY_PROTECTED_SCHEDULE_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_work_date:=(v_schedule->>'work_date')::date;
+    v_start_at:=(v_schedule->>'start_at_local')::timestamp without time zone;
+    v_end_at:=(v_schedule->>'end_at_local')::timestamp without time zone;
+    v_break_minutes:=(v_schedule->>'break_minutes')::integer;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_SCHEDULE_INVALID' using errcode='22023';
+  end;
+  if v_end_at<=v_start_at or v_start_at::date<>v_work_date
+     or v_break_minutes<0
+     or v_break_minutes>=extract(epoch from (v_end_at-v_start_at))/60 then
+    raise exception 'WEEKLY_PROTECTED_SCHEDULE_INVALID' using errcode='22023';
+  end if;
+  v_rate_classification:=p_request->'rate_classification';
+  v_source_proposal:=p_request->'source_proposal';
+  v_target_snapshot:=p_request->'target_snapshot';
+  if pg_catalog.octet_length(pg_catalog.convert_to(v_rate_classification::text,'UTF8'))>65536
+     or pg_catalog.octet_length(pg_catalog.convert_to(v_source_proposal::text,'UTF8'))>65536
+     or pg_catalog.octet_length(pg_catalog.convert_to(v_target_snapshot::text,'UTF8'))>1048576 then
+    raise exception 'WEEKLY_PROTECTED_TARGET_TOO_LARGE' using errcode='54000';
+  end if;
+
+  v_start:=p_request->'c1_request';
+  v_sources:=p_request->'c1_sources';
+  v_components:=p_request->'c1_components';
+  if not private.weekly_exceptional_json_keys_exact_v1(v_start,v_c1_keys)
+     or not (v_start ?& v_c1_keys)
+     or pg_catalog.jsonb_array_length(v_sources) not between 1 and 65536
+     or pg_catalog.jsonb_array_length(v_components)>65536 then
+    raise exception 'WEEKLY_PROTECTED_C1_STREAM_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_request_id:=(v_start->>'request_id')::uuid;
+    v_request_sequence:=(v_start->>'request_sequence')::bigint;
+    v_expected_head_revision:=(v_start->>'expected_head_revision')::bigint;
+    v_expected_source_count:=(v_start->>'expected_source_count')::integer;
+    v_expected_component_count:=(v_start->>'expected_component_count')::integer;
+    v_expected_payload_bytes:=(v_start->>'expected_payload_bytes')::integer;
+    v_financial_row_id:=(v_start->>'financial_row_id')::uuid;
+    v_source_manifest_hash:=private.weekly_exceptional_hex_sha256_v1(v_start->>'source_manifest_sha256');
+    v_entitlement_hash:=private.weekly_exceptional_hex_sha256_v1(v_start->>'entitlement_sha256');
+    v_outer_approval_hash:=private.weekly_exceptional_hex_sha256_v1(v_start->>'approval_sha256');
+    v_c1_request_hash:=private.weekly_exceptional_hex_sha256_v1(v_start->>'request_sha256');
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_C1_STREAM_INVALID' using errcode='22023';
+  end;
+  if v_request_sequence<1 or v_expected_head_revision<0
+     or v_expected_source_count<>pg_catalog.jsonb_array_length(v_sources)
+     or v_expected_component_count<>pg_catalog.jsonb_array_length(v_components)
+     or v_expected_payload_bytes<1
+     or ((v_start->>'is_zero_entitlement')::boolean is distinct from
+         (v_expected_component_count=0)) then
+    raise exception 'WEEKLY_PROTECTED_C1_STREAM_COUNT_INVALID' using errcode='22023';
+  end if;
+
+  -- An exact staged request is the idempotency authority even after the family
+  -- version advances.  A UUID collision with different bytes always refuses.
+  select request.* into v_publication
+  from public.weekly_exceptional_c1_publication_requests request
+  where request.id=v_request_id;
+  if found then
+    if v_publication.family_id is distinct from v_family_id
+       or v_publication.orchestration_run_id is distinct from v_run_id
+       or v_publication.request_sha256 is distinct from v_c1_request_hash then
+      raise exception 'WEEKLY_PROTECTED_C1_REQUEST_ID_COLLISION' using errcode='23505';
+    end if;
+    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);
+    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'outcome','STAGED','idempotent_replay',true,
+      'family_id',v_publication.family_id,'generation_id',v_publication.generation_id,
+      'publication_request_id',v_publication.id,'request_sha256',
+      pg_catalog.encode(v_publication.request_sha256,'hex'),
+      'state',v_publication.state
+    );
+  end if;
+
+  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);
+  -- An exact staged request is the idempotency authority even after the family
+  -- version advances.  A UUID collision with different bytes always refuses.
+  select request.* into v_publication
+  from public.weekly_exceptional_c1_publication_requests request
+  where request.id=v_request_id
+  for update;
+  if found then
+    if v_publication.family_id is distinct from v_family_id
+       or v_publication.orchestration_run_id is distinct from v_run_id
+       or v_publication.request_sha256 is distinct from v_c1_request_hash then
+      raise exception 'WEEKLY_PROTECTED_C1_REQUEST_ID_COLLISION' using errcode='23505';
+    end if;
+    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);
+    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'outcome','STAGED','idempotent_replay',true,
+      'family_id',v_publication.family_id,'generation_id',v_publication.generation_id,
+      'publication_request_id',v_publication.id,'request_sha256',
+      pg_catalog.encode(v_publication.request_sha256,'hex'),
+      'state',v_publication.state
+    );
+  end if;
+
+  select family.* into strict v_family
+  from public.weekly_exceptional_pay_target_families family
+  where family.id=v_family_id
+  for update;
+  select run.* into strict v_run
+  from public.weekly_exceptional_orchestration_runs run
+  where run.id=v_run_id and run.family_id=v_family.id
+  for update;
+  if (v_family.root_timesheet_id::text,v_family.candidate_id::text,v_family.contract_id::text,v_family.week_ending_date::text)
+    is distinct from (v_lock_family->>'root_timesheet_id',v_lock_family->>'candidate_id',
+      v_lock_family->>'contract_id',v_lock_family->>'week_ending_date') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  v_lock_group:=private.weekly_source_protected_group_lock_v1(v_source_cycle_id);
+  if p_request ? 'bulk_signed_selection_proof' or p_request ? 'automatic_reconcile_selection_sha256' then
+    -- The new one-shift round seals one pending proof at a time using the
+    -- existing cycle mutex; the individual path retains its native SHARE.
+    select cycle.* into strict v_cycle from public.weekly_source_cycles cycle
+      where cycle.id=v_source_cycle_id for update;
+  else
+  select cycle.* into strict v_cycle
+  from public.weekly_source_cycles cycle
+  where cycle.id=v_source_cycle_id
+  for share;
+  end if;
+  if v_cycle.source_group_id is distinct from v_lock_group then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  select source_group.* into strict v_group
+  from public.weekly_source_groups source_group
+  where source_group.id=v_cycle.source_group_id and source_group.active
+  for share;
+  perform private.weekly_source_office_authority_v1(
+    v_actor_user_id,'APPROVE_PROTECTED_PAY',v_group.id,v_client_id,v_work_date
+  );
+
+  if v_run.requested_by_user_id is distinct from v_actor_user_id
+     or v_run.state<>'RUNNING'
+     or v_run.request_kind not in (
+       'APPROVE','AMEND','WITHDRAW','RECONCILE','RECORD_NOT_WORKED'
+     )
+     or v_family.bound_version<>v_expected_bound_version
+     or v_family.c1_publication_state in ('PENDING','PUBLISHING')
+     or v_family.agency_id is distinct from v_group.agency_id
+     or v_family.root_timesheet_id is null
+     or v_work_date not between v_family.week_start_date and v_family.week_ending_date
+     or not exists(
+       select 1 from public.weekly_source_group_clients membership
+       where membership.source_group_id=v_group.id
+         and membership.client_id=v_client_id
+         and v_work_date between membership.valid_from
+           and coalesce(membership.valid_to,'infinity'::date)
+     ) then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  select timesheet.* into strict v_root
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=v_family.root_timesheet_id
+  for share;
+  select financial.* into strict v_fin
+  from public.timesheets_financials financial
+  where financial.id=v_financial_row_id
+    and financial.timesheet_id=v_root.timesheet_id
+    and financial.is_current
+  for share;
+  select event.* into strict v_event
+  from public.weekly_work_events event
+  where event.id=v_work_event_id
+    and event.candidate_id=v_family.candidate_id
+    and event.client_id=v_client_id
+    and event.work_date=v_work_date
+  for share;
+  if v_root.contract_id is distinct from v_family.contract_id
+     or v_root.week_ending_date is distinct from v_family.week_ending_date
+     or v_root.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+     or v_root.line_type<>'HOURS'::public.timesheet_line_type_enum
+     or v_root.is_adjustment or not v_root.is_current
+     or v_root.revoked_at is not null or v_root.archived_at_utc is not null then
+    raise exception 'WEEKLY_PROTECTED_C1_ROOT_INVALID' using errcode='55000';
+  end if;
+
+  v_policy:=private._weekly_source_effective_policy_v1(
+    v_client_id,v_family.contract_id,v_work_date
+  );
+  v_source_mode:=v_policy->>'c1_source_mode';
+  if v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true
+     or v_source_mode not in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY')
+     or (v_group.source_family='NHSP') is distinct from (v_source_mode='NHSP_WEEKLY') then
+    raise exception 'WEEKLY_PROTECTED_C1_POLICY_INVALID' using errcode='55000';
+  end if;
+
+  -- Existing WITHDRAW/RECONCILE actions accept actual Source, including
+  -- certified absence; this does not define any other removal action. A
+  -- Final-only synthetic zero proposal is not proof that Source is absent.
+  -- Keep replay above this fresh admission check; do not reinterpret a saved
+  -- decision after subsequent imports or change the Banking publication owner.
+  if v_run.request_kind in ('WITHDRAW','RECONCILE') then
+    v_selected_source_witness:=private.weekly_source_selected_source_witness_v1(
+      v_family.id,v_cycle.id,v_event.id
+    );
+    if v_selected_source_witness is null
+       or v_selected_source_witness->'source_proposal' is distinct from v_source_proposal
+       or (v_selected_source_witness->>'kind'='CURRENT_ROW' and (
+         v_selected_source_witness#>>'{basis,final_revision_id}' is null
+         or v_selected_source_witness#>>'{basis,final_revision_id}' is distinct from v_source_proposal->>'source_revision'
+         or v_source_proposal->'source_present' is distinct from 'true'::jsonb
+       ))
+       or (v_selected_source_witness->>'kind'='CERTIFIED_ABSENCE' and (
+         v_source_proposal->'source_present' is distinct from 'false'::jsonb
+         or v_source_proposal->>'source_minutes' is distinct from '0'
+       ))
+       or coalesce(v_selected_source_witness->>'kind' not in ('CURRENT_ROW','CERTIFIED_ABSENCE'),true) then
+      raise exception 'WEEKLY_PROTECTED_C1_SELECTED_SOURCE_UNAVAILABLE' using errcode='55000';
+    end if;
+  end if;
+
+  if (v_start->>'actor_user_id')::uuid is distinct from v_actor_user_id
+     or (v_start->>'candidate_id')::uuid is distinct from v_family.candidate_id
+     or (v_start->>'contract_id')::uuid is distinct from v_family.contract_id
+     or (v_start->>'root_timesheet_id')::uuid is distinct from v_root.timesheet_id
+     or (v_start->>'week_ending_date')::date is distinct from v_family.week_ending_date
+     or v_start->>'source_mode'<>v_source_mode
+     or v_financial_row_id is distinct from v_fin.id
+     or v_request_sequence<>v_family.current_generation_number+1 then
+    raise exception 'WEEKLY_PROTECTED_C1_START_SCOPE_INVALID' using errcode='55000';
+  end if;
+  if v_family.current_generation_id is null then
+    if v_expected_head_revision<>0 then
+      raise exception 'WEEKLY_PROTECTED_C1_HEAD_INVALID' using errcode='55000';
+    end if;
+  else
+    select generation.* into strict v_prior_generation
+    from public.weekly_exceptional_pay_generations generation
+    where generation.id=v_family.current_generation_id
+      and generation.family_id=v_family.id
+      and generation.lifecycle_state='PUBLISHED'
+    for share;
+    select request.* into strict v_publication
+    from public.weekly_exceptional_c1_publication_requests request
+    where request.generation_id=v_prior_generation.id
+      and request.family_id=v_family.id
+      and (request.state='PUBLISHED' or (request.state='RETIRED' and exists(
+        select 1 from private.weekly_source_local_protected_decision_receipts receipt
+        where receipt.publication_request_id=request.id and receipt.generation_id=v_prior_generation.id
+          and receipt.state='COMPLETE')));
+    if (case when v_publication.state='RETIRED' then v_prior_generation.generation_number::bigint
+             else v_publication.c1_head_revision end) is distinct from v_expected_head_revision then
+      raise exception 'WEEKLY_PROTECTED_C1_HEAD_INVALID' using errcode='55000';
+    end if;
+    v_publication.id:=null;
+  end if;
+
+  if v_evidence_timesheet_id is not null then
+    select evidence.* into strict v_evidence
+    from public.timesheets evidence
+    where evidence.timesheet_id=v_evidence_timesheet_id
+      and evidence.contract_id=v_family.contract_id
+      and evidence.week_ending_date=v_family.week_ending_date
+      and evidence.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+      and evidence.is_current and evidence.revoked_at is null
+      and evidence.archived_at_utc is null;
+    v_signed_evidence:=private.weekly_exceptional_candidate_signed_evidence_v1(
+      v_evidence_timesheet_id
+    );
+    v_signed_at:=(v_signed_evidence->>'signed_at_utc')::timestamptz;
+    v_signed_revision:=(v_signed_evidence->>'timesheet_version')::integer;
+    v_signed_hash:=private.weekly_exceptional_hex_sha256_v1(
+      v_signed_evidence->>'signature_sha256'
+    );
+  end if;
+
+  select coalesce(pg_catalog.array_agg(incident.id order by incident.id),'{}'::uuid[])
+    into v_issue_ids
+  from public.weekly_discrepancy_incidents incident
+  where incident.source_group_id=v_group.id
+    and incident.work_event_id=v_work_event_id
+    and incident.candidate_id=v_family.candidate_id
+    and incident.client_id=v_client_id;
+  v_issue_ids_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_ISSUE_SET_V1',pg_catalog.to_jsonb(v_issue_ids)
+  );
+  v_schedule_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_SCHEDULE_V1',v_schedule
+  );
+  v_rate_policy_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_RATE_POLICY_V1',
+    pg_catalog.jsonb_build_object(
+      'contract_id',v_family.contract_id,
+      'rates_json',(select contract.rates_json from public.contracts contract where contract.id=v_family.contract_id),
+      'policy',v_policy,'classification',v_rate_classification
+    )
+  );
+  v_source_proposal_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_SOURCE_PROPOSAL_V1',v_source_proposal
+  );
+
+  if v_comparison_revision_id is not null and not exists(
+    select 1
+    from public.weekly_issue_comparison_revisions comparison
+    join public.weekly_discrepancy_incidents incident on incident.id=comparison.incident_id
+    where comparison.id=v_comparison_revision_id
+      and comparison.contract_id=v_family.contract_id
+      and incident.source_group_id=v_group.id
+      and incident.work_event_id=v_work_event_id
+      and incident.candidate_id=v_family.candidate_id
+      and incident.client_id=v_client_id
+  ) then
+    raise exception 'WEEKLY_PROTECTED_COMPARISON_SCOPE_INVALID' using errcode='55000';
+  end if;
+  if v_final_revision_id is not null and not exists(
+    select 1 from public.weekly_source_final_revisions final_revision
+    where final_revision.id=v_final_revision_id
+      and final_revision.source_cycle_id=v_source_cycle_id
+      and final_revision.state='CURRENT'
+  ) then
+    raise exception 'WEEKLY_PROTECTED_FINAL_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  -- Validate and persist the complete normalized C1 source stream.  The C1
+  -- owner independently replays its TLV hashes before certification; these
+  -- local checks prevent truncation, reordering or cross-root substitution.
+  for v_source_entry in
+    select value from pg_catalog.jsonb_array_elements(v_sources)
+  loop
+    v_source_counter:=v_source_counter+1;
+    if not private.weekly_exceptional_json_keys_exact_v1(v_source_entry,v_source_keys)
+       or not (v_source_entry ?& v_source_keys)
+       or v_source_entry->>'record_type'<>'SOURCE'
+       or pg_catalog.jsonb_typeof(v_source_entry->'parts')<>'array' then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_INVALID' using errcode='22023';
+    end if;
+    begin
+      v_source_ordinal:=(v_source_entry->>'source_ordinal')::integer;
+      v_source_id:=(v_source_entry->>'source_id')::uuid;
+      v_source_payload_bytes:=(v_source_entry->>'payload_bytes')::integer;
+      v_source_part_count:=(v_source_entry->>'part_count')::integer;
+    exception when others then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_INVALID' using errcode='22023';
+    end;
+    if v_source_ordinal<>v_source_counter
+       or v_source_ordinal not between 1 and v_expected_source_count
+       or (v_source_entry->>'root_timesheet_id')::uuid is distinct from v_root.timesheet_id
+       or (v_source_entry->>'candidate_id')::uuid is distinct from v_family.candidate_id
+       or (v_source_entry->>'contract_id')::uuid is distinct from v_family.contract_id
+       or v_source_payload_bytes not between 1 and 16384
+       or v_source_part_count<>pg_catalog.jsonb_array_length(v_source_entry->'parts')
+       or v_source_part_count not between 1 and 6 then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_SCOPE_INVALID' using errcode='55000';
+    end if;
+    v_source_kind:=v_source_entry->>'authority_kind';
+    if v_source_kind not in (
+      'CANDIDATE_SUBMISSION','CLIENT_SOURCE','OFFICE_APPROVAL','ROOT_FINANCIAL',
+      'PROVIDER','SOURCE_EXPENSE','ORDINARY_EXPENSE','APPROVED_COMPONENT'
+    ) then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_KIND_INVALID' using errcode='22023';
+    end if;
+    v_count_client:=v_count_client+(v_source_kind='CLIENT_SOURCE')::integer;
+    v_count_candidate:=v_count_candidate+(v_source_kind='CANDIDATE_SUBMISSION')::integer;
+    v_count_root:=v_count_root+(v_source_kind='ROOT_FINANCIAL')::integer;
+    v_count_provider:=v_count_provider+(v_source_kind='PROVIDER')::integer;
+    v_count_office:=v_count_office+(v_source_kind='OFFICE_APPROVAL')::integer;
+    v_part_concat:=''::bytea;
+    v_part_ordinal:=0;
+    for v_part_entry in
+      select value from pg_catalog.jsonb_array_elements(v_source_entry->'parts')
+    loop
+      v_part_ordinal:=v_part_ordinal+1;
+      if not private.weekly_exceptional_json_keys_exact_v1(v_part_entry,v_part_keys)
+         or not (v_part_entry ?& v_part_keys)
+         or v_part_entry->>'record_type'<>'PART'
+         or (v_part_entry->>'source_ordinal')::integer<>v_source_ordinal
+         or (v_part_entry->>'part_ordinal')::integer<>v_part_ordinal
+         or coalesce(v_part_entry->>'payload_utf8','')!~'^(?:[0-9a-f]{2})+$' then
+        raise exception 'WEEKLY_PROTECTED_C1_PART_INVALID' using errcode='22023';
+      end if;
+      v_part_payload:=pg_catalog.decode(v_part_entry->>'payload_utf8','hex');
+      if pg_catalog.octet_length(v_part_payload) not between 1 and 3072
+         or extensions.digest(v_part_payload,'sha256') is distinct from
+            private.weekly_exceptional_hex_sha256_v1(v_part_entry->>'fragment_sha256') then
+        raise exception 'WEEKLY_PROTECTED_C1_PART_HASH_INVALID' using errcode='22023';
+      end if;
+      v_part_concat:=v_part_concat||v_part_payload;
+    end loop;
+    if v_part_ordinal<>v_source_part_count
+       or pg_catalog.octet_length(v_part_concat)<>v_source_payload_bytes then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_PAYLOAD_INVALID' using errcode='22023';
+    end if;
+    begin
+      v_source_document:=pg_catalog.convert_from(v_part_concat,'UTF8')::jsonb;
+    exception when others then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_DOCUMENT_INVALID' using errcode='22023';
+    end;
+    if pg_catalog.jsonb_typeof(v_source_document)<>'object'
+       or (v_source_document->>'root_timesheet_id')::uuid is distinct from v_root.timesheet_id
+       or (v_source_document->>'candidate_id')::uuid is distinct from v_family.candidate_id
+       or (v_source_document->>'contract_id')::uuid is distinct from v_family.contract_id
+       or (v_source_document->>'week_ending_date')::date is distinct from v_family.week_ending_date
+       or v_source_document->>'document_sha256' is distinct from
+          v_source_entry->>'source_document_sha256' then
+      raise exception 'WEEKLY_PROTECTED_C1_SOURCE_DOCUMENT_SCOPE_INVALID' using errcode='55000';
+    end if;
+    if v_source_kind='CLIENT_SOURCE'
+       and coalesce((v_source_document->>'source_complete')::boolean,false) is not true then
+      raise exception 'WEEKLY_PROTECTED_C1_CLIENT_SOURCE_INCOMPLETE' using errcode='55000';
+    elsif v_source_kind='ROOT_FINANCIAL'
+       and (v_source_document->>'financial_row_id')::uuid is distinct from v_fin.id then
+      raise exception 'WEEKLY_PROTECTED_C1_ROOT_FINANCIAL_INVALID' using errcode='55000';
+    elsif v_source_kind='OFFICE_APPROVAL'
+       and (
+         (v_source_document->>'actor_user_id')::uuid is distinct from v_actor_user_id
+         or (v_source_document->>'request_id')::uuid is distinct from v_request_id
+         or v_source_document->>'entitlement_sha256' is distinct from
+            v_start->>'entitlement_sha256'
+         or v_source_document->>'decision'<>'APPROVE_ENTITLEMENT'
+       ) then
+      raise exception 'WEEKLY_PROTECTED_C1_OFFICE_SOURCE_INVALID' using errcode='55000';
+    end if;
+    v_payload_total:=v_payload_total+v_source_payload_bytes;
+  end loop;
+  if v_source_counter<>v_expected_source_count
+     or v_count_client<1 or v_count_root<>1 or v_count_provider<>1 or v_count_office<>1
+     or (v_evidence_timesheet_id is null and v_count_candidate<>0)
+     or (v_evidence_timesheet_id is not null and v_count_candidate<>1)
+     or v_payload_total<>v_expected_payload_bytes then
+    raise exception 'WEEKLY_PROTECTED_C1_SOURCE_CARDINALITY_INVALID' using errcode='55000';
+  end if;
+
+  v_component_ordinal:=0;
+  for v_component_entry in
+    select value from pg_catalog.jsonb_array_elements(v_components)
+  loop
+    v_component_ordinal:=v_component_ordinal+1;
+    if not private.weekly_exceptional_json_keys_exact_v1(v_component_entry,v_component_keys)
+       or not (v_component_entry ?& v_component_keys)
+       or v_component_entry->>'record_type'<>'COMPONENT'
+       or (v_component_entry->>'component_ordinal')::integer<>v_component_ordinal
+       or (v_component_entry->>'source_ordinal')::integer not between 1 and v_expected_source_count
+       or coalesce(v_component_entry->>'source_key','')=''
+       or (v_previous_source_key is not null and v_component_entry->>'source_key'<=v_previous_source_key) then
+      raise exception 'WEEKLY_PROTECTED_C1_COMPONENT_INVALID' using errcode='22023';
+    end if;
+    if nullif(v_component_entry->>'work_date','') is not null
+       and (v_component_entry->>'work_date')::date not between
+           v_family.week_start_date and v_family.week_ending_date then
+      raise exception 'WEEKLY_PROTECTED_C1_COMPONENT_WEEK_INVALID' using errcode='55000';
+    end if;
+    v_total_pay:=v_total_pay+(v_component_entry->>'pay_ex_vat')::numeric;
+    perform private.weekly_exceptional_hex_sha256_v1(v_component_entry->>'component_sha256');
+    v_previous_source_key:=v_component_entry->>'source_key';
+  end loop;
+  if v_component_ordinal<>v_expected_component_count then
+    raise exception 'WEEKLY_PROTECTED_C1_COMPONENT_COUNT_INVALID' using errcode='22023';
+  end if;
+  v_total_pay:=pg_catalog.round(v_total_pay,2);
+
+  if v_family.current_generation_id is null then
+    -- Before the prepare owner distinguished empty from published families,
+    -- a retry could be recorded as AMEND even though nothing was published.
+    -- Preserve that immutable request and permit only its first generation;
+    -- never treat an existing staged/published entitlement as an initial one.
+    if v_run.request_kind not in ('APPROVE','AMEND')
+       or v_family.current_generation_number<>0
+       or v_family.current_lifecycle_state<>'PENDING_APPROVAL'
+       or exists(select 1 from public.weekly_exceptional_pay_generations existing
+         where existing.family_id=v_family.id) then
+      raise exception 'WEEKLY_PROTECTED_C1_INITIAL_ACTION_INVALID' using errcode='55000';
+    end if;
+    v_prior_vector:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_PROTECTED_TARGET_VECTOR_V1',
+      'components',pg_catalog.jsonb_build_array(),
+      'component_count',0,'is_zero_entitlement',true
+    );
+    v_generation_number:=1;
+    v_generation_reason:='INITIAL_APPROVAL';
+  else
+    v_prior_vector:=v_prior_generation.complete_next_vector_json;
+    v_generation_number:=v_prior_generation.generation_number+1;
+    v_generation_reason:=case v_run.request_kind
+      when 'AMEND' then 'OFFICE_AMENDMENT'
+      when 'WITHDRAW' then 'WITHDRAW'
+      when 'RECONCILE' then 'RECONCILE'
+      when 'RECORD_NOT_WORKED' then 'RECORD_NOT_WORKED'
+      else null end;
+    if v_generation_reason is null then
+      raise exception 'WEEKLY_PROTECTED_C1_ACTION_INVALID' using errcode='55000';
+    end if;
+  end if;
+  v_family_event_state:=case
+    when v_run.request_kind in ('APPROVE','AMEND') then 'WAIT'
+    when v_run.request_kind in ('WITHDRAW','RECONCILE') then 'ACCEPTED_SOURCE'
+    else 'NOT_WORKED' end;
+  if v_run.request_kind='RECORD_NOT_WORKED'
+     and coalesce((v_source_proposal->>'source_present')::boolean,true) then
+    raise exception 'WEEKLY_PROTECTED_NOT_WORKED_SOURCE_PRESENT' using errcode='55000';
+  end if;
+  with latest as (
+    select family_event.durable_work_event_id,family_event.state,
+      pg_catalog.row_number() over (
+        partition by family_event.durable_work_event_id
+        order by family_event.event_sequence desc
+      ) as event_rank
+    from public.weekly_exceptional_pay_family_events family_event
+    where family_event.family_id=v_family.id
+      and family_event.durable_work_event_id<>v_work_event_id
+  )
+  select pg_catalog.count(*)::integer into v_other_wait_count
+  from latest where event_rank=1 and state='WAIT';
+  v_resulting_lifecycle_state:=case
+    when v_family_event_state='WAIT' or v_other_wait_count>0 then 'WAITING_SOURCE'
+    when v_run.request_kind='RECORD_NOT_WORKED' then 'NOT_WORKED'
+    else 'RECONCILED' end;
+  v_pending_outcome:=case v_family_event_state
+    when 'WAIT' then 'WAIT'
+    when 'ACCEPTED_SOURCE' then 'ACCEPT_SOURCE'
+    else 'RECORD_NOT_WORKED' end;
+  v_payment_event_kind:=case v_run.request_kind
+    when 'APPROVE' then 'APPROVED'
+    when 'AMEND' then 'APPROVED'
+    when 'RECORD_NOT_WORKED' then 'RECORDED_NOT_WORKED'
+    else 'MATCH_ACCEPTED' end;
+  v_prior_vector_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_prior_vector
+  );
+  v_next_vector:=pg_catalog.jsonb_build_object(
+    'schema_version','WEEKLY_PROTECTED_TARGET_VECTOR_V1',
+    'target_snapshot',v_target_snapshot,
+    'components',v_components,
+    'component_count',v_expected_component_count,
+    'is_zero_entitlement',(v_expected_component_count=0),
+    'entitlement_sha256',v_start->>'entitlement_sha256',
+    'approved_pay_ex_vat',pg_catalog.to_char(v_total_pay,'FM9999999990.00')
+  );
+  -- Identity metadata is admitted only against this fresh, actual server
+  -- context under the established stage locks, never the caller's manifest.
+  -- Matching clocks are not a historical identity-derivation fallback.
+  v_component_identity_context:=public.weekly_exceptional_pay_action_context_v1(
+    jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',
+      'actor_user_id',v_actor_user_id,'family_id',v_family.id,
+      'orchestration_run_id',v_run.id,'source_cycle_id',v_cycle.id,
+      'work_event_id',v_event.id,'protected_schedule',v_schedule,
+      'evidence_timesheet_id',v_evidence_timesheet_id));
+  if v_component_identity_context->>'root_timesheet_id' is distinct from v_root.timesheet_id::text
+     or v_component_identity_context#>>'{current_financial,id}' is distinct from v_fin.id::text
+     or v_component_identity_context->>'family_bound_version' is distinct from v_expected_bound_version::text
+     or v_component_identity_context->'source_proposal' is distinct from v_source_proposal then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+  v_component_identity_basis:=private.weekly_source_protected_component_manifest_v1(
+    v_component_identity_context,v_target_snapshot);
+  v_next_vector:=v_next_vector||jsonb_build_object(
+    'protected_component_identity_basis',v_component_identity_basis);
+  -- Seal the common before-position at approval. A later authorised amendment
+  -- must not silently replace an entitlement published after this calculation.
+  if v_root.authorised_at_server is not null then
+    v_next_vector:=v_next_vector||pg_catalog.jsonb_build_object(
+      'prior_effective_inventory',private.weekly_source_effective_inventory_v1(v_root.timesheet_id));
+  end if;
+  if p_request ? 'bulk_signed_selection_proof' then
+    v_bulk_signed_proof:=private.weekly_source_bulk_stage_proof_v1(p_request,v_fin.id);
+    v_next_vector:=v_next_vector||jsonb_build_object('bulk_signed_selection_proof',v_bulk_signed_proof);
+  end if;
+  if p_request ? 'automatic_reconcile_selection_sha256' then
+    v_automatic_reconcile_proof:=private.weekly_source_automatic_reconcile_stage_proof_v1(p_request);
+    v_next_vector:=v_next_vector||jsonb_build_object('automatic_reconcile_proof',v_automatic_reconcile_proof);
+  end if;
+  v_next_vector_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_next_vector
+  );
+  v_fixed_source_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_FIXED_SOURCE_STATE_V1',
+    pg_catalog.jsonb_build_object(
+      'source_cycle_id',v_source_cycle_id,
+      'comparison_revision_id',v_comparison_revision_id,
+      'final_revision_id',v_final_revision_id,
+      'source_proposal_hash',pg_catalog.encode(v_source_proposal_hash,'hex'),
+      'financial_row_id',v_fin.id,'financial_timesheet_version',v_fin.timesheet_version
+    )
+  );
+  v_local_approval_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_APPROVAL_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'work_event_id',v_work_event_id,
+      'candidate_id',v_family.candidate_id,'client_id',v_client_id,
+      'contract_id',v_family.contract_id,'week_ending_date',v_family.week_ending_date,
+      'schedule_hash',pg_catalog.encode(v_schedule_hash,'hex'),
+      'evidence_timesheet_id',v_evidence_timesheet_id,
+      'signed_hash',case when v_signed_hash is null then null else pg_catalog.encode(v_signed_hash,'hex') end,
+      'issue_ids_hash',pg_catalog.encode(v_issue_ids_hash,'hex'),
+      'rate_policy_hash',pg_catalog.encode(v_rate_policy_hash,'hex'),
+      'target_vector_hash',pg_catalog.encode(v_next_vector_hash,'hex'),
+      'actor_user_id',v_actor_user_id,'reason',v_reason
+    )
+  );
+
+  insert into public.weekly_exceptional_payment_approvals(
+    pay_target_family_id,work_event_id,evidence_timesheet_id,candidate_id,
+    client_id,contract_id,week_ending,protected_work_date,
+    protected_start_at_local,protected_end_at_local,protected_break_minutes,
+    signed_submission_timesheet_id,signed_submission_revision,
+    signed_submission_hash,signed_at_utc,contributing_issue_episode_ids,
+    contributing_issue_episode_ids_hash,signed_schedule_fact_hash,
+    contract_rate_policy_source_fingerprint,approved_by_user_id,
+    approval_reason,source_cycle_id,comparison_revision_id,final_revision_id,
+    approved_target_pay_components_json,approved_target_gross,
+    creation_orchestration_run_id,approval_hash,creation_idempotency_key
+  ) values (
+    v_family.id,v_work_event_id,v_evidence_timesheet_id,v_family.candidate_id,
+    v_client_id,v_family.contract_id,v_family.week_ending_date,v_work_date,
+    v_start_at,v_end_at,v_break_minutes,
+    v_evidence_timesheet_id,v_signed_revision,v_signed_hash,v_signed_at,v_issue_ids,
+    v_issue_ids_hash,v_schedule_hash,v_rate_policy_hash,v_actor_user_id,
+    v_reason,v_source_cycle_id,v_comparison_revision_id,v_final_revision_id,
+    v_target_snapshot,v_total_pay,v_run.id,v_local_approval_hash,
+    v_idempotency_key||':approval'
+  ) returning * into v_approval;
+
+  insert into public.weekly_exceptional_pay_generations(
+    family_id,generation_number,prior_generation_id,prior_generation_hash,
+    request_idempotency_key,reason,complete_prior_vector_json,
+    complete_prior_vector_hash,complete_next_vector_json,complete_next_vector_hash,
+    fixed_target_source_state_fingerprint,lifecycle_state
+  ) values (
+    v_family.id,v_generation_number,v_family.current_generation_id,
+    case when v_family.current_generation_id is null then null else v_prior_vector_hash end,
+    v_idempotency_key||':generation',v_generation_reason,v_prior_vector,
+    v_prior_vector_hash,v_next_vector,v_next_vector_hash,v_fixed_source_hash,'PENDING_C1'
+  ) returning * into v_generation;
+
+  select coalesce(max(event_sequence),0)+1,
+         (array_agg(event_hash order by event_sequence desc))[1]
+    into v_family_event_sequence,v_prior_family_event_hash
+  from public.weekly_exceptional_pay_family_events
+  where family_id=v_family.id;
+  v_family_event_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_FAMILY_EVENT_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'event_sequence',v_family_event_sequence,
+      'work_event_id',v_work_event_id,'approval_id',v_approval.id,
+      'schedule',v_schedule,'source_proposal_hash',pg_catalog.encode(v_source_proposal_hash,'hex'),
+      'target_vector_hash',pg_catalog.encode(v_next_vector_hash,'hex'),
+      'prior_event_hash',case when v_prior_family_event_hash is null then null
+        else pg_catalog.encode(v_prior_family_event_hash,'hex') end
+    )
+  );
+  insert into public.weekly_exceptional_pay_family_events(
+    family_id,event_sequence,durable_work_event_id,evidence_approval_id,
+    work_date,start_at_local,end_at_local,break_minutes,rate_classification_json,
+    source_proposal_snapshot_json,source_proposal_hash,
+    fixed_office_target_snapshot_json,fixed_office_target_hash,state,
+    current_comparison_revision_id,current_final_revision_id,office_actor_user_id,
+    office_reason,prior_event_hash,event_hash
+  ) values (
+    v_family.id,v_family_event_sequence,v_work_event_id,v_approval.id,
+    v_work_date,v_start_at,v_end_at,v_break_minutes,v_rate_classification,
+    v_source_proposal,v_source_proposal_hash,v_schedule,v_schedule_hash,v_family_event_state,
+    v_comparison_revision_id,v_final_revision_id,v_actor_user_id,v_reason,
+    v_prior_family_event_hash,v_family_event_hash
+  ) returning id into v_family_event_id;
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.bpay_next_protected_current_decision_capture_v1(v_family_event_id);
+  end if;
+
+  select coalesce(max(event_sequence),0)+1,
+         (array_agg(event_hash order by event_sequence desc))[1]
+    into v_target_event_sequence,v_prior_target_event_hash
+  from public.weekly_exceptional_pay_target_events
+  where family_id=v_family.id;
+  v_target_event_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_TARGET_EVENT_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'event_sequence',v_target_event_sequence,
+      'approval_id',v_approval.id,'generation_id',v_generation.id,
+      'prior_vector_hash',pg_catalog.encode(v_prior_vector_hash,'hex'),
+      'next_vector_hash',pg_catalog.encode(v_next_vector_hash,'hex'),
+      'reason',v_generation_reason,'actor_user_id',v_actor_user_id
+    )
+  );
+  insert into public.weekly_exceptional_pay_target_events(
+    family_id,approval_id,event_sequence,triggering_comparison_revision_id,
+    triggering_final_revision_id,prior_event_fingerprint,
+    fixed_target_component_snapshot,current_source_proposal_snapshot,
+    complete_prior_family_vector_fingerprint,
+    complete_next_family_vector_fingerprint,reason,resulting_lifecycle_state,
+    financial_generation_id,actor_user_id,event_hash,idempotency_key
+  ) values (
+    v_family.id,v_approval.id,v_target_event_sequence,v_comparison_revision_id,
+    v_final_revision_id,v_prior_target_event_hash,v_target_snapshot,v_source_proposal,
+    v_prior_vector_hash,v_next_vector_hash,v_generation_reason,v_resulting_lifecycle_state,
+    v_generation.id,v_actor_user_id,v_target_event_hash,v_idempotency_key||':target-event'
+  );
+  update public.weekly_exceptional_pending_reconciliation_targets target
+  set state=case when v_run.request_kind='WITHDRAW' then 'WITHDRAWN' else 'CONSUMED' end,
+      completed_at_utc=pg_catalog.statement_timestamp()
+  where target.family_id=v_family.id
+    and target.durable_work_event_id=v_work_event_id
+    and target.state='ACTIVE';
+  if v_family_event_state='WAIT' then
+    insert into public.weekly_exceptional_pending_reconciliation_targets(
+      family_id,approval_id,durable_work_event_id,incident_id,current_final_revision_id,
+      intended_outcome,source_action_policy_target_fingerprint,state
+    ) values (
+      v_family.id,v_approval.id,v_work_event_id,
+      (select incident.id from public.weekly_discrepancy_incidents incident
+       where incident.source_group_id=v_group.id and incident.work_event_id=v_work_event_id
+       order by incident.episode_number desc limit 1),
+      v_final_revision_id,v_pending_outcome,v_fixed_source_hash,'ACTIVE'
+    );
+  end if;
+  insert into public.weekly_exceptional_payment_events(
+    family_id,approval_id,event_kind,lifecycle_view,bounded_payload_json,
+    idempotency_key
+  ) values (
+    v_family.id,v_approval.id,v_payment_event_kind,'PENDING_C1',
+    pg_catalog.jsonb_build_object(
+      'work_event_id',v_work_event_id,'generation_id',v_generation.id,
+      'target_vector_hash',pg_catalog.encode(v_next_vector_hash,'hex'),
+      'approved_pay_ex_vat',pg_catalog.to_char(v_total_pay,'FM9999999990.00')
+    ),v_idempotency_key||':payment-event'
+  );
+
+  insert into public.weekly_exceptional_c1_publication_requests(
+    id,family_id,generation_id,orchestration_run_id,agency_id,candidate_id,
+    contract_id,root_timesheet_id,week_ending_date,source_mode,request_sequence,
+    expected_head_revision,expected_source_count,expected_component_count,
+    expected_payload_bytes,source_manifest_sha256,entitlement_sha256,
+    approval_sha256,is_zero_entitlement,financial_row_id,request_sha256,state
+  ) values (
+    v_request_id,v_family.id,v_generation.id,v_run.id,v_family.agency_id,
+    v_family.candidate_id,v_family.contract_id,v_root.timesheet_id,
+    v_family.week_ending_date,v_source_mode,v_request_sequence,
+    v_expected_head_revision,v_expected_source_count,v_expected_component_count,
+    v_expected_payload_bytes,v_source_manifest_hash,v_entitlement_hash,
+    v_outer_approval_hash,(v_expected_component_count=0),v_fin.id,
+    v_c1_request_hash,'READY'
+  ) returning * into v_publication;
+
+  for v_source_entry in select value from pg_catalog.jsonb_array_elements(v_sources)
+  loop
+    v_source_ordinal:=(v_source_entry->>'source_ordinal')::integer;
+    v_source_id:=(v_source_entry->>'source_id')::uuid;
+    insert into public.weekly_exceptional_c1_source_records(
+      id,publication_request_id,source_ordinal,authority_kind,source_system,
+      external_identity,external_revision,source_document_sha256,payload_bytes,
+      part_count,work_date,root_timesheet_id,candidate_id,contract_id,
+      source_row_sha256
+    ) values (
+      v_source_id,v_publication.id,v_source_ordinal,v_source_entry->>'authority_kind',
+      v_source_entry->>'source_system',v_source_entry->>'external_identity',
+      v_source_entry->>'external_revision',
+      private.weekly_exceptional_hex_sha256_v1(v_source_entry->>'source_document_sha256'),
+      (v_source_entry->>'payload_bytes')::integer,
+      (v_source_entry->>'part_count')::integer,
+      nullif(v_source_entry->>'work_date','')::date,v_root.timesheet_id,
+      v_family.candidate_id,v_family.contract_id,
+      private.weekly_exceptional_hex_sha256_v1(v_source_entry->>'source_row_sha256')
+    );
+    for v_part_entry in select value from pg_catalog.jsonb_array_elements(v_source_entry->'parts')
+    loop
+      insert into public.weekly_exceptional_c1_source_parts(
+        publication_request_id,source_record_id,source_ordinal,part_ordinal,
+        payload_utf8,fragment_sha256
+      ) values (
+        v_publication.id,v_source_id,v_source_ordinal,
+        (v_part_entry->>'part_ordinal')::integer,
+        pg_catalog.decode(v_part_entry->>'payload_utf8','hex'),
+        private.weekly_exceptional_hex_sha256_v1(v_part_entry->>'fragment_sha256')
+      );
+    end loop;
+  end loop;
+
+  for v_component_entry in select value from pg_catalog.jsonb_array_elements(v_components)
+  loop
+    insert into public.weekly_exceptional_c1_component_records(
+      publication_request_id,component_ordinal,component_id,source_ordinal,
+      source_key,component_kind,economic_key_type,economic_key_value,
+      component_member_identity,segment_id,segment_key,segment_stable_key,
+      work_date,reference_number,hours_day,hours_night,hours_sat,hours_sun,
+      hours_bh,additional_code_raw,unit_count,unit_pay_rate,unit_charge_rate,
+      expense_code,pay_ex_vat,charge_ex_vat,exclude_from_pay,
+      origin,component_sha256
+    ) values (
+      v_publication.id,(v_component_entry->>'component_ordinal')::integer,
+      (v_component_entry->>'component_id')::uuid,
+      (v_component_entry->>'source_ordinal')::integer,
+      v_component_entry->>'source_key',v_component_entry->>'component_kind',
+      v_component_entry->>'economic_key_type',v_component_entry->>'economic_key_value',
+      v_component_entry->>'component_member_identity',nullif(v_component_entry->>'segment_id',''),
+      nullif(v_component_entry->>'segment_key',''),nullif(v_component_entry->>'segment_stable_key',''),
+      nullif(v_component_entry->>'work_date','')::date,nullif(v_component_entry->>'reference_number',''),
+      nullif(v_component_entry->>'hours_day','')::numeric,
+      nullif(v_component_entry->>'hours_night','')::numeric,
+      nullif(v_component_entry->>'hours_sat','')::numeric,
+      nullif(v_component_entry->>'hours_sun','')::numeric,
+      nullif(v_component_entry->>'hours_bh','')::numeric,
+      nullif(v_component_entry->>'additional_code_raw',''),
+      nullif(v_component_entry->>'unit_count','')::numeric,
+      nullif(v_component_entry->>'unit_pay_rate','')::numeric,
+      nullif(v_component_entry->>'unit_charge_rate','')::numeric,
+      nullif(v_component_entry->>'expense_code',''),
+      (v_component_entry->>'pay_ex_vat')::numeric,
+      nullif(v_component_entry->>'charge_ex_vat','')::numeric,
+      (v_component_entry->>'exclude_from_pay')::boolean,
+      v_component_entry->>'origin',
+      private.weekly_exceptional_hex_sha256_v1(v_component_entry->>'component_sha256')
+    );
+  end loop;
+
+  update public.weekly_exceptional_pay_target_families
+  set c1_publication_state='PENDING',bound_version=bound_version+1
+  where id=v_family.id;
+
+  v_request_body_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_C1_STAGE_REQUEST_BODY_V1',p_request
+  );
+  v_before_hash:=v_run.before_state_fingerprint;
+  v_after_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_C1_STAGED_STATE_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'generation_id',v_generation.id,
+      'publication_request_id',v_publication.id,'request_sha256',
+      pg_catalog.encode(v_c1_request_hash,'hex'),'new_bound_version',v_family.bound_version+1
+    )
+  );
+  select coalesce(max(sequence),0)+1 into v_step_sequence
+  from public.weekly_exceptional_orchestration_steps where orchestration_run_id=v_run.id;
+  insert into public.weekly_exceptional_orchestration_steps(
+    orchestration_run_id,sequence,step_kind,idempotency_key,
+    allowlisted_owner_name,allowlisted_owner_signature,bounded_request_hash,
+    before_state_fingerprint,bounded_owner_response_json,owner_response_hash,
+    after_state_fingerprint,outcome,completed_at_utc
+  ) values (
+    v_run.id,v_step_sequence,'STAGE_C1_REQUEST',v_idempotency_key,
+    'public.weekly_exceptional_pay_stage_c1_request_v1','jsonb->jsonb',
+    v_request_body_hash,v_before_hash,
+    pg_catalog.jsonb_build_object(
+      'publication_request_id',v_publication.id,'generation_id',v_generation.id,
+      'request_sha256',pg_catalog.encode(v_c1_request_hash,'hex')
+    ),v_after_hash,v_after_hash,'COMPLETE',pg_catalog.statement_timestamp()
+  );
+
+  if p_request ? 'automatic_reconcile_selection_sha256' then
+    -- The assertion reads the actual sealed complete vector and native rows.
+    -- Any refusal rolls back this entire stage, including its unaccepted event.
+    perform private.weekly_source_automatic_reconcile_certificate_v1(v_publication.id,v_actor_user_id,v_cycle.id);
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'outcome','STAGED','idempotent_replay',false,
+    'family_id',v_family.id,'generation_id',v_generation.id,
+    'approval_id',v_approval.id,'publication_request_id',v_publication.id,
+    'request_sha256',pg_catalog.encode(v_publication.request_sha256,'hex'),
+    'source_count',v_expected_source_count,
+    'component_count',v_expected_component_count,
+    'approved_pay_ex_vat',pg_catalog.to_char(v_total_pay,'FM9999999990.00'),
+    'new_family_bound_version',v_family.bound_version+1,'state','READY'
+  );
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_C1_STAGE_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+alter function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) to service_role;

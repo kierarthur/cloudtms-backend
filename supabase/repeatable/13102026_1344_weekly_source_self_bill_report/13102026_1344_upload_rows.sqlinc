@@ -1,0 +1,500 @@
+-- Complete native successor; bounded report arm only. Root composes later shared owner hunks.
+create or replace function public.weekly_source_upload_stage_rows_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_upload_id uuid;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_group_id uuid;
+  v_cycle_date date;
+  v_client_id uuid;
+  v_item jsonb;
+  v_key text;
+  v_ordinal integer;
+  v_hash bytea;
+  v_existing_physical public.weekly_source_physical_rows%rowtype;
+  v_existing_row public.weekly_source_upload_rows%rowtype;
+  v_existing_money public.weekly_source_money_cell_evidence%rowtype;
+  v_existing_expense public.weekly_source_expense_cell_evidence%rowtype;
+  v_row public.weekly_source_upload_rows%rowtype;
+  v_money public.weekly_source_money_cell_evidence%rowtype;
+  v_expense public.weekly_source_expense_cell_evidence%rowtype;
+  v_payload jsonb;
+  v_physical_added integer:=0;
+  v_rows_added integer:=0;
+  v_money_added integer:=0;
+  v_expenses_added integer:=0;
+  v_report boolean:=false;
+begin
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','upload_id','physical_rows','normalised_rows',
+         'money_evidence','expense_evidence')
+     ) then
+    raise exception 'WEEKLY_SOURCE_STAGE_ROWS_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_upload_id:=(p_request->>'upload_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_STAGE_ROWS_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_upload_id is null
+     or pg_catalog.jsonb_typeof(coalesce(p_request->'physical_rows','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(p_request->'normalised_rows','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(p_request->'money_evidence','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(p_request->'expense_evidence','[]'::jsonb))<>'array' then
+    raise exception 'WEEKLY_SOURCE_STAGE_ROWS_REQUEST_INVALID' using errcode='22023';
+  end if;
+  if pg_catalog.jsonb_array_length(coalesce(p_request->'physical_rows','[]'::jsonb))>10000
+     or pg_catalog.jsonb_array_length(coalesce(p_request->'normalised_rows','[]'::jsonb))>10000
+     or pg_catalog.jsonb_array_length(coalesce(p_request->'money_evidence','[]'::jsonb))>40001
+     or pg_catalog.jsonb_array_length(coalesce(p_request->'expense_evidence','[]'::jsonb))>10000 then
+    raise exception 'WEEKLY_SOURCE_STAGE_ROWS_BATCH_TOO_LARGE' using errcode='22023';
+  end if;
+
+  select * into v_upload
+  from public.weekly_source_uploads where id=v_upload_id for update;
+  if not found or v_upload.state<>'STAGING' then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_NOT_STAGING' using errcode='55000';
+  end if;
+  if v_upload.uploaded_by_user_id is distinct from v_actor then
+    raise exception 'WEEKLY_SOURCE_UPLOAD_ACTOR_MISMATCH' using errcode='42501';
+  end if;
+  select cycle.source_group_id,cycle.finalisation_week_ending
+    into strict v_group_id,v_cycle_date
+  from public.weekly_source_cycles cycle where cycle.id=v_upload.source_cycle_id;
+  if v_upload.report_scope_id is null then
+    begin
+      v_client_id:=nullif(v_upload.file_metadata_json->>'client_id','')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'WEEKLY_SOURCE_CLIENT_SCOPE_INVALID' using errcode='55000';
+    end;
+  else
+    select scope.client_id into strict v_client_id
+    from public.weekly_source_report_scopes scope
+    where scope.id=v_upload.report_scope_id
+      and scope.source_cycle_id=v_upload.source_cycle_id;
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'UPLOAD_SOURCE',v_group_id,v_client_id,v_cycle_date
+  );
+
+  v_report:=exists(select 1 from public.weekly_source_format_profiles p where p.id=v_upload.source_format_profile_id
+    and p.profile_code='ACACIUM_SELF_BILL_REPORT_V1');
+  if v_report and jsonb_array_length(coalesce(p_request->'expense_evidence','[]'::jsonb))<>0 then
+    raise exception 'WEEKLY_SOURCE_REPORT_EXPENSES_FORBIDDEN' using errcode='22023'; end if;
+
+  for v_item in
+    select value from pg_catalog.jsonb_array_elements(
+      coalesce(p_request->'physical_rows','[]'::jsonb)
+    )
+  loop
+    if pg_catalog.jsonb_typeof(v_item)<>'object' then
+      raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_INVALID' using errcode='22023';
+    end if;
+    select key into v_key from pg_catalog.jsonb_object_keys(v_item) key
+    where key not in ('source_row_ordinal','bounded_raw_cells_json','classification','row_sha256')
+    order by key limit 1;
+    if v_key is not null then
+      raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_UNKNOWN_FIELD'
+        using errcode='22023',detail=v_key;
+    end if;
+    begin
+      v_ordinal:=(v_item->>'source_row_ordinal')::integer;
+    exception when invalid_text_representation or numeric_value_out_of_range then
+      raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_ORDINAL_INVALID' using errcode='22023';
+    end;
+    if v_ordinal is null or v_ordinal<1 or v_ordinal>v_upload.physical_row_count
+       or pg_catalog.jsonb_typeof(v_item->'bounded_raw_cells_json')<>'object'
+       or coalesce(v_item->>'classification','') not in (
+         'HEADER','TRAILER','PROFILE_PROVED_NON_ECONOMIC_CONTINUATION',
+         'ACCEPTED_SHIFT','BLOCKING_ECONOMIC_DUPLICATE','BLOCKING_MALFORMED'
+       ) then
+      raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_INVALID' using errcode='22023';
+    end if;
+    v_payload:=pg_catalog.jsonb_build_object(
+      'source_row_ordinal',v_ordinal,
+      'classification',v_item->>'classification',
+      'bounded_raw_cells_json',v_item->'bounded_raw_cells_json'
+    );
+    v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PHYSICAL_ROW_V1',v_payload);
+    if nullif(v_item->>'row_sha256','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'row_sha256','WEEKLY_SOURCE_PHYSICAL_ROW_HASH_INVALID'
+       ) is distinct from v_hash then
+      raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_HASH_MISMATCH' using errcode='22023';
+    end if;
+    select * into v_existing_physical
+    from public.weekly_source_physical_rows
+    where upload_id=v_upload_id and source_row_ordinal=v_ordinal;
+    if found then
+      if v_existing_physical.classification is distinct from v_item->>'classification'
+         or v_existing_physical.bounded_raw_cells_json is distinct from v_item->'bounded_raw_cells_json'
+         or v_existing_physical.row_sha256 is distinct from v_hash then
+        raise exception 'WEEKLY_SOURCE_PHYSICAL_ROW_REPLAY_CONFLICT' using errcode='55000';
+      end if;
+    else
+      insert into public.weekly_source_physical_rows(
+        upload_id,source_row_ordinal,bounded_raw_cells_json,row_sha256,classification
+      ) values (
+        v_upload_id,v_ordinal,v_item->'bounded_raw_cells_json',v_hash,v_item->>'classification'
+      );
+      v_physical_added:=v_physical_added+1;
+    end if;
+  end loop;
+
+  for v_item in
+    select value from pg_catalog.jsonb_array_elements(
+      coalesce(p_request->'normalised_rows','[]'::jsonb)
+    )
+  loop
+    if pg_catalog.jsonb_typeof(v_item)<>'object' then
+      raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_INVALID' using errcode='22023';
+    end if;
+    select key into v_key from pg_catalog.jsonb_object_keys(v_item) key
+    where key not in (
+      'source_row_ordinal','external_source_key','source_candidate_identity',
+      'source_client_identity','work_date','start_at_local','end_at_local',
+      'break_minutes','actual_net_minutes','row_finalisation_state','finalised_by',
+      'role_band_source','source_commission_pence','source_total_cost_pence',
+      'source_shift_charge_pence','source_money_parse_state','source_gross_pence','source_vat_pence','finalised_at_utc',
+      'source_qualification_profile_version','source_expense_pence',
+      'source_expense_parse_state','bounded_raw_columns_json','normalised_row_hash'
+    ) order by key limit 1;
+    if v_key is not null then
+      raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_UNKNOWN_FIELD'
+        using errcode='22023',detail=v_key;
+    end if;
+    begin
+      v_row:=pg_catalog.jsonb_populate_record(null::public.weekly_source_upload_rows,v_item);
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_TYPE_INVALID' using errcode='22023';
+    end;
+    v_row.row_finalisation_state:=coalesce(v_row.row_finalisation_state,'NOT_APPLICABLE');
+    v_row.source_money_parse_state:=coalesce(v_row.source_money_parse_state,'NOT_APPLICABLE');
+    v_row.source_expense_parse_state:=coalesce(v_row.source_expense_parse_state,'NOT_APPLICABLE');
+    v_row.bounded_raw_columns_json:=coalesce(v_row.bounded_raw_columns_json,'{}'::jsonb);
+    if v_row.source_row_ordinal is null or v_row.source_row_ordinal<1
+       or v_row.source_row_ordinal>v_upload.physical_row_count
+       or nullif(pg_catalog.btrim(coalesce(v_row.source_candidate_identity,'')),'') is null
+       or nullif(pg_catalog.btrim(coalesce(v_row.source_client_identity,'')),'') is null
+       or v_row.work_date is null
+       or pg_catalog.jsonb_typeof(v_row.bounded_raw_columns_json)<>'object'
+       or not exists(
+         select 1 from public.weekly_source_physical_rows physical
+         where physical.upload_id=v_upload_id
+           and physical.source_row_ordinal=v_row.source_row_ordinal
+           and physical.classification='ACCEPTED_SHIFT'
+       ) then
+      raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_INVALID' using errcode='22023';
+    end if;
+    v_payload:=pg_catalog.jsonb_build_object(
+      'source_row_ordinal',v_row.source_row_ordinal,
+      'external_source_key',v_row.external_source_key,
+      'source_candidate_identity',v_row.source_candidate_identity,
+      'source_client_identity',v_row.source_client_identity,
+      'work_date',v_row.work_date,
+      'start_at_local',v_row.start_at_local,
+      'end_at_local',v_row.end_at_local,
+      'break_minutes',v_row.break_minutes,
+      'actual_net_minutes',v_row.actual_net_minutes,
+      'row_finalisation_state',v_row.row_finalisation_state,
+      'finalised_by',v_row.finalised_by,
+      'role_band_source',v_row.role_band_source,
+      'source_commission_pence',v_row.source_commission_pence,
+      'source_total_cost_pence',v_row.source_total_cost_pence,
+      'source_shift_charge_pence',v_row.source_shift_charge_pence,
+      'source_money_parse_state',v_row.source_money_parse_state,
+      'source_qualification_profile_version',v_row.source_qualification_profile_version,
+      'source_expense_pence',v_row.source_expense_pence,
+      'source_expense_parse_state',v_row.source_expense_parse_state,
+      'bounded_raw_columns_json',v_row.bounded_raw_columns_json
+    )||case when not v_report and (v_row.source_gross_pence is not null or v_row.source_vat_pence is not null or v_row.finalised_at_utc is not null)
+      then jsonb_build_object('source_gross_pence',v_row.source_gross_pence,'source_vat_pence',v_row.source_vat_pence,'finalised_at_utc',v_row.finalised_at_utc) else '{}'::jsonb end;
+    if v_report then
+      if v_row.row_finalisation_state<>'SOURCE_REPORT_LINE' or v_row.break_minutes is not null
+        or v_row.actual_net_minutes is not null or v_row.finalised_at_utc is not null or v_row.finalised_by is not null or v_row.role_band_source is not null
+        or v_row.source_commission_pence is not null or v_row.source_total_cost_pence is not null
+        or v_row.source_expense_pence is not null or v_row.source_expense_parse_state<>'NOT_APPLICABLE'
+        or v_row.source_money_parse_state<>'VALID'
+        or v_row.source_qualification_profile_version is distinct from 'SOURCE_INVOICE_MONEY_PENCE_V1' then
+        raise exception 'WEEKLY_SOURCE_REPORT_PAY_FACTS_FORBIDDEN' using errcode='22023'; end if;
+      v_hash:=private.weekly_source_self_bill_report_row_hash_v1(v_item-array[
+        'break_minutes','actual_net_minutes','row_finalisation_state','finalised_by','role_band_source',
+        'source_commission_pence','source_total_cost_pence','source_money_parse_state','source_qualification_profile_version',
+        'source_expense_pence','source_expense_parse_state','normalised_row_hash']);
+    else
+      if v_row.row_finalisation_state='SOURCE_REPORT_LINE' then
+        raise exception 'WEEKLY_SOURCE_REPORT_ROW_PROFILE_INVALID' using errcode='22023'; end if;
+      v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_NORMALISED_ROW_V1',v_payload);
+    end if;
+    if nullif(v_item->>'normalised_row_hash','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'normalised_row_hash','WEEKLY_SOURCE_NORMALISED_ROW_HASH_INVALID'
+       ) is distinct from v_hash then
+      raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_HASH_MISMATCH' using errcode='22023';
+    end if;
+    select * into v_existing_row
+    from public.weekly_source_upload_rows
+    where upload_id=v_upload_id and source_row_ordinal=v_row.source_row_ordinal;
+    if found then
+      if v_existing_row.normalised_row_hash is distinct from v_hash then
+        raise exception 'WEEKLY_SOURCE_NORMALISED_ROW_REPLAY_CONFLICT' using errcode='55000';
+      end if;
+    else
+      -- Two accepted economic rows of one upload may not share an external
+      -- source key.  For HealthRoster the key is the `Request Id`, which the
+      -- profile uses as durable work identity, so a repeat is a duplicate
+      -- economic row (14 s4.2.8).  For NHSP the broker stages the Reference
+      -- Number, which 24 s9 says is evidence and never identity; a report that
+      -- repeats one is a source shape this build cannot account for, and 14
+      -- s4.2.8 blocks it.
+      --
+      -- Either way the refusal must be STATED.  Until this guard existed the
+      -- only thing that stopped it was the unique index
+      -- weekly_source_upload_rows_external_key_uq, which reached the caller as
+      -- a bare 23505 from a constraint name - an unhandled error, not a
+      -- refusal, and the exact shape a positive and its same-Reference full
+      -- negative produce.  A unique index must never be the statement of a
+      -- rule (standing rule 5); it stays as the backstop behind this one.
+      if v_row.external_source_key is not null
+         and exists(
+           select 1
+           from public.weekly_source_upload_rows existing_key
+           where existing_key.upload_id=v_upload_id
+             and existing_key.external_source_key=v_row.external_source_key
+             and existing_key.source_row_ordinal is distinct from v_row.source_row_ordinal
+         ) then
+        raise exception 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY'
+          using errcode='55000',
+                detail=pg_catalog.jsonb_build_object(
+                  'upload_id',v_upload_id,
+                  'source_row_ordinal',v_row.source_row_ordinal,
+                  'external_source_key',v_row.external_source_key
+                )::text;
+      end if;
+      insert into public.weekly_source_upload_rows(
+        upload_id,source_row_ordinal,external_source_key,source_candidate_identity,
+        source_client_identity,work_date,start_at_local,end_at_local,break_minutes,
+        actual_net_minutes,row_finalisation_state,finalised_by,role_band_source,source_gross_pence,source_vat_pence,finalised_at_utc,
+        source_commission_pence,source_total_cost_pence,source_shift_charge_pence,
+        source_money_parse_state,source_qualification_profile_version,
+        source_expense_pence,source_expense_parse_state,normalised_row_hash,
+        bounded_raw_columns_json
+      ) values (
+        v_upload_id,v_row.source_row_ordinal,v_row.external_source_key,
+        v_row.source_candidate_identity,v_row.source_client_identity,v_row.work_date,
+        v_row.start_at_local,v_row.end_at_local,v_row.break_minutes,v_row.actual_net_minutes,
+        v_row.row_finalisation_state,v_row.finalised_by,v_row.role_band_source,v_row.source_gross_pence,v_row.source_vat_pence,v_row.finalised_at_utc,
+        v_row.source_commission_pence,v_row.source_total_cost_pence,
+        v_row.source_shift_charge_pence,v_row.source_money_parse_state,
+        v_row.source_qualification_profile_version,v_row.source_expense_pence,
+        v_row.source_expense_parse_state,v_hash,v_row.bounded_raw_columns_json
+      );
+      v_rows_added:=v_rows_added+1;
+    end if;
+  end loop;
+
+  for v_item in
+    select value from pg_catalog.jsonb_array_elements(
+      coalesce(p_request->'money_evidence','[]'::jsonb)
+    )
+  loop
+    if pg_catalog.jsonb_typeof(v_item)<>'object' then
+      raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_INVALID' using errcode='22023';
+    end if;
+    select key into v_key from pg_catalog.jsonb_object_keys(v_item) key
+    where key not in (
+      'source_row_ordinal','money_field_kind','source_column_index','cell_coordinate',
+      'source_kind','original_token','decoded_token','cell_type_marker',
+      'formula_present','parse_state','parsed_pence','source_file_sha256','token_sha256'
+    ) order by key limit 1;
+    if v_key is not null then
+      raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_UNKNOWN_FIELD'
+        using errcode='22023',detail=v_key;
+    end if;
+    begin
+      v_money:=pg_catalog.jsonb_populate_record(null::public.weekly_source_money_cell_evidence,v_item);
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_TYPE_INVALID' using errcode='22023';
+    end;
+    v_money.formula_present:=coalesce(v_money.formula_present,false);
+    if v_money.source_row_ordinal is null or v_money.source_row_ordinal<1
+       or v_money.source_row_ordinal>v_upload.physical_row_count
+       or not ((not v_report and v_money.money_field_kind in ('COMMISSION','TOTAL_COST','FMC','BOTTOM_TOTAL_COST','SOURCE_NET','SOURCE_GROSS','SOURCE_VAT'))
+          or (v_report and v_money.money_field_kind in ('SOURCE_NET','SOURCE_VAT','SOURCE_GROSS')))
+       or v_money.source_column_index is null or v_money.source_column_index<0
+       or v_money.source_kind not in (
+         'XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN','HTML_DECODED_TEXT','CSV_DECODED_TEXT'
+       )
+       or v_money.original_token is null or v_money.decoded_token is null
+       or v_money.parse_state not in (
+         'VALID','MISSING','INVALID','EXCESS_PRECISION','FORMULA',
+         'UNSUPPORTED_CELL_TYPE','OVERFLOW'
+       ) then
+      raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_INVALID' using errcode='22023';
+    end if;
+    if nullif(v_item->>'source_file_sha256','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'source_file_sha256','WEEKLY_SOURCE_EVIDENCE_FILE_HASH_INVALID'
+       ) is distinct from v_upload.content_sha256 then
+      raise exception 'WEEKLY_SOURCE_EVIDENCE_FILE_HASH_MISMATCH' using errcode='22023';
+    end if;
+    v_payload:=pg_catalog.jsonb_build_object(
+      'source_row_ordinal',v_money.source_row_ordinal,
+      'money_field_kind',v_money.money_field_kind,
+      'source_column_index',v_money.source_column_index,
+      'cell_coordinate',v_money.cell_coordinate,
+      'source_kind',v_money.source_kind,
+      'original_token',v_money.original_token,
+      'decoded_token',v_money.decoded_token,
+      'cell_type_marker',v_money.cell_type_marker,
+      'formula_present',v_money.formula_present,
+      'parse_state',v_money.parse_state,
+      'parsed_pence',v_money.parsed_pence
+    );
+    v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_MONEY_TOKEN_V1',v_payload);
+    if nullif(v_item->>'token_sha256','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'token_sha256','WEEKLY_SOURCE_MONEY_TOKEN_HASH_INVALID'
+       ) is distinct from v_hash then
+      raise exception 'WEEKLY_SOURCE_MONEY_TOKEN_HASH_MISMATCH' using errcode='22023';
+    end if;
+    select * into v_existing_money
+    from public.weekly_source_money_cell_evidence
+    where upload_id=v_upload_id and source_row_ordinal=v_money.source_row_ordinal
+      and money_field_kind=v_money.money_field_kind;
+    if found then
+      if v_existing_money.token_sha256 is distinct from v_hash
+         or v_existing_money.source_file_sha256 is distinct from v_upload.content_sha256 then
+        raise exception 'WEEKLY_SOURCE_MONEY_EVIDENCE_REPLAY_CONFLICT' using errcode='55000';
+      end if;
+    else
+      insert into public.weekly_source_money_cell_evidence(
+        upload_id,source_row_ordinal,money_field_kind,source_column_index,
+        cell_coordinate,source_kind,original_token,decoded_token,cell_type_marker,
+        formula_present,parse_state,parsed_pence,source_file_sha256,token_sha256
+      ) values (
+        v_upload_id,v_money.source_row_ordinal,v_money.money_field_kind,
+        v_money.source_column_index,v_money.cell_coordinate,v_money.source_kind,
+        v_money.original_token,v_money.decoded_token,v_money.cell_type_marker,
+        v_money.formula_present,v_money.parse_state,v_money.parsed_pence,
+        v_upload.content_sha256,v_hash
+      );
+      v_money_added:=v_money_added+1;
+    end if;
+  end loop;
+
+  for v_item in
+    select value from pg_catalog.jsonb_array_elements(
+      coalesce(p_request->'expense_evidence','[]'::jsonb)
+    )
+  loop
+    if pg_catalog.jsonb_typeof(v_item)<>'object' then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_INVALID' using errcode='22023';
+    end if;
+    select key into v_key from pg_catalog.jsonb_object_keys(v_item) key
+    where key not in (
+      'source_row_ordinal','source_column_index','cell_coordinate','source_kind',
+      'original_token','decoded_token','cell_type_marker','formula_present',
+      'lexical_profile_version','parse_state','parsed_pence',
+      'source_file_sha256','token_sha256'
+    ) order by key limit 1;
+    if v_key is not null then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_UNKNOWN_FIELD'
+        using errcode='22023',detail=v_key;
+    end if;
+    begin
+      v_expense:=pg_catalog.jsonb_populate_record(null::public.weekly_source_expense_cell_evidence,v_item);
+    exception when others then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_TYPE_INVALID' using errcode='22023';
+    end;
+    v_expense.formula_present:=coalesce(v_expense.formula_present,false);
+    v_expense.lexical_profile_version:=coalesce(
+      v_expense.lexical_profile_version,'SOURCE_FIXED_EXPENSE_PENCE_V1'
+    );
+    if v_expense.source_row_ordinal is null or v_expense.source_row_ordinal<1
+       or v_expense.source_row_ordinal>v_upload.physical_row_count
+       or v_expense.source_column_index is null or v_expense.source_column_index<0
+       or v_expense.source_kind not in (
+         'XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN','HTML_DECODED_TEXT','CSV_DECODED_TEXT'
+       )
+       or v_expense.original_token is null or v_expense.decoded_token is null
+       or v_expense.lexical_profile_version<>'SOURCE_FIXED_EXPENSE_PENCE_V1'
+       or v_expense.parse_state not in (
+         'VALID','OMITTED_ZERO','INVALID','EXCESS_PRECISION','FORMULA',
+         'UNSUPPORTED_CELL_TYPE','OVERFLOW'
+       ) then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_INVALID' using errcode='22023';
+    end if;
+    if nullif(v_item->>'source_file_sha256','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'source_file_sha256','WEEKLY_SOURCE_EVIDENCE_FILE_HASH_INVALID'
+       ) is distinct from v_upload.content_sha256 then
+      raise exception 'WEEKLY_SOURCE_EVIDENCE_FILE_HASH_MISMATCH' using errcode='22023';
+    end if;
+    v_payload:=pg_catalog.jsonb_build_object(
+      'source_row_ordinal',v_expense.source_row_ordinal,
+      'source_column_index',v_expense.source_column_index,
+      'cell_coordinate',v_expense.cell_coordinate,
+      'source_kind',v_expense.source_kind,
+      'original_token',v_expense.original_token,
+      'decoded_token',v_expense.decoded_token,
+      'cell_type_marker',v_expense.cell_type_marker,
+      'formula_present',v_expense.formula_present,
+      'lexical_profile_version',v_expense.lexical_profile_version,
+      'parse_state',v_expense.parse_state,
+      'parsed_pence',v_expense.parsed_pence
+    );
+    v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_EXPENSE_TOKEN_V1',v_payload);
+    if nullif(v_item->>'token_sha256','') is not null
+       and private.weekly_source_hex32_v1(
+         v_item->>'token_sha256','WEEKLY_SOURCE_EXPENSE_TOKEN_HASH_INVALID'
+       ) is distinct from v_hash then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_TOKEN_HASH_MISMATCH' using errcode='22023';
+    end if;
+    select * into v_existing_expense
+    from public.weekly_source_expense_cell_evidence
+    where upload_id=v_upload_id and source_row_ordinal=v_expense.source_row_ordinal;
+    if found then
+      if v_existing_expense.token_sha256 is distinct from v_hash
+         or v_existing_expense.source_file_sha256 is distinct from v_upload.content_sha256 then
+        raise exception 'WEEKLY_SOURCE_EXPENSE_EVIDENCE_REPLAY_CONFLICT' using errcode='55000';
+      end if;
+    else
+      insert into public.weekly_source_expense_cell_evidence(
+        upload_id,source_row_ordinal,source_column_index,cell_coordinate,source_kind,
+        original_token,decoded_token,cell_type_marker,formula_present,
+        lexical_profile_version,parse_state,parsed_pence,source_file_sha256,token_sha256
+      ) values (
+        v_upload_id,v_expense.source_row_ordinal,v_expense.source_column_index,
+        v_expense.cell_coordinate,v_expense.source_kind,v_expense.original_token,
+        v_expense.decoded_token,v_expense.cell_type_marker,v_expense.formula_present,
+        v_expense.lexical_profile_version,v_expense.parse_state,v_expense.parsed_pence,
+        v_upload.content_sha256,v_hash
+      );
+      v_expenses_added:=v_expenses_added+1;
+    end if;
+  end loop;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','STAGING','upload_id',v_upload_id,
+    'inserted',pg_catalog.jsonb_build_object(
+      'physical_rows',v_physical_added,'normalised_rows',v_rows_added,
+      'money_evidence',v_money_added,'expense_evidence',v_expenses_added
+    ),
+    'stored',pg_catalog.jsonb_build_object(
+      'physical_rows',(select count(*) from public.weekly_source_physical_rows where upload_id=v_upload_id),
+      'normalised_rows',(select count(*) from public.weekly_source_upload_rows where upload_id=v_upload_id),
+      'money_evidence',(select count(*) from public.weekly_source_money_cell_evidence where upload_id=v_upload_id),
+      'expense_evidence',(select count(*) from public.weekly_source_expense_cell_evidence where upload_id=v_upload_id)
+    )
+  );
+end;
+$function$;

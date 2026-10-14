@@ -61,8 +61,8 @@ declare
   v_roster jsonb;
   v_timesheet jsonb;
 begin
-  if (select count(*) from public.weekly_source_format_profiles where active)<>5 then
-    raise exception 'expected five active release-controlled source profiles';
+  if (select count(*) from public.weekly_source_format_profiles where active)<>6 then
+    raise exception 'expected six active release-controlled source profiles';
   end if;
   if exists(
     select 1 from public.weekly_source_format_profiles

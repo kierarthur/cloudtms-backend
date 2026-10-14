@@ -1,0 +1,56 @@
+--- a/js/main.js
++++ b/js/main.js
+@@ -305683,2 +305683,7 @@
+-    const vat = ex * (vatRatePct / 100);
+-    subtotal_ex_vat += ex;
++    const source = invData.weekly_source_invoice;
++    const helper = window.CloudTmsSourceInvoiceAdjustments;
++    const vat = source?.is_weekly_source_invoice === true
++      ? (Object.prototype.hasOwnProperty.call(a,'vat_amount') ? Number(a.vat_amount)
++        : Number(helper.defaultVat(a.amount_ex_vat,helper.context(source).default_vat_rate_pct)))
++      : ex * (vatRatePct / 100);
++    subtotal_ex_vat += ex;
+@@ -306011,2 +306016,4 @@
+-    amount_ex_vat: a.amount_ex_vat
+-  })).filter
++    amount_ex_vat: a.amount_ex_vat,
++    ...(invoiceModalGetInvoiceData(modalCtx).weekly_source_invoice?.is_weekly_source_invoice === true
++      && Object.prototype.hasOwnProperty.call(a,'vat_amount') ? {vat_amount:a.vat_amount} : {})
++  })).filter
+@@ -308382,3 +308389,11 @@
+-  const { invoice } = invoiceModalGetInvoiceData(parentCtx);
+-
+-  // Ensure showModal
++  const sourceInvoiceData = invoiceModalGetInvoiceData(parentCtx);
++  const { invoice } = sourceInvoiceData;
++  if (sourceInvoiceData.weekly_source_invoice?.is_weekly_source_invoice === true) {
++    return window.CloudTmsSourceInvoiceAdjustments?.open(parentCtx,{
++      invoiceData:sourceInvoiceData,canEdit:invoiceModalIsEditable(invoice,parentCtx,'lines'),
++      showModal,document,newToken:invoiceModalNewClientToken,
++      close:()=>document.getElementById('btnCloseModal')?.click(),rerender
++    });
++  }
++
++  // Ensure showModal
+@@ -310756,4 +310771,8 @@
+-        ` : ''}
+-      </div>
+-
+-      ${isEditing && hasPendingEdits ?
++        ` : ''}
++        ${isEditing && weekly_source_invoice?.is_weekly_source_invoice === true
++          && window.CloudTmsSourceInvoiceAdjustments?.context(weekly_source_invoice) ? `
++          <button type="button" class="btn btn-sm btn-outline-secondary" data-action="inv-add-adjustment" ${addDisabledAttr}>+ Add adjustment</button>
++        ` : ''}
++      </div>
++
++      ${isEditing && hasPendingEdits ?
+@@ -310956,3 +310975,5 @@
+-        <tbody>${sourceBody || `<tr><td colspan="${isEditing ? 7 : 6}" class="text-muted">No source lines remain on this invoice.</td></tr>`}</tbody>
+-      </table>
+-    </div>`;
++        <tbody>${sourceBody || `<tr><td colspan="${isEditing ? 7 : 6}" class="text-muted">No source lines remain on this invoice.</td></tr>`}</tbody>
++      </table>
++      ${window.CloudTmsSourceInvoiceAdjustments?.rows(items,modalCtx.invoiceEdits?.add_adjustments,
++        removedSet,weeklySource,isEditing,esc,fmtMoneyLocal) || ''}
++    </div>`;

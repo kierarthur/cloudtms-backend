@@ -1,0 +1,25 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_FATAL_GIT_PATH_FORWARD_V1",
+  "source_only": true,
+  "deltas": [
+    {
+      "file": "source-equivalence.mjs",
+      "predecessor_sha256": "f624c98cf7542d9091131455fc8e7ff4ee73dfaf5f9ba5db358a0434ca5a212e",
+      "successor_sha256": "372270e18c7a56d904db0242ea21fcb2120212ef7b068f6e0abd061c7ec0c973",
+      "reverse_matches_entire_predecessor": true
+    },
+    {
+      "file": "weekly-source-protected-execution-tree.mjs",
+      "predecessor_sha256": "33361a5028275216e3bb6d660abbcdd2534be46a053e13034313af950a745878",
+      "successor_sha256": "e450c383cf8660dafcda4d7e1cea975fe9c73acae7c24988559fef6de040e6f2",
+      "reverse_matches_entire_predecessor": true
+    }
+  ],
+  "new_signatures": 0,
+  "new_grants": 0,
+  "root_source_commit": "cea15289e0283e3383e71f0acb8b18ce184647c2",
+  "root_private_preserved": 232,
+  "planned_complete_private_union": 258,
+  "actual_native_acceptance": false,
+  "actual_activation": false
+}

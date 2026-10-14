@@ -1,0 +1,499 @@
+-- Complete existing row reader: carry OPEN questions for dated import-authoritative CYCLE scopes.
+-- Native qualified coverage remains the one protection exclusion; immutable comparisons are not rewritten.
+create or replace function private.weekly_source_office_query_groups_v1(
+  p_source_cycle_id uuid,
+  p_projection_publication_id uuid,
+  p_filters jsonb default '{}'::jsonb
+) returns table(
+  group_key text,
+  candidate_id uuid,
+  client_id uuid,
+  manager_recipient_route_key bytea,
+  candidate_name text,
+  client_name text,
+  incident_ids uuid[],
+  accept_incident_ids uuid[],
+  missing_scopes jsonb,
+  children jsonb,
+  issue_count integer,
+  candidate_asked boolean,
+  manager_informed boolean,
+  outreach_eligible boolean,
+  manager_eligible boolean,
+  candidate_app_available boolean,
+  first_seen_at_utc timestamptz,
+  status_text text,
+  status_tone text,
+  issue_summary text
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with cycle_context as (
+    select cycle.id,cycle.source_group_id,cycle.finalisation_week_ending,
+      source_group.environment,source_group.agency_id,source_group.source_family,
+      publication.upload_id,
+      current_upload.source_format_profile_id,
+      current_profile.profile_code,publication.authority_scope_kind,
+      private.weekly_source_checking_client_scope_v1(publication.id) checking_client_id
+    from public.weekly_source_cycles cycle
+    join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+    join public.weekly_source_projection_publications publication
+      on publication.id=p_projection_publication_id
+     and publication.source_cycle_id=cycle.id
+     and publication.state='CURRENT'
+    join public.weekly_source_uploads current_upload
+      on current_upload.id=publication.upload_id
+    join public.weekly_source_format_profiles current_profile
+      on current_profile.id=current_upload.source_format_profile_id
+    where cycle.id=p_source_cycle_id
+  ), incident_facts as (
+    select incident.id incident_id,incident.candidate_id,incident.client_id,
+      incident.work_event_id,cycle_context.source_group_id,
+      incident.candidate_action_state,incident.manager_action_state,
+      incident.manager_potential_state,incident.created_at_utc,
+      comparison.issue_family,comparison.contract_id,
+      comparison.candidate_timesheet_id,comparison.source_presence,comparison.source_row_id,
+      comparison.candidate_start_at_local,comparison.candidate_end_at_local,
+      comparison.candidate_break_minutes,comparison.system_start_at_local,
+      comparison.system_end_at_local,comparison.system_break_minutes,
+      work_event.work_date,contract.role job_role,route_context.value route_context,
+      candidate_reply.bounded_payload_json->>'choice' candidate_reply_choice,
+      candidate_reply.occurred_at_utc candidate_replied_at,
+      candidate_delivery.contacted_at_utc candidate_contacted_at,
+      manager_reply.bounded_payload_json->>'response_kind' manager_reply_kind,
+      manager_reply.occurred_at_utc manager_replied_at,
+      manager_delivery.contacted_at_utc manager_contacted_at,
+      manager_item.intended_start_at_local,manager_item.intended_end_at_local,
+      manager_item.intended_break_minutes
+    from cycle_context
+    join public.weekly_discrepancy_incidents incident
+      on incident.source_cycle_id=cycle_context.id and incident.state='OPEN'
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_source_uploads comparison_upload
+      on comparison_upload.id=comparison.comparison_upload_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    left join public.contracts contract on contract.id=comparison.contract_id
+    -- Replies belong to the current incident episode. A prior question's answer
+    -- must never be presented as the answer to materially changed hours.
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='CANDIDATE_RESPONDED'
+        and incident.candidate_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) candidate_reply on true
+    left join lateral (
+      select min(command.provider_accepted_at_utc) contacted_at_utc
+      from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_message_dispatch_commands command
+        on command.candidate_generation_id=membership.candidate_generation_id
+        and command.state='ACCEPTED'
+      where membership.incident_id=incident.id
+        and membership.comparison_revision_id=incident.current_comparison_revision_id
+    ) candidate_delivery on true
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='MANAGER_RESPONDED'
+        and incident.manager_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) manager_reply on true
+    left join lateral (
+      select min(command.provider_accepted_at_utc) contacted_at_utc
+      from public.weekly_manager_review_items review_item
+      join public.weekly_manager_review_batches review_batch on review_batch.id=review_item.review_batch_id
+      join public.weekly_message_dispatch_commands command
+        on command.message_render_id=review_batch.message_render_id
+        and command.state='ACCEPTED'
+      where review_item.incident_id=incident.id
+        and review_item.incident_episode=incident.episode_number
+    ) manager_delivery on true
+    left join public.weekly_manager_review_items manager_item
+      on manager_item.id=nullif(manager_reply.bounded_payload_json->>'review_item_id','')::uuid
+      and manager_item.incident_id=incident.id
+      and manager_item.incident_episode=incident.episode_number
+    cross join lateral (
+      select private.weekly_source_office_route_key_v1(
+        incident.source_cycle_id,incident.candidate_id,incident.client_id,
+        comparison.contract_id,work_event.work_date
+      ) value
+    ) route_context
+    -- A provisional comparison can remain byte-for-byte unchanged when a new
+    -- file covers its date. Its immutable revision still names the prior
+    -- publication; visibility is based on the OPEN incident, not a rewrite of
+    -- that revision or a second notification clock.
+    where comparison.issue_family<>'CANDIDATE_TIMESHEET_MISSING'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (cycle_context.checking_client_id is null or incident.client_id=cycle_context.checking_client_id)
+      and (comparison.projection_publication_id=p_projection_publication_id
+        or (cycle_context.profile_code='NHSP_PREFINAL_RELEASED_V1'
+          and comparison_upload.source_cycle_id=cycle_context.id
+          and comparison_upload.source_format_profile_id=cycle_context.source_format_profile_id)
+        or (cycle_context.authority_scope_kind='CYCLE'
+          and comparison_upload.source_cycle_id=cycle_context.id
+          and comparison_upload.source_format_profile_id=cycle_context.source_format_profile_id
+          and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date)))
+  ), manual_facts as (
+    select review.*,current_row.id current_source_row_id,
+      current_row.normalised_row_hash current_source_row_hash,
+      current_row.start_at_local,current_row.end_at_local,
+      current_row.break_minutes,contract.role job_role,
+      coalesce(nullif(office_user.display_name,''),'Office user') opened_by_name,
+      route_context.value route_context
+    from cycle_context
+    join private.weekly_source_manual_reviews review
+      on review.source_cycle_id=cycle_context.id and review.state='OPEN'
+    join public.weekly_source_upload_rows source_row on source_row.id=review.upload_row_id
+    join public.contracts contract on contract.id=review.contract_id
+    left join public.tms_users office_user on office_user.id=review.opened_by_user_id
+    left join lateral (
+      select candidate_row.*
+      from public.weekly_source_upload_rows candidate_row
+      join public.weekly_source_uploads candidate_upload on candidate_upload.id=candidate_row.upload_id
+      join lateral (
+        select mapping.work_event_id,mapping.mapping_state
+        from public.weekly_source_row_resolutions mapping
+        where mapping.upload_row_id=candidate_row.id
+        order by mapping.generation desc,mapping.id desc limit 1
+      ) current_mapping on current_mapping.work_event_id=review.work_event_id
+        and current_mapping.mapping_state='RESOLVED'
+      where candidate_upload.source_cycle_id=review.source_cycle_id
+        and candidate_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+        and (
+          exists(select 1 from public.weekly_source_client_manifests manifest
+            join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+            where manifest.source_cycle_id=review.source_cycle_id
+              and manifest.client_id=review.client_id
+              and revision.state='CURRENT' and revision.upload_id=candidate_upload.id)
+          or (not exists(select 1 from public.weekly_source_client_manifests manifest
+              join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+              where manifest.source_cycle_id=review.source_cycle_id
+                and manifest.client_id=review.client_id and revision.state='CURRENT')
+            and exists(select 1 from public.weekly_source_projection_publications publication
+              where publication.source_cycle_id=review.source_cycle_id
+                and publication.upload_id=candidate_upload.id and publication.state='CURRENT'))
+        )
+      order by candidate_row.created_at_utc desc,candidate_row.id desc limit 1
+    ) current_row on true
+    cross join lateral (select private.weekly_source_office_route_key_v1(
+      review.source_cycle_id,review.candidate_id,review.client_id,
+      review.contract_id,review.work_date) value) route_context
+    where cycle_context.checking_client_id is null or review.client_id=cycle_context.checking_client_id
+  ), missing_rows as (
+    select cycle_context.id source_cycle_id,
+      resolution.candidate_id,resolution.client_id,resolution.contract_id,
+      row.id source_row_id,row.normalised_row_hash,row.work_date,
+      row.start_at_local,row.end_at_local,row.break_minutes,row.actual_net_minutes,
+      row.row_finalisation_state,row.created_at_utc,resolution.id row_resolution_id,
+      resolution.work_event_id,resolution.source_row_fingerprint,
+      resolution.contract_and_rate_fingerprint,resolution.effective_policy_fingerprint,
+      (date_trunc('week',row.work_date)::date+6) week_ending,
+      coalesce(lineage.timesheet_id,root_contract_week.timesheet_id) timesheet_id,
+      route_context.value route_context
+    from cycle_context
+    join public.weekly_source_upload_rows row on row.upload_id=cycle_context.upload_id
+    join lateral (
+      select candidate.* from public.weekly_source_row_resolutions candidate
+      where candidate.upload_row_id=row.id
+      order by candidate.generation desc,candidate.id desc limit 1
+    ) resolution on resolution.mapping_state='RESOLVED'
+    left join public.weekly_source_row_timesheet_lineages lineage
+      on lineage.row_resolution_id=resolution.id
+    left join lateral (
+      select contract_week.timesheet_id
+      from public.contract_weeks contract_week
+      where contract_week.contract_id=resolution.contract_id
+        and contract_week.week_ending_date=(date_trunc('week',row.work_date)::date+6)
+        and contract_week.additional_seq=0
+        and not contract_week.is_adjustment
+        and contract_week.status<>'CANCELLED'::public.contract_week_status_enum
+      order by contract_week.created_at desc,contract_week.id desc
+      limit 1
+    ) root_contract_week on true
+    left join public.timesheets timesheet
+      on timesheet.timesheet_id=coalesce(lineage.timesheet_id,root_contract_week.timesheet_id)
+     and timesheet.is_current and timesheet.revoked_at is null
+     and timesheet.archived_at_utc is null
+     and timesheet.sheet_scope='WEEKLY' and timesheet.line_type='HOURS'
+    cross join lateral (
+      select private.weekly_source_office_route_key_v1(
+        cycle_context.id,resolution.candidate_id,resolution.client_id,
+        resolution.contract_id,row.work_date
+      ) value
+    ) route_context
+    where row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+      and (cycle_context.checking_client_id is null or resolution.client_id=cycle_context.checking_client_id)
+      and row.actual_net_minutes>0
+      and not exists (
+        select 1 from public.weekly_source_client_manifests manifest
+        join public.weekly_source_final_revisions final_revision
+          on final_revision.id=manifest.final_revision_id
+        where manifest.source_cycle_id=cycle_context.id
+          and manifest.client_id=resolution.client_id
+          and final_revision.state='CURRENT'
+      )
+      and route_context.value->>'authority_mode'='SOURCE_AUTHORITY'
+      and route_context.value->>'document_mode'='CHECK_ONLY'
+      and (timesheet.timesheet_id is null
+        or timesheet.r2_nurse_key is null or timesheet.img_sha256_nurse is null)
+  ), missing_scopes as (
+    select missing_rows.source_cycle_id,missing_rows.candidate_id,
+      missing_rows.client_id,missing_rows.contract_id,missing_rows.week_ending,
+      min(missing_rows.work_date) first_work_date,
+      (pg_catalog.array_agg(missing_rows.source_row_id order by
+        missing_rows.work_date,missing_rows.start_at_local,
+        missing_rows.end_at_local,missing_rows.source_row_id))[1] first_source_row_id,
+      min(missing_rows.created_at_utc) first_seen_at_utc,
+      (min(missing_rows.route_context->>'route_key'))::text route_key_hex,
+      bool_and(coalesce((missing_rows.route_context->>'candidate_queries_enabled')::boolean,false))
+        candidate_queries_enabled,
+      private.weekly_source_office_missing_scope_fingerprint_v1(
+        p_projection_publication_id,missing_rows.candidate_id,missing_rows.client_id,
+        missing_rows.contract_id,missing_rows.week_ending
+      ) expected_source_fingerprint,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'incident_id',null,'row_key','missing-'||missing_rows.source_row_id::text,
+        'day_date',to_char(missing_rows.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',coalesce(contract.role,''),
+        'candidate_hours','Timesheet not submitted',
+        'system_hours',case when missing_rows.start_at_local is null then pg_catalog.chr(8212)
+          else to_char(missing_rows.start_at_local,'HH24:MI')||'-'||to_char(missing_rows.end_at_local,'HH24:MI') end,
+        'issue','Timesheet missing',
+        'status',pg_catalog.jsonb_build_object('text','Waiting for Timesheet','tone','warning'),
+        'accept_eligible',false,'actions',pg_catalog.jsonb_build_array('View details')
+      ) order by missing_rows.work_date,missing_rows.start_at_local,
+        missing_rows.end_at_local,missing_rows.source_row_id) children
+    from missing_rows
+    join public.contracts contract on contract.id=missing_rows.contract_id
+    group by missing_rows.source_cycle_id,missing_rows.candidate_id,
+      missing_rows.client_id,missing_rows.contract_id,missing_rows.week_ending
+  ), incident_grouped as (
+    select (incident_facts.route_context->>'group_key')::text group_key,
+      incident_facts.candidate_id,incident_facts.client_id,
+      pg_catalog.decode(incident_facts.route_context->>'route_key','hex') manager_recipient_route_key,
+      pg_catalog.array_agg(incident_facts.incident_id order by incident_facts.incident_id) incident_ids,
+      coalesce(pg_catalog.array_agg(incident_facts.incident_id order by incident_facts.incident_id)
+        filter (where incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'),'{}'::uuid[])
+        accept_incident_ids,
+      min(incident_facts.created_at_utc) first_seen_at_utc,
+      bool_or(incident_facts.candidate_action_state in ('ASKED','RESPONDED')) candidate_asked,
+      bool_or(incident_facts.manager_action_state in ('SENT','RESPONDED')) manager_informed,
+      bool_and(coalesce((incident_facts.route_context->>'candidate_queries_enabled')::boolean,false))
+        and bool_or(incident_facts.candidate_action_state<>'NOT_REQUIRED') candidate_queries_enabled,
+      bool_and(coalesce((incident_facts.route_context->>'manager_queries_enabled')::boolean,false)
+        and coalesce((incident_facts.route_context->>'manager_recipient_present')::boolean,false))
+        manager_queries_enabled,
+      bool_and((incident_facts.candidate_timesheet_id is not null
+        or (private.weekly_source_is_import_authoritative_v1(incident_facts.client_id,incident_facts.contract_id,incident_facts.work_date)
+          and (incident_facts.issue_family='HEALTHROSTER_NOT_FINALISED'
+            or private.weekly_source_expected_week_question_v1(incident_facts.incident_id))))
+        and incident_facts.manager_potential_state='AVAILABLE'
+        and incident_facts.manager_action_state not in ('RESPONDED','NOT_REQUIRED')) manager_eligible,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'incident_id',incident_facts.incident_id,
+        'candidate_shift_absent_from_import',incident_facts.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED'
+          and incident_facts.source_presence='ABSENT' and incident_facts.source_row_id is null
+          and incident_facts.candidate_timesheet_id is not null
+          and incident_facts.candidate_start_at_local is not null
+          and incident_facts.candidate_end_at_local>incident_facts.candidate_start_at_local,
+        'candidate_response',case incident_facts.candidate_reply_choice
+          when 'CANDIDATE_CORRECT' then 'My hours are correct'
+          when 'CANDIDATE_WRONG' then 'Accepted system hours'
+          when 'NEITHER_CORRECT' then 'Submitted corrected hours'
+          else null end,
+        'candidate_responded_at',to_char(incident_facts.candidate_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'candidate_contacted_at',to_char(incident_facts.candidate_contacted_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_response',case incident_facts.manager_reply_kind
+          when 'SYSTEM_CORRECT' then 'System hours are correct'
+          when 'CANDIDATE_DID_NOT_WORK' then 'Candidate did not work'
+          when 'MANAGER_CORRECTED_SOURCE' then 'Reported a source correction'
+          else null end,
+        'manager_responded_at',to_char(incident_facts.manager_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_contacted_at',to_char(incident_facts.manager_contacted_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_intended_hours',case when incident_facts.manager_reply_kind='MANAGER_CORRECTED_SOURCE'
+          then to_char(incident_facts.intended_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.intended_end_at_local,'HH24:MI')
+            ||' ('||incident_facts.intended_break_minutes||' min break)' else null end,
+        'protected_pay_seed',case when incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'
+          then pg_catalog.jsonb_build_object('source_group_id',incident_facts.source_group_id,
+            'client_id',incident_facts.client_id,'candidate_id',incident_facts.candidate_id,
+            'work_event_id',incident_facts.work_event_id,'contract_id',incident_facts.contract_id,
+            'work_date',incident_facts.work_date,
+            'start',to_char(coalesce(incident_facts.candidate_start_at_local,incident_facts.system_start_at_local),'HH24:MI'),
+            'end',to_char(coalesce(incident_facts.candidate_end_at_local,incident_facts.system_end_at_local),'HH24:MI'),
+            'break_minutes',coalesce(incident_facts.candidate_break_minutes,incident_facts.system_break_minutes)) end,
+        'row_key','incident-'||incident_facts.incident_id::text,
+        'day_date',to_char(incident_facts.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',coalesce(incident_facts.job_role,''),
+        'candidate_hours',case when incident_facts.candidate_start_at_local is null then 'Timesheet not submitted'
+          else to_char(incident_facts.candidate_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.candidate_end_at_local,'HH24:MI')
+            ||case when incident_facts.candidate_break_minutes is null then '' else ' ('||incident_facts.candidate_break_minutes||' min break)' end end,
+        'system_hours',case when incident_facts.source_presence<>'PRESENT'
+          and not (incident_facts.source_presence='UNFINALISED'
+            and private.weekly_source_is_import_authoritative_v1(incident_facts.client_id,incident_facts.contract_id,incident_facts.work_date)
+            and incident_facts.system_start_at_local is not null
+            and incident_facts.system_end_at_local>incident_facts.system_start_at_local) then 'Not included'
+          else to_char(incident_facts.system_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.system_end_at_local,'HH24:MI')
+            ||case when incident_facts.system_break_minutes is null then '' else ' ('||incident_facts.system_break_minutes||' min break)' end end,
+        'issue',case incident_facts.issue_family
+          when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+          when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+          when 'REFERENCE_MISSING' then 'Reference missing'
+          when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+          else 'Needs review' end,
+        'status',pg_catalog.jsonb_build_object(
+          'text',case when incident_facts.manager_action_state='RESPONDED' then 'Manager responded'
+            when incident_facts.manager_action_state='SENT' then 'Manager informed'
+            when incident_facts.candidate_action_state='RESPONDED' then 'Candidate responded'
+            when incident_facts.candidate_action_state='ASKED' then 'Candidate asked' else 'Needs action' end,
+          'tone',case when incident_facts.candidate_action_state='NOT_ASKED' then 'warning' else 'info' end
+        ),'accept_eligible',incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY',
+        'actions',pg_catalog.jsonb_build_array('View details')
+      ) order by incident_facts.work_date,
+        coalesce(incident_facts.system_start_at_local,incident_facts.candidate_start_at_local),
+        incident_facts.incident_id) children,
+      pg_catalog.string_agg(distinct case incident_facts.issue_family
+        when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+        when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+        when 'REFERENCE_MISSING' then 'Reference missing'
+        when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+        else 'Needs review' end,', ' order by case incident_facts.issue_family
+        when 'SOURCE_HOURS_DIFFER' then 'Hours differ'
+        when 'SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Missing or not yet authorised'
+        when 'REFERENCE_MISSING' then 'Reference missing'
+        when 'HEALTHROSTER_NOT_FINALISED' then 'Not finalised'
+        else 'Needs review' end) issue_summary
+    from incident_facts
+    group by incident_facts.route_context->>'group_key',incident_facts.candidate_id,
+      incident_facts.client_id,incident_facts.route_context->>'route_key'
+  ), manual_grouped as (
+    select (manual.route_context->>'group_key')::text group_key,
+      manual.candidate_id,manual.client_id,
+      pg_catalog.decode(manual.route_context->>'route_key','hex') manager_recipient_route_key,
+      count(*)::integer review_count,min(manual.opened_at_utc) first_seen_at_utc,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'manual_review_id',manual.id,'incident_id',null,
+        'source_row_id',manual.current_source_row_id,
+        'current_source_row_hash',pg_catalog.encode(manual.current_source_row_hash,'hex'),
+        'row_key','manual-'||manual.id::text,
+        'day_date',to_char(manual.work_date,'Dy FMDD Mon YYYY'),
+        'job_role',manual.job_role,
+        'candidate_hours','See candidate Timesheet',
+        'system_hours',case when manual.current_source_row_id is null then 'Not in current import'
+          else to_char(manual.start_at_local,'HH24:MI')||'-'||
+            to_char(manual.end_at_local,'HH24:MI')||' ('||manual.break_minutes||' min break)' end,
+        'issue','Manually queried',
+        'manual_query',pg_catalog.jsonb_build_object(
+          'opened_by',manual.opened_by_name,
+          'opened_at_uk',to_char(manual.opened_at_utc at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+          'reason',manual.office_reason),
+        'status',pg_catalog.jsonb_build_object('text','Office review','tone','danger'),
+        'accept_eligible',false,
+        'protected_pay_seed',pg_catalog.jsonb_build_object(
+          'source_group_id',manual.source_group_id,
+          'client_id',manual.client_id,'candidate_id',manual.candidate_id,
+          'work_event_id',manual.work_event_id,'contract_id',manual.contract_id,
+          'manual_review_id',manual.id,
+          'work_date',manual.work_date,'start',to_char(manual.start_at_local,'HH24:MI'),
+          'end',to_char(manual.end_at_local,'HH24:MI'),
+          'break_minutes',manual.break_minutes),
+        'actions','[]'::jsonb
+      ) order by manual.work_date,manual.start_at_local,manual.id) children
+    from manual_facts manual
+    group by manual.route_context->>'group_key',manual.candidate_id,
+      manual.client_id,manual.route_context->>'route_key'
+  ), missing_grouped as (
+    select private.weekly_source_office_group_key_v1(
+        scope.source_cycle_id,scope.candidate_id,scope.client_id,
+        pg_catalog.decode(scope.route_key_hex,'hex')
+      ) group_key,
+      scope.candidate_id,scope.client_id,
+      pg_catalog.decode(scope.route_key_hex,'hex') manager_recipient_route_key,
+      pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'week_ending',scope.week_ending,'client_id',scope.client_id,
+        'contract_id',scope.contract_id,
+        'expected_source_fingerprint',pg_catalog.encode(scope.expected_source_fingerprint,'hex')
+      ) order by scope.week_ending,scope.client_id,scope.contract_id) scopes,
+      min(scope.first_seen_at_utc) first_seen_at_utc,
+      bool_and(scope.candidate_queries_enabled) candidate_queries_enabled,
+      pg_catalog.jsonb_agg(child.value order by scope.week_ending,scope.contract_id,child.ordinality) children
+    from missing_scopes scope
+    cross join lateral pg_catalog.jsonb_array_elements(scope.children) with ordinality child(value,ordinality)
+    group by scope.source_cycle_id,scope.candidate_id,scope.client_id,scope.route_key_hex
+  ), combined as (
+    select coalesce(incident.group_key,missing.group_key,manual.group_key) group_key,
+      coalesce(incident.candidate_id,missing.candidate_id,manual.candidate_id) candidate_id,
+      coalesce(incident.client_id,missing.client_id,manual.client_id) client_id,
+      coalesce(incident.manager_recipient_route_key,missing.manager_recipient_route_key,
+        manual.manager_recipient_route_key)
+        manager_recipient_route_key,
+      coalesce(incident.incident_ids,'{}'::uuid[]) incident_ids,
+      coalesce(incident.accept_incident_ids,'{}'::uuid[]) accept_incident_ids,
+      coalesce(missing.scopes,'[]'::jsonb) missing_scopes,
+      coalesce(incident.children,'[]'::jsonb)||coalesce(missing.children,'[]'::jsonb)
+        ||coalesce(manual.children,'[]'::jsonb) children,
+      coalesce(pg_catalog.array_length(incident.incident_ids,1),0)
+        +coalesce(pg_catalog.jsonb_array_length(missing.scopes),0)
+        +coalesce(manual.review_count,0) issue_count,
+      coalesce(incident.candidate_asked,false) candidate_asked,
+      coalesce(incident.manager_informed,false) manager_informed,
+      coalesce(incident.candidate_queries_enabled,true)
+        and coalesce(missing.candidate_queries_enabled,true) candidate_queries_enabled,
+      coalesce(incident.manager_eligible,false)
+        and pg_catalog.jsonb_array_length(coalesce(missing.scopes,'[]'::jsonb))=0 manager_eligible,
+      least(incident.first_seen_at_utc,missing.first_seen_at_utc,
+        manual.first_seen_at_utc) first_seen_at_utc,
+      case when manual.review_count>0 and (incident.group_key is not null or missing.group_key is not null)
+        then 'Multiple' when manual.review_count>0 then 'Manually queried'
+        else coalesce(incident.issue_summary,'Timesheet missing') end issue_summary
+    from incident_grouped incident
+    full join missing_grouped missing on missing.group_key=incident.group_key
+    full join manual_grouped manual on manual.group_key=coalesce(incident.group_key,missing.group_key)
+  ), named as (
+    select combined.*,coalesce(nullif(candidate.display_name,''),
+        nullif(pg_catalog.concat_ws(' ',candidate.first_name,candidate.last_name),''),
+        candidate.tms_ref,'Candidate') candidate_name,
+      client.name client_name,context.environment,
+      (select count(*)=1
+       from public.candidate_app_global_membership_links membership
+       join public.candidate_app_accounts account on account.id=membership.account_id
+       where membership.candidate_id=combined.candidate_id
+         and membership.state='ACTIVE' and account.status='ACTIVE') candidate_app_available
+    from combined
+    join public.candidates candidate on candidate.id=combined.candidate_id
+    join public.clients client on client.id=combined.client_id
+    cross join cycle_context context
+  )
+  select named.group_key,named.candidate_id,named.client_id,
+    named.manager_recipient_route_key,named.candidate_name,named.client_name,
+    named.incident_ids,named.accept_incident_ids,named.missing_scopes,named.children,named.issue_count,
+    named.candidate_asked,named.manager_informed,
+    named.candidate_queries_enabled and named.candidate_app_available
+      and (pg_catalog.cardinality(named.incident_ids)>0
+        or pg_catalog.jsonb_array_length(named.missing_scopes)>0) outreach_eligible,
+    named.manager_eligible,named.candidate_app_available,named.first_seen_at_utc,
+    case when not named.candidate_app_available then 'Candidate app unavailable'
+      when pg_catalog.jsonb_array_length(named.missing_scopes)>0 then 'Waiting for Timesheet'
+      when named.manager_informed then 'Manager informed'
+      when named.candidate_asked then 'Candidate asked' else 'Needs action' end status_text,
+    case when not named.candidate_app_available then 'warning'
+      when named.manager_informed or named.candidate_asked then 'info' else 'warning' end status_tone,
+    named.issue_summary
+  from named
+  where coalesce(p_filters->>'status','UNRESOLVED') in ('UNRESOLVED','ALL')
+    and (nullif(pg_catalog.btrim(coalesce(p_filters->>'candidate','')),'') is null
+      or private.weekly_source_query_ascii_fold_v1(named.candidate_name)
+        like '%'||private.weekly_source_query_ascii_fold_v1(p_filters->>'candidate')||'%')
+    and (coalesce(p_filters->>'issue','ALL')='ALL'
+      or (p_filters->>'issue'='TIMESHEET_MISSING' and pg_catalog.jsonb_array_length(named.missing_scopes)>0)
+      or (p_filters->>'issue'='HOURS_DIFFER' and named.issue_summary like '%Hours differ%')
+      or (p_filters->>'issue'='MISSING_SHIFT' and named.issue_summary like '%Missing%'));
+$function$;
+
+alter function private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_office_query_groups_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

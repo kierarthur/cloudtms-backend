@@ -1,0 +1,263 @@
+create or replace function private.weekly_source_self_bill_report_pay_authority_v1(p_binding_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  b public.weekly_source_self_bill_report_line_bindings%rowtype;
+  rr public.weekly_source_row_resolutions%rowtype; er public.weekly_source_upload_rows%rowtype;
+  ep public.weekly_source_projection_publications%rowtype; ec public.weekly_source_cycles%rowtype;
+  fr public.weekly_source_final_revisions%rowtype; fs public.weekly_source_final_snapshot_lines%rowtype;
+  lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  receipt public.weekly_source_ordinary_pay_projection_receipts%rowtype;
+  run public.weekly_source_finalisation_pay_runs%rowtype; task public.weekly_source_finalisation_pay_tasks%rowtype;
+  fin public.timesheets_financials%rowtype; root public.timesheets%rowtype;
+  head public.weekly_source_entitlement_heads%rowtype;
+  bundle public.weekly_source_entitlement_decision_bundles%rowtype;
+  publication private.weekly_source_entitlement_publication_receipts%rowtype;
+  generation public.weekly_exceptional_pay_generations%rowtype;
+  approval public.weekly_exceptional_payment_approvals%rowtype;
+  local_receipt private.weekly_source_local_protected_decision_receipts%rowtype;
+  c1_request public.weekly_exceptional_c1_publication_requests%rowtype;
+  count_rows integer; witness jsonb; inventory jsonb; basis jsonb;
+  current_receipt jsonb; current_event uuid; current_approval uuid; current_root uuid;
+  identity jsonb; result jsonb; run_contexts jsonb; prepared_context jsonb; expected_run_hash bytea;
+  native_origin jsonb; next_application jsonb; submission jsonb;
+  ready boolean:=false; position text:='UNPROVED'; reason text:='NATIVE_PAY_RECEIPT_UNAVAILABLE';
+  active_amount text:=null; prepared_amount text:=null; publication_fin uuid; member integer;
+begin
+  select * into b from public.weekly_source_self_bill_report_line_bindings where id=p_binding_id;
+  if not found or b.state is distinct from 'CURRENT' then return null; end if;
+  -- Accepted means the exact current Report publication, never metadata alone.
+  if not exists(select 1 from public.weekly_source_upload_rows report_row
+    join public.weekly_source_uploads upload on upload.id=report_row.upload_id and upload.state='CURRENT'
+    join public.weekly_source_report_scopes rs on rs.current_complete_upload_id=upload.id
+      and rs.id=upload.report_scope_id and rs.self_bill_report_id=b.self_bill_report_id
+    join public.weekly_source_projection_publications rp on rp.id=rs.current_projection_publication_id
+      and rp.upload_id=upload.id and rp.report_scope_id=rs.id and rp.authority_scope_kind='SELF_BILL_REPORT_SCOPE'
+      and rp.authority_scope_version=rs.version and rp.state='CURRENT'
+    where report_row.id=b.report_row_id and report_row.self_bill_report_id=b.self_bill_report_id
+      and report_row.row_finalisation_state='SOURCE_REPORT_LINE') then return null; end if;
+  select * into strict er from public.weekly_source_upload_rows where id=b.export_upload_row_id;
+  select * into strict rr from public.weekly_source_row_resolutions where id=b.bound_row_resolution_id;
+  select * into strict ep from public.weekly_source_projection_publications where id=b.export_projection_publication_id;
+  select * into strict ec from public.weekly_source_cycles where id=ep.source_cycle_id;
+  if er.row_finalisation_state is distinct from 'SOURCE_WORKED' or nullif(btrim(er.finalised_by),'') is null
+    or rr.upload_row_id is distinct from er.id or rr.work_event_id is distinct from b.work_event_id
+    or rr.mapping_state is distinct from 'RESOLVED' or rr.generation is distinct from coalesce(ep.projection_generation,ep.authority_scope_version)
+    or ep.upload_id is distinct from er.upload_id or ep.authority_scope_kind is distinct from 'CYCLE'
+    or ep.state is distinct from 'CURRENT' or ep.id is distinct from ec.current_projection_publication_id
+    or ep.upload_id is distinct from ec.current_complete_upload_id or ep.authority_scope_version is distinct from ec.version
+    or not exists(select 1 from public.weekly_source_uploads u where u.id=er.upload_id and u.state='CURRENT'
+      and u.source_cycle_id=ec.id and u.report_scope_id is null)
+    or not exists(select 1 from public.weekly_source_report_scopes rs where rs.self_bill_report_id=b.self_bill_report_id
+      and rs.source_group_id=ec.source_group_id and rs.client_id=rr.client_id)
+    then return null; end if;
+  select * into fr from public.weekly_source_final_revisions where id=ec.current_final_revision_id;
+  if not found or fr.state is distinct from 'CURRENT' or fr.authority_scope_kind is distinct from 'CYCLE'
+    or fr.source_cycle_id is distinct from ec.id or fr.upload_id is distinct from ep.upload_id
+    or fr.report_scope_id is not null then return null; end if;
+  select count(*) into count_rows from public.weekly_source_final_snapshot_lines s
+    where s.final_revision_id=fr.id and s.row_resolution_id=rr.id and s.upload_row_id=er.id
+      and s.work_event_id=b.work_event_id and s.client_id=rr.client_id and s.contract_id=rr.contract_id;
+  if count_rows=0 then return null; end if;
+  if count_rows<>1 then raise exception 'WEEKLY_SOURCE_REPORT_PAY_WITNESS_AMBIGUOUS' using errcode='55000'; end if;
+  select * into strict fs from public.weekly_source_final_snapshot_lines s
+    where s.final_revision_id=fr.id and s.row_resolution_id=rr.id and s.upload_row_id=er.id
+      and s.work_event_id=b.work_event_id and s.client_id=rr.client_id and s.contract_id=rr.contract_id;
+  select count(*) into count_rows from public.weekly_source_row_timesheet_lineages l
+    where l.row_resolution_id=rr.id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;
+  if count_rows<>1 then raise exception 'WEEKLY_SOURCE_REPORT_PAY_WITNESS_AMBIGUOUS' using errcode='55000'; end if;
+  select * into strict lineage from public.weekly_source_row_timesheet_lineages l
+    where l.row_resolution_id=rr.id and l.work_event_id=b.work_event_id and l.client_id=rr.client_id and l.contract_id=rr.contract_id;
+  select * into strict root from public.timesheets where timesheet_id=lineage.timesheet_id;
+  if root.contract_id is distinct from fs.contract_id or not exists(select 1 from public.contracts c
+    where c.id=root.contract_id and c.client_id=fs.client_id and c.candidate_id=fs.candidate_id) then return null; end if;
+  identity:=jsonb_build_object('bound_pay_snapshot_line_id',fs.id,'bound_pay_final_revision_id',fr.id,
+    'bound_pay_projection_receipt_id',null,'published_timesheet_financial_id',null,
+    'invoice_timesheet_id',lineage.timesheet_id,'candidate_id',fs.candidate_id,'client_id',fs.client_id,
+    'contract_id',fs.contract_id,'work_event_id',fs.work_event_id);
+  select count(*) into count_rows from public.weekly_source_ordinary_pay_projection_receipts r
+    where r.final_revision_id=fr.id and r.root_timesheet_id=lineage.timesheet_id and r.client_id=fs.client_id;
+  if count_rows>1 then raise exception 'WEEKLY_SOURCE_REPORT_PAY_WITNESS_AMBIGUOUS' using errcode='55000'; end if;
+  if count_rows=1 then
+    select * into strict receipt from public.weekly_source_ordinary_pay_projection_receipts r
+      where r.final_revision_id=fr.id and r.root_timesheet_id=lineage.timesheet_id and r.client_id=fs.client_id;
+    select * into run from public.weekly_source_finalisation_pay_runs r where r.final_revision_id=fr.id;
+    select * into task from public.weekly_source_finalisation_pay_tasks t
+      where t.run_id=run.id and t.projection_receipt_id=receipt.id;
+    -- The native run is orchestration proof only. Every immutable task/context,
+    -- receipt digest and run manifest must match; COMPLETE alone proves no pay.
+    select coalesce(jsonb_agg(t.prepared_context_json||jsonb_build_object(
+      'prepared_context_hash',encode(t.prepared_context_hash,'hex')) order by t.root_timesheet_id),'[]'::jsonb)
+      into run_contexts from public.weekly_source_finalisation_pay_tasks t where t.run_id=run.id;
+    expected_run_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINALISATION_PAY_RUN_V1',jsonb_build_object(
+      'final_revision_id',run.final_revision_id,'source_cycle_id',run.source_cycle_id,
+      'requested_by_user_id',run.requested_by_user_id,'final_revision_manifest_hash',encode(run.final_revision_manifest_hash,'hex'),
+      'task_manifest_hash',encode(run.task_manifest_hash,'hex'),'task_count',run.task_count));
+    prepared_context:=task.prepared_context_json;
+    if private.weekly_source_report_projection_receipt_assert_v1(receipt) is distinct from true
+      or receipt.final_manifest_hash is distinct from fr.manifest_hash or receipt.final_policy_fingerprint is distinct from fr.policy_fingerprint
+      or run.id is null or run.source_cycle_id is distinct from ec.id or run.state is distinct from 'COMPLETE'
+      or run.completed_at_utc is null or not isfinite(run.completed_at_utc)
+      or run.final_revision_manifest_hash is distinct from fr.manifest_hash or run.run_hash is distinct from expected_run_hash
+      or run.task_count<1 or run.task_count is distinct from jsonb_array_length(run_contexts)
+      or run.terminal_task_count is distinct from run.task_count or run.action_required_task_count is distinct from 0
+      or run.task_manifest_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINALISATION_PAY_TASK_MANIFEST_V1',run_contexts)
+      or exists(select 1 from public.weekly_source_finalisation_pay_tasks t where t.run_id=run.id and
+        (t.state not in ('PREPARED_FOR_AUTHORISATION','PROPOSED','NO_OP_FIRST_NEGATIVE','TARGET_MANAGED_SUPPRESSED')
+          or t.completed_at_utc is null or not isfinite(t.completed_at_utc)))
+      or task.id is null or task.state is distinct from receipt.outcome or task.root_timesheet_id is distinct from lineage.timesheet_id
+      or task.root_family_booking_id is distinct from root.booking_id or task.projection_idempotency_key is distinct from receipt.idempotency_key
+      or receipt.actor_user_id is distinct from run.requested_by_user_id
+      or task.prepared_context_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_FINALISATION_PAY_ROOT_CONTEXT_V1',prepared_context)
+      or prepared_context->>'schema_version' is distinct from 'WEEKLY_SOURCE_FINALISATION_PAY_ROOT_CONTEXT_V1'
+      or prepared_context->>'final_revision_id' is distinct from fr.id::text
+      or prepared_context->>'source_cycle_id' is distinct from ec.id::text
+      or prepared_context->>'client_id' is distinct from fs.client_id::text
+      or prepared_context->>'root_timesheet_id' is distinct from lineage.timesheet_id::text
+      or not exists(select 1 from public.weekly_source_client_manifests m where m.id=task.client_manifest_id
+        and m.id::text=prepared_context->>'client_manifest_id' and m.final_revision_id=fr.id and m.client_id=fs.client_id
+        and coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id
+        and encode(m.manifest_hash,'hex')=prepared_context#>>'{expected_rate_source_refs,client_manifest_hash}')
+      or prepared_context#>>'{expected_rate_source_refs,final_manifest_hash}' is distinct from encode(fr.manifest_hash,'hex')
+      or prepared_context#>>'{expected_rate_source_refs,source_unit_manifest_hash}' is distinct from encode(receipt.source_unit_manifest_hash,'hex')
+      or prepared_context#>>'{expected_rate_source_refs,source_expense_manifest_hash}' is distinct from encode(receipt.source_expense_manifest_hash,'hex')
+      then reason:='NATIVE_PAY_ORCHESTRATION_UNPROVED';
+    else
+      identity:=identity||jsonb_build_object('bound_pay_projection_receipt_id',receipt.id);
+      if receipt.outcome='PREPARED_FOR_AUTHORISATION' then
+        select * into fin from public.timesheets_financials where id=receipt.published_timesheet_financial_id;
+        if fin.id is not null and fin.timesheet_id=lineage.timesheet_id and fin.candidate_id=fs.candidate_id
+          and fin.client_id=fs.client_id and fin.timesheet_version=task.root_timesheet_version then
+          ready:=true; position:='PREPARED_FOR_AUTHORISATION'; reason:=null; publication_fin:=fin.id;
+          -- Native receipt seals the submitted service snapshot, not an
+          -- immutable retained copy of this mutable financial row's amount.
+          -- Preserve historical writer identity/invoice provenance, but leave
+          -- saved prepared amount unknown without exact retained output proof.
+          -- Active amount is available only through the existing approved
+          -- inventory certificate; a prepared unsigned row does not fake zero.
+          inventory:=private.weekly_source_effective_inventory_v1(lineage.timesheet_id);
+          basis:=inventory->'approval_basis';
+          if basis->'coverage_complete'='true'::jsonb then active_amount:=basis->>'approved_pay_ex_vat'; end if;
+        else reason:='NATIVE_PREPARED_WRITER_IDENTITY_UNPROVED'; end if;
+      elsif receipt.outcome='PROPOSED' then
+        inventory:=private.weekly_source_effective_inventory_v1(lineage.timesheet_id); basis:=inventory->'approval_basis';
+        if basis->'coverage_complete'='true'::jsonb then active_amount:=basis->>'approved_pay_ex_vat'; end if;
+        if basis->'coverage_complete'='true'::jsonb and inventory->>'authority'='HEAD' then
+          select * into head from public.weekly_source_entitlement_heads where id=(inventory->>'head_id')::uuid;
+          select * into bundle from public.weekly_source_entitlement_decision_bundles d
+            where d.decision_bundle_id=head.decision_bundle_id and d.bundle_revision=head.bundle_revision;
+          select count(*) into count_rows from private.weekly_source_entitlement_publication_receipts p
+            where p.decision_bundle_id=head.decision_bundle_id and p.bundle_revision=head.bundle_revision and p.request_digest=bundle.request_digest;
+          if count_rows=1 then
+            select * into strict publication from private.weekly_source_entitlement_publication_receipts p
+              where p.decision_bundle_id=head.decision_bundle_id and p.bundle_revision=head.bundle_revision and p.request_digest=bundle.request_digest;
+            member:=array_position(publication.head_ids,head.id);
+            native_origin:=head.source_origin_json;
+            if bundle.state='COMMITTED' and bundle.bundle_kind='SINGLE_ROOT' and cardinality(publication.head_ids)=1
+              and member=1 and publication.member_root_ids[member]=lineage.timesheet_id
+              and publication.member_family_booking_ids[member]=root.booking_id
+              and publication.member_root_versions[member]=head.root_timesheet_version
+              and publication.candidate_id=fs.candidate_id and head.authority_kind='LOCKED_FINAL_SOURCE'
+              and native_origin->>'final_revision_id'=fr.id::text and native_origin->>'source_cycle_id'=ec.id::text
+              and native_origin->>'revision_number'=fr.revision_number::text
+              and native_origin->>'manifest_hash'=encode(fr.manifest_hash,'hex')
+              and native_origin->>'policy_fingerprint'=encode(fr.policy_fingerprint,'hex')
+              and head.source_generation_digest=private.weekly_source_publication_request_digest_v1(native_origin)
+              and bundle.source_revision_digest=head.source_generation_digest
+              and head.decision_bundle_id=private.weekly_source_entitlement_derived_uuid_v1(
+                'WEEKLY_SOURCE_DECISION_BUNDLE_V1',btrim(root.booking_id)||'|'||fr.id::text) then
+              ready:=true; position:='PUBLISHED_SOURCE_HEAD'; reason:=null; active_amount:=basis->>'approved_pay_ex_vat';
+            end if;
+          end if;
+        end if;
+        if not ready then position:='PROPOSED'; reason:='PROPOSED_SOURCE_NOT_PUBLISHED'; end if;
+      end if;
+      if not ready and receipt.outcome in ('PROPOSED','TARGET_MANAGED_SUPPRESSED') then
+        witness:=private.weekly_source_protected_wait_witness_v1(b.work_event_id,ec.id);
+        if witness is not null and exists(select 1 from public.timesheets t
+          where t.timesheet_id=(witness->>'root_timesheet_id')::uuid and t.booking_id=root.booking_id
+            and t.contract_id=root.contract_id and t.week_ending_date=root.week_ending_date
+            and t.sheet_scope='WEEKLY' and t.line_type='HOURS' and t.is_adjustment is false) then
+          current_root:=(witness->>'root_timesheet_id')::uuid;
+          select * into strict generation from public.weekly_exceptional_pay_generations where id=(witness->>'current_generation_id')::uuid;
+          -- Qualify the CURRENT vector's own native financial publication too;
+          -- an accepted old sibling WAIT cannot manufacture current authority.
+          select count(*),(array_agg(t.approval_id))[1] into count_rows,current_approval
+            from public.weekly_exceptional_pay_target_events t where t.family_id=(witness->>'family_id')::uuid
+              and t.financial_generation_id=generation.id;
+          if count_rows=1 then
+            select * into strict approval from public.weekly_exceptional_payment_approvals where id=current_approval;
+            select count(*),(array_agg(e.id))[1] into count_rows,current_event
+              from public.weekly_exceptional_pay_family_events e where e.family_id=approval.pay_target_family_id
+                and e.durable_work_event_id=approval.work_event_id and e.evidence_approval_id=approval.id and e.state='WAIT'
+                and not exists(select 1 from public.weekly_exceptional_pay_family_events n where n.family_id=e.family_id
+                  and n.durable_work_event_id=e.durable_work_event_id and n.event_sequence>e.event_sequence);
+            if count_rows=1 then current_receipt:=private.weekly_source_protected_wait_receipt_v1(current_root,current_event)->'accepted_receipt'; end if;
+          end if;
+          if current_receipt->>'receipt_state' in ('COMPLETE','PUBLISHED')
+            and current_receipt->>'generation_id'=generation.id::text
+            and approval.candidate_id=fs.candidate_id and approval.client_id=fs.client_id and approval.contract_id=fs.contract_id then
+            if current_receipt->>'lane'='SOURCE_LOCAL' then
+              select * into local_receipt from private.weekly_source_local_protected_decision_receipts l
+                where l.generation_id=generation.id and l.publication_request_id=(current_receipt->>'publication_request_id')::uuid;
+              inventory:=private.weekly_source_effective_inventory_v1(current_root); basis:=inventory->'approval_basis';
+              if basis->'coverage_complete'='true'::jsonb and basis#>>'{scope,candidate_id}'=fs.candidate_id::text
+                and basis#>>'{scope,client_id}'=fs.client_id::text and basis#>>'{scope,contract_id}'=fs.contract_id::text then
+                if local_receipt.result_json->>'authority'='COMMON_ENTITLEMENT_HEAD'
+                  and basis#>>'{origin,source_revision,generation_id}'=generation.id::text
+                  and basis#>>'{origin,source_revision,publication_request_id}'=local_receipt.publication_request_id::text then
+                  ready:=true; position:='LOCAL_PUBLISHED_SOURCE_HEAD'; active_amount:=basis->>'approved_pay_ex_vat';
+                elsif local_receipt.result_json->>'authority'='UNAUTHORISED_TSFIN'
+                  and basis#>>'{origin,financial_snapshot_id}'=local_receipt.result_json->>'timesheet_financials_id' then
+                  ready:=true; position:='LOCAL_FIRST_AUTHORISED'; active_amount:=basis->>'approved_pay_ex_vat';
+                  publication_fin:=(basis#>>'{origin,financial_snapshot_id}')::uuid;
+                end if;
+              end if;
+            elsif current_receipt->>'lane'='RETAINED_C1' then
+              -- The unchanged full native helper proves actual PUBLISH/checkpoint
+              -- and COMPLETE_C1_PUBLICATION, not a guessed current TF status.
+              select * into c1_request from public.weekly_exceptional_c1_publication_requests
+                where id=(current_receipt->>'publication_request_id')::uuid and generation_id=generation.id;
+              if c1_request.state='PUBLISHED' and c1_request.financial_row_id is not null then
+                ready:=true; position:='RETAINED_C1_PUBLISHED'; publication_fin:=c1_request.financial_row_id;
+                -- No active Banking amount is inferred from C1 acceptance.
+              end if;
+            elsif current_receipt->>'lane'='DIRECT_NEXT' then
+              -- Full unchanged Direct NEXT receipt joins approval/sealed WORK/
+              -- revision/command/publication/COMPLETE native step. This is
+              -- accepted invoice provenance; it makes no settlement claim.
+              ready:=true; position:='DIRECT_NEXT_PUBLISHED';
+              -- The controlling I3 currently excludes headless PROTECTED origins.
+              -- Do not replace that named admission with a status-only shortcut.
+              next_application:=private.bpay_next_source_origin_state_v1(
+                (current_receipt->>'work_id')::uuid,(current_receipt->>'revision_id')::uuid);
+            end if;
+          end if;
+          if ready then reason:=null; else reason:='PROTECTED_EFFECTIVE_PUBLICATION_UNPROVED'; end if;
+        else reason:='PROTECTED_WAIT_NOT_QUALIFIED'; end if;
+      elsif receipt.outcome not in ('PREPARED_FOR_AUTHORISATION','PROPOSED','TARGET_MANAGED_SUPPRESSED') then
+        reason:='NATIVE_PAY_OUTCOME_NOT_INVOICE_READY';
+      end if;
+    end if;
+  end if;
+  submission:=private.weekly_source_actual_timesheet_submission_v1(lineage.timesheet_id);
+  result:=identity||jsonb_build_object('published_timesheet_financial_id',publication_fin,
+    'schema_version','WEEKLY_SOURCE_REPORT_PAY_AUTHORITY_V1','binding_id',b.id,
+    'bound_row_resolution_id',rr.id,'bound_export_projection_publication_id',ep.id,
+    'invoice_ready',ready,'native_pay_position',position,'unavailable_reason',reason,
+    'native_projection_receipt_hash',encode(receipt.receipt_hash,'hex'),
+    'native_pay_run_id',run.id,'native_pay_task_id',task.id,
+    'approved_inventory_basis',basis,'qualified_wait',witness,'current_publication_receipt',current_receipt,
+    'next_application',next_application,'actual_submission',submission,
+    'prepared_pay_ex_vat',prepared_amount,'prepared_amount_known',false,
+    'prepared_amount_unavailable_reason',case when position='PREPARED_FOR_AUTHORISATION'
+      then 'NATIVE_PREPARED_AMOUNT_RETENTION_UNPROVED' else null end,
+    'active_pay_ex_vat',active_amount,'active_amount_scope','ROOT_FAMILY',
+    'withheld_pay_ex_vat',null,'withheld_amount_known',false);
+  return result||jsonb_build_object('authority_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_REPORT_PAY_AUTHORITY_V1',result),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+  raise exception 'WEEKLY_SOURCE_REPORT_PAY_WITNESS_UNAVAILABLE' using errcode='55000';
+end;
+$function$;

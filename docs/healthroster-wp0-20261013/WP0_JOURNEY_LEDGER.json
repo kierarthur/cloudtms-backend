@@ -1,0 +1,955 @@
+{
+  "audit": "HealthRoster WP-0 journey feasibility",
+  "date": "2026-10-13",
+  "scope": "START §2 items 6,7,9,10; complete MyTMS source refresh",
+  "limits": {
+    "staticOnly": true,
+    "databaseCalls": 0,
+    "sqlExecuted": false,
+    "networkCalls": 0,
+    "localDatabases": 0,
+    "dockerResources": 0,
+    "sourceEdits": 0,
+    "gitWrites": 0,
+    "builds": 0,
+    "deployments": 0,
+    "bankingChatMessages": 0,
+    "proofReruns": 0
+  },
+  "sourceCommits": {
+    "backend": "77ffc9d7d15d19b6453ae25441eee8c1bff58c90",
+    "office": "887e7af7cd15d9f4034ad73806b44344f3eb0791",
+    "mytmsInitialMain": "18f07fcc77b50542733876dc367f673528f53f69",
+    "mytmsAdoptedCompletePublishedSource": "3d26ed757bc5fed8208e3534abb7ad50a8bd45d3",
+    "priorReviewed": "15fb7037d3917a80ccbecdfbf2d1067d321d5e69",
+    "priorBounded": "cb0c4a873a367e6af2fc84e297df628f04fbd488",
+    "priorMetadata": "4b72c4454dc668095d5f2b8441432108c9108772"
+  },
+  "parentInstalledCatalogueEvidence": {
+    "path": "WP0_INSTALLED_OWNER_EVIDENCE.json",
+    "receipt": {
+      "accepted": true,
+      "database": "cloudtms_test_clone",
+      "rolledBack": true,
+      "connectedFresh": true
+    },
+    "routineCount": 37,
+    "columnCount": 27,
+    "indexCount": 4,
+    "browserExecuteAllDenied": true,
+    "constraintsConfirmed": [
+      "UNIQUE booking_id WHERE is_current",
+      "UNIQUE booking_id/version",
+      "Daily reset selects by booking and exact expected Timesheet ID",
+      "C09 catalogue masks and removes invoice-linked query email"
+    ],
+    "limits": [
+      "Parent executed serial catalogue inspection; this lane executed no SQL or database call.",
+      "Owner-only private helpers service_execute=false is not itself an ACL defect.",
+      "No application routine called; no business rows read or written; no installed definition changed.",
+      "Not full body/contract/API callability proof."
+    ]
+  },
+  "assertions": [
+    {
+      "id": "J01",
+      "assertion": "Adjustment ELECTRONIC week listing",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "Additional ELECTRONIC adjustment weeks are not excluded solely by additional_seq/is_adjustment.",
+      "actual": "Page v1 enumerates candidate_weeks and uses additional_seq in pagination; no base-only admission filter. Page v2 delegates to v1.",
+      "sources": [
+        "24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql:433,851–866",
+        "03102026_1540_candidate_approved_hours_visible.sql:93–123"
+      ],
+      "owner": "Candidate page owners",
+      "smallestRequiredExtension": "No blanket listing successor justified. Preserve hidden R0 and add request-specific P0 presentation after its server identity is frozen.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "MyTMS correction consumers"
+      ],
+      "laterProof": "Exact installed adjustment P0 list/detail/first-entry once on TEST; no runtime pass claimed."
+    },
+    {
+      "id": "J02",
+      "assertion": "Adjustment ELECTRONIC transition",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "The additional_seq=0/is_adjustment exclusion applies only to IMPORT_AUTHORITATIVE request/self-entry allowance.",
+      "actual": "Final transition puts the base-week restriction inside the import-authoritative branch. ELECTRONIC still uses record capability/current-target checks; no correction request exists today.",
+      "sources": [
+        "10102026_1347_import_expense_qr_approval_v1.sql:956–1051",
+        "24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql:174–177,309–319"
+      ],
+      "owner": "Candidate workflow owner",
+      "smallestRequiredExtension": "Do not broaden route family. Future P0 must resolve ELECTRONIC and genuine editable capabilities; new request identity cannot bypass original protection.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "MyTMS correction consumers"
+      ],
+      "laterProof": "Installed first-use for exact correction shape, old week, signed/protected original and stale P0 is UNPROVED."
+    },
+    {
+      "id": "J03",
+      "assertion": "Existing DAILY detail outside active Rota",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "A real existing current DAILY Timesheet can provide daily_shift without current published Rota membership.",
+      "actual": "Final detail v1 delegates by exact current Timesheet to daily read projection; receipt context checks owned factual record and current identity, not active Rota. Read projection uses stored scheduled times/site.",
+      "sources": [
+        "10102026_1347_import_expense_qr_approval_v1.sql:5526–5554",
+        "28082026_1912_candidate_daily_receipt_context_v1.sql:40–87",
+        "28082026_2236_candidate_daily_receipt_display_v1.sql:25–29,79–85",
+        "02092026_0325_candidate_paper_break_entry_v1.sql:50–60"
+      ],
+      "owner": "Daily receipt/detail owners",
+      "smallestRequiredExtension": "Reuse stored scheduled fields. Copy/freeze T0 booking display onto request-owned P0; prove new-family ownership separately. Do not create or grant never-submitted source authority outside Rota.",
+      "dependentWorkPackages": [
+        "Signed check-only DAILY",
+        "MyTMS"
+      ],
+      "laterProof": "New P0 five-weeks-old Daily detail through installed private/public API and phone remains UNPROVED."
+    },
+    {
+      "id": "J04",
+      "assertion": "True submission and manager-signed readiness",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "An unsigned proposal, schedule presence, local draft, or planned hours is not submission; worker submission and manager finalisation are distinct facts.",
+      "actual": "Transition freezes immutable_submission_json/hash and worker_submitted_at_utc only on explicit submit. Electronic finaliser requires APPROVED exact generation/manifest, immutable HOURS component, worker/manager signatures and ready final render. Existing query evidence additionally requires authorised_at_server, so it is unsuitable as the sole signed-not-authorised Checklist predicate.",
+      "sources": [
+        "10102026_1347_import_expense_qr_approval_v1.sql:2280–2297,4984–5039",
+        "21072026_1820_00_import_review_internal_core.sql:659–668",
+        "broker/src/candidate-app-backend.js:3958–4038"
+      ],
+      "owner": "Workflow/finalise owners",
+      "smallestRequiredExtension": "One canonical selection helper must expose separate submitted, manager-signed and authorised facts bound to physical current P0/request and exact immutable generation. Never infer submission from actual_schedule_json.",
+      "dependentWorkPackages": [
+        "WP-U3 check-only arm",
+        "Signed check-only",
+        "MyTMS"
+      ],
+      "laterProof": "Signature/state cross-product, same-generation hash witnesses, empty signed hours and stale proposal tests on TEST."
+    },
+    {
+      "id": "J05",
+      "assertion": "Exact physical correction family",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "T0 remains current and untouched while waiting P0 is separately current and addressable; cancellation cannot select T0.",
+      "actual": "UNIQUE booking_id WHERE is_current and UNIQUE booking_id/version forbid two current rows in one physical family. Daily reset resolves current by requested booking and exact expected ID. Copying T0 booking either violates uniqueness or risks the original. No committed WHOLE/request owner exists.",
+      "sources": [
+        "baseline/22082026_1501_cloudtms_test_structural_finishing.sql:9806–9809",
+        "28082026_1928_candidate_daily_receipt_reset_v1.sql:41–53",
+        "10102026_1347_import_expense_qr_approval_v1.sql:5531–5548"
+      ],
+      "owner": "Shared WHOLE design;Daily exact-target adapter",
+      "smallestRequiredExtension": "Use a distinct server-owned physical correction booking family with immutable original/root booking, T0 physical/version and P0/request links; same business booking/date is retained as lineage. Freeze it before build. Do not weaken unique/current indices or booking reset.",
+      "dependentWorkPackages": [
+        "WP-AI",
+        "Signed check-only",
+        "MyTMS",
+        "NX-AI-3/NX-CHK"
+      ],
+      "laterProof": "Installed exact family, first-generation, fresh/stale/foreign, second correction and race proof; currently UNPROVED."
+    },
+    {
+      "id": "J06",
+      "assertion": "Legal P0 removal and workflow retirement",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Cancel retires manager/signature/workflow authority while exact P0 exists, then every correction-only successor/week, preserving T0 and audit evidence atomically.",
+      "actual": "Generic CANCEL retires requests/components then calls weekly/Daily reset, which rotates rather than deletes. Manual adjustment delete preview resolves a booking family and refuses any correction_id/kind, and requires additional weekly Contract week. History reader/archive alone cannot prove complete correction cleanup; expense cleanup is expense-only.",
+      "sources": [
+        "10102026_1347_import_expense_qr_approval_v1.sql:3480–3614",
+        "09022026_delete_adjustment_timesheets_safely.sql:775–806,852–889",
+        "24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql:2267–2341",
+        "17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql:705"
+      ],
+      "owner": "Request-bound retirement beside existing workflow/removal owners",
+      "smallestRequiredExtension": "Add the minimal exact-request retirement-only adapter; retain existing manager/component retirement and legal history checks, preserving historical signature assets and tombstones. No generic submitted-delete or protected rotation weakening; no booking-only cleanup.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "WP-AI shared unit"
+      ],
+      "laterProof": "Before workflow, submitted, pending/APPROVED, finalised P0; interrupted/replayed cancel, cancel/approve race and absence of usable requests/orphan current/week. No hosted mail test."
+    },
+    {
+      "id": "J07",
+      "assertion": "Shared WHOLE origins and managed-root admission",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "Unsigned agency corrections after issue and signed corrections in every state share one WHOLE identity/lifecycle owner, with exact check-only managed-root exception.",
+      "actual": "WHOLE correction names/origins are proposed and absent from committed SQL. Existing lifecycle scope recognises only import-classified CHANGED_HOURS/CANCELLATION kinds. Office routing admits any dated Weekly Source group and directs Authorise through first-authorisation wrapper, so signed-group managed status cannot be inferred false.",
+      "sources": [
+        "21072026_1235_05_timesheet_correction_chain_scope_v1.sql:105–155",
+        "21072026_1235_00_import_correction_policy_helpers.sql:435–461",
+        "05102026_1210_weekly_source_office_authorise_scope_v1.sql:44–65",
+        "broker/src/index.js:169855–169907"
+      ],
+      "owner": "Shared WHOLE owner;protected managed-root boundary",
+      "smallestRequiredExtension": "One owner branches admission by durable origin: unsigned agency after-issue restriction versus signed all-state request. Conditional admission must prove actual check-only dated group/policy and exact current root; unrelated managed Source/NHSP roots remain excluded. Any protected-boundary edit stops dependent path for separate review.",
+      "dependentWorkPackages": [
+        "WP-AI",
+        "Signed check-only",
+        "Banking handoff read-only"
+      ],
+      "laterProof": "Parent installed root-authorisation/definition inventory; exact managed signed fixture and unrelated managed negative later."
+    },
+    {
+      "id": "J08",
+      "assertion": "Initial P0/request approval before R0",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Preview resolves a durable request before R0 exists and creates nothing; mutation creates one R0 only after signed readiness, then one whole unit.",
+      "actual": "Existing expansion classifies selected Timesheet and expands already-existing import correction units. Pair transition requires an existing valid chain and unit, returns a plan only. Proposed initial request/P0 path is absent.",
+      "sources": [
+        "21072026_1235_00_import_correction_policy_helpers.sql:379–484",
+        "21072026_1235_08_timesheet_correction_pair_transition_v1.sql:64–86,174–191"
+      ],
+      "owner": "Request-aware single/bulk adapter",
+      "smallestRequiredExtension": "Place request resolution beside unchanged owners; lock request/scope/T0/P0/current/signature/proposal generations, create R0 once, delegate whole unit in one transaction. No speculative R0 during preview or unsigned failure.",
+      "dependentWorkPackages": [
+        "Signed check-only A0/A/B/C/D/D2",
+        "WP-AI shared"
+      ],
+      "laterProof": "First approval, stale/unsigned/failed outcomes, interruption and replay with no orphan R0 or partial state."
+    },
+    {
+      "id": "J09",
+      "assertion": "A0 bulk precedence, unit dedupe and atomicity",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "P0/request selected absorbs A0 T0 into T0/R0/P0; no original-only approval/warning first; T0 alone retains warned ordinary Authorise.",
+      "actual": "Current bulk has group failure propagation and postcondition machinery for existing import units, but correction IDs/classifier require existing pair and do not resolve waiting request or 3-member A0. Static references alone do not prove unchanged owner result handling.",
+      "sources": [
+        "21072026_1235_00_import_correction_policy_helpers.sql:435–484",
+        "14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql:2163,2353–2365,2433–2448"
+      ],
+      "owner": "Request-aware adapter over pinned generic/bulk owners",
+      "smallestRequiredExtension": "Partition whole legal/blocked units before delegation; dedupe by request/correction ID, reserve A0 T0 before ordinary iteration. Explicitly reject returned partial/failure and verify all member postconditions before request commit. T0 selected alone never becomes correction implicitly.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "WP-AI",
+        "Office single/bulk"
+      ],
+      "laterProof": "Single P0/request, either existing pair member, duplicates, mixed blocked/legal, A0 T0+P0 order variations, returned-failure rollback, concurrent Cancel."
+    },
+    {
+      "id": "J10",
+      "assertion": "A0 notification and projection truth",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "No T0/R0 standalone authorised notification or display; P0 is the effective approval.",
+      "actual": "Inspected generic/bulk owners audit authorisation and group results; no Candidate-authorised emitter was established in those bodies. Notification consumers do not prove trigger/emitter absence. Existing projections have no signed correction request arm.",
+      "sources": [
+        "14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql:2433–2481",
+        "03102026_0500_h1h2_successor_authorities_after_retry.sql:8474",
+        "10102026_1624_candidate_notification_consumers_v1.sql:28–30",
+        "broker/src/index.js:169855–169907"
+      ],
+      "owner": "Existing notification emitter/projection owners",
+      "smallestRequiredExtension": "Census installed triggers and actual emitter call path; suppress only request-bound A0 T0/R0 ordinary authored notification and display via exact correction receipt, retaining normal T0-only action. Never change pinned authorise body to do this.",
+      "dependentWorkPackages": [
+        "Signed check-only A0",
+        "MyTMS",
+        "Office"
+      ],
+      "laterProof": "Installed trigger/emitter proof and TEST inbox/MyTMS A0 receipt; no notification sent in WP-0."
+    },
+    {
+      "id": "J11",
+      "assertion": "Mode A EMAIL follow-up without auto-authorise",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Ticked check-only query reaches existing enqueue even when auto_authorise_timesheet_ids is empty.",
+      "actual": "runModeAAuthorisationFollowUp filters clients exclusively by nonempty auto-authorise targets; accepted query-only clients do not invoke runner.",
+      "sources": [
+        "broker/src/weekly-source/routes.js:897–922",
+        "21072026_1820_04_timesheet_query_email_rpcs.sql:35"
+      ],
+      "owner": "Mode A follow-up gate;existing post-commit runner",
+      "smallestRequiredExtension": "Extend this gate only to persisted EMAIL actions. Run query-only follow-up asynchronously with truthful delivery state; preserve existing fail-closed auto-authorise semantics.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "WP-P query pipeline"
+      ],
+      "laterProof": "Accepted query-only apply yields exact durable outbox, no auto-authorise; separate authorized enqueue/delivery approval."
+    },
+    {
+      "id": "J12",
+      "assertion": "PENDING-with-no-delivery retry",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "A source-committed PENDING email component with no delivery for exact operation can resume after 10 minutes.",
+      "actual": "Retry route refuses all PENDING; runner only handles PENDING/FAILED_RETRYABLE reached from current calls. No scheduler needed or found.",
+      "sources": [
+        "broker/src/import-review.js:1022–1056",
+        "broker/src/import-review-follow-up.js:236–273"
+      ],
+      "owner": "Existing retry/runner/delivery stores",
+      "smallestRequiredExtension": "Add narrow age and exact operation/no-delivery admission, maintain original apply receipt, and reuse deterministic enqueue. Pending with deliveries uses existing reconcile; first 10 minutes remains pending.",
+      "dependentWorkPackages": [
+        "Signed check-only reminders"
+      ],
+      "laterProof": "TEST stale/young no-delivery and existing-delivery cases, replay before/after SENT, truthful pending labels."
+    },
+    {
+      "id": "J13",
+      "assertion": "Frozen reminder commands after COMPLETE",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "A deliberate reminder has durable distinct command identity; same command retries before/after SENT reuse same delivery; original apply/outcome/COMPLETE receipt stays immutable.",
+      "actual": "Enqueue requires selected IDs exactly equal original response post_commit_email_action_ids and uses action outcomes. Runner short-circuits COMPLETE. Key includes reminder_sequence derived from mutable sent_count, so same post-SENT reminder replay can choose a new key without new command.",
+      "sources": [
+        "21072026_1820_04_timesheet_query_email_rpcs.sql:66–83,111–118,143–146,300–309",
+        "broker/src/import-review-follow-up.js:229–245",
+        "21072026_1820_01_import_review_lifecycle_rpcs.sql:1759"
+      ],
+      "owner": "Existing operation/outcome/delivery stores",
+      "smallestRequiredExtension": "Explicit adjacent reminder command admission/resume; freeze actor/client/issue-set/current version/accepted comparison/recipient/evidence/sequence at command creation under locks. New deliberate click allocates a new command; sent_count is evidence, never replay identity. No apply/TSFIN/auto-authorise rerun or reopened COMPLETE component.",
+      "dependentWorkPackages": [
+        "Signed check-only",
+        "WP-P"
+      ],
+      "laterProof": "Same command pending/queued/SENT, new click, concurrent replay, changed evidence/recipient, closed/replaced/stale/protected refusals; no hosted email/provider effects."
+    },
+    {
+      "id": "J14",
+      "assertion": "C09 after-issue discrepancy and D8 policy",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Existing lawful query-every-difference/reminder route after I1 issue, while signed T0 remains correct; D8 truthful display and correction choice remain intact.",
+      "actual": "R-243 §2.3 requires every difference with reminders. Query evidence returns TIMESHEET_PRESENT_BUT_INVOICED; final catalogue disables and can remove email row. A blocked display is lawful and D8 is answered; it is not an email/reminder pass.",
+      "sources": [
+        "OWNER_ANSWERS_ROUND22_20261012.md:§2 item3",
+        "OWNER_DECISIONS_FOR_IMPLEMENTATION.md:D8",
+        "21072026_1820_00_import_review_internal_core.sql:713",
+        "06102026_1523_import_review_catalog_generic_plan_bound_v1.sql:1271–1373"
+      ],
+      "owner": "Existing invoice/query guard;owner D8",
+      "smallestRequiredExtension": "Report concrete 10h signed/first HR match/I1 issue/later HR 9h wrong case. Show exact reason and preserve I1/T0; Office corrects only if signed Timesheet wrong. Do not widen invoice guard, invent a query exception, require a correction, or reopen answered D8. Hold affected activation pending lawful route/owner resolution.",
+      "dependentWorkPackages": [
+        "Signed check-only Queries/reminders",
+        "C09/CK-6/26/CL-11"
+      ],
+      "laterProof": "Owner reviews this irreconcilable route example; exact authorized TEST issued weekly/DAILY case later."
+    },
+    {
+      "id": "J15",
+      "assertion": "Null-Contract DAILY matching before staging",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Valid current Daily with actual client/date and null Contract is recognized through exact signed/current witness before stage.",
+      "actual": "Daily match view requires current matching TSFIN; it carries client but no Contract/worker submission witness. Catalogue computes Daily authority/rate witness through FROM contracts WHERE id=rtsx.contract_id, which returns no row for null Contract. Durable preview requires staged import and cannot supply pre-staging authority.",
+      "sources": [
+        "baseline/22082026_1504_cloudtms_test_views_and_triggers.sql:1233–1266",
+        "06102026_1523_import_review_catalog_generic_plan_bound_v1.sql:178–236,249–267",
+        "21072026_1820_03_import_review_daily_resolution_and_previews.sql:143–160"
+      ],
+      "owner": "Existing daily matching/view/resolution owner;pre-stage route",
+      "smallestRequiredExtension": "Extend same resolver/view with exact current Timesheet/client/optional Contract/date/dated authority/signed witness. Never borrow other-client Contract or invent financial client from booking/name. Existing unresolved no-client receipt must remain unresolved.",
+      "dependentWorkPackages": [
+        "WP-F3",
+        "Signed check-only upload",
+        "MyTMS DAILY"
+      ],
+      "laterProof": "Null Contract with real client versus unresolved no-client, Rota rollover and cross-client weekly contamination; refusal creates no staged import/query."
+    },
+    {
+      "id": "J16",
+      "assertion": "Cross-client and scope ambiguity before staging",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "Resolve actual current Timesheets and client first; unique match chooses route, genuine ambiguity uses matched-client picker; mixed/all-no-Timesheet refuse with no artifacts.",
+      "actual": "Existing weekly qualification handles exact qualified contracts/prior Office choices. Catalogue/Daily preview operate after staging. No existing complete pre-stage signed/null-Contract Daily route was established.",
+      "sources": [
+        "broker/src/weekly-source/contract-qualification.js:85–126",
+        "06102026_1523_import_review_catalog_generic_plan_bound_v1.sql:183–267",
+        "03_IMPLEMENTATION_PLAN.md:2412–2447"
+      ],
+      "owner": "Existing upload/profile/weekly+Daily resolution owners",
+      "smallestRequiredExtension": "Reuse exact profiles then daily detector, then signed current Timesheet scope, not layout alone. Restrict picker to proved clients/counts/routes; refuse mixed and all-no-Timesheet files, accepted empty daily declaration remains explicit.",
+      "dependentWorkPackages": [
+        "WP-F3",
+        "Signed check-only"
+      ],
+      "laterProof": "Two clients same worker/date, weekly other-client Contract, genuine same-date ambiguity, one-day layout collision, mixed/all-no/empty daily; zero staging/query artifacts on refusals."
+    },
+    {
+      "id": "J17",
+      "assertion": "Canonical Queries/Checklist submitted/correction selection",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "One current submitted Timesheet selection drives both screens; waiting T0 remains authority, correction item takes precedence; approved P0 replaces it; R0/proposal/local draft never become actual submitted rows.",
+      "actual": "Current workspace readers and existing comparison stores exist; current Office has no implemented check-only Checklist producer/arm. Actual schedule presence and query-evidence authorisation flag alone fail A0/proposal requirements.",
+      "sources": [
+        "15092026_1534_weekly_source_read_projections_v1.sql:763",
+        "09102026_1130_weekly_source_released_review_visibility_v1.sql:6",
+        "21072026_1820_00_import_review_internal_core.sql:659–668",
+        "OWNER_ANSWERS_ROUND22_20261012.md:§9,§11"
+      ],
+      "owner": "Existing workspace reader/Checklist extension;one canonical selector",
+      "smallestRequiredExtension": "Define one helper from submitted/signature/request/version witness: current-week actual submitted clients plus relevant earlier unauthorised; one item per exact root/current/request. No-Timesheet HR query must cite accepted import containing row and remain No hold; no second comparison store.",
+      "dependentWorkPackages": [
+        "WP-U3 stage9B check-only arm",
+        "Signed check-only"
+      ],
+      "laterProof": "A0 awaiting correction, submitted unsigned P0, local-only/empty/source-only negatives, correction approval/cancel, duplicate rows and historical clients."
+    },
+    {
+      "id": "J18",
+      "assertion": "Unique order, independent cursors and anchored refresh",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "Stable row/item ordering across equal labels, actor/filter/sort changes, late inserts and child return; bounded continuous expansion scrolling.",
+      "actual": "Existing Office sentinel/observer and per-tab scroll are reusable; one session.observer and positional tab wiring are not proof of independent Checklist expansion cursors or stable anchor refresh.",
+      "sources": [
+        "js/weekly-source/import-workspace.js:1245–1253,1751–1782",
+        "03_IMPLEMENTATION_PLAN.md:2716–2792"
+      ],
+      "owner": "Existing workspace navigation/sentinel owners",
+      "smallestRequiredExtension": "Use total sort tuple including client_id, week and immutable item ID; bind cursor to actor/permissions/filter/sort and selection revision, independently per section/expansion. Mutations/read changes invalidate/reanchor by item identity, nearest surviving neighbor; preserve child return context. Key tab buttons; hide Finalise only single-scope TIMESHEET_AUTHORITY.",
+      "dependentWorkPackages": [
+        "WP-U3",
+        "Train0",
+        "Signed check-only"
+      ],
+      "laterProof": "Equal-name boundary, alternate sorts, permission changes, late closure/insertion, multi expansion/batch and child return; browser proof on TEST."
+    },
+    {
+      "id": "J19",
+      "assertion": "Per-field/segment/break correction deltas",
+      "proofClass": "Source/static",
+      "result": "UNPROVED",
+      "expected": "Frozen original/proposal arrays and unambiguous segment mapping highlight only changed start/finish/break or genuine added/removed part.",
+      "actual": "Existing weekly and Daily form/model support multipart and break controls; no correction detail/property/UI exists. Shared weekly source editor intentionally excludes imported hours and must not seed this proposal.",
+      "sources": [
+        "apps/candidate-app/src/features/timesheets/hours-model.ts:134–189",
+        "apps/candidate-app/src/features/daily/model.ts:72–95",
+        "apps/candidate-app/src/app/daily/shift.tsx:55–74,109–126",
+        "apps/candidate-app/src/app/timesheets/[identityKind]/[id]/hours.tsx:75,286–294"
+      ],
+      "owner": "Existing schedule parsers/controls/Timesheet detail",
+      "smallestRequiredExtension": "Optional correction contract carries exact P0/request/proposal generation, frozen original signed segment identity/evidence and field deltas. Reuse parsers; pair by stable identity/unique value witness, refuse ambiguous pairing, preserve overnight/date/break variants. No second schedule store.",
+      "dependentWorkPackages": [
+        "MyTMS correction consumers",
+        "Signed check-only"
+      ],
+      "laterProof": "Start-only/finish-only/break-only/no-break/duration/break-range/multipart/added/removed/overnight/no-change; worker confirmation/signature and actual phone."
+    },
+    {
+      "id": "J20",
+      "assertion": "Correction draft scope and continuations",
+      "proofClass": "Source/static",
+      "result": "FAIL",
+      "expected": "Original/cancelled P0 drafts do not alias a new correction; same exact P0/request edits survive harmless refresh and continue through review/sign/submit.",
+      "actual": "Canonical Daily draft ID is booking first; alias set includes all workflow anchors/targets. Requested record resolver admits these aliases. Hours/Daily editor one-time loaded state is not keyed by correction ownership; volatile context includes statuses/actions. No correction-specific ownership exists.",
+      "sources": [
+        "apps/candidate-app/src/core/drafts/context.ts:16–39,49–69,129–137,145–199",
+        "apps/candidate-app/src/core/drafts/types.ts:3–35",
+        "apps/candidate-app/src/app/daily/shift.tsx:40–65",
+        "apps/candidate-app/src/app/timesheets/[identityKind]/[id]/hours.tsx:63–75",
+        "apps/candidate-app/src/app/timesheets/[identityKind]/[id]/review.tsx:59",
+        "apps/candidate-app/src/app/workflows/[workflowId]/approval.tsx:36,57"
+      ],
+      "owner": "Existing encrypted draft store/context/resolver/progress owners",
+      "smallestRequiredExtension": "Correction ownership before ordinary booking branch: stable physical P0+request; include generation only when proposal/ownership changes. Only proved P0 aliases; exclude T0 and cancelled/reissued identities. Ownership change resets initial editor once; harmless refresh preserves current edits; review warnings remain context. No delete/migrate unrelated drafts.",
+      "dependentWorkPackages": [
+        "MyTMS correction consumers",
+        "Signed check-only"
+      ],
+      "laterProof": "Original and old P0 saved drafts, same-P0 refresh/resume, explicit alias attack, Cancel/reissue, interruption at review/progress/approval/sign/submit."
+    },
+    {
+      "id": "J21",
+      "assertion": "Actual serializers/schema/public boundary inventory",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "Use actual detail owners and generated schemas/types; strict DAILY validator is separate; do not invent two closed runtime TimesheetDetail validators.",
+      "actual": "Detail RPC v2→v1, Worker enriches lineage/submitted facts/expenses/paper then jsonResponse; successful publicSafePrivateResponse forwards body. MyTMS OpenAPI TimesheetDetail is additionalProperties=false; generated types/app consume it. No correction key present. Generic closed runtime detail validation was not established.",
+      "sources": [
+        "broker/src/candidate-app-backend.js:6299–6314",
+        "candidate-broker/src/candidate-broker.js:1151–1162",
+        "02092026_0325_candidate_paper_break_entry_v1.sql:18–60",
+        "contracts/candidate-api.openapi.json:22549",
+        "src/generated/candidate-api.d.ts:1582–1620",
+        "apps/candidate-app/src/core/api/types.ts:13–15"
+      ],
+      "owner": "SQL detail;private Worker enrichment;public transport;complete MyTMS contracts/types/app",
+      "smallestRequiredExtension": "Add optional bounded correction schema/type and exact producer/adjacent boundary checks in same reviewed source change; preserve strict BOOKED_DAILY_SHIFT/Daily response contracts and 72-operation inventory. Gate correction exposure on compatible deployed client capability/actual installed app.",
+      "dependentWorkPackages": [
+        "MyTMS correction consumers",
+        "WP-ACL/contracts"
+      ],
+      "laterProof": "Exact optional allowed/forbidden nested payloads, private/public API first use, old-client readiness fence and phone proof."
+    },
+    {
+      "id": "J22",
+      "assertion": "Refreshed complete MyTMS source",
+      "proofClass": "Source/static",
+      "result": "PASS",
+      "expected": "Use complete published active source rather than older main-only app subset; retain root/contracts/clients/locks/build/Google.",
+      "actual": "Initial main18f07 is ancestor of 3d26ed7 (no main-only source). Active branch contains 12 later commits and complete required layout. Parent verified exact remote and fast-forwarded own clean named worktree to3d26ed7. Versus15fb7037:9 files +267/−20; versus prior4b72c445:4 files +52/−7. App/contracts/clients/native locks/build unchanged versus reviewed15fb; current delta is Google/docs/tests.",
+      "sources": [
+        "Git commit objects18f07fcc/15fb7037/cb0c4a87/4b72c445/3d26ed7",
+        "google-apps-script/SOURCE_VERSION.json:2–10",
+        "parent WP0_CURRENT_SOURCES.json"
+      ],
+      "owner": "Complete MyTMS repository/approved-hours branch",
+      "smallestRequiredExtension": "No merge/revert needed. Adopt exact verified active complete commit for future approved work; preserve all root source inputs and unrelated dirty work. Do not copy app directory alone or infer installed Google/native source from Git.",
+      "dependentWorkPackages": [
+        "All MyTMS-dependent packages"
+      ],
+      "laterProof": "Future release refresh exact remote complete source, deployment/build fingerprints and separate D6 app authority; no build run here."
+    }
+  ],
+  "finalOwners": [
+    {
+      "name": "public.candidate_app_timesheet_page_v1",
+      "physicalDefinitionFile": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "line": 345,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_app_timesheet_page_v2",
+      "physicalDefinitionFile": "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+      "line": 93,
+      "lastInstallingRoot": "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_app_timesheet_detail_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 5432,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_app_timesheet_detail_v2",
+      "physicalDefinitionFile": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+      "line": 18,
+      "lastInstallingRoot": "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_workflow_transition_atomic_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 79,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_submission_finalize_atomic_v1",
+      "physicalDefinitionFile": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "line": 4427,
+      "lastInstallingRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "private._candidate_daily_receipt_context_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "line": 4,
+      "lastInstallingRoot": "supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "private._candidate_daily_read_projection_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
+      "line": 5,
+      "lastInstallingRoot": "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "private._candidate_daily_receipt_reset_v1",
+      "physicalDefinitionFile": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "line": 5,
+      "lastInstallingRoot": "supabase/repeatable/28082026_1928_candidate_daily_receipt_reset_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.candidate_workflow_cancel_atomic_v2",
+      "physicalDefinitionFile": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "line": 2347,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "private._candidate_workflow_cancel_authority_v1",
+      "physicalDefinitionFile": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "line": 346,
+      "lastInstallingRoot": "supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_weekly_manual_adjustment_delete_preview",
+      "physicalDefinitionFile": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+      "line": 715,
+      "lastInstallingRoot": "supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled.",
+      "dynamicPatch": {
+        "file": "supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql",
+        "line": 18,
+        "description": "Changes the actor predicate through exact pg_get_functiondef replacement; last CREATE declaration is not the final body."
+      }
+    },
+    {
+      "name": "public.timesheet_weekly_manual_adjustment_delete_apply",
+      "physicalDefinitionFile": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "line": 705,
+      "lastInstallingRoot": "supabase/repeatable/17092026_0900_weekly_source_pinned_owner_rotation_guard_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_removal_financial_history_v1",
+      "physicalDefinitionFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 153516,
+      "lastInstallingRoot": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_archive_transition_v1",
+      "physicalDefinitionFile": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "line": 182033,
+      "lastInstallingRoot": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public._ctms_expand_lifecycle_items_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "line": 379,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_correction_chain_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_correction_pair_transition_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.invoice_correction_pair_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "line": 1,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public._import_review_query_evidence_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "line": 603,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public._import_review_action_catalog_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+      "line": 11,
+      "lastInstallingRoot": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_query_email_enqueue_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "line": 35,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.import_review_apply_status_get_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "line": 1664,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.import_review_follow_up_component_update_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "line": 1592,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.hr_daily_validation_preview_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "line": 143,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.hr_daily_timesheet_resolution_save_v1",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "line": 3,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "physicalDefinitionFile": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "line": 12,
+      "lastInstallingRoot": "supabase/repeatable/05102026_1210_weekly_source_office_authorise_scope_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.weekly_source_office_workspace_v1",
+      "physicalDefinitionFile": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "line": 763,
+      "lastInstallingRoot": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.weekly_source_combined_review_workspace_v1",
+      "physicalDefinitionFile": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "line": 6,
+      "lastInstallingRoot": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "private.weekly_source_first_authorise_core_v1",
+      "physicalDefinitionFile": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "line": 1413,
+      "lastInstallingRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_authorise_generic_atomic",
+      "physicalDefinitionFile": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "line": 8474,
+      "lastInstallingRoot": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_authorise_bulk_atomic",
+      "physicalDefinitionFile": "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+      "line": 2103,
+      "lastInstallingRoot": "supabase/repeatable/05092026_1200_banking_pay_draft_v8_final_authority_closure.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    },
+    {
+      "name": "public.timesheet_unauthorise_atomic",
+      "physicalDefinitionFile": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "line": 4,
+      "lastInstallingRoot": "supabase/repeatable/21072026_1235_30_timesheet_unauthorise_atomic.sql",
+      "proofClass": "Source/static",
+      "signatureClosure": "Name-level declarations only; exact overload and effective final body require installed catalogue. Later dynamic pg_get_functiondef patches must be reconciled."
+    }
+  ],
+  "installedRequests": {
+    "responsibility": "Parent only, serial Arthur route; these SELECT-only catalogue proposals are not executed and must not be sent to read-only fixed MCP as arbitrary SQL.",
+    "target": "agency_test / cloudtms_test_clone",
+    "routineNames": [
+      "public.candidate_app_timesheet_page_v1",
+      "public.candidate_app_timesheet_page_v2",
+      "public.candidate_app_timesheet_detail_v1",
+      "public.candidate_app_timesheet_detail_v2",
+      "public.candidate_workflow_transition_atomic_v1",
+      "public.candidate_submission_finalize_atomic_v1",
+      "private._candidate_daily_receipt_context_v1",
+      "private._candidate_daily_read_projection_v1",
+      "private._candidate_daily_receipt_reset_v1",
+      "public.candidate_workflow_cancel_atomic_v2",
+      "private._candidate_workflow_cancel_authority_v1",
+      "public.timesheet_weekly_manual_adjustment_delete_preview",
+      "public.timesheet_weekly_manual_adjustment_delete_apply",
+      "public.timesheet_removal_financial_history_v1",
+      "public.timesheet_archive_transition_v1",
+      "public._ctms_expand_lifecycle_items_v1",
+      "public.timesheet_correction_chain_scope_v1",
+      "public.timesheet_correction_pair_transition_v1",
+      "public.invoice_correction_pair_scope_v1",
+      "public._import_review_query_evidence_core_v1",
+      "public._import_review_action_catalog_core_v1",
+      "public.timesheet_query_email_enqueue_v1",
+      "public.import_review_apply_status_get_v1",
+      "public.import_review_follow_up_component_update_v1",
+      "public.hr_daily_validation_preview_v1",
+      "public.hr_daily_timesheet_resolution_save_v1",
+      "public.weekly_source_office_authorise_scope_v1",
+      "public.weekly_source_office_workspace_v1",
+      "public.weekly_source_combined_review_workspace_v1",
+      "private.weekly_source_first_authorise_core_v1",
+      "public.timesheet_authorise_generic_atomic",
+      "public.timesheet_authorise_bulk_atomic",
+      "public.timesheet_unauthorise_atomic",
+      "public._import_review_follow_up_reconcile_core_v1",
+      "public.timesheet_query_email_delivery_mark_v1"
+    ],
+    "queries": {
+      "routineCensus": "SELECT n.nspname AS schema_name,p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid) AS identity_arguments,p.prosecdef,p.proconfig,pg_catalog.pg_get_userbyid(p.proowner) AS owner_name,pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE') AS service_execute,pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute,pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated_execute,pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid)) AS definition_md5 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname||'.'||p.proname IN ('public.candidate_app_timesheet_page_v1','public.candidate_app_timesheet_page_v2','public.candidate_app_timesheet_detail_v1','public.candidate_app_timesheet_detail_v2','public.candidate_workflow_transition_atomic_v1','public.candidate_submission_finalize_atomic_v1','private._candidate_daily_receipt_context_v1','private._candidate_daily_read_projection_v1','private._candidate_daily_receipt_reset_v1','public.candidate_workflow_cancel_atomic_v2','private._candidate_workflow_cancel_authority_v1','public.timesheet_weekly_manual_adjustment_delete_preview','public.timesheet_weekly_manual_adjustment_delete_apply','public.timesheet_removal_financial_history_v1','public.timesheet_archive_transition_v1','public._ctms_expand_lifecycle_items_v1','public.timesheet_correction_chain_scope_v1','public.timesheet_correction_pair_transition_v1','public.invoice_correction_pair_scope_v1','public._import_review_query_evidence_core_v1','public._import_review_action_catalog_core_v1','public.timesheet_query_email_enqueue_v1','public.import_review_apply_status_get_v1','public.import_review_follow_up_component_update_v1','public.hr_daily_validation_preview_v1','public.hr_daily_timesheet_resolution_save_v1','public.weekly_source_office_authorise_scope_v1','public.weekly_source_office_workspace_v1','public.weekly_source_combined_review_workspace_v1','private.weekly_source_first_authorise_core_v1','public.timesheet_authorise_generic_atomic','public.timesheet_authorise_bulk_atomic','public.timesheet_unauthorise_atomic','public._import_review_follow_up_reconcile_core_v1','public.timesheet_query_email_delivery_mark_v1') ORDER BY n.nspname,p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid) LIMIT 100;",
+      "triggers": "SELECT c.relname AS table_name,t.tgname,t.tgenabled,pg_catalog.pg_get_triggerdef(t.oid,true) AS definition FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ('timesheets','timesheets_financials','candidate_submission_workflows','candidate_approval_requests','import_apply_operations','import_review_action_outcomes','hr_issue_email_deliveries') AND NOT t.tgisinternal ORDER BY c.relname,t.tgname LIMIT 100;",
+      "indexes": "SELECT schemaname,tablename,indexname,indexdef FROM pg_catalog.pg_indexes WHERE schemaname='public' AND tablename IN ('timesheets','contract_weeks','candidate_submission_workflows','candidate_approval_requests','hr_issue_email_deliveries') AND (indexname IN ('timesheets_booking_id_current_uidx','timesheets_booking_id_version_uidx','uq_timesheets_correction_id_kind') OR indexdef ILIKE '%operation_id%' OR indexdef ILIKE '%workflow%' OR indexdef ILIKE '%deterministic_outbox_key%') ORDER BY tablename,indexname LIMIT 50;",
+      "view": "SELECT pg_catalog.pg_get_viewdef('public.v_timesheets_daily_match'::pg_catalog.regclass,true) AS definition;",
+      "definitionFollowUp": "After catalogue returns exact signatures, request each named function definition once through Arthur Operations. Installed owner/root/ledger/ACL equality is separate from source declaration order."
+    }
+  },
+  "proposedTestSetupApprovalList": [
+    {
+      "approvalId": "JS-1",
+      "proposedClientIds": [
+        "fd0a0010-1310-4260-8260-000000000001",
+        "fd0a0010-1310-4260-8260-000000000002",
+        "fd0a0010-1310-4260-8260-000000000003"
+      ],
+      "names": [
+        "WP0-HR-CHK-WEEKLY",
+        "WP0-HR-CHK-DAILY",
+        "WP0-HR-CHK-OTHER-CLIENT"
+      ],
+      "before": "Absent; vacancy must be proved immediately before authorized setup.",
+      "after": "Synthetic TEST-only client identities; check-only dated flags requires_hr=true, autoprocess_hr=true, no_timesheet_required=false; signed TIMESHEET_AUTHORITY/INVOICE_EVIDENCE_REQUIRED group for first two; other-client negative stays ordinary.",
+      "verification": "Exact returned IDs/settings/group cutoff/history; no existing client settings changed.",
+      "cleanup": "Approved fixture retirement through lawful owners/forward-fix; never delete real rows."
+    },
+    {
+      "approvalId": "JS-2",
+      "proposedGroupIds": [
+        "fd0a0020-1310-4260-8260-000000000001",
+        "fd0a0020-1310-4260-8260-000000000002"
+      ],
+      "before": "Absent; existing imported groups/flags untouched.",
+      "after": "Synthetic signed-Timesheet group and unsigned AGENCY_INVOICE negative group; exact dated membership from 2026-09-01. Application features remain OFF.",
+      "verification": "Dated route choice; signed/unsigned overlap refused; no movement of existing clients.",
+      "cleanup": "Retain audit or authorized retire, never ad-hoc settings DML."
+    },
+    {
+      "approvalId": "JS-3",
+      "proposedCandidateIds": [
+        "fd0a0030-1310-4260-8260-000000000001",
+        "fd0a0030-1310-4260-8260-000000000002"
+      ],
+      "before": "Absent; no real Candidate/manager/access/credentials reused.",
+      "after": "Synthetic WPHR-C1 and WPHR-C2 with isolated TEST agency membership; exact assigned synthetic weekly Contract and DAILY entitlement. One same worker has other-client weekly Contract for null-Contract contamination negative.",
+      "verification": "Own/foreign account and inactive/reduced-role negatives; identities and no real contact data.",
+      "cleanup": "Owner approves fixture/account retention/retirement; no credential rotation or borrowing."
+    },
+    {
+      "approvalId": "JS-4",
+      "fixtureLabels": [
+        "W-A0",
+        "W-A",
+        "W-B",
+        "W-C",
+        "W-D",
+        "W-D2",
+        "D-A0",
+        "D-A",
+        "D-B",
+        "D-C",
+        "D-D",
+        "D-D2",
+        "D-OLD",
+        "D-NOCLIENT",
+        "AMBIG-WD",
+        "AMBIG-CLIENT"
+      ],
+      "before": "No fixture records.",
+      "after": "One independent synthetic state fixture for each signed weekly/DAILY A0/authorised-unpaid/paid/draft/issued/unissued-original state plus 2026-09-06 Daily outside Rota, unresolved no-client and two current match ambiguity. Exact physical booking/Timesheet/week/TSFIN/workflow/signature/document/invoice IDs must be emitted and submitted as a second concrete approval manifest before creation.",
+      "verification": "Frozen T0 witnesses, distinct P0 family, no R0 before ready approval, unchanged paid/issued evidence, no business payment execution.",
+      "cleanup": "No manual paid/issued markers. Use owner-approved repository synthetic fixture support; if unavailable, this setup item stays UNPROVED rather than fabrication."
+    },
+    {
+      "approvalId": "JS-5",
+      "fixtureLabels": [
+        "MAIL-NO-AUTO",
+        "MAIL-YOUNG",
+        "MAIL-STALE",
+        "MAIL-QUEUED",
+        "MAIL-SENT",
+        "MAIL-COMPLETE",
+        "MAIL-C09"
+      ],
+      "before": "No fixture issue/outcome/delivery.",
+      "after": "Synthetic accepted applied comparisons with frozen query choices, command receipts and qualified current evidence. Age >10m cases use repository fixture clock support; no manual historic timestamp/provider/SENT fabrication. Restricted delivery sink must be separately named/approved before actual send.",
+      "verification": "Same command once before/after SENT; deliberate second command distinct; no original receipt change, no auto-authorise rerun, changed recipient/evidence/stale/issued guards.",
+      "cleanup": "No email/provider/drain invoked under WP-0. Enqueue and any TEST delivery receive separate exact authority; existing credentials untouched."
+    },
+    {
+      "approvalId": "JS-6",
+      "fixtureLabels": [
+        "DELTA-START",
+        "DELTA-FINISH",
+        "DELTA-BREAK-NONE",
+        "DELTA-BREAK-DURATION",
+        "DELTA-BREAK-RANGE",
+        "DELTA-MULTIPART",
+        "DELTA-ADDED-REMOVED",
+        "DELTA-OVERNIGHT",
+        "DELTA-NOCHANGE",
+        "DRAFT-ORIGINAL",
+        "DRAFT-CANCEL-REISSUE"
+      ],
+      "before": "Synthetic proposal/detail/device drafts absent.",
+      "after": "Frozen original/proposal fixtures use 07/10/2026 07:00–19:00 baseline, finish18:30 variant, 30→45min break, independent same-day parts and 19:00→07:00 overnight. Original and P0/request drafts isolated; all new controls OFF until capability/phone gates.",
+      "verification": "Only genuine changed fields highlight; fresh confirmation; same P0 resume; original/old P0 drafts preserved and never adopted.",
+      "cleanup": "Clear only approved synthetic app draft scope through app controls; no broad device-store reset."
+    },
+    {
+      "approvalId": "JS-7",
+      "fixtureLabels": [
+        "UI-EQUAL-NAMES",
+        "UI-MULTI-EXPAND",
+        "UI-LATE-INSERT-CLOSE",
+        "UI-ACTOR-FILTER-SORT"
+      ],
+      "before": "No synthetic reader rows beyond other approved fixtures.",
+      "after": "Enough authorized synthetic client/week/query items to cross 2 reader batches and 2 expanded sections, including equal display names with different client IDs; exact count/IDs finalized after implementation batch size contract. Role matrix active admin/authoriser/golden-key/read-only/inactive.",
+      "verification": "Total order, scope-bound independent cursors, permission refresh, anchor restore, no repeated/omitted items and no actionable links for reduced roles.",
+      "cleanup": "Repository owner retirement only; no live import replay or real business row changes."
+    }
+  ],
+  "releasePlan": {
+    "status": "Future proposal only; D2 STOP retained",
+    "order": [
+      "Owner review/continuation and exact source/contract freeze; finish physical request/P0/retirement design and C09 case before dependent build.",
+      "Owner-approved disabled Train0/WP-PP/foundation batch; compatible current shared helper may publish earliest before dependent query/pay consumers; no Banking-owned files changed.",
+      "Owner-approved additive server request/WHOLE identity/retirement/reminder/selection batch, all features OFF; current exact protected owners and contract/security tests accompany source.",
+      "Owner-approved Office/MyTMS consumers against frozen contract; full MyTMS source preserved; separate D6 native build/submission/actual phone approval.",
+      "Owner-approved joined TEST acceptance batch after exact published compatible Banking NEXT join; credit-issued consumers wait all P1–P18, ordinary signed pay/HR hold proof separate.",
+      "Owner approves activation only after each gate passes; forward-fix reviewed releases only."
+    ],
+    "publication": "Reviewed exact GitHub commit → protected TEST database release → normal backend → real Candidate private → synthetic private (canonical config) → public broker last → Office; verify dedicated invoice/document Worker connections when affected; MyTMS control/app publication separate.",
+    "localDatabaseException": "No WP-0 database/Docker. Future release only mechanical clean PG17 contract generate/seal; one small container per release removed immediately, no local acceptance tests.",
+    "coordination": "Fresh Banking committed pin/target HEAD before each shared-test promotion; one integrator serializes source/contract integration. Shared _ctms_expand_lifecycle_items_v1, timesheet_correction_chain_scope_v1, timesheet_correction_pair_transition_v1, invoice_correction_pair_scope_v1 and query/managed-root/first-authorise consumers require exact final-closure review. Banking-owned first-authorise/NEXT monetary bodies remain external/read-only; no messaging or edits here."
+  }
+}

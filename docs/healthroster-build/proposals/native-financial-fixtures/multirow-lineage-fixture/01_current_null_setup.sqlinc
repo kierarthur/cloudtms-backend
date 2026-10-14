@@ -1,0 +1,43 @@
+-- Source proposal only. Root executes inside its one agency TEST rollback transaction.
+-- No nested transaction, clock override, queue drain, payment/provider/email call.
+do $nfx_preflight$ begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'NFX_WRONG_DATABASE';end if;
+ if (transaction_timestamp() at time zone 'Europe/London')::date<>date '2026-10-13' then raise exception 'NFX_CURRENT_CASE_DATE_CHANGED';end if;
+ if not exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1) then raise exception 'NFX_LEGACY_1_REQUIRED';end if;
+ if nullif(current_setting('cloudtms.nfx.agency_id',true),'') is null or nullif(current_setting('cloudtms.nfx.agency_anchor_group_id',true),'') is null then raise exception 'NFX_REVIEWED_AGENCY_MANIFEST_REQUIRED';end if;
+ if not exists(select 1 from public.weekly_source_groups where id=current_setting('cloudtms.nfx.agency_anchor_group_id')::uuid and agency_id=current_setting('cloudtms.nfx.agency_id')::uuid and environment='TEST') then raise exception 'NFX_AGENCY_ANCHOR_MISMATCH';end if;
+ if exists(select 1 from public.tms_users where id='e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid or email='nfx-multi-hr-20261013@example.test')
+ or exists(select 1 from public.clients where id='2d503751-8104-81a3-93de-df92c1ef8c11'::uuid or name='NFX October Multi Client')
+ or exists(select 1 from public.candidates where id='90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid or tms_ref='NFX-101002' or display_name='NFX October Multi Nurse')
+ or exists(select 1 from public.contracts where id='5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid)
+ or exists(select 1 from public.weekly_source_groups where code='NFX_MULTI_HR_20261013')
+ or exists(select 1 from public.weekly_source_upload_rows where external_source_key in ('NFX-SHIFT-6892ED0EF75CB46F02FD6A7D','NFX-SHIFT-CEFADA3F51C71073F3C01503')) then raise exception 'NFX_NAMESPACE_NOT_VACANT';end if;
+end;$nfx_preflight$;
+select set_config('request.jwt.claim.role','service_role',true);
+create temporary table nfx_state(case_id text primary key,actor_id uuid,client_id uuid,candidate_id uuid,contract_id uuid,group_id uuid,cycle_id uuid,upload_id uuid,publication_id uuid,revision_id uuid,manifest_id uuid,invoice_id uuid,pay_run jsonb,pay_start jsonb,model jsonb) on commit drop;
+insert into pg_temp.nfx_state(case_id,actor_id,client_id,candidate_id,contract_id) values('WS-NFX-MULTI-HR-20261013','e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid,'2d503751-8104-81a3-93de-df92c1ef8c11'::uuid,'90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid,'5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid);
+-- Identity/configuration fixtures only. All source/finance descendants are native-produced below.
+insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key) values('e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid,'nfx-multi-hr-20261013@example.test','admin',true,'NFX_NOT_A_LOGIN',true,false);
+do $nfx_client$ declare result jsonb;begin
+ result:=public.client_create_with_settings_v1('2d503751-8104-81a3-93de-df92c1ef8c11'::uuid,
+ '{"name":"NFX October Multi Client","vat_chargeable":true,"payment_terms_days":30,"invoice_address":"TEST fixture address","ts_queries_email":"nfx-manager@example.test"}'::jsonb,'e2dac56c-1e5f-8354-95eb-39f2ca3f62b0'::uuid,
+ '{"timezone_id":"Europe/London","day_start":"06:00","day_end":"20:00","night_start":"20:00","night_end":"06:00","sat_start":"00:00","sat_end":"00:00","sun_start":"00:00","sun_end":"00:00","bh_start":"00:00","bh_end":"00:00","bh_list":[],"vat_rate_pct":20,"holiday_pay_pct":0,"erni_pct":0,"hr_validation_required":true,"autoprocess_hr":true,"requires_hr":true,"no_timesheet_required":true,"self_bill_no_invoices_sent":true,"is_nhsp":false,"hr_attach_to_invoice":false,"ts_attach_to_invoice":false,"healthroster_import_auto_authorise":false,"pay_reference_required":false,"invoice_reference_required":false,"reference_number_required_to_issue_invoice":false,"candidate_expenses_require_separate_timesheet":true,"candidate_expense_invoice_email":"nfx-expense@example.test","opt_in_email":false,"opt_in_sms":false,"opt_in_whatsapp":false}'::jsonb);
+ if result->>'ok' is distinct from 'true' then raise exception 'NFX_NATIVE_CLIENT_CREATE_FAILED';end if;
+end;$nfx_client$;
+insert into public.candidates(id,tms_ref,display_name,pay_method,active,nhsp_hr_name_aliases,opt_in_email,opt_in_sms,opt_in_whatsapp) values('90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid,'NFX-101002','NFX October Multi Nurse','PAYE',true,'["nfx october nurse"]'::jsonb,false,false,false);
+insert into public.contracts(id,candidate_id,client_id,role,band,start_date,end_date,pay_method_snapshot,rates_json,weekly_timesheet_source,self_bill,no_timesheet_required,requires_hr,autoprocess_hr,require_reference_to_pay,require_reference_to_invoice,hr_attach_to_invoice,ts_attach_to_invoice,healthroster_import_auto_authorise_override,overrideclientsettings) values('5f55f65b-d68e-860f-a60b-4e7e7346339d'::uuid,'90c499d2-0a69-8146-8588-90ce2a26cc31'::uuid,'2d503751-8104-81a3-93de-df92c1ef8c11'::uuid,'NFX nurse','5',date '2026-10-01',date '2026-10-31','PAYE','{"paye_day":20,"paye_night":30,"paye_sat":40,"paye_sun":50,"paye_bh":60,"umb_day":20,"umb_night":30,"umb_sat":40,"umb_sun":50,"umb_bh":60,"charge_day":30,"charge_night":45,"charge_sat":60,"charge_sun":75,"charge_bh":90}'::jsonb,'HEALTHROSTER',true,true,true,true,false,false,false,false,false,false);
+do $nfx_setup$ declare result jsonb;shape jsonb;g uuid;c uuid;resolved jsonb;begin
+ result:=public.weekly_source_source_group_save_atomic_v1(jsonb_build_object('actor_user_id','e2dac56c-1e5f-8354-95eb-39f2ca3f62b0','agency_id',current_setting('cloudtms.nfx.agency_id'),'environment','TEST','source_group','{"id":null,"expected_version":null,"code":"NFX_MULTI_HR_20261013","display_name":"NFX current NULL HealthRoster","source_family":"ROSTER","cutoff_weekday":3,"cutoff_local_time":"23:59","nhsp_report_heading_name":null,"active":true}'::jsonb));
+ if result->>'ok' is distinct from 'true' then raise exception 'NFX_GROUP_NATIVE_SAVE_FAILED';end if;
+ g:=(result->>'saved_source_group_id')::uuid;
+ shape:=public.weekly_source_client_settings_get_v1(jsonb_build_object('actor_user_id','e2dac56c-1e5f-8354-95eb-39f2ca3f62b0','agency_id',current_setting('cloudtms.nfx.agency_id'),'environment','TEST','client_id','2d503751-8104-81a3-93de-df92c1ef8c11','effective_date',current_date));
+ if shape->>'eligible' is distinct from 'true' then raise exception 'NFX_ACTUAL_CONTRACT_SCOPE_NOT_ELIGIBLE';end if;
+ result:=public.weekly_source_client_settings_save_atomic_v1(jsonb_build_object('actor_user_id','e2dac56c-1e5f-8354-95eb-39f2ca3f62b0','agency_id',current_setting('cloudtms.nfx.agency_id'),'environment','TEST','client_id','2d503751-8104-81a3-93de-df92c1ef8c11','expected_settings_version',shape->>'settings_version','settings',(shape->'settings')||jsonb_build_object('source_group_id',g,'effective_from',current_date,'authority_mode','SOURCE_AUTHORITY','document_mode','IMPORT_ONLY','self_bill_enabled',true,'candidate_queries_enabled',false,'manager_queries_enabled',false,'completed_pack_copy_enabled',false)));
+ if result->>'ok' is distinct from 'true' then raise exception 'NFX_CLIENT_NATIVE_SAVE_FAILED';end if;
+ select id into strict c from public.weekly_source_cycles where source_group_id=g and scope_client_id is null and state='OPEN' and finalisation_week_ending=date '2026-10-11';
+ resolved:=public.weekly_source_client_cycle_resolve_atomic_v1(jsonb_build_object('actor_user_id','e2dac56c-1e5f-8354-95eb-39f2ca3f62b0','source_cycle_id',c,'client_id','2d503751-8104-81a3-93de-df92c1ef8c11'));
+ if resolved->>'ok' is distinct from 'true' then raise exception 'NFX_NATIVE_CLIENT_CYCLE_FAILED';end if;
+ c:=(resolved->>'source_cycle_id')::uuid;
+ if private.weekly_source_effective_rule_set_v1('2d503751-8104-81a3-93de-df92c1ef8c11'::uuid,c) is not null then raise exception 'NFX_NULL_RULE_CONTROL_CHANGED';end if;
+ update pg_temp.nfx_state set group_id=g,cycle_id=c;
+end;$nfx_setup$;
