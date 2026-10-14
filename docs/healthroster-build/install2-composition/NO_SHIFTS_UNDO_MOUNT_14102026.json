@@ -1,0 +1,318 @@
+{
+  "status": "SOURCE_MOUNT_NOT_NATIVE",
+  "beforeCommit": "87b9908370d238d1af4da910b97018d19a3fd033",
+  "authorCommit": "d59255c626bbad7f2ee5db02dc2c36ad58fcdd48",
+  "archivePins": [
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/before/broker/src/weekly-source/routes.js",
+      "sha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/before/broker/src/weekly-source/routes.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/check-and-freeze-undo-source.mjs",
+      "sha256": "b983f00c02ca385de574e88b1d2f8e9b7976e7283d2bcf193be0f242c8522184",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/check-and-freeze-undo-source.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/CURRENT_UNDO_FULL_REVERSE.json",
+      "sha256": "1cd7efa81e41eb813e44a5c29b6d7eb279dabd47662fb659adf0ec412bd1d46a",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/CURRENT_UNDO_FULL_REVERSE.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/forward/broker/src/weekly-source/routes.js",
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/forward/broker/src/weekly-source/routes.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "sha256": "3620f3fe8a70474d502b59c5e5a3772d673c701d44309896190f1629527c3efe",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo_v1.sql",
+      "sha256": "ff332bc03050801ab30ee9974b8b217a576027620f052d786eab3957d63b2dcb",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo_v1.sql"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/prepare-undo-forward.mjs",
+      "sha256": "76c106b1cde3f594894c92acf53bdf0e31ef3d24caee9f8b537398e9e5ea2b0f",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/prepare-undo-forward.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/SOURCE_CHECK_RESULT.json",
+      "sha256": "45712c45001a8ac6a9f8d3077f56e5416276361ae6aae182ba15098b47f7c574",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/SOURCE_HANDOFF.md",
+      "sha256": "9904f69b6fc78d74c353353804cb3f168795f012f00089657ff9579e57b35491",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/SOURCE_HANDOFF.md"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/banking-pay/weekly-source-c1-authoring.mjs",
+      "sha256": "67bff9ac76aa2b6ac71e0e4a34f921f10bd01293a9c2889e4c9997f76018777f",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/banking-pay/weekly-source-c1-authoring.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "sha256": "1c70ca14d9893096ae9a0ff04865bdb54dc7021cb1dc1418f46e8c0d9e185ca8",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/banking-pay/weekly-source-c1-components.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/banking-pay/weekly-source-c1-publication.mjs",
+      "sha256": "2a9a1f6d06eed3637b1de2f11de3023e87cd3d71ab686a847fc616a0d405be7e",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/banking-pay/weekly-source-c1-publication.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/banking-pay/weekly-source-c1-stream.mjs",
+      "sha256": "45aacb4a33e17d9d8b41d80a225a7bae678e4098e95fd8f7cf19cf941b26f00c",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/banking-pay/weekly-source-c1-stream.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/bpay-busy.js",
+      "sha256": "f9de3b1fd722ce592868fe5b13f65d01494c88d83d082fcd1bd214bc99c16932",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/bpay-busy.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/bpay-next-legacy-fence.js",
+      "sha256": "0a7e0f87af882e1d0d39a98498fed7814bbdad77c444ac9b0f9058bc4c5f24b8",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/bpay-next-legacy-fence.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/payment-actor-permission.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/acacium-report-normalise.js",
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/acacium-report-normalise.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/contract-qualification.js",
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/contract-qualification.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/csv-evidence.js",
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/csv-evidence.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/economic-snapshot.js",
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/economic-snapshot.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/errors.js",
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/errors.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/guard-refusal-record.mjs",
+      "sha256": "85c7a7d2a5d43886ef1324fe0bc64628138ed2d9d02f250125815cd93da87979",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/guard-refusal-record.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/healthroster-normalise.js",
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/healthroster-normalise.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/html-evidence.js",
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/html-evidence.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/index.js",
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/index.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/manager-email.js",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/manager-email.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/money.js",
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/money.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/nhsp-normalise.js",
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/nhsp-normalise.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/profiles.js",
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/profiles.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "sha256": "5352ef8bcc66e87b090d5a1d4f40ba872cf7a542d38f60aaf690ec1eea80f3c3",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/protected-action-orchestrator.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/protected-next-preview.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/protected-target-schedule.js",
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/protected-target-schedule.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/roster-summary-normalise.js",
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/roster-summary-normalise.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/routes.js",
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/routes.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/rule-set-validation.js",
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/rule-set-validation.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/shared.js",
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/shared.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/source-finalised-time.js",
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/source-finalised-time.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/source-invoice-money.js",
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/source-invoice-money.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/source-price-comparator.js",
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/source-price-comparator.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/weekly-rate-owner.js",
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/weekly-rate-owner.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/test-mount/broker/src/weekly-source/xlsx-evidence.js",
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/test-mount/broker/src/weekly-source/xlsx-evidence.js"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/undo-current-transport.test.mjs",
+      "sha256": "4799c14ac16044b330405e224188695320ef03c4b6db3ef40a5c6b35be4eee4d",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/undo-current-transport.test.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/unit-source-loader.mjs",
+      "sha256": "80c0fec48e3022de16e635273ce00d5b6c7850f25757cff102864e05be4c2414",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/unit-source-loader.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native/REVIEW_MANIFEST.json",
+      "sha256": "d97bd1909b77353905ec19d8e988bbc9ce1f010e41386aee18a0d05c94db1337",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-native-20261014/REVIEW_MANIFEST.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/before/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "sha256": "3620f3fe8a70474d502b59c5e5a3772d673c701d44309896190f1629527c3efe",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/before/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/check-and-freeze-undo-state.mjs",
+      "sha256": "390ba36a2f42ad353024bcd255fb38ef4c567f7294426094633d93722eee487d",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/check-and-freeze-undo-state.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/CURRENT_STATE_OWNER_REVERSE_AND_PINS.json",
+      "sha256": "c6ca71c3ea5200ea2c673f021f56b4a8a830e2b224f8875bbdf8aa385af301e6",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/CURRENT_STATE_OWNER_REVERSE_AND_PINS.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/current-protocol/public_weekly_source_correct_final_apply_atomic_v1.sql.txt",
+      "sha256": "844ccd908d7c509c2ac517b00254793d8ad3b0eedada51f6658023e658fa8d77",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/current-protocol/public_weekly_source_correct_final_apply_atomic_v1.sql.txt"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/current-protocol/public_weekly_source_correct_final_cancel_atomic_v1.sql.txt",
+      "sha256": "ae1b37ad11b3a48f29e610fe7dd7cdb0e9d00117f45b0a2f8eaf2102b971e78f",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/current-protocol/public_weekly_source_correct_final_cancel_atomic_v1.sql.txt"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/current-protocol/public_weekly_source_correct_final_open_atomic_v1.sql.txt",
+      "sha256": "128fb591ced89320ea69bc304c48166d44bea23fc22b9b5b0fb3065e249817c1",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/current-protocol/public_weekly_source_correct_final_open_atomic_v1.sql.txt"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/current-protocol/public_weekly_source_correct_final_prepare_atomic_v1.sql.txt",
+      "sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/current-protocol/public_weekly_source_correct_final_prepare_atomic_v1.sql.txt"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/current-protocol/public_weekly_source_correct_final_review_atomic_v1.sql.txt",
+      "sha256": "f62727e880288024562eed90d2f67486059301512767fd47b8d1ce4c513a1565",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/current-protocol/public_weekly_source_correct_final_review_atomic_v1.sql.txt"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/prepare-undo-state-successor.mjs",
+      "sha256": "e9e9249dc7331dced1ae3a79bc4ee585d9d8cf5a057de215b9bb00415cd4d1d9",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/prepare-undo-state-successor.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/SOURCE_CHECK_RESULT.json",
+      "sha256": "463e9567920cb236c6a8bdedee1e94dd77899eaf933a6a03f517ab8c186e7224",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/SOURCE_CHECK_RESULT.json"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/SOURCE_DISPOSITION.md",
+      "sha256": "edda9c874ad33f18409a7fd1eba86aa4756aee27d59c2838843673ce4e289cee",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/SOURCE_DISPOSITION.md"
+    },
+    {
+      "file": "docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/state/REVIEW_MANIFEST.json",
+      "sha256": "ecf9fbe50130511a860943f3e4b975f62163820c3d7e899849c483d170198ec4",
+      "publishedSource": "docs/healthroster-build/proposals/install2-no-shifts-undo-state-successor-20261014/REVIEW_MANIFEST.json"
+    }
+  ],
+  "owners": [
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "beforeSha256": "284b3487d14ab215e3764bcdfe49c44e39ada7856e5d087f7436df05f5b47a53",
+      "sha256": "425e7fefb430e7db09c777ebf852f0e9aaa02ce17e0ca144eaaf2d58dd7c29a5",
+      "reverseHunks": 2
+    },
+    {
+      "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql",
+      "sha256": "25a25cf7c9f88352ca0dffadff6ecca151e80ac475ce7909d69479e780ad9547",
+      "sourceNameOnlyChanged": true,
+      "sqlCanonicalLF": true
+    },
+    {
+      "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e",
+      "rawSourceSha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e",
+      "sqlCanonicalLF": true
+    }
+  ],
+  "sourcePacketsPreserved": true,
+  "contractSeal": null,
+  "signature": "public.weekly_source_no_shifts_undo_atomic_v1(jsonb)",
+  "finalClassificationVerifierCouplingRequired": true,
+  "nativeFirstUse": false,
+  "installation": false
+}

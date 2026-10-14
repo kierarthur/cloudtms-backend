@@ -1,0 +1,71 @@
+{
+  "schema": "NO_SHIFTS_UNDO_STATE_SOURCE_SUCCESSOR_MANIFEST_V1",
+  "source_pin": "87b9908370d238d1af4da910b97018d19a3fd033",
+  "predecessor_manifest_sha256": "d97bd1909b77353905ec19d8e988bbc9ce1f010e41386aee18a0d05c94db1337",
+  "artifact_count": 13,
+  "entries": [
+    {
+      "path": "before/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "bytes": 7644,
+      "sha256": "3620f3fe8a70474d502b59c5e5a3772d673c701d44309896190f1629527c3efe"
+    },
+    {
+      "path": "check-and-freeze-undo-state.mjs",
+      "bytes": 4781,
+      "sha256": "390ba36a2f42ad353024bcd255fb38ef4c567f7294426094633d93722eee487d"
+    },
+    {
+      "path": "CURRENT_STATE_OWNER_REVERSE_AND_PINS.json",
+      "bytes": 4973,
+      "sha256": "c6ca71c3ea5200ea2c673f021f56b4a8a830e2b224f8875bbdf8aa385af301e6"
+    },
+    {
+      "path": "current-protocol/public_weekly_source_correct_final_apply_atomic_v1.sql.txt",
+      "bytes": 36254,
+      "sha256": "844ccd908d7c509c2ac517b00254793d8ad3b0eedada51f6658023e658fa8d77"
+    },
+    {
+      "path": "current-protocol/public_weekly_source_correct_final_cancel_atomic_v1.sql.txt",
+      "bytes": 27781,
+      "sha256": "ae1b37ad11b3a48f29e610fe7dd7cdb0e9d00117f45b0a2f8eaf2102b971e78f"
+    },
+    {
+      "path": "current-protocol/public_weekly_source_correct_final_open_atomic_v1.sql.txt",
+      "bytes": 11910,
+      "sha256": "128fb591ced89320ea69bc304c48166d44bea23fc22b9b5b0fb3065e249817c1"
+    },
+    {
+      "path": "current-protocol/public_weekly_source_correct_final_prepare_atomic_v1.sql.txt",
+      "bytes": 16406,
+      "sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5"
+    },
+    {
+      "path": "current-protocol/public_weekly_source_correct_final_review_atomic_v1.sql.txt",
+      "bytes": 12882,
+      "sha256": "f62727e880288024562eed90d2f67486059301512767fd47b8d1ce4c513a1565"
+    },
+    {
+      "path": "forward/supabase/repeatable/14102026_0900_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "bytes": 7475,
+      "sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e"
+    },
+    {
+      "path": "prepare-undo-state-successor.mjs",
+      "bytes": 5055,
+      "sha256": "e9e9249dc7331dced1ae3a79bc4ee585d9d8cf5a057de215b9bb00415cd4d1d9"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULT.json",
+      "bytes": 1266,
+      "sha256": "463e9567920cb236c6a8bdedee1e94dd77899eaf933a6a03f517ab8c186e7224"
+    },
+    {
+      "path": "SOURCE_DISPOSITION.md",
+      "bytes": 2280,
+      "sha256": "edda9c874ad33f18409a7fd1eba86aa4756aee27d59c2838843673ce4e289cee"
+    }
+  ],
+  "source_checks_sha256": "463e9567920cb236c6a8bdedee1e94dd77899eaf933a6a03f517ab8c186e7224",
+  "native_seal": null,
+  "native_claims": false
+}

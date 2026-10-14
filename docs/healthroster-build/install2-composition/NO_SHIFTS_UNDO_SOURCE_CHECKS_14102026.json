@@ -1,0 +1,97 @@
+{
+  "status": "MOUNTED_SOURCE_PASS_NATIVE_AND_FINAL_COUPLING_HELD",
+  "sourcePins": 60,
+  "archiveFiles": 57,
+  "closureFiles": 2,
+  "closureSha256": "a78540ed15daafae4991bf4384bcc584bbae317123121142bea003ac0295849a",
+  "atomicStatements": 5,
+  "fullRouteReverseHunks": 2,
+  "fullStateReverseHunks": 1,
+  "reboundTestSha256": "7ca471e22bd3c0652c9b41b2cc53016ef1837418a301ce22dbc90ccd8aefcae0",
+  "rebindings": [
+    {
+      "before": "from './test-mount/broker/src/weekly-source/routes.js'",
+      "after": "from '../../../broker/src/weekly-source/routes.js'",
+      "count": 1
+    },
+    {
+      "before": "const dir=path.dirname(fileURLToPath(import.meta.url));",
+      "after": "const actualRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..');\nconst dir=path.join(actualRoot,\"docs/healthroster-build/install2-composition/reviewed-no-shifts-undo-14102026/native\");",
+      "count": 1
+    },
+    {
+      "before": "path.resolve(dir,'../../../../../healthroster-install2-14102026')",
+      "after": "actualRoot",
+      "count": 1
+    },
+    {
+      "before": "path.join(dir,'forward',pin.new_native_owners[0].path)",
+      "after": "path.join(actualRoot,\"supabase/repeatable/14102026_0953_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc\")",
+      "count": 2
+    },
+    {
+      "before": "path.join(dir,'forward',pin.new_native_owners[1].path)",
+      "after": "path.join(actualRoot,\"supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql\")",
+      "count": 1
+    },
+    {
+      "before": "14102026_0900_healthroster_no_shifts_undo",
+      "after": "14102026_0953_healthroster_no_shifts_undo",
+      "count": 1
+    }
+  ],
+  "steps": [
+    {
+      "name": "mounted-dispatcher38",
+      "exitCode": 0,
+      "outputSha256": "f4ada10832ed7b646093efee107d06aff2ed88b3a2f18b5664b9591613bea91b",
+      "tests": 38,
+      "pass": 38,
+      "fail": 0
+    },
+    {
+      "name": "route-syntax",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "name": "recipe-syntax",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "name": "check-syntax",
+      "exitCode": 0,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "name": "database-source-integrity",
+      "exitCode": 0,
+      "outputSha256": "bbac9a1c26415e3c88c872fbf4eb91e39b297d4b7e2a8792419ba2308724af26",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "name": "tracked-credential-scan",
+      "exitCode": 0,
+      "outputSha256": "ef629eec3894d747fda0c5efd88a5a2ffde2275c2ba66c2287c11eee7dedda6a",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    }
+  ],
+  "contractSeal": null,
+  "native": false,
+  "installation": false,
+  "initialReaderHold": "Manifest artifact count includes its own manifest; first count assertion held before writes, then exact entries plus manifest were checked."
+}

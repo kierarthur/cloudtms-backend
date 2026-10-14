@@ -32,6 +32,7 @@ const DIRECT_RPC_COMMANDS = Object.freeze({
   REMIND_CANDIDATE: 'weekly_source_candidate_reminder_atomic_v1',
   ACKNOWLEDGE_NOTICE: 'weekly_source_office_notification_ack_atomic_v1',
   NO_SHIFTS_TO_IMPORT: 'weekly_source_no_shifts_attest_atomic_v1',
+  UNDO_NO_ONE_WORKED: 'weekly_source_no_shifts_undo_atomic_v1',
   ADMIT_SOURCE_INVOICE: 'weekly_source_invoice_admit_atomic_v1',
   MOVE_SOURCE_INVOICE: 'weekly_source_invoice_move_atomic_v1',
   ACCEPT_NHSP_SOURCE_CHARGES: 'weekly_source_charge_accept_atomic_v1',
@@ -803,6 +804,46 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       user.id,
       () => callRpc(dependencies, definition.rpc, strictEnvelopeRequest(definition, payload)),
     );
+    return jsonResponse(200, result);
+  }
+  if (action === 'UNDO_NO_ONE_WORKED') {
+    const keys = ['source_cycle_id', 'source_group_id', 'client_id', 'completion_id', 'expected_cycle_version'];
+    if (Object.keys(payload).length !== keys.length || keys.some(key => !Object.hasOwn(payload, key))
+        || Object.keys(payload).some(key => !keys.includes(key))) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    for (const key of keys.filter(key => key.endsWith('_id'))) {
+      request[key] = canonicalUuid(payload[key], 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', key);
+    }
+    const version = payload.expected_cycle_version;
+    if (!(typeof version === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(version))
+        && !(Number.isSafeInteger(version) && version >= 0)) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    request.expected_cycle_version = String(version);
+    if (BigInt(request.expected_cycle_version) >= 9223372036854775807n) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID', 'Refresh the Checklist and try again.', 400);
+    }
+    const result = await withRefusalRecording(dependencies,
+      'broker:weekly-source:weekly_source_no_shifts_undo_atomic_v1', user.id,
+      () => callRpc(dependencies, 'weekly_source_no_shifts_undo_atomic_v1', request));
+    const receiptKeys = ['ok', 'status', 'idempotent', 'completion_id', 'source_cycle_id', 'source_group_id',
+      'client_id', 'cycle_state', 'cycle_version', 'undone_by_user_id', 'undone_at_utc'];
+    if (!result || typeof result !== 'object' || Array.isArray(result)
+        || Object.keys(result).length !== receiptKeys.length
+        || receiptKeys.some(key => !Object.hasOwn(result, key))
+        || result.ok !== true || result.status !== 'NO_SHIFTS_UNDONE' || typeof result.idempotent !== 'boolean'
+        || !['OPEN', 'FINALISABLE', 'FINALISED'].includes(result.cycle_state)
+        || typeof result.cycle_version !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(result.cycle_version)
+        || typeof result.undone_at_utc !== 'string' || !Number.isFinite(Date.parse(result.undone_at_utc))
+        || ['completion_id', 'source_cycle_id', 'source_group_id', 'client_id'].some(key => result[key] !== request[key])
+        || result.undone_by_user_id !== user.id) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_RECEIPT_UNAVAILABLE', 'The Undo result could not be verified. Refresh the Checklist before trying again.', 503);
+    }
+    if ((!result.idempotent && BigInt(result.cycle_version) !== BigInt(request.expected_cycle_version) + 1n)
+        || BigInt(result.cycle_version) > 9223372036854775807n) {
+      fail('WEEKLY_SOURCE_NO_SHIFTS_UNDO_RECEIPT_UNAVAILABLE', 'The Undo result could not be verified. Refresh the Checklist before trying again.', 503);
+    }
     return jsonResponse(200, result);
   }
   if (DIRECT_RPC_COMMANDS[action]) {

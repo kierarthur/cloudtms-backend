@@ -1,0 +1,89 @@
+-- Primary owner plan §11.6. Superseding completion/audit only; no new ledger.
+create or replace function public.weekly_source_no_shifts_undo_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_actor uuid; v_group uuid; v_cycle_id uuid; v_client uuid; v_completion_id uuid; v_expected bigint;
+  v_cycle public.weekly_source_cycles%rowtype; v_completion public.weekly_source_client_cycle_completions%rowtype;
+  v_now timestamptz:=transaction_timestamp(); v_has_other boolean; v_all_complete boolean; v_state text;
+  v_command_hash text; v_prior jsonb; v_receipt jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if current_setting('transaction_isolation') is distinct from 'read committed' then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_ISOLATION_UNAVAILABLE' using errcode='55000';
+  end if;
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','source_cycle_id','client_id','completion_id','expected_cycle_version'],
+    'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'actor_user_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'source_group_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'source_cycle_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'client_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'completion_id') is distinct from 'string'
+    or jsonb_typeof(p_request->'expected_cycle_version') not in ('number','string')
+    or coalesce(p_request->>'expected_cycle_version','') !~ '^(0|[1-9][0-9]{0,18})$'
+    or not pg_input_is_valid(p_request->>'expected_cycle_version','bigint') then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID' using errcode='22023';
+  end if;
+  v_actor:=(p_request->>'actor_user_id')::uuid;v_group:=(p_request->>'source_group_id')::uuid;
+  v_cycle_id:=(p_request->>'source_cycle_id')::uuid;v_client:=(p_request->>'client_id')::uuid;
+  v_completion_id:=(p_request->>'completion_id')::uuid;v_expected:=(p_request->>'expected_cycle_version')::bigint;
+  if v_actor is null or v_group is null or v_cycle_id is null or v_client is null or v_completion_id is null or v_expected<0 or v_expected>=9223372036854775807 then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID' using errcode='22023';
+  end if;
+  -- Reuse native admin operation admission, including actual active actor and
+  -- dated scope. Pay-only subject/read authority never grants this operation.
+  perform private.weekly_source_office_authority_v1(v_actor,'FINALISE_WEEK',v_group);
+  select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id for update;
+  if v_cycle.id is null or v_cycle.source_group_id is distinct from v_group
+    or (v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_client) then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_SCOPE_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_source_office_authority_v1(v_actor,'FINALISE_WEEK',v_group,v_client,v_cycle.finalisation_week_ending);
+  if v_cycle.state='FINALISING' then raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_FINALISING' using errcode='55000';end if;
+  select * into v_completion from public.weekly_source_client_cycle_completions where id=v_completion_id for update;
+  if v_completion.id is null or v_completion.source_cycle_id is distinct from v_cycle_id
+    or v_completion.source_group_id is distinct from v_group or v_completion.client_id is distinct from v_client
+    or v_completion.completion_kind is distinct from 'NO_SHIFTS_TO_IMPORT' then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_COMPLETION_INVALID' using errcode='22023';
+  end if;
+  v_command_hash:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_NO_SHIFTS_UNDO_COMMAND_V1',p_request),'hex');
+  select audit.after_json->'receipt' into v_prior from public.audit_events audit
+    where audit.object_type='weekly_source_client_cycle_completions' and audit.object_id_text=v_completion_id::text
+      and audit.action='WEEKLY_SOURCE_NO_SHIFTS_UNDONE' and audit.actor_user_id=v_actor
+      and audit.after_json->>'command_sha256'=v_command_hash
+    order by audit.ts_utc desc,audit.id desc limit 1;
+  if v_completion.state='SUPERSEDED' and v_prior is not null then return v_prior||jsonb_build_object('idempotent',true);end if;
+  if v_cycle.version is distinct from v_expected then raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_CYCLE_STALE' using errcode='40001';end if;
+  if v_completion.state is distinct from 'CURRENT' then raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_COMPLETION_STALE' using errcode='40001';end if;
+  update public.weekly_source_client_cycle_completions set state='SUPERSEDED',superseded_at_utc=v_now
+    where id=v_completion_id and state='CURRENT';
+  if not found then raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_COMPLETION_STALE' using errcode='40001';end if;
+  select exists(select 1 from public.weekly_source_client_cycle_completions c where c.source_cycle_id=v_cycle_id and c.state='CURRENT'),
+    not exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=v_group
+      and (v_cycle.scope_client_id is null or m.client_id=v_cycle.scope_client_id)
+      and v_cycle.finalisation_week_ending between m.valid_from and coalesce(m.valid_to,'infinity'::date)
+      and not exists(select 1 from public.weekly_source_client_cycle_completions c
+        where c.source_cycle_id=v_cycle_id and c.client_id=m.client_id and c.state='CURRENT'))
+    into v_has_other,v_all_complete;
+  v_state:=case when not v_has_other then 'OPEN' when v_all_complete then 'FINALISED' else 'FINALISABLE' end;
+  update public.weekly_source_cycles set state=v_state,version=version+1,
+    finalised_at_utc=case when v_state='FINALISED' then coalesce(finalised_at_utc,v_now) end,
+    finalised_by_user_id=case when v_state='FINALISED' then coalesce(finalised_by_user_id,v_actor) end
+    where id=v_cycle_id and version=v_expected and state<>'FINALISING' returning * into v_cycle;
+  if not found then raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_CYCLE_STALE' using errcode='40001';end if;
+  v_receipt:=jsonb_build_object('ok',true,'status','NO_SHIFTS_UNDONE','idempotent',false,'completion_id',v_completion_id,
+    'source_cycle_id',v_cycle_id,'source_group_id',v_group,'client_id',v_client,'cycle_state',v_cycle.state,
+    'cycle_version',v_cycle.version::text,'undone_by_user_id',v_actor,'undone_at_utc',v_now);
+  insert into public.audit_events(ts_utc,actor_user_id,object_type,object_id_text,action,after_json,reason)
+    values(v_now,v_actor,'weekly_source_client_cycle_completions',v_completion_id::text,'WEEKLY_SOURCE_NO_SHIFTS_UNDONE',
+      jsonb_build_object('command_sha256',v_command_hash,'receipt',v_receipt),'Office undid No one worked');
+  return v_receipt;
+exception when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_NO_SHIFTS_UNDO_REQUEST_INVALID' using errcode='22023';
+end;
+$function$;
+alter function public.weekly_source_no_shifts_undo_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_no_shifts_undo_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_no_shifts_undo_atomic_v1(jsonb) to service_role;
