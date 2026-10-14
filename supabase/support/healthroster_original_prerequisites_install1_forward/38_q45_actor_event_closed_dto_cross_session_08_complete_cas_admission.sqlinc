@@ -1,0 +1,52 @@
+create or replace function private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id uuid,p_client_ids uuid[])
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ready boolean; v_cas jsonb; v_clients uuid[];
+begin
+  if p_client_ids is null or array_position(p_client_ids,null::uuid) is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='22023'; end if;
+  select coalesce(array_agg(distinct item order by item),'{}'::uuid[]) into v_clients from unnest(p_client_ids) item;
+  if to_regprocedure('private.weekly_source_bulk_producer_ready_v1(uuid)') is null
+    or to_regprocedure('private.weekly_source_bulk_source_cas_v1(uuid,uuid[])') is null then
+    raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_bulk_producer_ready_v1($1)' into v_ready using p_cycle_id;
+  if v_ready is distinct from true then
+    begin
+      perform private.weekly_source_protected_qualification_assert_v1(null,p_cycle_id,v_clients,'BULK_SIGNED');
+    exception when sqlstate '42501' or sqlstate '55000' then
+      raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000';
+    end;
+  end if;
+  execute 'select private.weekly_source_bulk_source_cas_v1($1,$2)' into v_cas using p_cycle_id,v_clients;
+  if not private.weekly_exceptional_json_keys_exact_v1(v_cas,array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or not(v_cas ?& array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or v_cas->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or v_cas->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_cas->'client_ids' is distinct from to_jsonb(v_clients)
+    or coalesce(v_cas->>'source_cas_sha256','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='55000'; end if;
+  return v_cas;
+end;
+$function$;
+
+create or replace function private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id uuid,p_client_ids uuid[],p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare clients uuid[]; result jsonb;
+begin
+  begin return private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id,p_client_ids);
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' then raise; end if;
+  end;
+  if p_client_ids is null or array_position(p_client_ids,null::uuid) is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='22023'; end if;
+  select coalesce(array_agg(distinct item order by item),'{}'::uuid[]) into clients from unnest(p_client_ids) item;
+  perform private.weekly_source_protected_test_scope_assert_v1(p_cycle_id,p_actor_user_id,clients,null);
+  result:=private.weekly_source_bulk_source_cas_v1(p_cycle_id,clients);
+  if result->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or result->>'source_cycle_id' is distinct from p_cycle_id::text or result->'client_ids' is distinct from to_jsonb(clients)
+    or coalesce(result->>'source_cas_sha256','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_SOURCE_CAS_INVALID' using errcode='55000'; end if;
+  return result;
+end;
+$function$;

@@ -1,0 +1,45 @@
+-- Complete isolated source proposal. Root review and native proofs pending.
+-- Only a native authoritative admitted command supplies this census. Browser
+-- requests never gain a client_ids property. Replay retains its original scope.
+create or replace function private.weekly_source_bulk_original_client_ids_v1(p_cycle_id uuid,p_actor_id uuid,p_bulk_key text)
+returns uuid[] language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare command jsonb; selection jsonb; cas_value jsonb; clients uuid[]; item jsonb;
+begin
+  if p_cycle_id is null or p_actor_id is null or coalesce(p_bulk_key,'') !~ '^[A-Za-z0-9:_-]{16,120}$' then
+    raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_INVALID' using errcode='22023'; end if;
+  select audit.after_json into command from public.audit_events audit
+    where audit.object_type='weekly_source_bulk_signed_command'
+      and audit.object_id_text=p_cycle_id::text||':'||p_actor_id::text||':'||p_bulk_key
+      and audit.action='WEEKLY_SOURCE_BULK_SIGNED_COMMAND_ADMITTED' and audit.event_sequence_is_authoritative
+    order by audit.event_sequence desc limit 1;
+  selection:=command->'initial_selection'; cas_value:=selection->'source_cas';
+  if command->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_COMMAND_V1'
+    or command->>'actor_user_id' is distinct from p_actor_id::text or command->>'source_cycle_id' is distinct from p_cycle_id::text
+    or command->>'bulk_request_key' is distinct from p_bulk_key
+    or selection->>'contract' is distinct from 'WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1'
+    or selection->>'source_cycle_id' is distinct from p_cycle_id::text
+    or coalesce(selection->>'selection_sha256','') !~ '^[0-9a-f]{64}$'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_BULK_SIGNED_SELECTION_V1',
+      selection-array['selection_sha256','eligible_count','skipped_count']),'hex') is distinct from selection->>'selection_sha256'
+    or not private.weekly_exceptional_json_keys_exact_v1(cas_value,array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or not(cas_value ?& array['schema_version','source_cycle_id','client_ids','source_cas_sha256'])
+    or cas_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_BULK_SOURCE_CAS_V1'
+    or cas_value->>'source_cycle_id' is distinct from p_cycle_id::text
+    or coalesce(cas_value->>'source_cas_sha256','') !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(cas_value->'client_ids') is distinct from 'array' or jsonb_array_length(cas_value->'client_ids')>100 then
+    raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_INVALID' using errcode='55000'; end if;
+  for item in select value from jsonb_array_elements(cas_value->'client_ids') value loop
+    if jsonb_typeof(item) is distinct from 'string' or item#>>'{}' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_INVALID' using errcode='55000'; end if;
+  end loop;
+  select coalesce(array_agg(distinct value::uuid order by value::uuid),'{}'::uuid[]) into clients
+    from jsonb_array_elements_text(cas_value->'client_ids') value;
+  if to_jsonb(clients) is distinct from cas_value->'client_ids' then
+    raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_INVALID' using errcode='55000'; end if;
+  return clients;
+exception when invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_BULK_ORIGINAL_CLIENT_CENSUS_INVALID' using errcode='55000';
+end;
+$function$;
+

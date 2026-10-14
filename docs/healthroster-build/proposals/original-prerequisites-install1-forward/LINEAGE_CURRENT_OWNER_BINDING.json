@@ -1,0 +1,26 @@
+{
+  "source_only": true,
+  "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+  "original_forward": {
+    "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+    "file": "docs/healthroster-build/proposals/native-financial-fixtures/LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+    "bytes": 48358,
+    "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+  },
+  "original_forward_review": {
+    "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+    "file": "docs/healthroster-build/proposals/native-financial-fixtures/LINEAGE_OWN_NEW_ROOT_FORWARD.json",
+    "bytes": 1752,
+    "sha256": "52f58480f77f9a52cd8200d149ecc74de1088709c42fa12f2a0d17cb1f62c15b"
+  },
+  "actual_root_current_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "actual_root_current_file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+  "entire_current_root_definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+  "forward_entire_definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+  "entire_current_a634_definition_equal": true,
+  "native_next_hook_sha256": "6e3ddfffbc5b45a9c89dd13a0a6c4cda1464449c373b079e5eed74fc4ded7159",
+  "native_next_hook_bytes_equal": true,
+  "no_later_native_override_needed_at_current_root": true,
+  "actual37_lineage_requires_broad_native_prerequisites": true,
+  "source_only_not_native_creation_growth_concurrency_proof": true
+}

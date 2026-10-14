@@ -1,0 +1,107 @@
+-- Protected writer alone records these real R1 receipts on R2. The R1
+-- identity is retained, and the writer compares the complete committed native
+-- source set byte-for-byte. No ledger/status/receipt is edited by this reader.
+create or replace function private.weekly_source_protected_prerequisite_release_assert_v2(
+  p_q jsonb,p_group_id uuid,p_from date,p_to date,p_expected_sha256 text
+) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare g public.weekly_source_groups%rowtype; r private.cloudtms_database_releases%rowtype;
+  executed private.cloudtms_database_releases%rowtype; q jsonb:=p_q; entry jsonb; needed text[]; source_value jsonb;
+begin
+  select * into strict g from public.weekly_source_groups where id=p_group_id and active and source_family='ROSTER';
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  select * into strict executed from private.cloudtms_database_releases where release_id=q#>>'{execution_identity,release_id}';
+  if not private.weekly_exceptional_json_keys_exact_v1(q,array['schema_version','phase','release_id','git_commit','contract_sha256',
+      'agency_id','environment','source_group_id','effective_from_week_ending','effective_to_week_ending','capabilities',
+      'execution_identity','source_equivalence','gate_receipts','required_operational_replay','qualification_sha256'])
+    or not(q ?& array['schema_version','phase','release_id','git_commit','contract_sha256','agency_id','environment','source_group_id',
+      'effective_from_week_ending','effective_to_week_ending','capabilities','execution_identity','source_equivalence','gate_receipts',
+      'required_operational_replay','qualification_sha256'])
+    or q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2'
+    or q->>'phase' is distinct from 'PREREQUISITES_QUALIFIED_OPERATIONAL_REPLAY_PENDING'
+    or current_database()<>'cloudtms_test_clone' or g.environment<>'TEST'
+    or r.status<>'VERIFIED' or r.completed_at_utc is null or r.installed_contract_sha256 is distinct from r.repository_contract_sha256
+    or r.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or r.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or not private.weekly_exceptional_json_keys_exact_v1(q->'execution_identity',array['release_id','source_commit','contract_sha256',
+      'installation_id','agency_id','environment','database','managed_manifest_sha256','installed_catalogue_jsonb_sha256'])
+    or q->>'release_id' is distinct from r.release_id or q->>'git_commit' is distinct from r.git_commit
+    or q->>'contract_sha256' is distinct from r.installed_contract_sha256
+    or q->>'agency_id' is distinct from g.agency_id::text or q->>'source_group_id' is distinct from g.id::text
+    or q->>'environment' is distinct from 'TEST' or q->>'effective_from_week_ending' is distinct from p_from::text
+    or q->>'effective_to_week_ending' is distinct from p_to::text
+    or q->>'qualification_sha256' is distinct from p_expected_sha256
+    or coalesce(q->>'qualification_sha256','') !~ '^[0-9a-f]{64}$'
+    or encode(private.weekly_source_sha256_jsonb_v1(q->>'schema_version',q-'qualification_sha256'),'hex')
+      is distinct from q->>'qualification_sha256'
+    or executed.release_id=r.release_id or executed.status<>'VERIFIED' or executed.completed_at_utc is null
+    or executed.git_commit is distinct from q#>>'{execution_identity,source_commit}'
+    or executed.installed_contract_sha256 is distinct from executed.repository_contract_sha256
+    or executed.installed_contract_sha256 is distinct from r.installed_contract_sha256
+    or executed.installed_contract_sha256 is distinct from q#>>'{execution_identity,contract_sha256}'
+    or q#>>'{execution_identity,managed_manifest_sha256}' is distinct from executed.evidence_json#>>'{managed_release,manifest_sha256}'
+    or q#>>'{execution_identity,installed_catalogue_jsonb_sha256}'
+      is distinct from executed.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}'
+    or q#>>'{execution_identity,installed_catalogue_jsonb_sha256}'
+      is distinct from r.evidence_json#>>'{weekly_source_protected_qualification_catalogue,jsonb_sha256}'
+    or q#>>'{execution_identity,agency_id}' is distinct from g.agency_id::text
+    or q#>>'{execution_identity,environment}' is distinct from 'TEST'
+    or q#>>'{execution_identity,database}' is distinct from current_database()
+    or not exists(select 1 from private.cloudtms_database_identity identity where identity.singleton and identity.environment='TEST'
+      and identity.installation_id::text=q#>>'{execution_identity,installation_id}')
+    or executed.evidence_json#>>'{managed_release,environment}' is distinct from 'TEST'
+    or executed.evidence_json#>>'{managed_release,expected_database}' is distinct from current_database()
+    or q->'required_operational_replay' is distinct from '["CONTROLLED_ACTIVATION_POSITIVE_NEGATIVE_CAS", "REAL_CLIENT_API_PREVIEW_COMMIT_RETRY_ERROR_ORDER", "REAL_OFFICE_UI_DEEP_LINK_ACTIONS", "REAL_MYTMS_SIGNED_DOCUMENT_AND_APP", "REAL_POST_ACTIVATION_NATIVE_LEGACY_NEXT_REPLAY", "REAL_POST_ACTIVATION_SOURCE_ROUTING"]'::jsonb then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  source_value:=q->'source_equivalence';
+  if not private.weekly_exceptional_json_keys_exact_v1(source_value,array['schema_version','execution_source_commit',
+      'installation_source_commit','files','source_equivalence_sha256'])
+    or source_value->>'schema_version' is distinct from 'WEEKLY_SOURCE_COMMITTED_NATIVE_SOURCE_EQUIVALENCE_V1'
+    or source_value->>'execution_source_commit' is distinct from executed.git_commit
+    or source_value->>'installation_source_commit' is distinct from r.git_commit
+    or jsonb_typeof(source_value->'files') is distinct from 'array'
+    or case when jsonb_typeof(source_value->'files')='array' then jsonb_array_length(source_value->'files')=0 else true end
+    or source_value->>'source_equivalence_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_COMMITTED_NATIVE_SOURCE_EQUIVALENCE_V1',source_value-'source_equivalence_sha256'),'hex')
+    or (select count(distinct file->>'path') from jsonb_array_elements(source_value->'files') file)
+      <>jsonb_array_length(source_value->'files')
+    or exists(select 1 from jsonb_array_elements(source_value->'files') file where
+      not private.weekly_exceptional_json_keys_exact_v1(file,array['path','sha256'])
+      or not(file ?& array['path','sha256']) or nullif(file->>'path','') is null
+      or coalesce(file->>'sha256','') !~ '^[0-9a-f]{64}$')
+    or jsonb_typeof(q->'capabilities') is distinct from 'array'
+    or q->'capabilities' not in ('["BULK_SIGNED"]'::jsonb,'["AUTOMATIC_RECONCILE","BULK_SIGNED"]'::jsonb)
+    or jsonb_typeof(q->'gate_receipts') is distinct from 'array' then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  needed:=array['SOURCE_CAS_NATIVE','NATIVE_PROTECTION','SECURITY','LEGACY_PAY','NEXT_PAY','CLIENT_API','DOCUMENT','OWN_STAGE_CAS','SOURCE_ROUTING'];
+  if q->'capabilities' @> '["AUTOMATIC_RECONCILE"]'::jsonb then needed:=array_append(needed,'AUTOMATIC_COMPONENT_DELTA'); end if;
+  if jsonb_array_length(q->'gate_receipts')<>cardinality(needed)
+    or (select count(distinct value->>'gate') from jsonb_array_elements(q->'gate_receipts') value)<>cardinality(needed) then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  for entry in select value from jsonb_array_elements(q->'gate_receipts') value loop
+    if not private.weekly_exceptional_json_keys_exact_v1(entry,array['gate','status','execution','receipt_id','receipt_sha256',
+        'execution_release_id','execution_source_commit','execution_contract_sha256','execution_installation_id','scope_id',
+        'scope_sha256','transaction_id','source_cycle_id','week_ending','original_census_sha256','source_cas_sha256'])
+      or not(entry ?& array['gate','status','execution','receipt_id','receipt_sha256','execution_release_id','execution_source_commit',
+        'execution_contract_sha256','execution_installation_id','scope_id','scope_sha256','transaction_id','source_cycle_id','week_ending','original_census_sha256','source_cas_sha256'])
+      or not(coalesce(entry->>'gate','')=any(needed)) or entry->>'status' is distinct from 'PREREQUISITE_PASS'
+      or entry->>'execution' is distinct from 'AGENCY_TEST_NATIVE_ROLLBACK'
+      or entry->>'execution_release_id' is distinct from executed.release_id
+      or entry->>'execution_source_commit' is distinct from executed.git_commit
+      or entry->>'execution_contract_sha256' is distinct from executed.installed_contract_sha256
+      or entry->>'execution_installation_id' is distinct from q#>>'{execution_identity,installation_id}'
+      or coalesce(entry->>'scope_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or coalesce(entry->>'transaction_id','') !~ '^[0-9]+$'
+      or coalesce(entry->>'source_cycle_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or coalesce(entry->>'week_ending','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      or (entry->>'week_ending')::date<p_from or (p_to is not null and (entry->>'week_ending')::date>p_to)
+      or nullif(entry->>'receipt_id','') is null
+      or exists(select 1 from unnest(array['receipt_sha256','scope_sha256','original_census_sha256','source_cas_sha256']) field
+        where coalesce(entry->>field,'') !~ '^[0-9a-f]{64}$') then
+      raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  end loop;
+  return q;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000';
+end;
+$function$;

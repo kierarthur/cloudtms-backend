@@ -1,0 +1,1069 @@
+{
+  "schema_version": "ORIGINAL_PREREQUISITES_INSTALL1_SOURCE_INPUTS_V1",
+  "source_only": true,
+  "frozen_money_source_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "actual_install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "main_include": "supabase/support/healthroster_original_prerequisites_install1_forward/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+  "chronological_phases": [
+    {
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "input_count": 12
+    },
+    {
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "input_count": 8
+    },
+    {
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "input_count": 27
+    },
+    {
+      "phase": "F12_FIRST_USE_FULL_INVENTORY",
+      "input_count": 2
+    },
+    {
+      "phase": "FINAL_ORIGINAL_SOURCE_CAS_SCHEMA_LINEAGE",
+      "input_count": 2
+    }
+  ],
+  "ordered_source_occurrences": [
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/02_source_cas.sqlinc",
+      "bytes": 17435,
+      "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 1,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/01_cap_original_functions_02_source_cas.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "definition_sha256": "16a289f6e5fa231e2f2e79ca7016cf020b7f0f250053dc5432c77e56fbf6e0a5"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "definition_sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/03_capability_owners.sqlinc",
+      "bytes": 14714,
+      "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 2,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/02_cap_original_functions_03_capability_owners.sqlinc",
+      "statement_count": 5,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "definition_sha256": "7ef145df5f53e588e72e94bb3b9b312d132a8721280c0aea455614cf0b45abb4"
+        },
+        {
+          "signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+          "semantic_signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+          "definition_sha256": "ab98b552c43fdf6e62db7a62a8a3a575ce82155746dd0960c27935677338ef2f"
+        },
+        {
+          "signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "definition_sha256": "18be35bd30fa7f1fa0d114e672ac941a93245d841d2e3b4fda7c859c857090c5"
+        },
+        {
+          "signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "definition_sha256": "04a69d25d8368ffa2f36b1842ecdf645426891ca53a7a960bab014238c103c61"
+        },
+        {
+          "signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "definition_sha256": "41b86498f88e0abf7919bc22aea7a7a68c028c1548b868b628d872bfec8e56f0"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/04_original_clients.sqlinc",
+      "bytes": 3530,
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 3,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/03_cap_original_functions_04_original_clients.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+          "semantic_signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+          "definition_sha256": "f721e7331f55c222334a14c54c4043de06d09b04cb84ab8e3cd0cf69cb5f3e78"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/11_non_self_bill_admission.sqlinc",
+      "bytes": 2123,
+      "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 4,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "definition_sha256": "060e1baf19ac88555370b9dee51bc48225db36f2dca25f5b73114652369c49ae"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/05_complete_existing_activation.sqlinc",
+      "bytes": 20106,
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 5,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+          "semantic_signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+          "definition_sha256": "8cf83482c636e88218b98b6bb07051d1e146b405d5c1d4be7891dc2e1e708db3"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/06_complete_selection.sqlinc",
+      "bytes": 8378,
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 6,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/06_cap_original_functions_06_complete_selection.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "definition_sha256": "e910ba5859f9484250a29d732d1eeda317b0de4b4f3fc2795437e7ea42321097"
+        },
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+          "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+          "definition_sha256": "f2be06deed1ccba0318daaa7088029ecfee3ec87490670595e30f44aec52a130"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/07_complete_stage_proof.sqlinc",
+      "bytes": 4480,
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 7,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+          "semantic_signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+          "definition_sha256": "71a93ffc7456ca23bd45e046d9c053dea50a373d7436c5c479ff0a3a35890d5d"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/08_complete_bulk_command.sqlinc",
+      "bytes": 14792,
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 8,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+          "semantic_signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+          "definition_sha256": "4f4ddd095b9f745bd95628d4a139b6814486ebd6de8112ef260853f34ce0eb92"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_17_prepare_family.sqlinc",
+      "bytes": 28806,
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 9,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+          "definition_sha256": "643e3ffea22b30454a720e86b1c6de1f4c02081bfef7e2ec77f51fbb470bf6d9"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_18_prepare_action.sqlinc",
+      "bytes": 13428,
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 10,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "definition_sha256": "3c5a10909f4deaa8aec85d5e4724d1a621267bc008fa2eabe4a1c68719402e3c"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_19_action_context.sqlinc",
+      "bytes": 24978,
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 11,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "definition_sha256": "073692ae4a6a537ae2af01266721760a1d0b5c4bb27ace260195b5a107ceb21f"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_20_stage_request.sqlinc",
+      "bytes": 55130,
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254",
+      "phase": "CAP_ORIGINAL_FUNCTIONS",
+      "order": 12,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "definition_sha256": "67d978bd33ea639dd6146ed3ba54f22dd0245229d6abfde255033e880b3774a0"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/00_complete_current_catalogue.sqlinc",
+      "bytes": 14686,
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 13,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+          "definition_sha256": "8ed96f861e2295fda376f88060a7c918ce7eb7272569c39f4cec739616f98cfc"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_SCOPE.sqlinc",
+      "bytes": 19844,
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 14,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+      "statement_count": 5,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_owner_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_owner_v1()",
+          "definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_release_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_release_v1()",
+          "definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+          "definition_sha256": "54289b9ad28224a83eb45dd5eedfce706dabc89f9fce8b3ef292b11826f7259b"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+          "semantic_signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+          "definition_sha256": "14ff84ae6d9f2597b7f869e0f3059435596cbd40a536898b3436446fd625e8e3"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+          "semantic_signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+          "definition_sha256": "45a15757ed565b5bfc950a6ec92b9aa3701e6cdc411da7e4bee4480f44a2f649"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 15,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+          "semantic_signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+          "definition_sha256": "a46355526e0debd4ab8a676aafec9eb264bb8cbdf2dc0344afcba84639b41ee0"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/03_complete_cas_admission.sqlinc",
+      "bytes": 2028,
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 16,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "definition_sha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/04_complete_non_self_bill_admission.sqlinc",
+      "bytes": 2234,
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 17,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "definition_sha256": "fbf2192e2eaa47eb60c307eed2c654c14745c14f12010dc0470e4e3966b8c4ca"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/05_complete_automatic_admission.sqlinc",
+      "bytes": 1034,
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 18,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "semantic_signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "definition_sha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_R2_READER.sqlinc",
+      "bytes": 10132,
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 19,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+          "definition_sha256": "02dd1fe1a8748c38f821be4f7cbf8e15319398f2fc115e5fa3bb51fdffff04f9"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/08_complete_capability_release_reader.sqlinc",
+      "bytes": 6111,
+      "sha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85",
+      "phase": "Q25_OWNER_XID_QUALIFICATION",
+      "order": 20,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "definition_sha256": "73d7bb2ad0659e1775d20975d6dfa8addb1c7607ab8301615901d9508be3b333"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/00_complete_current_catalogue.sqlinc",
+      "bytes": 14686,
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 21,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+          "definition_sha256": "8ed96f861e2295fda376f88060a7c918ce7eb7272569c39f4cec739616f98cfc"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "bytes": 20104,
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 22,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "definition_sha256": "3bd2e56df47d7a1ac6a65b4ee6c9c8d7ef00666af18627b5eba983f7b08247a8"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "definition_sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "bytes": 14636,
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 23,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+      "statement_count": 5,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "definition_sha256": "7ef145df5f53e588e72e94bb3b9b312d132a8721280c0aea455614cf0b45abb4"
+        },
+        {
+          "signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+          "semantic_signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+          "definition_sha256": "ab98b552c43fdf6e62db7a62a8a3a575ce82155746dd0960c27935677338ef2f"
+        },
+        {
+          "signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "definition_sha256": "18be35bd30fa7f1fa0d114e672ac941a93245d841d2e3b4fda7c859c857090c5"
+        },
+        {
+          "signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "definition_sha256": "04a69d25d8368ffa2f36b1842ecdf645426891ca53a7a960bab014238c103c61"
+        },
+        {
+          "signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "definition_sha256": "41b86498f88e0abf7919bc22aea7a7a68c028c1548b868b628d872bfec8e56f0"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/04_original_clients.sqlinc",
+      "bytes": 3530,
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 24,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+          "semantic_signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+          "definition_sha256": "f721e7331f55c222334a14c54c4043de06d09b04cb84ab8e3cd0cf69cb5f3e78"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/04_complete_non_self_bill_admission.sqlinc",
+      "bytes": 2234,
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 25,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+          "definition_sha256": "fbf2192e2eaa47eb60c307eed2c654c14745c14f12010dc0470e4e3966b8c4ca"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 26,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+          "semantic_signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+          "definition_sha256": "a46355526e0debd4ab8a676aafec9eb264bb8cbdf2dc0344afcba84639b41ee0"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/05_complete_automatic_admission.sqlinc",
+      "bytes": 1034,
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 27,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "semantic_signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "definition_sha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/CLOSED_DTO.sqlinc",
+      "bytes": 381,
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 28,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+          "semantic_signature": "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+          "definition_sha256": "d54470fa4c15557a31176f4e2559f2dd12a6d3c8bc8c3b26b353715fca9bf730"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18341,
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 29,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+          "definition_sha256": "74968556f9ee34abcbaa8dbe36e26fb21516deb40716fee9adb2b9020e0e76ba"
+        },
+        {
+          "signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+          "semantic_signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+          "definition_sha256": "dc498f523c316cb0571737f0cee58becd0850e9000bfc1636ed0e77feea7ca1f"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/01_complete_qualification_scope.sqlinc",
+      "bytes": 20026,
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 30,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+      "statement_count": 5,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_qualification_owner_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_owner_v1()",
+          "definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_release_v1()",
+          "semantic_signature": "private.weekly_source_protected_qualification_release_v1()",
+          "definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+          "definition_sha256": "54289b9ad28224a83eb45dd5eedfce706dabc89f9fce8b3ef292b11826f7259b"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+          "semantic_signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+          "definition_sha256": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df"
+        },
+        {
+          "signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+          "semantic_signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+          "definition_sha256": "035f1b2bfb6f77a624a02acb047091eacabf8524b4e6d4e40741012c316dfba2"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/02_complete_prerequisite_reader.sqlinc",
+      "bytes": 8874,
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 31,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+          "definition_sha256": "73caa8b55e07115928bad00a991d37d53508237c0463fbc1bddbfa6ffb1dfc2d"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/TEST_JOURNEY_SCOPE.sqlinc",
+      "bytes": 18451,
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 32,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+      "statement_count": 3,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+          "definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56"
+        },
+        {
+          "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+          "semantic_signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+          "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c"
+        },
+        {
+          "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+          "semantic_signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+          "definition_sha256": "396a4f62df6cfce8d9c2bd7cb5f1dc2594612f7efe8d383a0ad2343e36b8351a"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/03_complete_operational_release_reader.sqlinc",
+      "bytes": 6266,
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 33,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+          "definition_sha256": "cb5225c22f36ad0e94a730d94443be6ecfd6c6a15e530c88d44c4292d36a5008"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/04_complete_capability_receipt.sqlinc",
+      "bytes": 2849,
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 34,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+          "definition_sha256": "d06b2e9384230206a08c19dea6ff95f631e3ccfb96742ee2c084a49b071364d8"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/05_complete_bulk_readiness.sqlinc",
+      "bytes": 615,
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 35,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+          "definition_sha256": "6825bea312c58819bd21d91eeed69ddb0b33214fc704fd0c1d558ed20b8f0b53"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/06_complete_automatic_readiness.sqlinc",
+      "bytes": 1843,
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 36,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "semantic_signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+          "definition_sha256": "a71d94d207666f3feaf9e2e2a6b05ee696127105c7c86ca368a6895bb8a032ed"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/07_complete_existing_feature_setup.sqlinc",
+      "bytes": 20906,
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 37,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+          "semantic_signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+          "definition_sha256": "1d2694753c89ff8b08433a663dd22c41ac013f16b668b336a9d9ab8109f25da8"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/08_complete_cas_admission.sqlinc",
+      "bytes": 3409,
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 38,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "definition_sha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+          "definition_sha256": "5cdffdf5b2c67db45ea58188b4a89496c9104fd42df17ccf066eeea76df06c82"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/09_complete_actor_non_self_bill_admission.sqlinc",
+      "bytes": 2861,
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 39,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+          "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+          "definition_sha256": "b91f017bac9799f04e24f25503c40c9e7caa37cf700f69401649434afe5a1f3d"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/10_complete_actor_bulk_selection.sqlinc",
+      "bytes": 8394,
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 40,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "definition_sha256": "4ab8f82b54cc5d26894c7b1901b0be67d7d62f92768998513b85bcbeeb4252dc"
+        },
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+          "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+          "definition_sha256": "f2be06deed1ccba0318daaa7088029ecfee3ec87490670595e30f44aec52a130"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/11_complete_actor_own_stage.sqlinc",
+      "bytes": 6416,
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 41,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+          "semantic_signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+          "definition_sha256": "a27df9e9ab43f8b832641b82c14e1e40b19cb1996f5d61d6a8c7fe6af34725e8"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_17_prepare_family.sqlinc",
+      "bytes": 28838,
+      "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 42,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+          "definition_sha256": "af68582fe7d41fb5c5e61c02cb588d4c4fc7711e6977caada750799180de1d3f"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_18_prepare_action.sqlinc",
+      "bytes": 13447,
+      "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 43,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "definition_sha256": "0e19954eb0f1eac4839148a8261c623fcc7d55de83ff5a2f20886606eb3862ea"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_19_action_context.sqlinc",
+      "bytes": 24997,
+      "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 44,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "definition_sha256": "769705a0c6c3e36c0d81be9678ac25b1538b5d7c9ca4a7923ab70fc0da802670"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/12_complete_actor_20_stage_request.sqlinc",
+      "bytes": 55162,
+      "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 45,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "semantic_signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "definition_sha256": "c0ba3b907908dc16d83175138ce8be90c06053c732bf3c6c4df33b6bccb341a1"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/07_complete_stage_proof.sqlinc",
+      "bytes": 4480,
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 46,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+          "semantic_signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+          "definition_sha256": "71a93ffc7456ca23bd45e046d9c053dea50a373d7436c5c479ff0a3a35890d5d"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/16_complete_bulk_command_presentation.sqlinc",
+      "bytes": 15449,
+      "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e",
+      "phase": "Q45_ACTOR_EVENT_CLOSED_DTO_CROSS_SESSION",
+      "order": 47,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+      "statement_count": 1,
+      "declarations": [
+        {
+          "signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+          "semantic_signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+          "definition_sha256": "9916726e75052944d608a5553be77bbe4f466245be834fde269f58aa857804d5"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/OPERATIONAL_CERTIFICATE.sqlinc",
+      "bytes": 18377,
+      "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+      "phase": "F12_FIRST_USE_FULL_INVENTORY",
+      "order": 48,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+          "semantic_signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+          "definition_sha256": "74968556f9ee34abcbaa8dbe36e26fb21516deb40716fee9adb2b9020e0e76ba"
+        },
+        {
+          "signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+          "semantic_signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+          "definition_sha256": "203128859623831c6f4184076a4107abf69e988c80bcffc3cbdddf4cfe8da457"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/strict-qualification-first-use-inventory-forward/TEST_JOURNEY_SCOPE.sqlinc",
+      "bytes": 18453,
+      "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "phase": "F12_FIRST_USE_FULL_INVENTORY",
+      "order": 49,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+      "statement_count": 3,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+          "semantic_signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+          "definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56"
+        },
+        {
+          "signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+          "semantic_signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+          "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c"
+        },
+        {
+          "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+          "semantic_signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+          "definition_sha256": "6be308ef893e3163d7658566cc70652849b24b79a54ece09f94517f5cfbf6aaa"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "bytes": 20104,
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "phase": "FINAL_ORIGINAL_SOURCE_CAS_SCHEMA_LINEAGE",
+      "order": 50,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "statement_count": 2,
+      "declarations": [
+        {
+          "signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+          "definition_sha256": "3bd2e56df47d7a1ac6a65b4ee6c9c8d7ef00666af18627b5eba983f7b08247a8"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "semantic_signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+          "definition_sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7"
+        }
+      ]
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/native-financial-fixtures/LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "bytes": 48358,
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+      "phase": "FINAL_ORIGINAL_SOURCE_CAS_SCHEMA_LINEAGE",
+      "order": 51,
+      "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "statement_count": 4,
+      "declarations": [
+        {
+          "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+          "semantic_signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+          "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119"
+        }
+      ]
+    }
+  ],
+  "one_time_constraint": {
+    "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+    "file": "docs/healthroster-build/proposals/protected-source-capability/SCHEMA.sqlinc",
+    "bytes": 1858,
+    "sha256": "22a4292f35bf78caf1b8367a8166b0eaefa1ced1cb59509e2b551f93de54a150",
+    "destination": "supabase/support/healthroster_original_prerequisites_install1_forward/CAP_CONSTRAINT_ONE_TIME_MIGRATION.sqlinc",
+    "excluded_from_repeatable_include": true
+  },
+  "original_acl_reference_only": [
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/09_exact_acl_delta.sqlinc",
+      "bytes": 4693,
+      "sha256": "b62ad3de7fc48126d0d415c255b68395d0596cf073b6e8f0d0151f749e9bb4f7"
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/06_owner_only_acl.sqlinc",
+      "bytes": 2900,
+      "sha256": "b795ecc64f5f3b188cfe89fb20c52a3630d4b6d03feda7b3889876ec37ae4331"
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/13_owner_only_acl.sqlinc",
+      "bytes": 1978,
+      "sha256": "402810badd5e27e5586966c4f34f2ca7552ba975e53277e7a874fa9422bce640"
+    }
+  ],
+  "final_current_registry_acl_root_owned": true,
+  "no_docs_sql_include": true,
+  "original_source_only_qualification_stage_not_callable_until_final_successors": true
+}
