@@ -109,6 +109,13 @@ test('source-only actual current Install1 plan retains full 142 verifier bodies,
   assert.ok(plan.sql.includes('do $hr_contract_compare$'));
   assert.ok(plan.sql.indexOf('do $hr_contract_compare$')<plan.sql.lastIndexOf('rollback;'));
   assert.ok(plan.diagnosticCodes.includes('WP_PP_FIXTURE_ID_COLLISION'));
+  const live=compileFullRehearsal({candidatePin,currentRemoteTestPin:base,expectedContractHash,contractDigest,installed,review,marker,observeLiveBusiness:true});
+  assert.equal(live.fixtureObservationUnits.length,143);
+  assert.deepEqual(live.units.map(r=>({file:r.file,sqlHash:r.sqlHash})),plan.units.map(r=>({file:r.file,sqlHash:r.sqlHash})));
+  assert.equal(live.lineMap.filter(r=>r.phase==='fixture_observation').length,429);
+  assert.equal(live.sql.split('HR_REHEARSAL_TRANSACTION_JSON ').length,2);
+  assert.equal(live.sql.split('HR_FIXTURE_OBSERVATION_JSON ').length,144);
+  assert.deepEqual(scanManagedSql(live.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO').map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
 });
 

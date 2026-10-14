@@ -1,0 +1,262 @@
+{
+  "status": "SOURCE_ONLY_PASS",
+  "predecessor": "807ffce239f86f9f1e104221e4b9400343ed19d2",
+  "checkedAt": "2026-10-14T08:36:50.991Z",
+  "pins": [
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "835feb02401af45d480268e7ce152a40c91e97f3e0be92def99f9713cf323b35",
+      "bytes": 8587,
+      "previousSha256": "8acacff2acd8fdc5149af90fb1b479d265d522e4a1ec0b9da29a863090421df6"
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "sha256": "6126587ace015411daa7cc5c0c84bfbbcbeaa52caa3f2a1046155c317f16e16a",
+      "bytes": 7478,
+      "previousSha256": "c4390b5c3ab112e6eeba9bd2436f09a0afcaf2c477b3c93a181287ae76bb1aeb"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "f94f89914d5075bd0b9eb3c44bc491be0fd2da5d84f0dd2e25a8a57629d0ef48",
+      "bytes": 40784,
+      "previousSha256": "0da03974515c9a7f8f6c8bb2b7d9ac0110e4d0e4cc109ac4f950d3a8c3e21db8"
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "sha256": "e62d449a127e737c9bd1676573a86978226495f0aed8ab268e34b340570b4c85",
+      "bytes": 19795,
+      "previousSha256": "a7ea96ec88582aa1318eda69f69efe94a05819fc67dc1b665a91f04a1a405373"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "sha256": "00806d0597716ef6a5786d80b869947b63ddb176fb27999c0d5c5db3d12bf404",
+      "bytes": 21481,
+      "previousSha256": "81eeff5972df525f8cc7deaebe0d15504470e9de8b6f4102c20248af392cf042"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "c20bf1e32dcacb7b66d247ab45dae24506b8e577f45bb44b43220f801534ed19",
+      "bytes": 14590,
+      "previousSha256": null
+    },
+    {
+      "file": "tests/healthroster-live-test-restoration.test.mjs",
+      "sha256": "327a4340040c374bc85ce0904cdaaa6a16d012708c7b5f020bd1b75027697a8b",
+      "bytes": 12731,
+      "previousSha256": null
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration-source-check.mjs",
+      "sha256": "a07c1603df073a770d3b5a224035322b00b9a904055dec64e7b0b5bde55e3b46",
+      "bytes": 4693,
+      "previousSha256": null
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/LIVE_TEST_RESTORATION_RULING_14102026.md",
+      "sha256": "850bab1d9509e15f63e55600e30836b4167828c5b81ea7d8f504b1ab845af1ce",
+      "bytes": 3455,
+      "previousSha256": null
+    }
+  ],
+  "checks": [
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-full-rehearsal-protocol.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 92,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-install1-archive-preflight.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 86,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-install1-full-rehearsal.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 86,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-install1-native-coordinator.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 85,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "tests/healthroster-install1-full-rehearsal.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 85,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-live-test-restoration.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 81,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "tests/healthroster-live-test-restoration.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 84,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--check",
+        "scripts/healthroster-live-test-restoration-source-check.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 95,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "--test",
+        "tests/healthroster-install1-full-rehearsal.test.mjs",
+        "tests/healthroster-install1-native-coordinator.test.mjs",
+        "tests/healthroster-full-rehearsal-protocol.test.mjs",
+        "tests/healthroster-live-test-restoration.test.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 38905,
+      "outputSha256": "db26cea6a6464751f5a209ebac82a27e845e484a8e10fe6991ffbc6a04fed376",
+      "tests": 51,
+      "pass": 51,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "scripts/cloudtms-db-release.mjs",
+        "check"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 1089,
+      "outputSha256": "977e9eca6de24795778eca4bb76a302ae962460e8a7cc59f7951f606a5cef123",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "scripts/verify-database-contract-coupling.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 218,
+      "outputSha256": "f8330a85b95663defecceca62600e2d33bae7df455309fc6a97acf504fced886",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "node.exe",
+      "args": [
+        "scripts/verify-source-secret-safety.mjs"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 1585,
+      "outputSha256": "1d83cc617d0489c69361be508e27eb8d54d6637e34c7bbe48065764cd0b1db31",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "git",
+      "args": [
+        "diff",
+        "--check"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 60,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    },
+    {
+      "command": "git",
+      "args": [
+        "apply",
+        "--reverse",
+        "--check",
+        "-"
+      ],
+      "exitCode": 0,
+      "elapsedMs": 62,
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0,
+      "pass": 0,
+      "fail": 0
+    }
+  ],
+  "completeTrackedDiffSha256": "b60ef0564f1f401e52a70c9469f530d426abf3f5699b045c5a674673f0e9c1cc",
+  "contractUnchanged": true,
+  "nativeFirstUse": false,
+  "installation": false,
+  "backgroundJobsPaused": false,
+  "repairHistory": [
+    "Draft final gate initially trusted a status label; independent P1 corrected by private validator WeakMap bound to complete snapshots and proof.",
+    "First branding edit had a duplicate const declaration; syntax check failed before any native operation or publication, then declaration was corrected.",
+    "Both full snapshot epochs/Xip are now checked; retry timing follows unchanged native fail/dequeue formulas and last_error remains stable."
+  ],
+  "limitations": [
+    "Committed archive and independent source verdict required next.",
+    "Third native rehearsal and fresh rollback attribution not yet executed."
+  ]
+}

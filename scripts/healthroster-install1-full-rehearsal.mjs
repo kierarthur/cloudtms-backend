@@ -11,6 +11,7 @@ import {canonical,digest,scanManagedSql,exactAtomicBody,literal} from './cloudtm
 import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits,closedRehearsalDiagnostic} from './healthroster-full-rehearsal-protocol.mjs';
 import {assertTurnIdentity,ownTurnActivityExclusionSql} from './healthroster-turn-control.mjs';
 import {verifierClosure} from './healthroster-install1-verifier-census.mjs';
+import {backgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
 
 export const REHEARSAL_VERSION='HEALTHROSTER_INSTALL1_FULL_REHEARSAL_V1';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -160,7 +161,7 @@ function readerPreparationUnit(readers){
 // This compiler takes the freshly observed installed ledgers. It performs no
 // probe, credential read, promotion, release dispatch, or native execution.
 export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installed,review,marker,
- expectedContractHash,contractDigest,
+ expectedContractHash,contractDigest,observeLiveBusiness=false,
  current=inventory(),release=JSON.parse(fs.readFileSync(path.join(root,'supabase/release/current-release.json'),'utf8')),
  closeSelection=closeFinalDefinerSelection,compileUnit=compileManagedUnit,readVerifier=mappedVerifier,
  readerPhases=readerReleasePhases,render=renderFullRehearsalUnits}={}){
@@ -214,7 +215,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   readOnlyBodyReviewed:finalReview.readOnlyBodyReviewed===true}),phase:'final_browser_isolation',clientVariables:clientVariables(final.sql)});
  // Every native REPEATABLE READ assertion is retained. Conflicting native modes
  // are refused by the protocol; SERIALIZABLE is not an implied substitute.
- const rendered=render(units,{outerIsolation:'REPEATABLE READ'});
+ const rendered=render(units,{outerIsolation:'REPEATABLE READ',observeLiveBusiness});
  const sourceBinding=rehearsalSourceBinding({current,review,contractPath:release.contractPath});
  expectedContractHash??=sourceBinding.contractSha256;
  requireThat(expectedContractHash===sourceBinding.contractSha256,'REHEARSAL_SEALED_CONTRACT_DRIFT');
@@ -251,7 +252,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   'begin isolation level repeatable read;','set local jit=off;','set local pg_show_plans.is_enabled=off;','set local statement_timeout=0;',
   `create table private.${marker}(marker boolean not null);`,
   `revoke all on table private.${marker} from PUBLIC,anon,authenticated,service_role;`,
-  `insert into private.${marker} values(true);`,body,'\\echo HR_CONTRACT_BEGIN',contractSql,'\\echo HR_CONTRACT_END','rollback;',
+  `insert into private.${marker} values(true);`,...(observeLiveBusiness?[transactionIdentitySql()]:[]),body,'\\echo HR_CONTRACT_BEGIN',contractSql,'\\echo HR_CONTRACT_END','rollback;',
   '\\echo HR_EXPLICIT_ROLLBACK_COMPLETED'].join('\n')+'\n';
  const bodyStart=sql.indexOf(body),lineOffset=sql.slice(0,bodyStart).split('\n').length-1,lineMap=[];
  const starts=[...body.matchAll(/^\\echo HR_FILE_BEGIN (\d+)$/gm)];
@@ -263,6 +264,11 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
    const endLine=lineOffset+body.slice(0,sqlStart+row.end).split('\n').length-1;
    lineMap.push({file:entry.file,kind:entry.kind,phase:entry.phase,statement:statement+1,object:statementObject(row),
     startLine,endLine:Math.max(startLine,endLine),statementHash:digest(entry.sql.slice(row.start,row.end))});
+  }
+  if(observeLiveBusiness&&['verifier','final_browser_verifier'].includes(entry.kind)){
+   const observer=fixtureObservationSql(unitIndex),observerStart=body.indexOf(observer,sqlStart+entry.sql.length);
+   requireThat(observerStart>=0,'REHEARSAL_FIXTURE_STATEMENT_MAP_REFUSED');
+   for(const [statement,row]of scanManagedSql(observer).statements.entries())lineMap.push({file:'HARNESS_FIXTURE_CENSUS',kind:'control',phase:'fixture_observation',statement:statement+1,object:'OWN_VISIBLE_EXCEPTION_IDENTITIES',startLine:lineOffset+body.slice(0,observerStart+row.start).split('\n').length,endLine:lineOffset+body.slice(0,observerStart+row.end).split('\n').length,statementHash:digest(observer.slice(row.start,row.end))});
   }
  }
  const contractStart=sql.indexOf(contractSql);
@@ -277,7 +283,8 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   exclusions,exclusionCount:exclusions.length,sql,sqlHash:digest(sql),bytes:Buffer.byteLength(sql),lineMap,
   outerIsolation:rendered.outerIsolation,isolationRequirements:rendered.isolationRequirements,
   sourceBinding,expectedContractHash,expectedJsonbHash,diagnosticCodes,diagnosticCodesHash,
-  ownerPolicy:logicalPostgresExecutablePolicy(),nativeFull:'NOT_RUN',mutationsAuthorised:false};
+  fixtureObservationUnits:observeLiveBusiness?units.flatMap((unit,i)=>['verifier','final_browser_verifier'].includes(unit.kind)?[i]:[]):[],
+  observeLiveBusiness,ownerPolicy:logicalPostgresExecutablePolicy(),nativeFull:'NOT_RUN',mutationsAuthorised:false};
 }
 
 export function assertFreshNativeGate(gate,{candidatePin,currentRemoteTestPin,expectedContractHash,now=Date.now()}={}){
@@ -302,13 +309,17 @@ export function assertFreshRestoration(before,after,marker){
  requireThat(after?.connectedFresh===true&&after.physicalDatabase==='cloudtms_test_clone'&&after.identityTest===true
   &&after.customerKeyNull===true&&after.module==='LEGACY:1', 'REHEARSAL_FRESH_IDENTITY_REFUSED');
  requireThat(after.markerAbsent===true&&after.marker===marker,'REHEARSAL_MARKER_PERSISTED');
- for(const key of ['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint']){
+ for(const key of ['ledgerFingerprint','catalogueFingerprint']){
   requireThat(hashPattern.test(before?.[key]??'')&&after[key]===before[key],'REHEARSAL_RESTORATION_MISMATCH');
  }
+ const qualified=after.liveRestoration!==undefined?assertQualifiedLiveRestoration(before,after,after.liveRestoration):false;
+ for(const key of ['businessCountsFingerprint','businessRowsFingerprint'])requireThat(hashPattern.test(before?.[key]??'')
+  &&(after[key]===before[key]||qualified),'REHEARSAL_RESTORATION_MISMATCH');
  requireThat(hashPattern.test(before?.relationCensus??'')&&after.relationCensus===before.relationCensus,'REHEARSAL_RELATION_CENSUS_MISMATCH');
  requireThat(after.applyingCount===0&&after.otherActivityCount===0,'REHEARSAL_FRESH_ACTIVITY_REFUSED');
  return {connectedFresh:true,physicalDatabase:after.physicalDatabase,module:after.module,markerAbsent:true,
-  compared:['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint']};
+  compared:['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint'],
+  ...after.liveRestoration?{liveRestoration:after.liveRestoration}:{} };
 }
 
 // Root calls this from ONE withSharedRehearsalTurn work callback. This function
@@ -327,13 +338,14 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
  const before=await callbacks.before({marker,activityExclusionSql:ownTurnActivityExclusionSql(turn.identity),turn});
  requireThat(before.physicalDatabase==='cloudtms_test_clone'&&before.identityTest===true&&before.customerKeyNull===true&&before.module==='LEGACY:1'
   &&before.applyingCount===0&&before.otherActivityCount===0&&before.markerAbsent===true,'REHEARSAL_BEFORE_REFUSED');
- const plan=compilePlan({candidatePin,currentRemoteTestPin,expectedContractHash,contractDigest:before.contractDigest,installed:before.installed,review,marker});
+ const plan=compilePlan({candidatePin,currentRemoteTestPin,expectedContractHash,contractDigest:before.contractDigest,installed:before.installed,review,marker,observeLiveBusiness:before.observeLiveBusiness===true});
  requireThat(plan.sourceBinding?.sha256===bindingHash,'REHEARSAL_COMPILED_SOURCE_BINDING_DRIFT');
  await gate('install1-full');
  let execution,executionFailure,restoration;
  try{
   execution=await callbacks.executeSameSession({sql:plan.sql,lineMap:plan.lineMap,sqlHash:plan.sqlHash,turn,marker,
    expectedContractHash:plan.expectedContractHash,diagnosticCodes:plan.diagnosticCodes,diagnosticCodesHash:plan.diagnosticCodesHash,
+   fixtureObservationUnits:plan.fixtureObservationUnits??[],observeLiveBusiness:plan.observeLiveBusiness===true,
    settings:{jit:'off',collector:'off',statementTimeout:0,onErrorRollback:'on',onErrorStop:'off',outerIsolation:'REPEATABLE READ'},
    noHarnessDeadline:true,diagnostic:line=>closedRehearsalDiagnostic(line,plan.lineMap,new Set(plan.diagnosticCodes))});
   requireThat(execution?.sameSession===true&&execution.explicitRollback===true&&execution.exitCode===0
@@ -374,7 +386,7 @@ export const activityGuardSql=identity=>`select count(*) from pg_catalog.pg_stat
 // Optional root adapter. Credentials are already loaded by the approved root
 // process and travel only in libpq environment variables. Never retain raw
 // stdout/stderr in the returned receipt, console, or a file.
-export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,sqlHash,marker,expectedContractHash,diagnosticCodes=[],diagnosticCodesHash}){
+export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,sqlHash,marker,expectedContractHash,diagnosticCodes=[],diagnosticCodesHash,observeLiveBusiness=false,fixtureObservationUnits=[]}){
  assertTurnIdentity(turn?.identity);
  requireThat(typeof turn.runOwnedChild==='function'&&path.isAbsolute(psqlPath??'')&&/^psql(?:\.exe)?$/i.test(path.basename(psqlPath)),'REHEARSAL_PSQL_ADAPTER_REFUSED');
  requireThat(env?.PGDATABASE==='cloudtms_test_clone'&&typeof env.PGHOST==='string'&&env.PGHOST.length>0
@@ -407,9 +419,15 @@ export async function executePsqlWithinOwnedTurn({turn,psqlPath,env,sql,lineMap,
    &&contracts.length===1,'REHEARSAL_CONTRACT_ENVELOPE_INCOMPLETE');
   installedContract=assertInstalledRehearsalContract(JSON.parse(contracts[0].slice('HR_CONTRACT_JSON '.length)),{expectedContractHash,marker});
  }catch(error){contractFailure=/^REHEARSAL_[A-Z_]+$/.test(error.message)?error.message:'REHEARSAL_CONTRACT_JSON_REFUSED';}
+ let transaction=null,fixtureObservations=[],fixtureCaptureFailure=null;
+ if(observeLiveBusiness)try{const tx=lines.filter(s=>s.startsWith('HR_REHEARSAL_TRANSACTION_JSON '));requireThat(tx.length===1,'REHEARSAL_TRANSACTION_FRAME_INCOMPLETE');
+  transaction=JSON.parse(tx[0].slice('HR_REHEARSAL_TRANSACTION_JSON '.length));fixtureObservations=lines.filter(s=>s.startsWith('HR_FIXTURE_OBSERVATION_JSON ')).map(s=>JSON.parse(s.slice('HR_FIXTURE_OBSERVATION_JSON '.length)));
+  validateFixtureObservations(transaction,fixtureObservations,fixtureObservationUnits);
+ }catch(error){fixtureCaptureFailure=/^REHEARSAL_[A-Z_]+$/.test(error.message)?error.message:'REHEARSAL_FIXTURE_FRAME_JSON_INVALID';}
  return {sameSession:true,explicitRollback:result.stdout.split(/\r?\n/).includes('HR_EXPLICIT_ROLLBACK_COMPLETED'),
-  exitCode:result.code,errorCollectionComplete:complete,errors,
-  unexpectedDiagnostic:unexpectedError?'UNMAPPED_DATABASE_ERROR':null,unmappedDiagnostics,sqlHash,unitMarkers:expected.length,installedContract,contractFailure};
+  exitCode:result.code,errorCollectionComplete:complete&&!fixtureCaptureFailure,errors,
+  unexpectedDiagnostic:unexpectedError?'UNMAPPED_DATABASE_ERROR':null,unmappedDiagnostics,sqlHash,unitMarkers:expected.length,installedContract,contractFailure,
+  ...observeLiveBusiness?{transaction,fixtureObservations,fixtureObservationUnits,fixtureCaptureFailure}:{} };
 }
 export const identityProbeSql=marker=>{
  requireThat(/^hr_install1_[a-f0-9]{32}$/.test(marker??''),'REHEARSAL_MARKER_REFUSED');
@@ -423,7 +441,7 @@ export const identityProbeSql=marker=>{
 // Root obtains this finite relation list from its fresh TEST catalogue while
 // holding the turn. A saved old contract cannot select or waive a table here.
 // All row material stays in PostgreSQL; the result contains only digests/counts.
-export function restorationSnapshotSql({identity,marker,relations,exportContractSql}){
+export function restorationSnapshotSql({identity,marker,relations,exportContractSql,observeLiveBusiness=false}){
  assertTurnIdentity(identity);
  requireThat(Array.isArray(relations)&&relations.length>0&&typeof exportContractSql==='string','REHEARSAL_SNAPSHOT_INPUT_REQUIRED');
  const exportQuery=exporterQuery(exportContractSql);
@@ -453,6 +471,7 @@ export function restorationSnapshotSql({identity,marker,relations,exportContract
  'businessRowsFingerprint',${hash("select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business")},
  'businessRelations',(select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'count',row_count,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business),
  'relationCensus',${literal(digest(JSON.stringify([...names].sort())))},
+ ${observeLiveBusiness?backgroundSnapshotFieldsSql()+',':''}
  'otherActivityCount',(select count(*) from pg_catalog.pg_stat_activity where datname=current_database() and ${ownTurnActivityExclusionSql(identity)} and (state <> 'idle' or xact_start is not null))))::text from identity_proof;`;
 }
 

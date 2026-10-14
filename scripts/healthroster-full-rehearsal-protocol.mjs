@@ -1,4 +1,5 @@
 import {scanManagedSql, digest} from './cloudtms-managed-release-sql.mjs';
+import {fixtureObservationSql} from './healthroster-live-test-restoration.mjs';
 
 // A source safety reviewer authorises exact envelope removals before rendering.
 // Hash-bound full SQL remains retained; this never opens a connection or grants
@@ -43,7 +44,7 @@ export function neutraliseReviewedVerifierEnvelope(unit, review) {
 // Source-only renderer. This module opens no database/network connection.
 // The post-Banking coordinator must supply exact pushed, independently reviewed
 // units, hold SEND_7 before its before probes, and retain it through fresh proof.
-export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
+export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusiness=false} = {}) {
   if (!Array.isArray(units) || !units.length) throw Error('REHEARSAL_UNITS_REQUIRED');
   if (outerIsolation !== undefined && !['READ COMMITTED','REPEATABLE READ','SERIALIZABLE'].includes(outerIsolation)) {
     throw Error('REHEARSAL_ISOLATION_VALUE_REFUSED');
@@ -100,6 +101,7 @@ export function renderFullRehearsalUnits(units, {outerIsolation} = {}) {
     if (clientVariables.some(name=>!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw Error('REHEARSAL_CLIENT_VARIABLE_REFUSED');
     if (verifier) parts.push(...clientVariables.map(name=>'\\unset '+name), `savepoint hr_verifier_${index};`);
     parts.push(unit.sql);
+    if (verifier&&observeLiveBusiness) parts.push(fixtureObservationSql(index));
     if (verifier) parts.push(`rollback to savepoint hr_verifier_${index};`, `release savepoint hr_verifier_${index};`,
       ...clientVariables.map(name=>'\\unset '+name));
     parts.push(`\\echo HR_FILE_END ${index}`);

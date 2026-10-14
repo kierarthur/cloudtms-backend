@@ -11,6 +11,8 @@ import {runFullRehearsalWithinOwnedTurn,executePsqlWithinOwnedTurn,restorationSn
 import {validateConnectionProof} from './automatic-test-release-policy.mjs';
 import {canonical,digest} from './cloudtms-managed-release-sql.mjs';
 import {createReceiptJournal,latestBusyTimestamp} from './healthroster-receipt-journal.mjs';
+import {freshFixtureProofSql,qualifyLiveRestoration} from './healthroster-live-test-restoration.mjs';
+import assert from 'node:assert/strict';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
@@ -24,6 +26,8 @@ const targets=[['backend','test-cloudtms-backend','deploy/cloudflare/test-cloudt
 const requireThat=(condition,code)=>{if(!condition)throw Error(code);};
 const git=args=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],{cwd:root,encoding:'utf8',windowsHide:true,maxBuffer:16000000}).trim();
 const remote=branch=>git(['ls-remote','origin','refs/heads/'+branch]).split(/\s/)[0];
+const publicSnapshot=value=>{const {backgroundRows,backgroundSnapshotXip,...safe}=value;return safe;};
+const publicExecution=value=>{if(!value)return value;const {fixtureObservations,...safe}=value;return {...safe,fixtureObservationCount:fixtureObservations?.length??0};};
 
 export function parseOneJsonResult(stdout){
  const lines=stdout.split(/\r?\n/).filter(x=>x.trim().startsWith('{')||x.trim().startsWith('['));
@@ -72,7 +76,7 @@ export async function runNativeInstall1(){
   try{receiptFile=journal.checkpoint(receipt);}
   catch(error){receipt.receiptPersistenceFailed=true;if(!continueRestoration)throw error;}
  };
- save();let published=false,relations;
+ save();let published=false,relations,beforeSnapshot,nativeExecution;
  try{
   console.log(JSON.stringify({status:receipt.status,candidatePin,liveDirectory,receiptFile}));
   const result=await withSharedRehearsalTurn({task:'Install1 exact pushed WP-PP full rehearsal and managed TEST release',progressPath,
@@ -110,14 +114,14 @@ export async function runNativeInstall1(){
      const census=await probe("select coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',c.relname,'kind',c.relkind::text) order by n.nspname,c.relname),'[]'::jsonb) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p');");
      relations??=census;
      requireThat(JSON.stringify(census)===JSON.stringify(relations),'NATIVE_RESTORATION_RELATION_CENSUS_CHANGED');
-     const result=await probe(restorationSnapshotSql({identity:turn.identity,marker,relations,exportContractSql:canonical(fs.readFileSync(path.join(root,'supabase/release/export_contract.sql'),'utf8'))}));
+     const result=await probe(restorationSnapshotSql({identity:turn.identity,marker,relations,exportContractSql:canonical(fs.readFileSync(path.join(root,'supabase/release/export_contract.sql'),'utf8')),observeLiveBusiness:true}));
      return {...result,marker};
     };
     return await runFullRehearsalWithinOwnedTurn({turn,candidatePin,currentRemoteTestPin:predecessor,expectedContractHash:contract,marker,review,callbacks:{
      freshGate,
-     async recordReceipt(value){receipt.checkpoints??=[];receipt.checkpoints.push(value);receipt.status=value.status;save({continueRestoration:true});},
+     async recordReceipt(value){receipt.checkpoints??=[];receipt.checkpoints.push({...value,...value.execution?{execution:publicExecution(value.execution)}:{}});receipt.status=value.status;save({continueRestoration:true});},
      async before(){const before=await snapshot();before.installed=await probe("select jsonb_build_object('migrations',(select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',content_sha256) order by path),'[]'::jsonb) from private.cloudtms_migration_ledger),'repeatables',(select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',closure_sha256) order by path),'[]'::jsonb) from private.cloudtms_repeatable_ledger));");
-      before.contractDigest={...await probe(expectedContractDigestSql({expectedContractHash:contract})),connectedFresh:true,checkedAt:new Date().toISOString()};receipt.before=before;save();return before;},
+      before.contractDigest={...await probe(expectedContractDigestSql({expectedContractHash:contract})),connectedFresh:true,checkedAt:new Date().toISOString()};before.observeLiveBusiness=true;beforeSnapshot=before;receipt.before=publicSnapshot(before);save();return before;},
      async executeSameSession(input){receipt.status='FULL_REHEARSAL_RUNNING';receipt.sqlHash=input.sqlHash;receipt.mappedStatements=input.lineMap.length;save();
       const units=[...input.sql.matchAll(/^\\echo HR_FILE_BEGIN (\d+)$/gm)].map(match=>{
        const line=input.sql.slice(0,match.index).split('\n').length;
@@ -135,11 +139,25 @@ export async function runNativeInstall1(){
        const last=text.slice(text.lastIndexOf('\n')+1);stdoutTail=last.length<160?last:'';
       }}})};
       const execution=await executePsqlWithinOwnedTurn({...input,turn:observedTurn,psqlPath,env:agencyChildEnvironment('healthroster_install1_full')});
-      receipt.execution=execution;receipt.errors=execution.errors;receipt.status='FULL_REHEARSAL_SQL_COMPLETED';save();return execution;},
-     async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=after;
+      nativeExecution=execution;receipt.execution=publicExecution(execution);receipt.errors=execution.errors;receipt.status='FULL_REHEARSAL_SQL_COMPLETED';save();return execution;},
+     async freshAfter(){const after={...await snapshot(),connectedFresh:true};receipt.after=publicSnapshot(after);
       const prior=new Map((receipt.before?.businessRelations??[]).map(row=>[row.relation,row]));
       receipt.businessChanges=(after.businessRelations??[]).filter(row=>row.count!==prior.get(row.relation)?.count||row.hash!==prior.get(row.relation)?.hash)
        .map(row=>({relation:row.relation,beforeCount:prior.get(row.relation)?.count,afterCount:row.count,beforeHash:prior.get(row.relation)?.hash,afterHash:row.hash}));
+      requireThat(nativeExecution?.transaction&&Array.isArray(nativeExecution.fixtureObservations),'REHEARSAL_FIXTURE_EXECUTION_CAPTURE_REQUIRED');
+      const fixtureProof=await probe(freshFixtureProofSql(nativeExecution.transaction,nativeExecution.fixtureObservations,beforeSnapshot));
+      const expectedWriters=JSON.parse(fs.readFileSync(path.join(root,'supabase/release/current-contract.json'),'utf8')).routines
+       .filter(r=>/^(candidate_daily_projection_claim_v1|_candidate_daily_json_sha256_v1|tsfin_dequeue_batch_ids|tsfin_work_fail)\(/.test(r.identity))
+       .sort((a,b)=>(a.schema+'|'+a.identity).localeCompare(b.schema+'|'+b.identity));
+      requireThat(expectedWriters.length===4,'REHEARSAL_BACKGROUND_EXPECTED_WRITERS_INCOMPLETE');
+      const sortWriters=rows=>[...rows].sort((a,b)=>(a.schema+'|'+a.identity).localeCompare(b.schema+'|'+b.identity));
+      assert.deepEqual(sortWriters(beforeSnapshot.backgroundWriterRoutines),expectedWriters,'REHEARSAL_BACKGROUND_BEFORE_WRITER_DRIFT');
+      assert.deepEqual(sortWriters(after.backgroundWriterRoutines),expectedWriters,'REHEARSAL_BACKGROUND_AFTER_WRITER_DRIFT');
+      const writerProof={matched:true,routines:expectedWriters.map(r=>({schema:r.schema,identity:r.identity,definitionSha256:r.definition_sha256})),
+       authority:'exact sealed contract and unchanged native before/after catalogue; actual 29082026 claim and existing dequeue/fail owners'};
+      after.liveRestoration=qualifyLiveRestoration(beforeSnapshot,after,{transaction:nativeExecution.transaction,observations:nativeExecution.fixtureObservations,
+       expectedUnits:nativeExecution.fixtureObservationUnits,fixtureProof,writerProof});
+      receipt.fixtureProof=fixtureProof;receipt.liveRestoration=after.liveRestoration;
       save({continueRestoration:true});return after;},
      async publishManaged({receipt:clean}){
       requireThat(!receipt.receiptPersistenceFailed,'INSTALL1_RECEIPT_PERSISTENCE_FAILED_HOLD');
