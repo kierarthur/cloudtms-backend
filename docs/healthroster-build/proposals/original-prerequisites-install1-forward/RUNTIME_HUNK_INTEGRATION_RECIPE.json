@@ -1,0 +1,33 @@
+{
+  "source_only": true,
+  "whole_old_managed_writer_bank_or_current_caller_mount_allowed": false,
+  "current_runtime_composition_owner": "ROOT_AND_REPORT",
+  "reviewed_recipe_pin": {
+    "file": "docs/healthroster-build/MONEY_INSTALL1_FORWARD_RECIPE_14102026.json",
+    "commit": "e9deed4f1c6da8e79f77f6262c9c10cb699b2f1b",
+    "sha256": "1c198ba5b176658999a9742149f5ac3053079672a0b1e7faf1741bda2151f777"
+  },
+  "original_owner_delta_inputs": [
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_NATIVE_OWNER_DELTA.json",
+      "bytes": 10572,
+      "sha256": "f46ef4080c09db30128ee749b3e44269978ed51ffe9c81e8556fca20b84ad5f8"
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/OWNER_DELTAS.json",
+      "bytes": 27521,
+      "sha256": "648337bfa31b735f21e9fc6bb4f4f34e5b56537fc389b3bae855dbe6e874b2ea"
+    },
+    {
+      "commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+      "file": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/INDEX_CALL_SITE_DELTAS.json",
+      "bytes": 1738,
+      "sha256": "5f45a7292b630951f9e26b0ad920a9a221e58210984b40f7d6de50fda507348b"
+    }
+  ],
+  "require_exact_current_source_hunks_and_entire_reverse": true,
+  "final_p10_and_money_sidecar_pins_in_reviewed_recipe": true,
+  "unchanged_managed_release_turn_mutex_and_writer_required": true
+}

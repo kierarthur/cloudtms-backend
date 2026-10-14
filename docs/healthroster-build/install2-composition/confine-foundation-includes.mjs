@@ -1,0 +1,13 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
+const root=process.cwd(), folder='docs/healthroster-build/install2-composition/';
+const hash=b=>createHash('sha256').update(b).digest('hex');const receiptPath=folder+'QUALIFICATION_FOUNDATIONS_COMPOSITION_14102026.json';
+const receipt=JSON.parse(fs.readFileSync(receiptPath,'utf8'));assert.equal(receipt.rootInputCommit,'a63455e878391cb3ee9732165e58c0db517f48a7');
+const maps=[['supabase/support/healthroster_original_prerequisites_install1_forward/','supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/'],['supabase/support/healthroster_money_native_interfaces/','supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/']];
+const added=[];
+for(const row of receipt.files){const mapping=maps.find(([old])=>row.file.startsWith(old));if(!mapping||row.file.endsWith('/CAP_CONSTRAINT_ONE_TIME_MIGRATION.sqlinc'))continue;const bytes=fs.readFileSync(row.file);assert.equal(hash(bytes),row.sha256);const file=mapping[1]+path.posix.basename(row.file);assert.ok(!fs.existsSync(file));added.push({...row,file,bytes});}
+assert.equal(added.length,83);
+const changes=[];
+for(const file of receipt.sequence.filter(x=>x.endsWith('_prerequisites_v1.sql')||x.endsWith('_interfaces_v1.sql'))){const row=receipt.files.find(x=>x.file===file);const before=fs.readFileSync(file);assert.equal(hash(before),row.sha256);let text=before.toString('utf8');for(const [old,next]of maps)text=text.replaceAll('../support/'+old.split('/').filter(Boolean).at(-1)+'/',next.replace('supabase/repeatable/',''));const after=Buffer.from(text);assert.notEqual(hash(after),hash(before));changes.push({file,beforeSha256:hash(before),afterSha256:hash(after),bytes:after});}
+assert.equal(changes.length,2);
+for(const row of added){fs.mkdirSync(path.dirname(row.file),{recursive:true});fs.writeFileSync(row.file,row.bytes);}for(const row of changes){fs.writeFileSync(row.file,row.bytes);receipt.files.find(x=>x.file===row.file).sha256=row.afterSha256;}
+receipt.files.push(...added.map(({bytes,...row})=>row));receipt.canonicalIncludeConfinement={originalFailure:'SQL include escapes supabase/repeatable',frozenSupportInputsPreserved:true,exactCanonicalCopies:83,compilerBoundaryUnchanged:true,rootChanges:changes.map(({bytes,...row})=>row)};fs.writeFileSync(receiptPath,JSON.stringify(receipt,null,2)+'\n');console.log(JSON.stringify({canonicalCopies:83,totalFiles:receipt.files.length,rootsUpdated:2,frozenPacketsUnchanged:true}));

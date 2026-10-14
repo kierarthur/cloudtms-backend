@@ -1,0 +1,270 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_NATIVE_INTERFACES_SOURCE_CHECK_V1",
+  "status": "SOURCE_PACKET_CHECKS_PASS_INTEGRATED_RELEASE_CHECK_HELD",
+  "source_tests_pass": 21,
+  "source_tests_fail": 0,
+  "preserved_money_and_lineage_source_vectors_pass": 16,
+  "preserved_money_and_lineage_source_vectors_fail": 0,
+  "total_source_vectors_pass": 37,
+  "javascript_syntax_files": 40,
+  "sql_source_parser": [
+    {
+      "file": "01_operational_rule_projection.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "02_effective_rule_owner.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "03_cas_operational_projection.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "04_final_revision_rule_guard.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "05_coverage_floor_owner.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "06_existing_controlled_setup.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "07_automatic_capability_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "08_cas_admission_owner.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "09_complete_controlled_setup_transport.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "11_complete_historical_fixture_native_assignment.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "12_complete_report_nullable_rounding_owner.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "13_complete_nullable_physical_qualification_scope.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "ACTIVATION_PROBE_SCOPE.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "ACTIVATION_WINDOW_BINDING.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "CURRENT_SOURCE_OWNER_INPUTS.sqlinc",
+      "statements": 272,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OFF_RULE_AUTHORITY.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OFF_RULE_COMMAND.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OFF_RULE_STATUS.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "OWNER_ONLY_ADDITIONS_ACL.sqlinc",
+      "statements": 78,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "REPORT_FIXTURE_REFERENCE.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "SAME_INSTALLED_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parsed_only": true
+    },
+    {
+      "file": "SOURCE_EXECUTOR_EFFECT_INPUTS.sqlinc",
+      "statements": 488,
+      "meta": 0,
+      "source_parsed_only": true
+    }
+  ],
+  "frozen_predecessors": [
+    {
+      "folder": "protected-source-qualification-operational-gate",
+      "files": 44,
+      "sha256": "66b5b97d5628be25a0555c20c3a5755bf9561bd760afcaaaaed1b9b09f71b700"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206",
+      "files": 5,
+      "sha256": "10db4d8d3728129f429a0cfaf8d8670dbbf1125bcc9be53b60ff7d06b1664e8f"
+    },
+    {
+      "folder": "protected-source-qualification-operational-gate-pin-forward-2206-trial2",
+      "files": 5,
+      "sha256": "4784752bda1a9c5df7edad45d99715fa114efd25b85c7810e9cdc7c01dd1e272"
+    },
+    {
+      "folder": "strict-qualification-first-use-inventory-forward",
+      "files": 11,
+      "sha256": "e05b9ec2574dcf83c7773171adb50e116f3181d28812ac6e8571dd79fab5c427"
+    },
+    {
+      "folder": "strict-qualification-git-path-parser-forward",
+      "files": 9,
+      "sha256": "06645fbf3c215137bf306405d03ce6817a78e5b8ce08948ad834e9e66a26d3d3"
+    }
+  ],
+  "packet_credential_scan": "PASS_INCLUDING_DOCS_PROPOSALS_AND_SQLINC",
+  "runtime_import_closure": "PASS_ALL_LOCAL_OR_EXPLICIT3_ORIGINAL_EXTERNAL_MODULES",
+  "integrated_db_check": {
+    "status": "FAIL_PREEXISTING_UNRECORDED_MIGRATION",
+    "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+    "release_lock_or_contract_changed": false
+  },
+  "source_pin": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "original_consumed_definition_drift": 0,
+  "private_union": 301,
+  "owner_only_additions": 26,
+  "independent_critic": false,
+  "postgresql_compile": false,
+  "actual_database_call": false,
+  "actual_runtime_qualification": false,
+  "actual_financial_acceptance": false,
+  "actual_http_ui_phone_acceptance": false,
+  "actual_next_acceptance": false,
+  "operational_assignment_changed": false,
+  "banking_action": false,
+  "secrets_printed": false
+}

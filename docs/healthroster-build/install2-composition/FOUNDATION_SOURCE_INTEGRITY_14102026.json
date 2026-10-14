@@ -1,0 +1,38 @@
+{
+  "sourceOnly": true,
+  "priorHeldSteps": [
+    {
+      "script": "db:lock:update",
+      "exitCode": 1,
+      "outputSha256": "62c7a43137954ec46310bdfc33c0aa8d842563ff5a2a4b3ddef9d0e431e628b4",
+      "summary": []
+    }
+  ],
+  "includeFailure": "SQL include escapes supabase/repeatable",
+  "canonicalCopies": 83,
+  "compilerConfinementUnchanged": true,
+  "migrationLockAppend": {
+    "status": "PASS",
+    "migrations": 399,
+    "oldLockedBytesPreserved": true
+  },
+  "steps": [
+    {
+      "script": "db:check",
+      "exitCode": 0,
+      "outputSha256": "65bd61a607cb1892fab0d53077732f0f7253f394bfe24234cb43560b30b6b65c",
+      "summary": [
+        "Database source integrity passed: 399 migrations, 1055 repeatables."
+      ]
+    },
+    {
+      "script": "security:secrets",
+      "exitCode": 0,
+      "outputSha256": "75fae7745d20f7970791affcc638af8163bcaa32e5b9c8968ebe83091b45450e",
+      "summary": [
+        "Tracked source credential scan: PASS (8473 files)"
+      ]
+    }
+  ],
+  "noDatabaseCall": true
+}

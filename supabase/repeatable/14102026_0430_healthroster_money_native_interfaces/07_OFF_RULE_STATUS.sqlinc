@@ -1,0 +1,27 @@
+-- The existing service-registered feature owner dispatches this read. An
+-- absent authorization is ordinary; a claimed invalid/expired scope refuses.
+create or replace function private.weekly_source_rule_qualification_status_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; auth jsonb; actor uuid; cycle_id uuid; n integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action','source_cycle_id','purpose'])
+    or p_request->>'qualification_action' is distinct from 'OFF_RULE_STATUS' or p_request->>'environment' is distinct from 'TEST'
+    or p_request->>'purpose' not in ('SOURCE_FIXTURE_SETUP','AUTOMATIC_JOURNEY') then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_STATUS_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid; cycle_id:=(p_request->>'source_cycle_id')::uuid;
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  select count(*) into n from jsonb_array_elements(case when jsonb_typeof(r.evidence_json->'weekly_source_protected_test_setup_authorizations')='array'
+    then r.evidence_json->'weekly_source_protected_test_setup_authorizations' else '[]'::jsonb end) value
+    where value->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1' and value->>'source_cycle_id'=cycle_id::text
+      and value->>'journey_actor_user_id'=actor::text and value->>'purpose'=p_request->>'purpose';
+  if n=0 then return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1','qualified_fixture',false,'operational_ready',false); end if;
+  auth:=private.weekly_source_rule_qualification_authorization_v1(cycle_id,actor,p_request->>'purpose');
+  if auth->>'agency_id' is distinct from p_request->>'agency_id' then raise exception 'WEEKLY_SOURCE_OFF_RULE_STATUS_REFUSED' using errcode='42501'; end if;
+  perform private.weekly_source_rule_qualification_scope_assert_v1(auth,actor,false);
+  return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1','qualified_fixture',true,'operational_ready',false,
+    'purpose',auth->>'purpose','source_cycle_id',cycle_id,'actor_user_id',actor,'allowed_operations',auth->'allowed_operations',
+    'scope_id',auth->>'scope_id','authorization_sha256',auth->>'authorization_sha256');
+end;
+$function$;

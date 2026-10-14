@@ -1,0 +1,84 @@
+create or replace function private.weekly_source_rule_coverage_floor_v1(p_client_id uuid,p_cycle_id uuid)
+returns date language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_cycle public.weekly_source_cycles%rowtype; v_floor date;
+begin
+  select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;
+  if private.weekly_source_effective_rule_set_v1(p_client_id,p_cycle_id) is null then return null; end if;
+  if private.weekly_source_operational_effective_rule_set_v1(p_client_id,p_cycle_id) is null then
+    -- Qualification exposure is its genuine existing audit OPEN, never an
+    -- invented normal activation receipt or a checking-time clock substitute.
+    select (audit.after_json->>'coverage_floor_local_date')::date into strict v_floor
+    from public.audit_events audit
+    where audit.object_type='weekly_source_off_rule_test_journey' and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED'
+      and audit.event_sequence_is_authoritative and audit.object_id_text=private.weekly_source_rule_qualification_context_v1(p_client_id,p_cycle_id)->>'scope_id';
+    if v_floor<>v_cycle.finalisation_week_ending-6 then
+      raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000'; end if;
+    return v_floor;
+  end if;
+  -- F1's only feature writer refuses false->false. A RULE_SET purpose and
+  -- complete receipt remain after disable; a never-enabled draft has neither.
+  -- Refuse malformed activated history rather than advancing a client's floor.
+  if exists(select 1 from public.weekly_source_group_rule_assignments a
+    join public.weekly_source_group_clients gc on gc.source_group_id=a.source_group_id and gc.client_id=p_client_id
+      and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]')
+        && daterange(a.effective_from_week_ending,coalesce(a.effective_to_week_ending,'infinity'::date),'[]')
+    where a.source_group_id=v_cycle.source_group_id and a.feature_purpose='RULE_SET'
+      and a.effective_from_week_ending<=v_cycle.finalisation_week_ending and (
+        a.rule_set_version_id is null or a.feature_release_id is null or a.feature_changed_at_utc is null
+        or a.feature_changed_by_user_id is null or a.feature_request_id is null or a.feature_request_sha256 is null
+        or a.feature_receipt_json->>'contract' is distinct from 'WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1'
+        or a.feature_receipt_json->>'assignment_id' is distinct from a.id::text
+        or a.feature_receipt_json->>'source_group_id' is distinct from a.source_group_id::text
+        or a.feature_receipt_json->>'rule_set_version_id' is distinct from a.rule_set_version_id::text
+        or a.feature_receipt_json->>'effective_from_week_ending' is distinct from a.effective_from_week_ending::text
+        or a.feature_receipt_json->>'release_id' is distinct from a.feature_release_id
+        or a.feature_receipt_json->>'actor_user_id' is distinct from a.feature_changed_by_user_id::text
+        or a.feature_receipt_json->>'request_id' is distinct from a.feature_request_id::text
+        or (a.feature_receipt_json->>'changed_at_utc')::timestamptz is distinct from a.feature_changed_at_utc
+        or a.feature_receipt_json->>'feature_purpose' is distinct from 'RULE_SET'
+        or a.feature_receipt_json->'feature_enabled' is distinct from to_jsonb(a.feature_enabled)
+      )) then
+    raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000';
+  end if;
+  with applicable_assignments as (
+    select greatest(a.effective_from_week_ending+((7-extract(dow from a.effective_from_week_ending)::integer)%7),
+      gc.valid_from+((7-extract(dow from gc.valid_from)::integer)%7)) first_week,
+      least(coalesce(a.effective_to_week_ending,'infinity'::date),coalesce(gc.valid_to,'infinity'::date),
+        v_cycle.finalisation_week_ending) last_week
+    from public.weekly_source_group_rule_assignments a
+    join public.weekly_source_group_clients gc on gc.source_group_id=a.source_group_id and gc.client_id=p_client_id
+    join public.weekly_source_rule_set_versions version on version.id=a.rule_set_version_id
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id
+    join public.weekly_source_groups source_group on source_group.id=a.source_group_id
+      and source_group.agency_id=rules.agency_id and source_group.environment=rules.environment
+    where a.source_group_id=v_cycle.source_group_id and a.feature_purpose='RULE_SET'
+      and a.feature_release_id is not null and a.feature_changed_at_utc is not null
+  ), frozen_use as (
+    select source_cycle.finalisation_week_ending first_week
+    from public.weekly_source_final_revisions final
+    join public.weekly_source_cycles source_cycle on source_cycle.id=final.source_cycle_id
+      and source_cycle.source_group_id=v_cycle.source_group_id
+    join public.weekly_source_group_clients gc on gc.source_group_id=source_cycle.source_group_id
+      and gc.client_id=p_client_id and source_cycle.finalisation_week_ending
+        between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+    join public.weekly_source_rule_set_versions version on version.id=final.rule_set_version_id
+    join public.weekly_source_rule_sets rules on rules.id=version.rule_set_id
+    join public.weekly_source_groups source_group on source_group.id=source_cycle.source_group_id
+      and source_group.agency_id=rules.agency_id and source_group.environment=rules.environment
+    where source_cycle.finalisation_week_ending<=v_cycle.finalisation_week_ending
+      and (source_cycle.scope_client_id=p_client_id or exists(
+        select 1 from public.weekly_source_client_manifests manifest
+        where manifest.final_revision_id=final.id and manifest.client_id=p_client_id)
+        or exists(select 1 from public.weekly_source_report_scopes report
+          where report.id=final.report_scope_id and report.source_cycle_id=source_cycle.id and report.client_id=p_client_id))
+  ) select min(first_week)-6 into v_floor from (
+    select first_week from applicable_assignments where first_week<=last_week
+    union all select first_week from frozen_use
+  ) history;
+  if v_floor is null then raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000'; end if;
+  return v_floor;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+  raise exception 'WEEKLY_SOURCE_RULE_COVERAGE_HISTORY_UNPROVABLE' using errcode='55000';
+end;
+$function$;

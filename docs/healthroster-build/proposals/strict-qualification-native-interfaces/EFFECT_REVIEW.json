@@ -1,0 +1,143 @@
+{
+  "source_only": true,
+  "consumed_source_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "complete_effect_input_sha256": "8af0bf0abf8b20870dff80a695684b47351b3275dd3dda8b062491442856ba97",
+  "conservative_routines": 488,
+  "literal_trigger_declarations": 125,
+  "physical_timesheet_write_leaves": [
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "owner_name": "public.weekly_exceptional_pay_prepare_family_v1",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "definition_sha256": "ffeaf2e809dedff38778f9130f2c54d3cb8e230acf57248ec66dcc9ec35a6eb1",
+      "calls": [
+        "private.weekly_exceptional_candidate_signed_evidence_v1",
+        "private.weekly_exceptional_json_keys_exact_v1",
+        "private.weekly_source_lock_family_rows_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_query_admit_v2",
+        "private.weekly_source_protected_saved_prepare_route_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "private.weekly_source_work_event_schedule_compatible_v1"
+      ],
+      "writes": [
+        "public.audit_events",
+        "public.contract_weeks",
+        "public.timesheets",
+        "public.weekly_exceptional_orchestration_runs",
+        "public.weekly_exceptional_pay_target_families",
+        "public.weekly_work_events"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "owner_name": "public.weekly_source_timesheet_lineage_ensure_atomic_v1",
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119",
+      "calls": [
+        "private._weekly_source_effective_policy_v1",
+        "private.weekly_source_current_publication_guard_v1",
+        "private.weekly_source_lock_family_rows_v1",
+        "private.weekly_source_office_authority_v1",
+        "private.weekly_source_pay_query_admit_v2",
+        "private.weekly_source_projection_hex32_v1",
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "writes": [
+        "private.bpay_next_source_current_lock_members",
+        "public.audit_events",
+        "public.contract_weeks",
+        "public.timesheets",
+        "public.weekly_source_row_timesheet_lineages"
+      ]
+    },
+    {
+      "signature": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)",
+      "owner_name": "public.weekly_source_ordinary_pay_projection_apply_atomic_v1",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "definition_sha256": "5043fc2a667f47d7e1c6b3f09675744d7ca82b08a89da92edcc1557d3924d670",
+      "calls": [
+        "private.weekly_source_entitlement_components_v1",
+        "private.weekly_source_entitlement_derived_uuid_v1",
+        "private.weekly_source_entitlement_proposal_record_v1",
+        "private.weekly_source_entitlement_proposal_request_v1",
+        "private.weekly_source_finalisation_negate_vector_v1",
+        "private.weekly_source_finalisation_vector_v1",
+        "private.weekly_source_ordinary_projection_active_movements_v1",
+        "private.weekly_source_ordinary_projection_actual_schedule_v1",
+        "private.weekly_source_ordinary_projection_current_expenses_v1",
+        "private.weekly_source_ordinary_projection_current_segments_v1",
+        "private.weekly_source_ordinary_projection_expense_movement_assert_v1",
+        "private.weekly_source_ordinary_projection_expenses_materialise_v1",
+        "private.weekly_source_ordinary_projection_receipt_insert_v1",
+        "private.weekly_source_ordinary_projection_receipt_json_v1",
+        "private.weekly_source_ordinary_projection_root_hash_v1",
+        "private.weekly_source_ordinary_projection_snapshot_assert_v1",
+        "private.weekly_source_ordinary_projection_source_units_v1",
+        "private.weekly_source_retain_approved_additional_v2",
+        "private.weekly_source_sha256_jsonb_v1",
+        "private.weekly_source_target_family_for_root_v1",
+        "public.import_timesheet_financial_preflight_v1",
+        "public.tsfin_write_current_snapshot_single_bounded"
+      ],
+      "writes": [
+        "public.timesheets",
+        "public.weekly_source_state_transitions"
+      ]
+    },
+    {
+      "signature": "public.trg_timesheet_document_invalidate()",
+      "owner_name": "public.trg_timesheet_document_invalidate",
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+      "definition_sha256": "8d10dac60a2ff17bf790aa8c14073706eba1485303a2bea5ab4f6aeb9d263bad",
+      "calls": [],
+      "writes": [
+        "public.invoice_document_versions",
+        "public.invoice_operation_chunks",
+        "public.invoice_operations",
+        "public.invoices",
+        "public.timesheets"
+      ]
+    },
+    {
+      "signature": "private._daily_timesheet_settings_authority_after_fin_v1()",
+      "owner_name": "private._daily_timesheet_settings_authority_after_fin_v1",
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "definition_sha256": "0960fd2e8fa5fa990a0fcd5c646510a8afcfb403f411c390d84f9e7f7d12eb98",
+      "calls": [
+        "private._contract_settings_effective_core_v1"
+      ],
+      "writes": [
+        "public.timesheets"
+      ]
+    }
+  ],
+  "unresolved_source_callees": [
+    "private.weekly_source_automatic_reconcile_producer_ready_v1",
+    "private.weekly_source_bulk_producer_ready_v1",
+    "private.weekly_source_bulk_source_cas_v1",
+    "private.weekly_source_entitlement_publication_receipts"
+  ],
+  "unresolved_classification": {
+    "actual_original_dependency_functions": [
+      "private.weekly_source_automatic_reconcile_producer_ready_v1",
+      "private.weekly_source_bulk_producer_ready_v1",
+      "private.weekly_source_bulk_source_cas_v1"
+    ],
+    "conservative_source_relation_reference": "private.weekly_source_entitlement_publication_receipts"
+  },
+  "no_literal_network_provider_submission_email_send_or_drain_invocation_found": true,
+  "dynamic_source_units": [
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1",
+      "sha256": "bda3ef9414b29d862ec06b9510ee5335760485935359fe72f926343b3a8a49cf"
+    },
+    {
+      "signature": "private.pay_workbench_finance_effect_normalise_row_v1",
+      "sha256": "9729a67a6f2a0f81cd30fd5b2ea88ba4e24cb391fa884730d69045fbc96cd699"
+    }
+  ],
+  "review_boundary": "Complete conservative source declarations and literal trigger graph only. Native metadata/queue writes, Banking hooks and document invalidation remain. Read-only historical provider/settlement facts are not payment execution. Dynamic SQL and actual branch/trigger behavior still need root review and real first use.",
+  "native_effect_acceptance": false,
+  "external_call_run": false
+}

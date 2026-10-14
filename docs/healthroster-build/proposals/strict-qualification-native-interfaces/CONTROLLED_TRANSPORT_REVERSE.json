@@ -1,0 +1,8 @@
+{
+  "source_only": true,
+  "input_sha256": "85a8b860c07579b26180cfd623f85ffb16d24efc66105b644303513c52ee61bd",
+  "output_sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f",
+  "reverse_hunk_matches_entire_input_definition": true,
+  "new_dispatch_only": "OFF_RULE_TRANSPORT_STATUS",
+  "no_new_service_grant": true
+}

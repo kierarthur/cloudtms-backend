@@ -1,0 +1,80 @@
+create or replace function public.weekly_source_group_rule_assign_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid; v_agency uuid; v_environment text; v_group_id uuid; v_version_id uuid;
+  v_request_id uuid; v_expected bigint; v_from date; v_to date; v_hash text; v_id uuid:=gen_random_uuid(); v_receipt jsonb;
+  v_group public.weekly_source_groups%rowtype; v_version public.weekly_source_rule_set_versions%rowtype;
+  v_prior public.weekly_source_group_rule_assignments%rowtype;
+begin
+  perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','agency_id','environment','source_group_id','rule_set_version_id','effective_from_week_ending','effective_to_week_ending','expected_group_version','request_id'],'WEEKLY_SOURCE_RULE_ASSIGN_REQUEST_INVALID');
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid; v_agency:=(p_request->>'agency_id')::uuid; v_group_id:=(p_request->>'source_group_id')::uuid;
+    v_version_id:=nullif(p_request->>'rule_set_version_id','')::uuid; v_request_id:=(p_request->>'request_id')::uuid;
+    v_expected:=(p_request->>'expected_group_version')::bigint; v_from:=(p_request->>'effective_from_week_ending')::date;
+    v_to:=nullif(p_request->>'effective_to_week_ending','')::date;
+  exception when others then raise exception 'WEEKLY_SOURCE_RULE_ASSIGN_REQUEST_INVALID' using errcode='22023'; end;
+  perform private._weekly_source_settings_require_admin_v1(v_actor);
+  v_environment:=private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  if v_group_id is null or v_request_id is null or v_expected is null or v_expected<1 or v_from is null
+    or p_request->>'effective_from_week_ending'<>to_char(v_from,'YYYY-MM-DD')
+    or (v_to is not null and (p_request->>'effective_to_week_ending'<>to_char(v_to,'YYYY-MM-DD') or v_to<v_from or (v_to-v_from)%7<>0))
+    or not p_request ? 'rule_set_version_id' then raise exception 'WEEKLY_SOURCE_RULE_ASSIGN_REQUEST_INVALID' using errcode='22023'; end if;
+  v_hash:=encode(extensions.digest(convert_to(p_request::text,'UTF8'),'sha256'),'hex');
+  -- Same lifecycle gate as cycle creation; lock cycles too, as finalisation
+  -- holds the cycle row even when no group lock is needed by its old owner.
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-cycle-lifecycle:'||v_group_id::text,0));
+  select * into v_group from public.weekly_source_groups where id=v_group_id for update;
+  if not found or v_group.agency_id<>v_agency or v_group.environment<>v_environment or not v_group.active or v_group.source_family<>'ROSTER' then
+    raise exception 'WEEKLY_SOURCE_RULE_GROUP_NOT_APPLICABLE' using errcode='22023'; end if;
+  select * into v_prior from public.weekly_source_group_rule_assignments where source_group_id=v_group_id and assignment_request_id=v_request_id;
+  if found then
+    if v_prior.assignment_request_sha256<>v_hash then raise exception 'WEEKLY_SOURCE_RULE_REQUEST_REUSED' using errcode='22023'; end if;
+    return v_prior.assignment_receipt_json||jsonb_build_object('replayed',true);
+  end if;
+  if v_group.version<>v_expected then raise exception 'WEEKLY_SOURCE_RULE_GROUP_STALE' using errcode='40001'; end if;
+  if v_from<(transaction_timestamp() at time zone 'Europe/London')::date then
+    -- Only the owner-XID audit of a fresh disabled historical TEST fixture
+    -- substitutes this date assertion. All native guards below remain.
+    perform private.weekly_source_historical_fixture_assignment_assert_v1(p_request);
+  end if;
+  perform 1 from public.weekly_source_cycles c where c.source_group_id=v_group_id and c.finalisation_week_ending>=v_from
+    and c.finalisation_week_ending<=coalesce(v_to,'infinity'::date) order by c.id for update;
+  if exists(select 1 from public.weekly_source_cycles c where c.source_group_id=v_group_id
+    and c.finalisation_week_ending between v_from and coalesce(v_to,'infinity'::date)
+    and (c.current_final_revision_id is not null or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
+      or exists(select 1 from public.weekly_source_final_revisions f where f.source_cycle_id=c.id))) then
+    raise exception 'WEEKLY_SOURCE_RULE_FINALISED_WEEK_REFUSED' using errcode='55000'; end if;
+  if v_version_id is not null then
+    select v.* into v_version from public.weekly_source_rule_set_versions v join public.weekly_source_rule_sets r on r.id=v.rule_set_id
+      where v.id=v_version_id and r.agency_id=v_agency and r.environment=v_environment;
+    if not found then raise exception 'WEEKLY_SOURCE_RULE_VERSION_NOT_FOUND' using errcode='22023'; end if;
+    perform private._weekly_source_rule_group_context_v1(v_group_id,v_from,v_to,v_version.values_json,false);
+  end if;
+  -- A new choice clips only an earlier open assignment. Future overlapping
+  -- choices and same-start replacements need an explicit new range decision.
+  select * into v_prior from public.weekly_source_group_rule_assignments a where a.source_group_id=v_group_id
+    and daterange(a.effective_from_week_ending,coalesce(a.effective_to_week_ending,'infinity'::date),'[]')
+      && daterange(v_from,coalesce(v_to,'infinity'::date),'[]') order by a.effective_from_week_ending for update;
+  if found then
+    if v_prior.feature_enabled and exists(select 1 from public.weekly_source_rule_set_versions v
+      where v.id=v_prior.rule_set_version_id and v.values_json->>'invoice_sender'='AGENCY_INVOICE') then
+      raise exception 'WEEKLY_SOURCE_RULE_ACTIVE_AGENCY_TRANSITION_REQUIRED' using errcode='55000'; end if;
+    if v_prior.effective_from_week_ending>=v_from or v_prior.effective_to_week_ending is not null
+      or (v_from-v_prior.effective_from_week_ending)%7<>0
+      or exists(select 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=v_group_id
+        and a.id<>v_prior.id and daterange(a.effective_from_week_ending,coalesce(a.effective_to_week_ending,'infinity'::date),'[]')
+          && daterange(v_from,coalesce(v_to,'infinity'::date),'[]')) then
+      raise exception 'WEEKLY_SOURCE_RULE_ASSIGNMENT_OVERLAP' using errcode='22023'; end if;
+    update public.weekly_source_group_rule_assignments set effective_to_week_ending=v_from-7,version=version+1 where id=v_prior.id;
+  end if;
+  update public.weekly_source_groups set version=version+1,updated_by_user_id=v_actor,updated_at_utc=transaction_timestamp()
+    where id=v_group_id returning * into v_group;
+  v_receipt:=jsonb_build_object('contract','WEEKLY_SOURCE_RULE_ASSIGNED_V1','assignment_id',v_id,'assignment_version',1,
+    'source_group_id',v_group_id,'source_group_version',v_group.version,'rule_set_version_id',v_version_id,
+    'effective_from_week_ending',v_from,'effective_to_week_ending',v_to,'feature_enabled',false,'replayed',false);
+  insert into public.weekly_source_group_rule_assignments(id,source_group_id,rule_set_version_id,effective_from_week_ending,effective_to_week_ending,
+    assignment_request_id,assignment_request_sha256,assignment_receipt_json,created_by_user_id)
+    values(v_id,v_group_id,v_version_id,v_from,v_to,v_request_id,v_hash,v_receipt,v_actor);
+  return v_receipt;
+end;
+$function$;

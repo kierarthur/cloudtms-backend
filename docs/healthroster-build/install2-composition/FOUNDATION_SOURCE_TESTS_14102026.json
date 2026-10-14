@@ -1,0 +1,18 @@
+{
+  "sourceOnly": true,
+  "exitCode": 0,
+  "outputSha256": "06f0cbc1618a2807d9bd74b24f8b98c303b4a7edd1cacfcb5a2dec7ee162aa8d",
+  "summary": [
+    "ℹ tests 13",
+    "ℹ suites 0",
+    "ℹ pass 13",
+    "ℹ fail 0",
+    "ℹ cancelled 0",
+    "ℹ skipped 0",
+    "ℹ todo 0",
+    "ℹ duration_ms 9227.414"
+  ],
+  "runtimeSyntaxAndImportModules": 11,
+  "producerFunctionsInvoked": false,
+  "noDatabaseConnection": true
+}

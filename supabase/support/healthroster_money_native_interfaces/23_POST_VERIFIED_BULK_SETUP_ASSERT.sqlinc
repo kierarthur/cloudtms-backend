@@ -1,0 +1,57 @@
+create or replace function private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(p_auth jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; g public.weekly_source_groups%rowtype; census jsonb; q jsonb; r private.cloudtms_database_releases%rowtype; manifest jsonb;
+begin
+  if not private.weekly_source_qualification_closed_object_v1(p_auth,array['schema_version','authorization_id','scope_id','agency_id','source_group_id',
+    'source_cycle_id','setup_actor_user_id','journey_actor_user_id','week_ending','expires_at_utc','fixture_namespace','fixture_manifest','original_census',
+    'prerequisite_qualification_sha256','capabilities','release_id','source_commit','contract_sha256','authorization_sha256'])
+    or p_auth->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_TEST_SETUP_AUTHORIZATION_V1'
+    or p_auth->>'release_id' is distinct from p_execution->>'release_id' or p_auth->>'source_commit' is distinct from p_execution->>'source_commit'
+    or p_auth->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+    or p_auth->>'fixture_namespace' is distinct from 'WSQ_TEST_' or p_auth->'capabilities' is distinct from '["BULK_SIGNED"]'::jsonb
+    or p_auth->>'authorization_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PROTECTED_TEST_SETUP_AUTHORIZATION_V1',p_auth-'authorization_sha256'),'hex')
+    or exists(select 1 from unnest(array['authorization_id','scope_id','agency_id','source_group_id','source_cycle_id','setup_actor_user_id','journey_actor_user_id']) key
+      where coalesce(p_auth->>key,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or exists(select 1 from unnest(array['contract_sha256','prerequisite_qualification_sha256','authorization_sha256']) key where coalesce(p_auth->>key,'') !~ '^[0-9a-f]{64}$')
+    or (p_auth->>'expires_at_utc')::timestamptz<=clock_timestamp() or (p_auth->>'expires_at_utc')::timestamptz>clock_timestamp()+interval '2 hours' then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_BULK_SETUP_INVALID' using errcode='22023'; end if;
+  perform private._weekly_source_settings_require_admin_v1((p_auth->>'setup_actor_user_id')::uuid);
+  select * into strict c from public.weekly_source_cycles where id=(p_auth->>'source_cycle_id')::uuid;
+  select * into strict g from public.weekly_source_groups where id=c.source_group_id and id=(p_auth->>'source_group_id')::uuid
+    and agency_id=(p_auth->>'agency_id')::uuid and active and source_family='ROSTER' and environment='TEST';
+  perform private._weekly_source_settings_deployment_v1(g.agency_id,g.environment);
+  perform private.weekly_source_office_authority_v1((p_auth->>'journey_actor_user_id')::uuid,'APPROVE_PROTECTED_PAY',g.id,null,c.finalisation_week_ending);
+  if c.finalisation_week_ending::text is distinct from p_auth->>'week_ending'
+    or exists(select 1 from public.weekly_source_group_rule_assignments a where a.source_group_id=g.id and a.feature_enabled)
+    or private.weekly_source_bulk_producer_ready_v1(c.id) or private.weekly_source_automatic_reconcile_producer_ready_v1(c.id) then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_BULK_SETUP_SCOPE_CHANGED' using errcode='40001'; end if;
+  census:=private.weekly_source_protected_qualification_census_v1(c.id);manifest:=p_auth->'fixture_manifest';
+  if census is distinct from p_auth->'original_census'
+    or not private.weekly_source_qualification_closed_object_v1(manifest,array['group_code','client_ids','candidate_ids','contract_ids','original_root_ids','work_event_ids','client_refs','candidate_refs'])
+    or g.code is distinct from manifest->>'group_code' or g.code !~ '^WSQ_TEST_[A-Z0-9_]+$'
+    or manifest->'client_ids' is distinct from census->'original_client_ids'
+    or (select coalesce(jsonb_agg(distinct item->'candidate_id' order by item->'candidate_id'),'[]'::jsonb) from jsonb_array_elements(census->'original_items') item) is distinct from manifest->'candidate_ids'
+    or (select coalesce(jsonb_agg(distinct item->'contract_id' order by item->'contract_id'),'[]'::jsonb) from jsonb_array_elements(census->'original_items') item) is distinct from manifest->'contract_ids'
+    or (select coalesce(jsonb_agg(distinct item->'work_event_id' order by item->'work_event_id'),'[]'::jsonb) from jsonb_array_elements(census->'original_items') item) is distinct from manifest->'work_event_ids'
+    or (select coalesce(jsonb_agg(item->'timesheet_id' order by item->'timesheet_id'),'[]'::jsonb) from jsonb_array_elements(census->'original_root_identities') item) is distinct from manifest->'original_root_ids'
+    or (select coalesce(jsonb_agg(item->'client_id' order by item->'client_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'client_refs') item) is distinct from manifest->'client_ids'
+    or (select coalesce(jsonb_agg(item->'candidate_id' order by item->'candidate_id'),'[]'::jsonb) from jsonb_array_elements(manifest->'candidate_refs') item) is distinct from manifest->'candidate_ids'
+    or exists(select 1 from jsonb_array_elements(manifest->'client_refs') item where not private.weekly_source_qualification_closed_object_v1(item,array['client_id','cli_ref'])
+      or coalesce(item->>'cli_ref','') !~ '^CLI-913013[0-9]{2}$' or not exists(select 1 from public.clients client where client.id=(item->>'client_id')::uuid and client.cli_ref=item->>'cli_ref'))
+    or exists(select 1 from jsonb_array_elements(manifest->'candidate_refs') item where not private.weekly_source_qualification_closed_object_v1(item,array['candidate_id','tms_ref'])
+      or coalesce(item->>'tms_ref','') !~ '^CCR-913013[0-9]{2}$' or not exists(select 1 from public.candidates candidate where candidate.id=(item->>'candidate_id')::uuid and candidate.tms_ref=item->>'tms_ref')) then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_BULK_SETUP_CENSUS_CHANGED' using errcode='40001'; end if;
+  select * into strict r from private.cloudtms_database_releases where release_id=p_execution->>'release_id';
+  select value into strict q from jsonb_array_elements(r.evidence_json->'weekly_source_protected_prerequisite_qualifications') value
+    where value->>'qualification_sha256'=p_auth->>'prerequisite_qualification_sha256';
+  perform private.weekly_source_protected_prerequisite_release_assert_v2(q,g.id,(q->>'effective_from_week_ending')::date,
+    (q->>'effective_to_week_ending')::date,p_auth->>'prerequisite_qualification_sha256');
+  if q->'capabilities' is distinct from '["BULK_SIGNED"]'::jsonb or not exists(select 1 from jsonb_array_elements(q->'gate_receipts') receipt
+    where receipt->>'gate'='NEXT_PAY' and receipt->>'status'='PREREQUISITE_PASS') then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_BULK_SETUP_NEXT_REQUIRED' using errcode='55000'; end if;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_POST_VERIFIED_BULK_SETUP_INVALID' using errcode='22023';
+end;
+$function$;

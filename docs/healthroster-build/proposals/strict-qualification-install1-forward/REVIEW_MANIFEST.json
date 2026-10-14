@@ -1,0 +1,149 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_INSTALL1_FORWARD_FROZEN_SOURCE_REVIEW_V1",
+  "status": "NEW_SOURCE_PACKET_FROZEN_FOR_CRITIC_NATIVE_ROOT_COMPOSITION_AND_REAL_GATES_HELD",
+  "actual_install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "prior_source_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "frozen_money_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "prior_frozen_manifest_sha256": "e03db5673f81c6fb3a2eb8e18ca9209064b0821c2cb68474b92e8a7a087a23d0",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/ACTUAL_ADDITIONAL_EXECUTOR_OWNERS.sqlinc",
+      "bytes": 440678,
+      "sha256": "aabc26feedd8cb24eea735ab4391a43b24bb70f0a4c8b8c37236ab98e37a4d57"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/ACTUAL_CHANGED_CONSUMED_OWNERS.sqlinc",
+      "bytes": 1063008,
+      "sha256": "36069fdfdd95e58a91ff52ed8be818eb0be4fac7e312cd5f21dba5cb3f8820c9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/ACTUAL_CHANGED_TRIGGER_DECLARATIONS.sqlinc",
+      "bytes": 3002,
+      "sha256": "12de2bf6fc57b1adfbab5dc47f0b299e9748123157d64d29fb99f8213777328e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/ACTUAL_INTERFACE_PREDECESSOR_DEFINITIONS.sqlinc",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/BROKER_INDEX_INSTALL1_SOURCE_FORWARD.js",
+      "bytes": 8914848,
+      "sha256": "f4628723680567c185c2a1ca4bd5830595b8bb7444dc78e9f4dd50c07e05cb41"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/BROKER_INSTALL1_ENTIRE_SOURCE_REVERSE.json",
+      "bytes": 12305,
+      "sha256": "f8e7461ca3ed4b46f2f2050b1c23858b051af17fe5de9f9379e9df8c9b62af70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/COMPOSITION_PLAN.json",
+      "bytes": 140278,
+      "sha256": "a7f2aec71edc5188631cff9a67e07b4f0aaa437fc0b4869087ddf9f478a9f768"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/EXPLICIT_FUNCTION_DROP_REVIEW.json",
+      "bytes": 267294,
+      "sha256": "cd377b25d3a37ce4f3f90980ffd6189fd29a95a9275952aa891a69f6bfe02f7b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/INSTALL1_ACTUAL_EXECUTOR_CENSUS.json",
+      "bytes": 301247,
+      "sha256": "a039c69d067052046a6d284bf725d39726ac213d1fdb6a767cb989e10fbd51b5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/INSTALL1_CONSUMED_OWNER_COMPARISON.json",
+      "bytes": 1989903,
+      "sha256": "01fdec6d5ab8260a52951fb5931bba318aad7d92fb0bf41824e3f54c19228e34"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/INSTALL1_SOURCE_INPUT_PINS.json",
+      "bytes": 1811492,
+      "sha256": "8f84c45700756e85a9113c8d384d60d69c166d8ebad89e35d31f3c9364d504d7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/MONEY_INTERFACE_ENTIRE_SOURCE_REVERSE.json",
+      "bytes": 37322,
+      "sha256": "8c95ef3faa3d53762c1516871802afe15df6716ff7e1667fd8f9e2a8ced1d657"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/MONEY_INTERFACE_INSTALL1_BINDINGS.json",
+      "bytes": 36901,
+      "sha256": "cc1c991067ead51bdd904b9f3be0d59935c9a9b8b3e70a4cb8d422c2f6e469a7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/MONEY_INTERFACE_SOURCE_FORWARD.sqlinc",
+      "bytes": 340254,
+      "sha256": "2b7e10a4457838390daa00a1b013616db441e550d16a5014c0a051a7074f1dd5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/PINNED_MANAGED_SQL_SCANNER.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/PINNED_SQL_DATE_ORDER.mjs",
+      "bytes": 648,
+      "sha256": "7035b4f5fcbca7ed25bff284ef29115ef645f58314c28e3d19475e1d8a894f5e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/PRIOR_CHANGED_CONSUMED_OWNERS.sqlinc",
+      "bytes": 1107187,
+      "sha256": "ca8458fad2daa08995c160038af6a4e40aaaf8cce5f7483f18d5e1820ce73e49"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/PRIOR_FROZEN_PRESERVATION.json",
+      "bytes": 250,
+      "sha256": "5538530f5050a57a80fa244625eb9e28be14c85389cbf3cdbd5e04a10023cb62"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/RUNTIME_AND_RECORDER_SOURCE_PINS.json",
+      "bytes": 7503,
+      "sha256": "e5852255349500a1c449dc3711410d392c3940437bf9cb9786082f88e90eb453"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/SOURCE_CHECK_RESULT.json",
+      "bytes": 2967,
+      "sha256": "d395c1f4e17973ab7d54d9d8e65a3fa5b2f215c4f36933069b558c2d5e5b9e26"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/SOURCE_REVIEW_READY.md",
+      "bytes": 3806,
+      "sha256": "772d27308b636804a4d169638585f817c805f7b345b2d796e1366840c5743bd5"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/build-composition-review.mjs",
+      "bytes": 12758,
+      "sha256": "767a4f0df8fc982443bac67a2e948a13e631b7ac9e605a53c6eacd83969b1f01"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/compare-install1.mjs",
+      "bytes": 19787,
+      "sha256": "a1f147154be6660e6ef1a8999c360fe296ebc498437da233bb3040a52a22519b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/composition-forward.test.mjs",
+      "bytes": 11670,
+      "sha256": "81fc7d8f083e29f90d342872b543a141d48bfe25c7e7132cbd25df862ff8bf02"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/freeze-install1-forward.mjs",
+      "bytes": 4643,
+      "sha256": "e3714524220a7d3ac6a2b7ed9c8f5e958e2cfc21b71026e2aa0ca25188bcd3b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/generate-broker-install1-forward.mjs",
+      "bytes": 4351,
+      "sha256": "09e1138e85141f060b828a89072b79b2c95f0dfeadf46bac0ba589f0249cdd55"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/strict-qualification-install1-forward/native-source-identity.mjs",
+      "bytes": 4804,
+      "sha256": "5bebd321b158f7f4662e94982118b2de52b8c7b0e4343aceba74261b82268f39"
+    }
+  ],
+  "source_check_result_sha256": "d395c1f4e17973ab7d54d9d8e65a3fa5b2f215c4f36933069b558c2d5e5b9e26",
+  "no_prior_frozen_artifact_modified": true,
+  "independent_critic": false,
+  "actual_database_or_runtime_acceptance": false
+}

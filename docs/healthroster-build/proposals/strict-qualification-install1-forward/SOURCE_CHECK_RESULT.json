@@ -1,0 +1,80 @@
+{
+  "schema_version": "STRICT_QUALIFICATION_INSTALL1_FORWARD_SOURCE_CHECK_V1",
+  "status": "SOURCE_REVIEW_READY_ROOT_DUAL_NATIVE_COMPOSITION_AND_REAL_GATES_HELD",
+  "actual_install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "prior_source_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "frozen_money_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "prior_frozen_manifest_sha256": "e03db5673f81c6fb3a2eb8e18ca9209064b0821c2cb68474b92e8a7a087a23d0",
+  "source_tests_pass": 11,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 9,
+  "sql_source_parser": [
+    {
+      "file": "ACTUAL_ADDITIONAL_EXECUTOR_OWNERS.sqlinc",
+      "statements": 71,
+      "meta": 0,
+      "parsed_source_only": true
+    },
+    {
+      "file": "ACTUAL_CHANGED_CONSUMED_OWNERS.sqlinc",
+      "statements": 61,
+      "meta": 0,
+      "parsed_source_only": true
+    },
+    {
+      "file": "ACTUAL_CHANGED_TRIGGER_DECLARATIONS.sqlinc",
+      "statements": 14,
+      "meta": 0,
+      "parsed_source_only": true
+    },
+    {
+      "file": "ACTUAL_INTERFACE_PREDECESSOR_DEFINITIONS.sqlinc",
+      "statements": 0,
+      "meta": 0,
+      "parsed_source_only": true
+    },
+    {
+      "file": "MONEY_INTERFACE_SOURCE_FORWARD.sqlinc",
+      "statements": 125,
+      "meta": 0,
+      "parsed_source_only": true
+    },
+    {
+      "file": "PRIOR_CHANGED_CONSUMED_OWNERS.sqlinc",
+      "statements": 61,
+      "meta": 0,
+      "parsed_source_only": true
+    }
+  ],
+  "whole_packet_credential_scan": "PASS_INCLUDING_COMPLETE_BROKER_AND_NATIVE_BODY_REFERENCES",
+  "prior_frozen_consumed_declarations": 488,
+  "unchanged": 344,
+  "changed": 61,
+  "absent_broad_prerequisites": 83,
+  "canonical_prior_alias_reconciliation": 4,
+  "actual_executor_closure": 369,
+  "additional_actual_owners": 71,
+  "trigger_declaration_changes": 21,
+  "retained_not_currently_reached_triggers": 29,
+  "complete_money_interface_declarations": 47,
+  "money_overwrites_installed_bank_wp_bodies": 0,
+  "complete_money_source_declaration_reverse": true,
+  "complete_broker_actual_install1_reverse": true,
+  "prior_frozen98_artifacts_saved_and_git_blobs_match": true,
+  "prior_frozen98_modified": false,
+  "dual_native_root_owned_composition_remaining": [
+    "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+    "public.weekly_source_manual_review_resolve_v1(jsonb)",
+    "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+    "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz)",
+    "private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)"
+  ],
+  "actual_install2_joined_source_recomposition_required": true,
+  "whole_source_or_receipt_only_equivalence_claim": false,
+  "independent_critic": false,
+  "postgresql_compile": false,
+  "actual_native_or_database_call": false,
+  "actual_runtime_financial_document_http_ui_phone_activation_acceptance": false,
+  "banking_worktree_or_chat_access": false,
+  "secrets_printed": false
+}

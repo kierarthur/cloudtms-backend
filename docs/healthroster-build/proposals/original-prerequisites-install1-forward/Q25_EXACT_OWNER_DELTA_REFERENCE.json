@@ -1,0 +1,179 @@
+{
+  "schema_version": "PROTECTED_SOURCE_ROLLBACK_QUALIFICATION_OWNER_DELTA_V1",
+  "inputs": [
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "bytes": 18312,
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/NONSELFBILL_ADMISSION.sqlinc",
+      "bytes": 2045,
+      "sha256": "54ea107efe38c511deb38407574ad6fec2177d56b1494e851d83fa0730d94010"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "bytes": 23651,
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "bytes": 14636,
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_SCOPE.sqlinc",
+      "bytes": 19844,
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_STEP.sqlinc",
+      "bytes": 9896,
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_R2_READER.sqlinc",
+      "bytes": 10132,
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/generated/10_complete_managed_release.mjs",
+      "bytes": 30229,
+      "sha256": "766b11e184c69d48f28af096cf95bba52932a2ac5d34d22dfc5ba99c11ae27fa"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/scripts/cloudtms-db-release.mjs",
+      "bytes": 25506,
+      "sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65"
+    },
+    {
+      "file": "../healthroster-v2-backend-13102026/.github/workflows/database-release.yml",
+      "bytes": 9484,
+      "sha256": "3b9a4bd699928b50fa302d8c7f28bd9c51f84d3e9bc9f436cb63d3c292bed0df"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-qualification/prerequisite-evidence.mjs",
+      "bytes": 19857,
+      "sha256": "03537b6683c687364c2c72a57db876887223cce0853e14c0b96bb187b2d8bf69"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/protected-source-capability/release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    }
+  ],
+  "proofs": [
+    {
+      "name": "private.weekly_source_protected_qualification_current_catalogue_v1",
+      "file": "00_complete_current_catalogue.sqlinc",
+      "complete_native_export_query_sha256": "fcceeb6266a4a629fc636ec0018286085f30967fb530bcf18cc75df76a09d5eb",
+      "only_delta": "Native final ::text result is returned as jsonb inside an owner-only SQL function.",
+      "reverse_hunk_matches_entire_input_definition": true
+    },
+    {
+      "name": "private.weekly_source_bulk_source_cas_assert_v1",
+      "file": "03_complete_cas_admission.sqlinc",
+      "input_definition_sha256": "717c488bae965a73bacacb04d34431e821d5043dae664378521c6b5ea2e4c60d",
+      "output_definition_sha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "  if v_ready is distinct from true then\n    begin\n      perform private.weekly_source_protected_qualification_assert_v1(null,p_cycle_id,v_clients,'BULK_SIGNED');\n    exception when sqlstate '42501' or sqlstate '55000' then\n      raise exception 'WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE' using errcode='55000';\n    end;\n  end if;"
+    },
+    {
+      "name": "private.weekly_source_protected_non_self_bill_mode_v1",
+      "file": "04_complete_non_self_bill_admission.sqlinc",
+      "input_definition_sha256": "060e1baf19ac88555370b9dee51bc48225db36f2dca25f5b73114652369c49ae",
+      "output_definition_sha256": "fbf2192e2eaa47eb60c307eed2c654c14745c14f12010dc0470e4e3966b8c4ca",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "  begin\n    qualification:=private.weekly_source_protected_capability_receipt_v1(c.id);\n  exception when sqlstate '55000' or no_data_found or too_many_rows then\n    begin\n      qualification:=private.weekly_source_protected_qualification_assert_v1(null,c.id,null,'BULK_SIGNED');\n    exception when sqlstate '42501' or sqlstate '55000' then return null;\n    end;\n    if not(qualification#>'{original_census,original_client_ids}' @> jsonb_build_array(p_client_id)) then return null; end if;\n  end;"
+    },
+    {
+      "name": "private.weekly_source_automatic_reconcile_capability_assert_v1",
+      "file": "05_complete_automatic_admission.sqlinc",
+      "input_definition_sha256": "c2b3d0f9e02c32eb47e0137ea93a3c75eba838d701d5f40de21c8614c524b5d0",
+      "output_definition_sha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "  if v_ready is distinct from true then\n    begin\n      perform private.weekly_source_protected_qualification_assert_v1(null,p_cycle_id,null,'AUTOMATIC_RECONCILE');\n    exception when sqlstate '42501' or sqlstate '55000' then\n      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000';\n    end;\n  end if;"
+    },
+    {
+      "name": "private.weekly_source_protected_capability_release_evidence_v1",
+      "file": "08_complete_capability_release_reader.sqlinc",
+      "input_definition_sha256": "7ef145df5f53e588e72e94bb3b9b312d132a8721280c0aea455614cf0b45abb4",
+      "output_definition_sha256": "73d7bb2ad0659e1775d20975d6dfa8addb1c7607ab8301615901d9508be3b333",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "  if count_rows=1 and q->>'schema_version'='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2' then\n    return private.weekly_source_protected_prerequisite_release_assert_v2(q,p_group_id,p_from,p_to,p_expected_sha256);\n  end if;\n  if count_rows<>1 or not private.weekly_exceptional_json_keys_exact_v1(q,array["
+    },
+    {
+      "name": "Database Release workflow",
+      "file": "11_complete_protected_release_workflow.yml",
+      "input_definition_sha256": "3b9a4bd699928b50fa302d8c7f28bd9c51f84d3e9bc9f436cb63d3c292bed0df",
+      "output_definition_sha256": "6486bcfaed865b615396cc2394307446e9923d1b7c69a6433dcad79e3f536fc1",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "Complete historical Git objects only; existing protected target/source approval/standing TEST authority unchanged."
+    },
+    {
+      "name": "executeManagedRelease",
+      "file": "09_complete_managed_release.mjs",
+      "input_definition_sha256": "766b11e184c69d48f28af096cf95bba52932a2ac5d34d22dfc5ba99c11ae27fa",
+      "output_definition_sha256": "e8091382bdac0c9eec34dee4300e6aee8494637dc48098e90154d85dcb7cdc1c",
+      "native_checkpoint_writer_unchanged": true,
+      "delta": "Closed additional prerequisite evidence schema; actual committed native file equality; preserved R1 execution identity."
+    },
+    {
+      "name": "applyRelease",
+      "file": "10_complete_release_caller.mjs",
+      "input_definition_sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "output_definition_sha256": "6273e9cc5556657d1bfa484a08e3858185eec2bd3a63ebf0365c8af2d5d2bdf4",
+      "native_approval_target_verifiers_unchanged": true,
+      "delta": "One fixed-path commit/hash-bound root evidence input; no CLI/env/browser input."
+    }
+  ],
+  "signatures": [
+    "private.weekly_source_protected_qualification_current_catalogue_v1()",
+    "private.weekly_source_protected_qualification_owner_v1()",
+    "private.weekly_source_protected_qualification_release_v1()",
+    "private.weekly_source_protected_qualification_census_v1(uuid)",
+    "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+    "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+    "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+    "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+    "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+    "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+    "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+    "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)"
+  ],
+  "new_tables": 0,
+  "new_columns": 0,
+  "new_public_rpcs": 0,
+  "new_service_grants": 0,
+  "native_business_acceptance": false,
+  "operational_ready_owners_unchanged": true,
+  "install_order": [
+    "00_complete_current_catalogue.sqlinc",
+    "QUALIFICATION_SCOPE.sqlinc",
+    "QUALIFICATION_STEP.sqlinc",
+    "03_complete_cas_admission.sqlinc",
+    "04_complete_non_self_bill_admission.sqlinc",
+    "05_complete_automatic_admission.sqlinc",
+    "QUALIFICATION_R2_READER.sqlinc",
+    "08_complete_capability_release_reader.sqlinc",
+    "06_owner_only_acl.sqlinc"
+  ],
+  "unchanged_native_owners": [
+    "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+    "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+    "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+    "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+    "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+    "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+    "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+    "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+    "private.weekly_source_bulk_own_stage_context_v1(uuid,uuid,text,text,text)",
+    "private.weekly_source_shift_on_self_bill_context_v1(uuid,uuid,jsonb)"
+  ],
+  "root_integration": "Union exact private ACL registry; preserve existing service inventory and frozen Protection1745/automatic-forward owners."
+}

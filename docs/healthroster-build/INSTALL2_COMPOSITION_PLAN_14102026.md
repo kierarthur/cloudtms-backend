@@ -1,5 +1,13 @@
 # Install2 composition — source work in progress
 
+## Qualification foundations mounted — 14 October 2026, 03:34 UTC
+
+Original51 components/38 final definitions from publishedd6ffd1 and corrected Money31 components/47 interfaces from frozend4b62 are source-mounted around the retained five-owner0420 stage. One-time constraint extension is0400 only. Existing release compiler include confinement is preserved: roots0410/0430 include83 exact executable copies beneath `supabase/repeatable`, and the original frozen support archives remain unchanged. Canonical source integrity is399 migrations/1055 repeatables; source-only atomic packaging accepts all four roots. Immediate per-stage owner/revoke/existing-public-service ACL and schema-cache notifications are present; final native catalogue/registry/contract verification remains mandatory.
+
+The125 earlier frozen Money/comparison artifacts and exact recipe are now retained with the original73 packet. Eleven current script modules pass syntax/import checks without invoking their functions; original prerequisite13 source tests pass. See `install2-composition/QUALIFICATION_FOUNDATIONS_COMPOSITION_14102026.json`, `FOUNDATION_MANAGED_PACKAGING_14102026.json`, `FOUNDATION_SOURCE_INTEGRITY_14102026.json` and `MONEY_RUNTIME_FOUNDATIONS_14102026.json` for exact source paths/pins. Current managed writer/caller and workflow integration remains a separate whole-source forward/reverse task. A0 current108 and Report correction35 are awaiting independent source review before root mounting; no native seal or receipt is fabricated.
+
+The20 reproducible review drafts/diffs are retained after an automatic approval refusal, with absolute paths/hashes in `RETAINED_REVIEW_ARTIFACTS_14102026.json`; source publication must exclude them unless deliberately retained. No database connection, release, schedule change, feature activation or TestFlight accompanies this source checkpoint. Older dated inventories below remain historical.
+
 ## Current source composition, 14 October 2026
 
 The four initially held runtime paths are deliberately composed at the exact reviewed/pushed Report source `ae49914f8b5acbf00c7ab11c2bd1db849ffb5bd6`, preserving actual37 and broad f7 inputs plus Money's exact two adapter hunks. Their136-object closure/135 syntax checks and47 affected root tests pass; full61-hunk reversals are in `install2-composition/RUNTIME_WHOLE_SOURCE_REVERSE_14102026.json`. Only the two required Money runtime leaves are mounted with them. The unfinished Report collector/mapper/native seal remain unmounted. Reviewed Install1 diagnostic changes were brought forward without changing SQL via own feature-branch cherry-picks.

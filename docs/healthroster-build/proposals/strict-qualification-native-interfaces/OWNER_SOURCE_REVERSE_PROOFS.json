@@ -1,0 +1,119 @@
+{
+  "source_only": true,
+  "root_pin": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "original_operational_reader": {
+    "input_sha256": "cf355c712342c0ade1ace4b48410ebc68887eb91c022c80ef8e18a0e36ba2baa",
+    "renamed_copy_sha256": "e9c7ef9f1971c313a1c69c7dd1a4d6f252c71a0662c9fce6551944b9086eee12",
+    "query_bytes_unchanged": true
+  },
+  "edits": [
+    {
+      "file": "03_cas_operational_projection.sqlinc",
+      "input_definition_sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+      "output_definition_sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "9a94e7b6ac1acbaa6e82bb488c5ef26509c637f4361e4337239f517119808b14",
+          "after_sha256": "a82ba17bc484c167b2d4127695df742fecd7c0ba3c98b78c83489d15b05fb37f"
+        }
+      ]
+    },
+    {
+      "file": "04_final_revision_rule_guard.sqlinc",
+      "input_definition_sha256": "7a01cbb37f66fd94ae96b01a8efff7e00279500267d8f2b0a0d6cbeea0a74306",
+      "output_definition_sha256": "5445511b6e0b6f09fc22990c55da0891a1bf38eeebbbc6255c6764b6c50cb063",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "4385ca603cb19a9b9b2e4e031a4b6c0acdc2b8c31885b42b8ac4a50f087ca915",
+          "after_sha256": "29390c24c2575cf6365b09ebf89b57bac13bda04fab4c4516bc67707ca7060d1"
+        }
+      ]
+    },
+    {
+      "file": "05_coverage_floor_owner.sqlinc",
+      "input_definition_sha256": "2b82f2199c44918cf710cbd7df6acdbee7b820ae55b5b2a82b22e1d2645426df",
+      "output_definition_sha256": "54ba319659d0720d2d88c863ce750bdc594decfb1021d800bb00b45a537bd14b",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "c43c047f7ad0ef7255e41c67ce47a99c5a44e8eb47936dde3a43a1f37fd6ff03",
+          "after_sha256": "d66801c012bffcd1c710893a3e97de9eef31d37dac7c8307c1335be3c17d734c"
+        }
+      ]
+    },
+    {
+      "file": "06_existing_controlled_setup.sqlinc",
+      "input_definition_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "output_definition_sha256": "85a8b860c07579b26180cfd623f85ffb16d24efc66105b644303513c52ee61bd",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "d8fa77a0a1036451cb03db77e94ee9141dfaaed6a593b912bc9ccfda8fc40699",
+          "after_sha256": "015444679c44ad4156dfbf059a5382094c05969c411317ce31230e1475bb1721"
+        },
+        {
+          "before_sha256": "8d0e0f5aabaa0cb1c8fd8407f2b5507ec64813f713c1f867753c8606a4ee3c6a",
+          "after_sha256": "a554d82c9b89a9313cf3a05d231713f81bfb387134dbaca81f1d9326f4a32d71"
+        },
+        {
+          "before_sha256": "039818042a47ae0c7b2e15504747b59aabbb6a91c91384bbb09c17a6106dd618",
+          "after_sha256": "b24d9bb14d2746c2ed20d91e85bb1266e0b9deff4914e2229333d33e5617f8ae"
+        },
+        {
+          "before_sha256": "47963ad4bbef628e8157129f5452e43a5a607383465e6c67f0c54fc79fee8476",
+          "after_sha256": "580781c54fad5c5165a7b51281815826b266ce0aac949a83d22b4d7d51737b35"
+        },
+        {
+          "before_sha256": "0fe9d1399c6b5258889a9550ed05415cf94235495503d1944f06eba0668fc079",
+          "after_sha256": "9a1e92c54f877df25950d2a0f335fb7b829c9f0934f8a6184d223a331e91b4c8"
+        },
+        {
+          "before_sha256": "81047f6b64e3df98098534dac45f3a9e095bfff1f592bdcfdb1939aff8625c3c",
+          "after_sha256": "8cf37d83aa7e3ecfc7aa46e87699e5f37e19b6c032b6bb73b0759fab0b5704c1"
+        }
+      ]
+    },
+    {
+      "file": "07_automatic_capability_admission.sqlinc",
+      "input_definition_sha256": "c2b3d0f9e02c32eb47e0137ea93a3c75eba838d701d5f40de21c8614c524b5d0",
+      "output_definition_sha256": "c42d144aa23af3c5146ba972123b8023c015147ee560dfcbef7a853294e26580",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "17df311d787e9a1e5133b3ea7fd55e42163f8e50675c94bf94d5a1daf4d24321",
+          "after_sha256": "93d5dbfe95b9ace8a6b3ceb82900303aca7cf59f9b81cd0fffa32926548546f6"
+        },
+        {
+          "before_sha256": "425883811432228acd35eedad536f8c1e2070247a188146470a57706fc1a2a4b",
+          "after_sha256": "a8e1358d7774378ee2e23dd3ea2ddeed3ee2b3fbb7af647f0f23290a873f4eb8"
+        }
+      ]
+    },
+    {
+      "file": "08_cas_admission_owner.sqlinc",
+      "input_definition_sha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790",
+      "output_definition_sha256": "4a1ee268851a08b18d73256904ff78e698adc5457b1519021100f867e4e3c790",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "serialization": "Only whitespace outside the terminal SQL statement is normalized to one newline; body/statement reverses to entire input definition.",
+      "hunks": [
+        {
+          "before_sha256": "f86fa105a1093d2fc29376775147e27b246f9c6af1c5ab0fa377fc1c8abeb7b0",
+          "after_sha256": "bfeb980b4c849aa25a97352ec1b95268277c08dfe61515bbdb0150485f0cc013"
+        },
+        {
+          "before_sha256": "07fa7b9c13ec789165170b9ea52c8f428f9c44e0241d5505137edb8e66974b1a",
+          "after_sha256": "bf639cfb6c4727363d134940bdf302cce3f017154f33d3620676d863cc320023"
+        }
+      ]
+    }
+  ],
+  "no_original_policy_hash_or_pay_nochange_change": true,
+  "no_installed_execution": true
+}

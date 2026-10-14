@@ -1,0 +1,212 @@
+-- Complete isolated source proposal. Root review and native proofs pending.
+create or replace function public.weekly_source_group_rule_feature_set_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid; v_agency uuid; v_environment text; v_group_id uuid; v_assignment_id uuid; v_version_id uuid;
+  v_request_id uuid; v_expected bigint; v_enabled boolean; v_from date; v_release_id text; v_reason text; v_purpose text; v_hash text; v_receipt jsonb;
+  v_group public.weekly_source_groups%rowtype; v_assignment public.weekly_source_group_rule_assignments%rowtype;
+  v_latest private.cloudtms_database_releases%rowtype; v_values jsonb;
+  v_member record; v_manifest jsonb; v_shape jsonb; v_result jsonb; v_changes jsonb:='[]'::jsonb;
+  v_entry jsonb; v_apply_values jsonb; v_scope_date date; v_agency_invoice boolean:=false; v_qualification jsonb;
+begin
+  perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','agency_id','environment','source_group_id','assignment_id',
+    'rule_set_version_id','effective_from_week_ending','expected_assignment_version','feature_enabled','feature_purpose','release_id','reason','request_id',
+    'client_settings_versions','protected_capability_qualification_sha256'],'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID');
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid; v_agency:=(p_request->>'agency_id')::uuid; v_group_id:=(p_request->>'source_group_id')::uuid;
+    v_assignment_id:=(p_request->>'assignment_id')::uuid; v_version_id:=nullif(p_request->>'rule_set_version_id','')::uuid;
+    v_request_id:=(p_request->>'request_id')::uuid; v_expected:=(p_request->>'expected_assignment_version')::bigint;
+    v_enabled:=(p_request->>'feature_enabled')::boolean; v_from:=(p_request->>'effective_from_week_ending')::date;
+    v_release_id:=p_request->>'release_id'; v_reason:=btrim(p_request->>'reason'); v_purpose:=p_request->>'feature_purpose';
+  exception when others then raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end;
+  perform private._weekly_source_settings_require_admin_v1(v_actor);
+  v_environment:=private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  if v_group_id is null or v_assignment_id is null or v_request_id is null or v_expected is null or v_from is null
+    or jsonb_typeof(p_request->'feature_enabled') is distinct from 'boolean'
+    or not p_request ? 'rule_set_version_id' or v_release_id is null or v_reason is null or char_length(v_reason) not between 1 and 500
+    or v_purpose is null or v_purpose not in ('RULE_SET','SIGNED_CHECK_ONLY','PROTECTED_SOURCE') or (v_version_id is null)<>(v_purpose in ('SIGNED_CHECK_ONLY','PROTECTED_SOURCE'))
+    or p_request->>'effective_from_week_ending'<>to_char(v_from,'YYYY-MM-DD') then
+    raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end if;
+  if p_request ? 'protected_capability_qualification_sha256' and
+    (jsonb_typeof(p_request->'protected_capability_qualification_sha256') is distinct from 'string'
+      or coalesce(p_request->>'protected_capability_qualification_sha256','') !~ '^[0-9a-f]{64}$') then
+    raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end if;
+  if v_purpose='PROTECTED_SOURCE' and v_enabled and not(p_request ? 'protected_capability_qualification_sha256') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_RELEASE_UNQUALIFIED' using errcode='55000'; end if;
+  if v_purpose='SIGNED_CHECK_ONLY' and p_request ? 'protected_capability_qualification_sha256' then
+    raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end if;
+  v_hash:=encode(extensions.digest(convert_to(p_request::text,'UTF8'),'sha256'),'hex');
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-cycle-lifecycle:'||v_group_id::text,0));
+  -- Match the Client owner's client-before-group lock order. Recheck the exact
+  -- dated membership after taking the group/assignment locks below.
+  if (select count(distinct gc.client_id) from public.weekly_source_group_clients gc
+    where gc.source_group_id=v_group_id and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]')
+      && daterange(v_from-6,'infinity'::date,'[]'))>100 then
+    raise exception 'WEEKLY_SOURCE_RULE_ACTIVATION_SCOPE_TOO_LARGE' using errcode='22023'; end if;
+  for v_member in select distinct gc.client_id from public.weekly_source_group_clients gc
+    where gc.source_group_id=v_group_id and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]')
+      && daterange(v_from-6,'infinity'::date,'[]') order by gc.client_id
+  loop
+    perform pg_advisory_xact_lock(hashtextextended('weekly-source-settings-client:'||v_member.client_id::text,0));
+  end loop;
+  select * into v_group from public.weekly_source_groups where id=v_group_id for update;
+  if not found or v_group.agency_id<>v_agency or v_group.environment<>v_environment or not v_group.active or v_group.source_family<>'ROSTER' then
+    raise exception 'WEEKLY_SOURCE_RULE_GROUP_NOT_APPLICABLE' using errcode='22023'; end if;
+  select * into v_assignment from public.weekly_source_group_rule_assignments where id=v_assignment_id and source_group_id=v_group_id for update;
+  if not found or v_assignment.rule_set_version_id is distinct from v_version_id or v_assignment.effective_from_week_ending<>v_from then
+    raise exception 'WEEKLY_SOURCE_RULE_ASSIGNMENT_NOT_FOUND' using errcode='22023'; end if;
+  -- Latest record, not latest successful record: an APPLYING/FAILED successor holds activation.
+  select * into v_latest from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  if not found or v_latest.release_id<>v_release_id or v_latest.status<>'VERIFIED'
+    or v_latest.completed_at_utc is null or v_latest.installed_contract_sha256 is distinct from v_latest.repository_contract_sha256 then
+    raise exception 'WEEKLY_SOURCE_RULE_VERIFIED_RELEASE_REQUIRED' using errcode='55000'; end if;
+  if v_assignment.feature_request_id=v_request_id then
+    if v_assignment.feature_request_sha256<>v_hash then raise exception 'WEEKLY_SOURCE_RULE_REQUEST_REUSED' using errcode='22023'; end if;
+    return v_assignment.feature_receipt_json||jsonb_build_object('replayed',true);
+  end if;
+  if v_assignment.version<>v_expected then raise exception 'WEEKLY_SOURCE_RULE_ASSIGNMENT_STALE' using errcode='40001'; end if;
+  perform 1 from public.clients c where exists(select 1 from public.weekly_source_group_clients gc
+    where gc.client_id=c.id and gc.source_group_id=v_group_id
+      and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]'))
+    order by c.id for update;
+  perform 1 from public.client_settings cs where exists(select 1 from public.weekly_source_group_clients gc
+    where gc.client_id=cs.client_id and gc.source_group_id=v_group_id
+      and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]'))
+    order by cs.id for update;
+  perform 1 from public.contracts c where exists(select 1 from public.weekly_source_group_clients gc
+    where gc.client_id=c.client_id and gc.source_group_id=v_group_id
+      and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]'))
+    order by c.id for share;
+  -- Same owner requalification is metadata-only. Exact current assignment CAS,
+  -- actor/deployment/latest VERIFIED and locked Client/Contract gates above stay.
+  if v_enabled and p_request ? 'protected_capability_qualification_sha256' then
+    v_qualification:=private.weekly_source_protected_capability_release_evidence_v1(v_group_id,v_from,
+      v_assignment.effective_to_week_ending,p_request->>'protected_capability_qualification_sha256');
+  elsif p_request ? 'protected_capability_qualification_sha256' then
+    raise exception 'WEEKLY_SOURCE_RULE_FEATURE_REQUEST_INVALID' using errcode='22023'; end if;
+  if v_assignment.feature_enabled=v_enabled then
+    if not v_enabled or v_qualification is null or v_assignment.feature_purpose is distinct from v_purpose then
+      raise exception 'WEEKLY_SOURCE_RULE_FEATURE_ALREADY_SET' using errcode='22023'; end if;
+    if v_purpose='PROTECTED_SOURCE' then
+      perform private.weekly_source_protected_source_activation_scope_v1(v_group_id,v_from,v_assignment.effective_to_week_ending);
+    else
+      select values_json into strict v_values from public.weekly_source_rule_set_versions where id=v_version_id;
+      perform private._weekly_source_rule_group_context_v1(v_group_id,v_from,v_assignment.effective_to_week_ending,v_values,true);
+    end if;
+    if p_request ? 'client_settings_versions' and p_request->'client_settings_versions'<>'[]'::jsonb then
+      raise exception 'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_INVALID' using errcode='22023'; end if;
+    -- Preserve the exact AGENCY restore receipt, without calling Client save.
+    v_receipt:=v_assignment.feature_receipt_json||jsonb_build_object('assignment_version',v_assignment.version+1,
+      'release_id',v_release_id,'actor_user_id',v_actor,'changed_at_utc',transaction_timestamp(),'reason',v_reason,
+      'request_id',v_request_id,'protected_capability_qualification',v_qualification,'requalification',true,'replayed',false);
+    update public.weekly_source_group_rule_assignments set feature_changed_by_user_id=v_actor,
+      feature_changed_at_utc=transaction_timestamp(),feature_change_reason=v_reason,feature_release_id=v_release_id,
+      feature_request_id=v_request_id,feature_request_sha256=v_hash,feature_receipt_json=v_receipt,version=version+1 where id=v_assignment_id;
+    return v_receipt;
+  end if;
+  select v.values_json into v_values from public.weekly_source_rule_set_versions v join public.weekly_source_rule_sets r on r.id=v.rule_set_id
+    where v.id=v_version_id and r.agency_id=v_agency and r.environment=v_environment;
+  if v_version_id is not null and not found then raise exception 'WEEKLY_SOURCE_RULE_VERSION_NOT_FOUND' using errcode='22023'; end if;
+  v_agency_invoice:=coalesce(v_values->>'invoice_sender'='AGENCY_INVOICE',false);
+  if v_agency_invoice then
+    v_manifest:=p_request->'client_settings_versions';
+    if jsonb_typeof(v_manifest) is distinct from 'array' or jsonb_array_length(v_manifest) not between 1 and 100 then
+      raise exception 'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_REQUIRED' using errcode='22023'; end if;
+    for v_entry in select value from jsonb_array_elements(v_manifest) loop
+      perform private._weekly_source_settings_assert_request_v1(v_entry,array['client_id','expected_settings_version'],'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_INVALID');
+      if jsonb_typeof(v_entry->'client_id') is distinct from 'string' or v_entry->>'client_id' !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+        or jsonb_typeof(v_entry->'expected_settings_version') is distinct from 'string'
+        or v_entry->>'expected_settings_version' !~ '^[0-9a-f]{64}$' then
+        raise exception 'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_INVALID' using errcode='22023'; end if;
+    end loop;
+    if (select count(distinct value->>'client_id') from jsonb_array_elements(v_manifest))<>jsonb_array_length(v_manifest)
+      or (select count(distinct gc.client_id) from public.weekly_source_group_clients gc where gc.source_group_id=v_group_id
+        and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]'))<>jsonb_array_length(v_manifest)
+      or exists(select 1 from jsonb_array_elements(v_manifest) x where not exists(select 1 from public.weekly_source_group_clients gc
+        where gc.source_group_id=v_group_id and gc.client_id=(x.value->>'client_id')::uuid
+          and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]'))) then
+      raise exception 'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_INVALID' using errcode='22023'; end if;
+    for v_member in select gc.client_id,greatest(v_from-6,min(gc.valid_from)) as scope_date
+      from public.weekly_source_group_clients gc where gc.source_group_id=v_group_id
+        and daterange(gc.valid_from,coalesce(gc.valid_to,'infinity'::date),'[]') && daterange(v_from-6,coalesce(v_assignment.effective_to_week_ending,'infinity'::date),'[]')
+      group by gc.client_id order by gc.client_id
+    loop
+      v_scope_date:=v_member.scope_date;
+      if v_scope_date<(transaction_timestamp() at time zone 'Europe/London')::date then
+        raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED' using errcode='22023'; end if;
+      v_shape:=private._weekly_source_settings_client_shape_v1(v_agency,v_environment,v_member.client_id,v_scope_date);
+      if v_shape->>'settings_version'<>(select value->>'expected_settings_version' from jsonb_array_elements(v_manifest) where (value->>'client_id')::uuid=v_member.client_id) then
+        raise exception 'WEEKLY_SOURCE_RULE_CLIENT_SETTINGS_STALE' using errcode='40001'; end if;
+      if v_enabled then
+        if exists(select 1 from public.weekly_source_client_policies cp where cp.source_group_id=v_group_id and cp.client_id=v_member.client_id
+          and cp.effective_from>v_scope_date and cp.effective_from<=coalesce(v_assignment.effective_to_week_ending,'infinity'::date)) then
+          raise exception 'WEEKLY_SOURCE_RULE_ACTIVATION_FUTURE_SETTINGS_REFUSED' using errcode='22023'; end if;
+        v_changes:=v_changes||jsonb_build_array(jsonb_build_object('client_id',v_member.client_id,'scope_date',v_scope_date,
+          'before_values',v_shape->'settings','before_settings_version',v_shape->>'settings_version',
+          'before_policy_id',(select cp.id from public.weekly_source_client_policies cp where cp.source_group_id=v_group_id and cp.client_id=v_member.client_id
+            and v_scope_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date))));
+      else
+        select value into v_entry from jsonb_array_elements(v_assignment.feature_receipt_json->'client_changes')
+          where (value->>'client_id')::uuid=v_member.client_id;
+        if not found or v_entry->>'after_settings_version' is distinct from v_shape->>'settings_version'
+          or (v_entry->>'scope_date')::date<>v_scope_date then
+          raise exception 'WEEKLY_SOURCE_RULE_CLIENT_RESTORE_STALE' using errcode='40001'; end if;
+        v_changes:=v_changes||jsonb_build_array(v_entry);
+      end if;
+    end loop;
+  elsif p_request ? 'client_settings_versions' and p_request->'client_settings_versions'<>'[]'::jsonb then
+    raise exception 'WEEKLY_SOURCE_RULE_CLIENT_CAS_MANIFEST_INVALID' using errcode='22023';
+  end if;
+  if v_enabled then
+    if v_from<(transaction_timestamp() at time zone 'Europe/London')::date then
+      raise exception 'WEEKLY_SOURCE_RULE_FUTURE_WEEK_REQUIRED' using errcode='22023'; end if;
+    perform 1 from public.weekly_source_cycles c where c.source_group_id=v_group_id
+      and c.finalisation_week_ending between v_from and coalesce(v_assignment.effective_to_week_ending,'infinity'::date) order by c.id for update;
+    if exists(select 1 from public.weekly_source_cycles c where c.source_group_id=v_group_id
+      and c.finalisation_week_ending between v_from and coalesce(v_assignment.effective_to_week_ending,'infinity'::date)
+      and (c.current_final_revision_id is not null or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
+        or exists(select 1 from public.weekly_source_final_revisions f where f.source_cycle_id=c.id))) then
+      raise exception 'WEEKLY_SOURCE_RULE_FINALISED_WEEK_REFUSED' using errcode='55000'; end if;
+    if v_purpose='PROTECTED_SOURCE' then
+      perform private.weekly_source_protected_source_activation_scope_v1(v_group_id,v_from,v_assignment.effective_to_week_ending);
+    else
+      perform private._weekly_source_rule_group_context_v1(v_group_id,v_from,v_assignment.effective_to_week_ending,v_values,not v_agency_invoice);
+    end if;
+  end if;
+  -- Publish the gate and the approved Client policy transition together. The
+  -- feature receipt and Client writes cannot survive any refusal below.
+  update public.weekly_source_group_rule_assignments set feature_enabled=v_enabled,feature_purpose=v_purpose,
+    feature_changed_by_user_id=v_actor,feature_changed_at_utc=transaction_timestamp(),feature_change_reason=v_reason,feature_release_id=v_release_id,
+    feature_request_id=v_request_id,feature_request_sha256=v_hash,feature_receipt_json='{}'::jsonb where id=v_assignment_id;
+  if v_agency_invoice then
+    v_manifest:='[]'::jsonb;
+    for v_entry in select value from jsonb_array_elements(v_changes) order by value->>'client_id' loop
+      v_scope_date:=(v_entry->>'scope_date')::date;
+      v_shape:=private._weekly_source_settings_client_shape_v1(v_agency,v_environment,(v_entry->>'client_id')::uuid,v_scope_date);
+      v_apply_values:=v_entry->'before_values'||jsonb_build_object('effective_from',v_scope_date);
+      if v_enabled then v_apply_values:=v_apply_values||jsonb_build_object('authority_mode','SOURCE_AUTHORITY','document_mode','CHECK_ONLY','self_bill_enabled',false); end if;
+      v_result:=public.weekly_source_client_settings_save_atomic_v1(jsonb_build_object('actor_user_id',v_actor,'agency_id',v_agency,'environment',v_environment,
+        'client_id',v_entry->>'client_id','expected_settings_version',v_shape->>'settings_version','settings',v_apply_values));
+      if coalesce((v_result->>'ok')::boolean,false) is not true then raise exception 'WEEKLY_SOURCE_RULE_CLIENT_TRANSITION_FAILED' using errcode='55000'; end if;
+      v_shape:=private._weekly_source_settings_client_shape_v1(v_agency,v_environment,(v_entry->>'client_id')::uuid,v_scope_date);
+      v_manifest:=v_manifest||jsonb_build_array(v_entry||jsonb_build_object(
+        case when v_enabled then 'after_values' else 'restored_values' end,v_shape->'settings',
+        case when v_enabled then 'after_settings_version' else 'restored_settings_version' end,v_shape->>'settings_version',
+        case when v_enabled then 'after_policy_id' else 'restored_policy_id' end,(select cp.id from public.weekly_source_client_policies cp
+          where cp.source_group_id=v_group_id and cp.client_id=(v_entry->>'client_id')::uuid
+            and v_scope_date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date))));
+    end loop;
+    v_changes:=v_manifest;
+    if v_enabled then perform private._weekly_source_rule_group_context_v1(v_group_id,v_from,v_assignment.effective_to_week_ending,v_values,true); end if;
+  end if;
+  v_receipt:=jsonb_build_object('contract','WEEKLY_SOURCE_RULE_FEATURE_RECEIPT_V1','assignment_id',v_assignment_id,
+    'assignment_version',v_assignment.version+1,'source_group_id',v_group_id,'rule_set_version_id',v_version_id,
+    'effective_from_week_ending',v_from,'feature_enabled',v_enabled,'feature_purpose',v_purpose,'release_id',v_release_id,
+    'actor_user_id',v_actor,'changed_at_utc',transaction_timestamp(),'reason',v_reason,'request_id',v_request_id,'client_changes',v_changes,'replayed',false)||case when v_qualification is null then '{}'::jsonb else
+      jsonb_build_object('protected_capability_qualification',v_qualification) end;
+  update public.weekly_source_group_rule_assignments set feature_enabled=v_enabled,feature_purpose=v_purpose,
+    feature_changed_by_user_id=v_actor,feature_changed_at_utc=transaction_timestamp(),feature_change_reason=v_reason,feature_release_id=v_release_id,
+    feature_request_id=v_request_id,feature_request_sha256=v_hash,feature_receipt_json=v_receipt,version=version+1 where id=v_assignment_id;
+  return v_receipt;
+end;
+$function$;

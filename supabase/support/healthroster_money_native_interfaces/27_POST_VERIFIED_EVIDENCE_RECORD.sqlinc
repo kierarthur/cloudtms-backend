@@ -1,0 +1,150 @@
+-- Complete adjacent owner-session proposal. Protected controller must measure
+-- real Git objects and validate raw artifacts before this SQL call. No new
+-- release, status transition, DDL, ledger, feature setting or browser grant.
+create or replace function private.weekly_source_post_verified_artifact_assert_v1(p_slot text,p_artifacts jsonb,p_execution jsonb,p_receipt_commit text)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare artifact jsonb;
+begin
+  if jsonb_typeof(p_artifacts) is distinct from 'array' or jsonb_array_length(p_artifacts) not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+  case p_slot
+    when 'weekly_source_protected_prerequisite_qualifications' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        if artifact->'capabilities' is distinct from '["BULK_SIGNED"]'::jsonb then
+          raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PREREQUISITE_SCOPE_REFUSED' using errcode='55000'; end if;
+        perform private.weekly_source_protected_prerequisite_release_assert_v2(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'qualification_sha256');
+      end loop;
+    when 'weekly_source_protected_activation_probe_authorizations' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_protected_activation_probe_authorization_assert_v1(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'probe_authorization_sha256');
+      end loop;
+    when 'weekly_source_protected_partial_native_evidence' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_post_verified_partial_artifact_assert_v1(artifact,p_execution);
+      end loop;
+    when 'weekly_source_protected_capability_qualifications' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_protected_operational_certificate_assert_v1(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'qualification_sha256');
+      end loop;
+    when 'weekly_source_report_fin_native_comparisons' then
+      perform private.weekly_source_report_fin_native_comparisons_assert_v1(p_artifacts,p_execution,p_receipt_commit);
+    when 'weekly_source_report_fin_qualifications' then
+      perform private.weekly_source_report_fin_qualifications_assert_v1(p_artifacts,p_execution,p_receipt_commit);
+    when 'weekly_source_protected_test_setup_authorizations' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        if artifact->>'schema_version'='WEEKLY_SOURCE_PROTECTED_TEST_SETUP_AUTHORIZATION_V1' then
+          perform private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(artifact,p_execution);
+        else perform private.weekly_source_post_verified_setup_artifact_assert_v1(artifact,p_execution); end if;
+      end loop;
+    when 'weekly_source_off_rule_test_controls' then
+      if jsonb_array_length(p_artifacts)<>1 then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+      artifact:=p_artifacts->0;
+      if not private.weekly_source_qualification_closed_object_v1(artifact,array['schema_version','release_id','source_commit','contract_sha256',
+        'banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256','banking_first_install_complete','effective_acl_pass',
+        'browser_denied','source_effects_no_external_calls']) or artifact->>'schema_version' is distinct from 'WEEKLY_SOURCE_OFF_RULE_TEST_CONTROLS_V1'
+        or artifact->>'release_id' is distinct from p_execution->>'release_id' or artifact->>'source_commit' is distinct from p_execution->>'source_commit'
+        or artifact->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+        or exists(select 1 from unnest(array['banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256']) key
+          where coalesce(artifact->>key,'') !~ '^[0-9a-f]{64}$')
+        or exists(select 1 from unnest(array['banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls']) key
+          where artifact->key is distinct from 'true'::jsonb) then
+        raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+    else raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SLOT_REFUSED' using errcode='42501';
+  end case;
+end;
+$function$;
+
+create or replace function private.weekly_source_post_verified_evidence_record_v1(p_actor_user_id uuid,p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r private.cloudtms_database_releases%rowtype; execution jsonb; slot text; artifact jsonb; prior jsonb; next_value jsonb;
+  next_evidence jsonb; receipt jsonb; prior_sha text; new_sha text; artifact_sha text; item jsonb; key text;
+  identity_before jsonb; identity_after jsonb; managed_lock bigint:=hashtextextended('cloudtms_database_release_admission_v1',0);
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  perform private._weekly_source_settings_require_admin_v1(p_actor_user_id);
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['schema_version','expected_execution','expected_evidence_sha256',
+    'receipt_input_commit','receipt_tree_proof','artifact_slot','artifacts','reason','turn_backend_pid'])
+    or p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORD_V1'
+    or coalesce(p_request->>'expected_evidence_sha256','') !~ '^[0-9a-f]{64}$'
+    or coalesce(p_request->>'receipt_input_commit','') !~ '^[0-9a-f]{40}$'
+    or char_length(coalesce(p_request->>'reason','')) not between 1 and 1000
+    or coalesce(p_request->>'turn_backend_pid','') !~ '^[1-9][0-9]*$' then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_REQUEST_INVALID' using errcode='22023'; end if;
+  if not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted and lock_row.mode='ExclusiveLock'
+    and lock_row.pid=pg_backend_pid() and lock_row.database=(select oid from pg_database where datname=current_database())
+    and lock_row.objsubid=1 and lock_row.classid=((managed_lock>>32)&4294967295)::oid and lock_row.objid=(managed_lock&4294967295)::oid)
+    or not exists(select 1 from pg_locks lock_row where lock_row.locktype='advisory' and lock_row.granted and lock_row.mode='ExclusiveLock'
+      and lock_row.pid=(p_request->>'turn_backend_pid')::integer and lock_row.pid<>pg_backend_pid()
+      and lock_row.database=(select oid from pg_database where datname=current_database())
+      and lock_row.classid=20261013::oid and lock_row.objid=1::oid and lock_row.objsubid=2) then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_OWNED_MUTEX_REQUIRED' using errcode='55000'; end if;
+  execution:=private.weekly_source_protected_qualification_release_v1();
+  if execution is distinct from p_request->'expected_execution' then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_EXECUTION_CHANGED' using errcode='40001'; end if;
+  select * into strict r from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1 for update;
+  if r.release_id is distinct from execution->>'release_id' or r.status<>'VERIFIED' or r.completed_at_utc is null
+    or r.git_commit is distinct from execution->>'source_commit' or r.installed_contract_sha256 is distinct from execution->>'contract_sha256' then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_EXECUTION_CHANGED' using errcode='40001'; end if;
+  prior_sha:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_RELEASE_EVIDENCE_V1',r.evidence_json),'hex');
+  if prior_sha is distinct from p_request->>'expected_evidence_sha256' then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_CHANGED' using errcode='40001'; end if;
+  -- SQL verifies the closed measured DTO. Real Git/mode/type/raw-byte equality
+  -- must be measured by the protected controller, not asserted by caller JSON.
+  perform private.weekly_source_protected_execution_tree_assert_v2(p_request->'receipt_tree_proof',r.git_commit,p_request->>'receipt_input_commit');
+  slot:=p_request->>'artifact_slot';artifact:=p_request->'artifacts';
+  perform private.weekly_source_post_verified_artifact_assert_v1(slot,artifact,execution,p_request->>'receipt_input_commit');
+  if slot='weekly_source_off_rule_test_controls' then
+    prior:=r.evidence_json->slot;next_value:=artifact->0;
+    if prior is not null and prior is distinct from next_value then
+      raise exception 'WEEKLY_SOURCE_POST_VERIFIED_REPLACEMENT_REFUSED' using errcode='23505'; end if;
+  else
+    prior:=coalesce(r.evidence_json->slot,'[]'::jsonb);
+    if jsonb_typeof(prior) is distinct from 'array' then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_EXISTING_SLOT_INVALID' using errcode='55000'; end if;
+    next_value:=prior;
+    for item in select value from jsonb_array_elements(artifact) value loop
+      key:=case slot when 'weekly_source_protected_test_setup_authorizations' then 'authorization_id'
+        when 'weekly_source_protected_activation_probe_authorizations' then 'probe_authorization_sha256'
+        when 'weekly_source_protected_partial_native_evidence' then 'partial_evidence_sha256'
+        when 'weekly_source_protected_prerequisite_qualifications' then 'qualification_sha256'
+        when 'weekly_source_protected_capability_qualifications' then 'qualification_sha256'
+        when 'weekly_source_report_fin_qualifications' then 'qualification_sha256'
+        when 'weekly_source_report_fin_native_comparisons' then 'comparison_sha256' end;
+      if key is null or nullif(item->>key,'') is null then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_ID_REQUIRED' using errcode='22023'; end if;
+      if exists(select 1 from jsonb_array_elements(next_value) existing where existing->>key=item->>key and existing is distinct from item) then
+        raise exception 'WEEKLY_SOURCE_POST_VERIFIED_REPLACEMENT_REFUSED' using errcode='23505'; end if;
+      if exists(select 1 from jsonb_array_elements(next_value) existing where existing is distinct from item and (
+        (slot='weekly_source_protected_test_setup_authorizations' and
+          (existing->>'source_cycle_id',existing->>'journey_actor_user_id',existing->>'purpose') is not distinct from
+          (item->>'source_cycle_id',item->>'journey_actor_user_id',item->>'purpose'))
+        or (slot in ('weekly_source_protected_capability_qualifications','weekly_source_protected_prerequisite_qualifications') and
+          (existing->>'source_group_id',existing->>'effective_from_week_ending',existing->>'effective_to_week_ending',existing->>'rule_set_version_id')
+            is not distinct from (item->>'source_group_id',item->>'effective_from_week_ending',item->>'effective_to_week_ending',item->>'rule_set_version_id'))
+        or (slot='weekly_source_report_fin_qualifications' and existing->'scope' is not distinct from item->'scope'))) then
+        raise exception 'WEEKLY_SOURCE_POST_VERIFIED_AMBIGUOUS_SCOPE_REFUSED' using errcode='23505'; end if;
+      if not exists(select 1 from jsonb_array_elements(next_value) existing where existing=item) then next_value:=next_value||jsonb_build_array(item); end if;
+    end loop;
+  end if;
+  next_evidence:=jsonb_set(r.evidence_json,array[slot],next_value,true);
+  new_sha:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_RELEASE_EVIDENCE_V1',next_evidence),'hex');
+  identity_before:=to_jsonb(r)-'evidence_json';
+  if next_evidence is distinct from r.evidence_json then
+    update private.cloudtms_database_releases as release_row set evidence_json=next_evidence where release_row.release_id=r.release_id and release_row.status='VERIFIED'
+      and release_row.evidence_json=r.evidence_json returning to_jsonb(release_row)-'evidence_json' into identity_after;
+    if not found or identity_after is distinct from identity_before then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_IDENTITY_CHANGED' using errcode='40001'; end if;
+  end if;
+  artifact_sha:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_SET_V1',artifact),'hex');
+  receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1','execution',execution,
+    'receipt_input_commit',p_request->>'receipt_input_commit','receipt_tree_sha256',p_request#>>'{receipt_tree_proof,source_equivalence_sha256}',
+    'artifact_slot',slot,'artifacts_sha256',artifact_sha,'prior_evidence_sha256',prior_sha,'evidence_sha256',new_sha,
+    'actor_user_id',p_actor_user_id,'recorded_at_utc',clock_timestamp(),'replayed',next_evidence=r.evidence_json,
+    'operational_settings_changed',false);
+  receipt:=receipt||jsonb_build_object('receipt_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECEIPT_V1',receipt),'hex'));
+  perform public._audit_insert('weekly_source_post_verified_evidence',r.release_id,'WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED',null,
+    receipt||jsonb_build_object('artifacts',artifact,'receipt_tree_proof',p_request->'receipt_tree_proof'),p_request->>'reason',p_actor_user_id);
+  return receipt;
+end;
+$function$;

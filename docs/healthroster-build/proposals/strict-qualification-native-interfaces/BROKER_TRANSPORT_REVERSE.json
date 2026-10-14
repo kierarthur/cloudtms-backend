@@ -1,0 +1,24 @@
+{
+  "source_only": true,
+  "input_commit": "2151af656561ad4d68e61e242769ed80a631fcc9",
+  "input_file": "broker/src/index.js",
+  "input_sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86",
+  "output_sha256": "37af660c8f2b333e028bda140d569eb33238b5ceb5024e88157e86eea54e13ad",
+  "reverse_hunk_matches_entire_input_definition": true,
+  "scope": "Only existing Weekly Source request dependency block and one import",
+  "direct_rpc_callers": 2,
+  "native_recording_rpc_callers": 5,
+  "unchanged_calculator_and_c1_raw_dependencies": true,
+  "no_new_http_route": true,
+  "changes": [
+    {
+      "before_sha256": "7f0122920423e40728a9af36afaa8905e7540cc7227a0b96d248bb6f5d15a410",
+      "after_sha256": "e94be7a7ab0b37bf936b7b39ac71e9f1a2e3ca07f9bfe7a94cf82d364b9a6bdf"
+    },
+    {
+      "before_sha256": "3057b2fedfaf042d80b11752b727043ac322b6e5ccb4861b321deda007353228",
+      "after_sha256": "d2bd5036003ca000f54ef6441e6239319439b568a0ca52a0291b995c9a52485b"
+    }
+  ],
+  "no_remote_acceptance": true
+}

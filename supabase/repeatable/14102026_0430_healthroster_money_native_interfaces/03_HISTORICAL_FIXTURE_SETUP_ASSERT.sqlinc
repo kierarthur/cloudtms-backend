@@ -1,0 +1,85 @@
+-- Past TEST fixture setup is derived from its real owner-produced assignment
+-- audit and unchanged native receipt. It never authorises feature activation.
+create or replace function private.weekly_source_historical_fixture_setup_assert_v1(p_auth jsonb,p_initial_open boolean)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare completed jsonb; frame jsonb; assignment public.weekly_source_group_rule_assignments%rowtype;
+  reference public.weekly_source_group_rule_assignments%rowtype; c public.weekly_source_cycles%rowtype; n integer;
+  clients uuid[]; week date; today date; native_receipt jsonb;
+begin
+  today:=(clock_timestamp() at time zone 'Europe/London')::date;
+  week:=(p_auth->>'week_ending')::date;
+  select * into strict c from public.weekly_source_cycles where id=(p_auth->>'source_cycle_id')::uuid;
+  select * into strict assignment from public.weekly_source_group_rule_assignments where id=(p_auth->>'assignment_id')::uuid;
+  select count(*),jsonb_agg(audit.after_json)->0,jsonb_agg(audit.before_json)->0 into n,completed,frame
+    from public.audit_events audit where audit.object_type='weekly_source_historical_fixture_assignment'
+      and audit.action='WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNED' and audit.event_sequence_is_authoritative
+      and audit.after_json->>'assignment_id'=assignment.id::text;
+  if n<>1 or not private.weekly_source_qualification_closed_object_v1(completed,array['schema_version','execution','source_cycle_id','assignment_id',
+      'assignment_sha256','rule_set_version_id','native_receipt','frame_sha256','phase','operational_ready','historical_operational_activation'])
+    or not private.weekly_source_qualification_closed_object_v1(frame,array['schema_version','request_id','actor_user_id','execution','turn_backend_pid',
+      'source_cycle_id','future_reference_assignment_id','expected_future_assignment_sha256','fixture_manifest','native_request','transaction_id','backend_pid',
+      'current_local_date','phase','operational_ready','frame_sha256'])
+    or completed->'execution' is distinct from frame->'execution'
+    or week>=today or extract(dow from week)<>0 or c.finalisation_week_ending<>week
+    or assignment.source_group_id::text is distinct from p_auth->>'source_group_id'
+    or c.source_group_id<>assignment.source_group_id or assignment.feature_enabled or assignment.feature_receipt_json is not null
+    or assignment.effective_from_week_ending<>week or assignment.effective_to_week_ending is distinct from week
+    or assignment.rule_set_version_id::text is distinct from p_auth->>'rule_set_version_id'
+    or assignment.version::text is distinct from p_auth->>'assignment_version'
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(assignment)),'hex')
+      is distinct from p_auth->>'assignment_sha256'
+    or completed->>'schema_version' is distinct from 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNED_V1'
+    or completed->>'phase' is distinct from 'HISTORICAL_DISABLED_FIXTURE_ASSIGNMENT_ONLY'
+    or completed->'operational_ready' is distinct from 'false'::jsonb
+    or completed->'historical_operational_activation' is distinct from 'false'::jsonb
+    or completed->>'source_cycle_id' is distinct from c.id::text
+    or completed->>'assignment_sha256' is distinct from p_auth->>'assignment_sha256'
+    or completed->>'rule_set_version_id' is distinct from p_auth->>'rule_set_version_id'
+    or completed->>'frame_sha256' is distinct from frame->>'frame_sha256'
+    or frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_FRAME_V1',frame-'frame_sha256'),'hex')
+    or frame->'execution' is distinct from private.weekly_source_protected_qualification_release_v1()
+    or frame->>'actor_user_id' is distinct from p_auth->>'setup_actor_user_id'
+    or frame->>'source_cycle_id' is distinct from c.id::text or frame->'fixture_manifest' is distinct from p_auth->'fixture_manifest'
+    or frame->'operational_ready' is distinct from 'false'::jsonb
+    or frame->>'phase' is distinct from 'HISTORICAL_DISABLED_FIXTURE_ASSIGNMENT_ONLY'
+    or assignment.assignment_request_id::text is distinct from frame#>>'{native_request,request_id}'
+    or assignment.created_by_user_id::text is distinct from p_auth->>'setup_actor_user_id'
+    or assignment.assignment_request_sha256 is distinct from encode(extensions.digest(convert_to((frame->'native_request')::text,'UTF8'),'sha256'),'hex')
+    or not exists(select 1 from public.audit_events admitted where admitted.object_type='weekly_source_historical_fixture_assignment'
+      and admitted.object_id_text=assignment.assignment_request_id::text and admitted.event_sequence_is_authoritative
+      and admitted.action='WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_ADMITTED' and admitted.after_json=frame) then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_UNPROVED' using errcode='55000'; end if;
+  native_receipt:=completed->'native_receipt';
+  if native_receipt is distinct from assignment.assignment_receipt_json
+    or native_receipt->>'contract' is distinct from 'WEEKLY_SOURCE_RULE_ASSIGNED_V1'
+    or native_receipt->>'assignment_id' is distinct from assignment.id::text
+    or native_receipt->'feature_enabled' is distinct from 'false'::jsonb or native_receipt->'replayed' is distinct from 'false'::jsonb then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_UNPROVED' using errcode='55000'; end if;
+  select * into strict reference from public.weekly_source_group_rule_assignments where id=(frame->>'future_reference_assignment_id')::uuid;
+  if reference.source_group_id<>assignment.source_group_id or reference.feature_enabled
+    or reference.rule_set_version_id is distinct from assignment.rule_set_version_id
+    or reference.effective_from_week_ending<today
+    or encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_ASSIGNMENT_V1',to_jsonb(reference)),'hex')
+      is distinct from frame->>'expected_future_assignment_sha256' then
+    raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_REFERENCE_CHANGED' using errcode='40001'; end if;
+  if p_initial_open then
+    -- Include every state and every group: an unsuccessful/partial old upload
+    -- is still a prior upload for the fixture Client/week, never a fresh cycle.
+    select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(p_auth#>'{fixture_manifest,client_ids}') value;
+    if c.current_complete_upload_id is not null or c.current_projection_publication_id is not null or c.current_final_revision_id is not null
+      or c.state in ('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')
+      or p_auth->'original_source_cas' is distinct from 'null'::jsonb
+      or exists(select 1 from public.weekly_source_final_revisions final where final.source_cycle_id=c.id)
+      or exists(select 1 from public.weekly_source_uploads upload join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+        where cycle.source_group_id=c.source_group_id or (cycle.finalisation_week_ending=week and (
+          cycle.scope_client_id=any(clients) or upload.file_metadata_json->>'client_id' in(select value::text from unnest(clients) value)
+          or exists(select 1 from public.weekly_source_group_clients member where member.source_group_id=cycle.source_group_id
+            and member.client_id=any(clients) and week between member.valid_from and coalesce(member.valid_to,'infinity'::date))))) then
+      raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_NOT_FRESH' using errcode='55000'; end if;
+  end if;
+exception when no_data_found or too_many_rows or invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_HISTORICAL_FIXTURE_ASSIGNMENT_UNPROVED' using errcode='55000';
+end;
+$function$;

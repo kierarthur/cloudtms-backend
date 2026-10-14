@@ -1,0 +1,403 @@
+{
+  "source_only": true,
+  "actual_install1_commit": "37ddadc0a50721834c9e8a6c06becfc983f0dc32",
+  "entire_actual37_symbols_before": 2440,
+  "forward_semantic_symbol_count": 2473,
+  "entire_actual37_symbols_restored": 2440,
+  "entire_reverse_hash_mismatches": 0,
+  "forward_final_semantics": [
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "definition_sha256": "3bd2e56df47d7a1ac6a65b4ee6c9c8d7ef00666af18627b5eba983f7b08247a8"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+      "definition_sha256": "728c5c1de09651e09d457ba86888f82aea11a53e52f8369db9a1744d21783cb7"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+      "definition_sha256": "cb5225c22f36ad0e94a730d94443be6ecfd6c6a15e530c88d44c4292d36a5008"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+      "definition_sha256": "ab98b552c43fdf6e62db7a62a8a3a575ce82155746dd0960c27935677338ef2f"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+      "definition_sha256": "d06b2e9384230206a08c19dea6ff95f631e3ccfb96742ee2c084a49b071364d8"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+      "definition_sha256": "6825bea312c58819bd21d91eeed69ddb0b33214fc704fd0c1d558ed20b8f0b53"
+    },
+    {
+      "semantic_signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+      "definition_sha256": "a71d94d207666f3feaf9e2e2a6b05ee696127105c7c86ca368a6895bb8a032ed"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+      "definition_sha256": "f721e7331f55c222334a14c54c4043de06d09b04cb84ab8e3cd0cf69cb5f3e78"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+      "definition_sha256": "fbf2192e2eaa47eb60c307eed2c654c14745c14f12010dc0470e4e3966b8c4ca"
+    },
+    {
+      "semantic_signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "definition_sha256": "1d2694753c89ff8b08433a663dd22c41ac013f16b668b336a9d9ab8109f25da8"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+      "definition_sha256": "4ab8f82b54cc5d26894c7b1901b0be67d7d62f92768998513b85bcbeeb4252dc"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+      "definition_sha256": "f2be06deed1ccba0318daaa7088029ecfee3ec87490670595e30f44aec52a130"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+      "definition_sha256": "71a93ffc7456ca23bd45e046d9c053dea50a373d7436c5c479ff0a3a35890d5d"
+    },
+    {
+      "semantic_signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+      "definition_sha256": "9916726e75052944d608a5553be77bbe4f466245be834fde269f58aa857804d5"
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "definition_sha256": "af68582fe7d41fb5c5e61c02cb588d4c4fc7711e6977caada750799180de1d3f"
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "definition_sha256": "0e19954eb0f1eac4839148a8261c623fcc7d55de83ff5a2f20886606eb3862ea"
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "definition_sha256": "769705a0c6c3e36c0d81be9678ac25b1538b5d7c9ca4a7923ab70fc0da802670"
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "definition_sha256": "c0ba3b907908dc16d83175138ce8be90c06053c732bf3c6c4df33b6bccb341a1"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+      "definition_sha256": "8ed96f861e2295fda376f88060a7c918ce7eb7272569c39f4cec739616f98cfc"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "definition_sha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_release_v1()",
+      "definition_sha256": "3b199245835a1684bdbd3d6bba51cdb7f133778d3a8b67a046ea0a5faa6f989f"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "definition_sha256": "54289b9ad28224a83eb45dd5eedfce706dabc89f9fce8b3ef292b11826f7259b"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "definition_sha256": "278bec5f5e5e713a538076bd2e6ab2aa7f8e228b4f47e63d821b7ad90215d7df"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "definition_sha256": "035f1b2bfb6f77a624a02acb047091eacabf8524b4e6d4e40741012c316dfba2"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+      "definition_sha256": "a46355526e0debd4ab8a676aafec9eb264bb8cbdf2dc0344afcba84639b41ee0"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "definition_sha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790"
+    },
+    {
+      "semantic_signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "definition_sha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "definition_sha256": "73caa8b55e07115928bad00a991d37d53508237c0463fbc1bddbfa6ffb1dfc2d"
+    },
+    {
+      "semantic_signature": "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+      "definition_sha256": "d54470fa4c15557a31176f4e2559f2dd12a6d3c8bc8c3b26b353715fca9bf730"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+      "definition_sha256": "74968556f9ee34abcbaa8dbe36e26fb21516deb40716fee9adb2b9020e0e76ba"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+      "definition_sha256": "203128859623831c6f4184076a4107abf69e988c80bcffc3cbdddf4cfe8da457"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "definition_sha256": "8abb151f64d8e984a1e87c54089ad72e9bf5bd3ed2dc855980ae30b483ec4e56"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "definition_sha256": "152ae27d40af142cc4ddf987b96f3c05469186ef1a16d44e150d983d724ef03c"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "definition_sha256": "6be308ef893e3163d7658566cc70652849b24b79a54ece09f94517f5cfbf6aaa"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+      "definition_sha256": "5cdffdf5b2c67db45ea58188b4a89496c9104fd42df17ccf066eeea76df06c82"
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+      "definition_sha256": "b91f017bac9799f04e24f25503c40c9e7caa37cf700f69401649434afe5a1f3d"
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "definition_sha256": "a27df9e9ab43f8b832641b82c14e1e40b19cb1996f5d61d6a8c7fe6af34725e8"
+    },
+    {
+      "semantic_signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "definition_sha256": "f08f2733bce6ffe6de0d7576800d67930776c85e60e30bee915e1ece1cfe7119"
+    }
+  ],
+  "reverse_steps": [
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_facts_v1(uuid,uuid[])",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_v1(uuid,uuid[])",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_capability_release_evidence_v1(uuid,date,date,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_source_activation_scope_v1(uuid,date,date)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_capability_receipt_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_producer_ready_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_original_client_ids_v1(uuid,uuid,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_stage_proof_v1(jsonb,uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+        "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+        "definition_sha256": "341a2ecf419b9243ae79b38b8c9137b668a91240d7bb0dd99fadf7f154eb5371"
+      }
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+        "definition_sha256": "f1d4fbef05901d3c8cab7cdf6ee58f61ec1a783b0c96fbeecf26ae6fb91ec6d2"
+      }
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+        "definition_sha256": "7918532f649b17e7d7f6975764234f24c5e753d2cb2914fdf695e4a692d2fd4f"
+      }
+    },
+    {
+      "semantic_signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": {
+        "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+        "definition_sha256": "2c311b23730e311166f5df8ebd86cbc051579352f43693720c142f8c195b4ff2"
+      }
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_current_catalogue_v1()",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_release_v1()",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_census_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_begin_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_assert_v1(uuid,uuid,uuid[],text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_qualification_step_v1(uuid,text,jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_authorization_v1(uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "private.weekly_source_bulk_own_stage_v1(uuid,uuid,uuid,text,text,text)",
+      "remove_proposal": true,
+      "restore_actual": null
+    },
+    {
+      "semantic_signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "remove_proposal": true,
+      "restore_actual": {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+        "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+        "definition_sha256": "8285eaeda75e346e123743ad1fa0e37803323b8e929217658f0eb858ad01cc21"
+      }
+    }
+  ],
+  "complete_actual_predecessors_file": "ACTUAL37_PREDECESSOR_DEFINITIONS.sqlinc",
+  "actual_current_predecessors": [
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "signature": "public.weekly_exceptional_pay_prepare_family_v1(jsonb)",
+      "definition_sha256": "341a2ecf419b9243ae79b38b8c9137b668a91240d7bb0dd99fadf7f154eb5371"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "definition_sha256": "f1d4fbef05901d3c8cab7cdf6ee58f61ec1a783b0c96fbeecf26ae6fb91ec6d2"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "definition_sha256": "7918532f649b17e7d7f6975764234f24c5e753d2cb2914fdf695e4a692d2fd4f"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "definition_sha256": "2c311b23730e311166f5df8ebd86cbc051579352f43693720c142f8c195b4ff2"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+      "signature": "public.weekly_source_timesheet_lineage_ensure_atomic_v1(uuid,uuid)",
+      "definition_sha256": "8285eaeda75e346e123743ad1fa0e37803323b8e929217658f0eb858ad01cc21"
+    }
+  ],
+  "scope": "Source-declaration reverse only; original schema constraint has its own one-time source. Root final five joins/Money/Report/registry are later stages and need whole-source remeasurement. No database rollback proof."
+}

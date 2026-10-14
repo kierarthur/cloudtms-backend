@@ -1,0 +1,198 @@
+create or replace function private.weekly_source_rule_qualification_setup_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare auth jsonb; actor uuid; journey uuid; action text; lease jsonb; result jsonb; n integer;
+  assignment public.weekly_source_group_rule_assignments%rowtype; census jsonb; clients uuid[]; audit_id uuid;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action',
+    'source_cycle_id','journey_actor_user_id','purpose','reason']) or p_request->>'environment' is distinct from 'TEST'
+    or char_length(coalesce(p_request->>'reason','')) not between 1 and 500 then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid; journey:=(p_request->>'journey_actor_user_id')::uuid; action:=p_request->>'qualification_action';
+  perform private._weekly_source_settings_require_admin_v1(actor);
+  auth:=private.weekly_source_rule_qualification_authorization_v1((p_request->>'source_cycle_id')::uuid,journey,p_request->>'purpose');
+  if auth->>'setup_actor_user_id' is distinct from actor::text or auth->>'agency_id' is distinct from p_request->>'agency_id'
+    or private._weekly_source_settings_deployment_v1((auth->>'agency_id')::uuid,'TEST')<>'TEST'
+    or action not in ('OFF_RULE_OPEN','OFF_RULE_CLOSE','OFF_RULE_REVOKE') then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_REFUSED' using errcode='42501'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-off-rule-test:'||(auth->>'scope_id'),0));
+  -- The same assignment store serializes configuration and qualification. No
+  -- toggle or metadata write is made to it. Readers revalidate its full hash.
+  select * into strict assignment from public.weekly_source_group_rule_assignments where id=(auth->>'assignment_id')::uuid for share;
+  if exists(select 1 from public.audit_events audit where audit.object_type='weekly_source_off_rule_test_journey'
+    and audit.object_id_text=auth->>'scope_id' and audit.event_sequence_is_authoritative
+    and audit.action in ('WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED','WEEKLY_SOURCE_OFF_RULE_TEST_REVOKED')) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_TERMINAL' using errcode='55000'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into n,lease from public.audit_events audit
+    where audit.object_type='weekly_source_off_rule_test_journey' and audit.object_id_text=auth->>'scope_id'
+      and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_OPENED' and audit.event_sequence_is_authoritative;
+  if action='OFF_RULE_OPEN' then
+    if n<>0 then raise exception 'WEEKLY_SOURCE_OFF_RULE_SCOPE_ALREADY_OPEN' using errcode='23505'; end if;
+    perform private.weekly_source_rule_qualification_scope_assert_v1(auth,journey,true);
+    lease:=jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_TEST_SCOPE_V1','scope_id',auth->>'scope_id',
+      'authorization_id',auth->>'authorization_id','authorization_sha256',auth->>'authorization_sha256',
+      'purpose',auth->>'purpose','source_cycle_id',auth->>'source_cycle_id','source_group_id',auth->>'source_group_id',
+      'week_ending',auth->>'week_ending','assignment_id',assignment.id,'assignment_version',assignment.version,
+      'rule_set_version_id',assignment.rule_set_version_id,'opened_at_utc',clock_timestamp(),
+      'opened_local_date',(clock_timestamp() at time zone 'Europe/London')::date,
+      'coverage_floor_local_date',((auth->>'week_ending')::date-6),
+      'actor_user_id',journey,'setup_actor_user_id',actor,'operational_ready',false,'expires_at_utc',auth->>'expires_at_utc');
+    if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+      -- Capture ONCE, before any protected round. Every remaining Client and
+      -- original physical root stays in this immutable audited census.
+      census:=private.weekly_source_protected_qualification_census_v1((auth->>'source_cycle_id')::uuid);
+      if census->'original_client_ids' is distinct from auth#>'{fixture_manifest,client_ids}'
+        or census->'source_cas' is distinct from auth->'original_source_cas'
+        or (select coalesce(jsonb_agg(distinct row_value->'contract_id' order by row_value->'contract_id'),'[]'::jsonb)
+          from jsonb_array_elements(census->'original_items') row_value) is distinct from auth#>'{fixture_manifest,contract_ids}'
+        or (select coalesce(jsonb_agg(distinct row_value->'candidate_id' order by row_value->'candidate_id'),'[]'::jsonb)
+          from jsonb_array_elements(census->'original_items') row_value) is distinct from auth#>'{fixture_manifest,candidate_ids}' then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+      lease:=lease||jsonb_build_object('original_census',census);
+    end if;
+    lease:=lease||jsonb_build_object('scope_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_TEST_SCOPE_V1',lease),'hex'));
+    perform public._audit_insert('weekly_source_off_rule_test_journey',auth->>'scope_id','WEEKLY_SOURCE_OFF_RULE_TEST_OPENED',null,lease,p_request->>'reason',actor);
+    return lease;
+  end if;
+  if n<>1 then raise exception 'WEEKLY_SOURCE_OFF_RULE_SCOPE_UNAVAILABLE' using errcode='55000'; end if;
+  if action='OFF_RULE_CLOSE' then
+    perform private.weekly_source_rule_qualification_scope_assert_v1(auth,journey,false);
+    if auth->>'purpose'='AUTOMATIC_JOURNEY' then
+      census:=lease->'original_census';
+      if census is null or census->>'census_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_QUALIFICATION_CENSUS_V1',census-'census_sha256'),'hex') then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_UNAVAILABLE' using errcode='55000'; end if;
+      select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(census->'original_client_ids') value;
+      if private.weekly_source_bulk_source_cas_v1((auth->>'source_cycle_id')::uuid,clients) is distinct from census->'source_cas' then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_ORIGINAL_CENSUS_CHANGED' using errcode='40001'; end if;
+      -- Same closed DTO as the original controlled journey. The closure audit
+      -- preserves the OPEN census; it never recollects remaining incidents.
+      result:=jsonb_build_object('scope_id',auth->>'scope_id','scope_sha256',lease->>'scope_sha256',
+        'setup_authorization_sha256',auth->>'authorization_sha256','original_census_sha256',census->>'census_sha256',
+        'actor_user_id',journey,'source_cycle_id',auth->>'source_cycle_id','week_ending',auth->>'week_ending',
+        'execution_release_id',auth->>'release_id','execution_source_commit',auth->>'source_commit',
+        'execution_contract_sha256',auth->>'contract_sha256','state','CLOSED','closed_at_utc',clock_timestamp(),
+        'all_assignments_disabled',true,'all_operational_producers_false',true);
+    else
+      -- The first genuine Source producer may have no protected incidents.
+      -- Its resulting frozen Source CAS is a setup result, not a protected
+      -- capability census/certificate or manufactured protection evidence.
+      select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(auth#>'{fixture_manifest,client_ids}') value;
+      result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_TEST_SOURCE_CLOSURE_V1','scope_id',auth->>'scope_id',
+        'scope_sha256',lease->>'scope_sha256','authorization_sha256',auth->>'authorization_sha256',
+        'source_cycle_id',auth->>'source_cycle_id','week_ending',auth->>'week_ending','rule_set_version_id',auth->>'rule_set_version_id',
+        'rule_values_sha256',auth->>'rule_values_sha256','result_source_cas',private.weekly_source_bulk_source_cas_v1((auth->>'source_cycle_id')::uuid,clients),
+        'actor_user_id',journey,'release_id',auth->>'release_id','source_commit',auth->>'source_commit','contract_sha256',auth->>'contract_sha256',
+        'state','CLOSED','closed_at_utc',clock_timestamp(),'all_assignments_disabled',true,'all_operational_producers_false',true);
+    end if;
+  else result:=jsonb_build_object('scope_id',auth->>'scope_id','state','REVOKED','closed_at_utc',clock_timestamp(),'operational_ready',false); end if;
+  perform public._audit_insert('weekly_source_off_rule_test_journey',auth->>'scope_id',
+    case when action='OFF_RULE_CLOSE' then 'WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED' else 'WEEKLY_SOURCE_OFF_RULE_TEST_REVOKED' end,
+    lease,result,p_request->>'reason',actor);
+  if action='OFF_RULE_CLOSE' and auth->>'purpose'='AUTOMATIC_JOURNEY' then
+    select audit.id into strict audit_id from public.audit_events audit
+      where audit.object_type='weekly_source_off_rule_test_journey' and audit.object_id_text=auth->>'scope_id'
+        and audit.action='WEEKLY_SOURCE_OFF_RULE_TEST_CLOSED' and audit.event_sequence_is_authoritative and audit.after_json=result;
+    -- OFF_RULE_ORIGINAL_CENSUS_CLOSED: returned identifiers are measured from
+    -- the genuine audit row, never supplied by caller or inserted as evidence.
+    return result||jsonb_build_object('closure_audit_id',audit_id,'closure_audit_sha256',
+      encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1',result),'hex'));
+  end if;
+  return result;
+end;
+$function$;
+
+create or replace function private.weekly_source_rule_qualification_execute_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare actor uuid; cycle_id uuid; auth jsonb; req jsonb; op text; purpose text; frame jsonb; result jsonb;
+  command_id uuid:=gen_random_uuid(); stack text; parent_scope jsonb; completion jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  get diagnostics stack=pg_context;
+  if stack !~ 'PL/pgSQL function (public\.)?weekly_source_group_rule_feature_set_atomic_v1\(jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_CONTROLLED_OWNER_REQUIRED' using errcode='42501'; end if;
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action',
+    'source_cycle_id','native_operation','native_request']) or p_request->>'qualification_action' is distinct from 'OFF_RULE_COMMAND'
+    or p_request->>'environment' is distinct from 'TEST' or jsonb_typeof(p_request->'native_request') is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_COMMAND_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid;cycle_id:=(p_request->>'source_cycle_id')::uuid;op:=p_request->>'native_operation';req:=p_request->'native_request';
+  if op in ('weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1',
+    'weekly_source_upload_seal_atomic_v1','weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1',
+    'weekly_source_projection_publish_atomic_v1','weekly_source_import_prepare_atomic_v1','weekly_source_finalise_atomic_v1',
+    'weekly_source_finalisation_pay_open_atomic_v1','weekly_source_finalisation_pay_task_start_atomic_v1',
+    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE') then
+    purpose:='SOURCE_FIXTURE_SETUP';
+  elsif op in ('weekly_source_automatic_reconcile_atomic_v1','weekly_exceptional_pay_prepare_action_v1',
+    'weekly_exceptional_pay_action_context_v1','weekly_exceptional_pay_action_publication_status_v1',
+    'weekly_exceptional_pay_stage_c1_request_v1') then purpose:='AUTOMATIC_JOURNEY';
+  else raise exception 'WEEKLY_SOURCE_OFF_RULE_NATIVE_OPERATION_REFUSED' using errcode='42501'; end if;
+  auth:=private.weekly_source_rule_qualification_authorization_v1(cycle_id,actor,purpose);
+  if auth->>'agency_id' is distinct from p_request->>'agency_id' or not(auth->'allowed_operations' @> jsonb_build_array(op))
+    or (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)
+    or (req ? 'p_actor_user_id' and req->>'p_actor_user_id' is distinct from actor::text)
+    or (req ? 'source_cycle_id' and req->>'source_cycle_id' is distinct from cycle_id::text)
+    or (req ? 'source_group_id' and req->>'source_group_id' is distinct from auth->>'source_group_id')
+    or (req ? 'client_id' and not(auth#>'{fixture_manifest,client_ids}' @> jsonb_build_array((req->>'client_id')::uuid))) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_COMMAND_SCOPE_REFUSED' using errcode='42501'; end if;
+  -- Nonwaiting same-scope gate precedes OPEN revalidation. It remains held
+  -- through native dispatch/completion until transaction end. No group/row
+  -- lock is acquired ahead of native I1; a CLOSE holder returns busy here.
+  if not pg_try_advisory_xact_lock(hashtextextended('weekly-source-off-rule-test:'||(auth->>'scope_id'),0)) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_SCOPE_BUSY' using errcode='55P03'; end if;
+  perform private.weekly_source_rule_qualification_scope_assert_v1(auth,actor,false);
+  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,auth);
+  if exists(select 1 from public.audit_events audit where audit.object_type='weekly_source_off_rule_command'
+    and audit.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED' and audit.event_sequence_is_authoritative
+    and audit.after_json->>'transaction_id'=pg_current_xact_id()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text
+    and not exists(select 1 from public.audit_events closed where closed.object_type=audit.object_type and closed.object_id_text=audit.object_id_text
+      and closed.action='WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED' and closed.event_sequence_is_authoritative)) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_COMMAND_NESTED' using errcode='55000'; end if;
+  frame:=jsonb_build_object('schema_version','WEEKLY_SOURCE_OFF_RULE_COMMAND_V1','command_id',command_id,
+    'transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,'source_cycle_id',cycle_id,'actor_user_id',actor,
+    'authorization',auth,'native_operation',op,'native_request_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_OFF_RULE_NATIVE_REQUEST_V1',req),'hex'),'native_parent_scope',parent_scope,'operational_ready',false);
+  if op='weekly_exceptional_pay_prepare_action_v1' then frame:=frame||jsonb_build_object('native_prepare_request',req); end if;
+  frame:=frame||jsonb_build_object('command_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_COMMAND_V1',frame),'hex'));
+  perform public._audit_insert('weekly_source_off_rule_command',command_id::text,'WEEKLY_SOURCE_OFF_RULE_COMMAND_ADMITTED',null,frame,'Controlled OFF fixture native command',actor);
+  case op
+    when 'weekly_source_upload_context_v1' then result:=public.weekly_source_upload_context_v1(req);
+    when 'weekly_source_upload_stage_begin_atomic_v1' then result:=public.weekly_source_upload_stage_begin_atomic_v1(req);
+    when 'weekly_source_upload_stage_rows_atomic_v1' then result:=public.weekly_source_upload_stage_rows_atomic_v1(req);
+    when 'weekly_source_upload_seal_atomic_v1' then result:=public.weekly_source_upload_seal_atomic_v1(req);
+    when 'weekly_source_projection_begin_atomic_v1' then result:=public.weekly_source_projection_begin_atomic_v1(req);
+    when 'weekly_source_projection_rows_apply_atomic_v1' then result:=public.weekly_source_projection_rows_apply_atomic_v1(
+      (req->>'p_actor_user_id')::uuid,(req->>'p_publication_id')::uuid,req->'p_rows');
+    when 'weekly_source_projection_publish_atomic_v1' then result:=public.weekly_source_projection_publish_atomic_v1(req);
+    when 'weekly_source_import_prepare_atomic_v1' then result:=public.weekly_source_import_prepare_atomic_v1(req);
+    when 'weekly_source_finalise_atomic_v1' then result:=public.weekly_source_finalise_atomic_v1(req);
+    when 'weekly_source_finalisation_pay_open_atomic_v1' then result:=public.weekly_source_finalisation_pay_open_atomic_v1(req);
+    when 'weekly_source_finalisation_pay_task_start_atomic_v1' then result:=public.weekly_source_finalisation_pay_task_start_atomic_v1(req);
+    when 'weekly_source_ordinary_pay_projection_apply_atomic_v1' then result:=public.weekly_source_ordinary_pay_projection_apply_atomic_v1(req);
+    when 'weekly_source_finalisation_pay_task_finish_atomic_v1' then result:=public.weekly_source_finalisation_pay_task_finish_atomic_v1(req);
+    when 'REPORT_FIN_AB_FINALISE' then result:=private.weekly_source_rule_report_fixture_finalise_v1(auth,req);
+    when 'weekly_source_automatic_reconcile_atomic_v1' then result:=public.weekly_source_automatic_reconcile_atomic_v1(req);
+    when 'weekly_exceptional_pay_prepare_action_v1' then result:=public.weekly_exceptional_pay_prepare_action_v1(req);
+    when 'weekly_exceptional_pay_action_context_v1' then result:=public.weekly_exceptional_pay_action_context_v1(req);
+    when 'weekly_exceptional_pay_action_publication_status_v1' then result:=public.weekly_exceptional_pay_action_publication_status_v1(req);
+    when 'weekly_exceptional_pay_stage_c1_request_v1' then result:=public.weekly_exceptional_pay_stage_c1_request_v1(req);
+  end case;
+  -- The command frame is closed even for a legal native refusal result. Errors
+  -- abort the whole command/audit transaction; a later session starts afresh.
+  completion:=jsonb_build_object('command_id',command_id,'command_sha256',frame->>'command_sha256','native_result_sha256',
+    encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFF_RULE_NATIVE_RESULT_V1',result),'hex'),'operational_ready',false);
+  if op='weekly_exceptional_pay_prepare_action_v1' then
+    if result->>'source_cycle_id' is distinct from cycle_id::text or result->>'family_id' is distinct from req->>'family_id'
+      or result->>'work_event_id' is distinct from req->>'work_event_id'
+      or not exists(select 1 from public.weekly_exceptional_orchestration_runs r where r.id=(result->>'orchestration_run_id')::uuid
+        and r.family_id=(req->>'family_id')::uuid and r.requested_by_user_id=actor
+        and r.request_fingerprint=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',req)) then
+      raise exception 'WEEKLY_SOURCE_OFF_RULE_PREPARE_RESULT_CHANGED' using errcode='42501'; end if;
+    completion:=completion||jsonb_build_object('native_prepare_result',result);
+  end if;
+  perform public._audit_insert('weekly_source_off_rule_command',command_id::text,'WEEKLY_SOURCE_OFF_RULE_COMMAND_COMPLETED',frame,
+    completion,'Controlled OFF fixture native command complete',actor);
+  return result;
+end;
+$function$;

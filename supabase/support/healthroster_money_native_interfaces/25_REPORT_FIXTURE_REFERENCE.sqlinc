@@ -1,0 +1,78 @@
+-- R1 owner-session/savepoint authority only. Actual independent HTTP retains
+-- the unqualified operational Report selector refusal until its R2 certificate.
+-- This is not a public variant selector and has no service/browser EXECUTE.
+create or replace function private.weekly_source_rule_report_fixture_bind_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare actor uuid; auth jsonb; req jsonb; scope public.weekly_source_report_scopes%rowtype;
+  report public.weekly_source_self_bill_reports%rowtype; source_cas jsonb; clients uuid[]; ref jsonb; wrapped jsonb;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','source_cycle_id','case_id','variant','native_request'])
+    or p_request->>'variant' not in ('A','B') or p_request->>'case_id' not in ('BOUND_NEGATIVE','D_NEGATIVE','D_POSITIVE','D_ZERO',
+      'NEXT_ACTIVE','ORDINARY_NHSP_REGRESSION','STANDALONE_NEGATIVE') then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_REFERENCE_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid;req:=p_request->'native_request';
+  auth:=private.weekly_source_rule_qualification_authorization_v1((p_request->>'source_cycle_id')::uuid,actor,'SOURCE_FIXTURE_SETUP');
+  perform private.weekly_source_rule_qualification_scope_assert_v1(auth,actor,false);
+  if not private.weekly_source_qualification_closed_object_v1(req,array['actor_user_id','source_cycle_id','authority_scope_kind','report_scope_id','upload_id',
+    'projection_publication_id','expected_authority_scope_version','expected_row_manifest_hash','expected_comparison_manifest_hash','expected_issue_set_hash',
+    'exclude_unfinalised_acknowledged']) or req->>'authority_scope_kind' is distinct from 'SELF_BILL_REPORT_SCOPE'
+    or req->>'actor_user_id' is distinct from actor::text or req->>'source_cycle_id' is distinct from auth->>'source_cycle_id' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_REFERENCE_INVALID' using errcode='22023'; end if;
+  select * into strict scope from public.weekly_source_report_scopes where id=(req->>'report_scope_id')::uuid
+    and source_cycle_id=(auth->>'source_cycle_id')::uuid and source_group_id=(auth->>'source_group_id')::uuid
+    and current_complete_upload_id=(req->>'upload_id')::uuid and current_projection_publication_id=(req->>'projection_publication_id')::uuid
+    and version=(req->>'expected_authority_scope_version')::bigint and projection_state='CURRENT' and current_final_revision_id is null;
+  select * into strict report from public.weekly_source_self_bill_reports where id=scope.self_bill_report_id
+    and source_cycle_id=scope.source_cycle_id and source_group_id=scope.source_group_id and client_id=scope.client_id;
+  if not(auth#>'{fixture_manifest,client_ids}' @> jsonb_build_array(scope.client_id)) then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_FOREIGN_CLIENT' using errcode='42501'; end if;
+  perform private.weekly_source_office_authority_v1(actor,'FINALISE_WEEK',scope.source_group_id,scope.client_id,
+    (select finalisation_week_ending from public.weekly_source_cycles where id=scope.source_cycle_id));
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(auth#>'{fixture_manifest,client_ids}') value;
+  source_cas:=private.weekly_source_bulk_source_cas_v1(scope.source_cycle_id,clients);
+  ref:=jsonb_build_object('schema_version','WEEKLY_SOURCE_REPORT_FIN_FIXTURE_REFERENCE_V1','case_id',p_request->>'case_id',
+    'variant',p_request->>'variant','source_cycle_id',scope.source_cycle_id,'report_scope_id',scope.id,'client_id',scope.client_id,
+    'rule_set_version_id',auth->>'rule_set_version_id','rule_set_values_sha256',auth->>'rule_values_sha256',
+    'source_census_sha256',source_cas->>'source_cas_sha256','native_request_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_REPORT_FIN_FIXTURE_REQUEST_V1',req),'hex'));
+  wrapped:=jsonb_build_object('schema_version','WEEKLY_SOURCE_REPORT_FIN_FIXTURE_FRAME_V1','scope_id',auth->>'scope_id',
+    'authorization_sha256',auth->>'authorization_sha256','transaction_id',pg_current_xact_id()::text,'backend_pid',pg_backend_pid()::text,
+    'reference',ref,'source_cas',source_cas,'operational_ready',false);
+  wrapped:=wrapped||jsonb_build_object('frame_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_FIN_FIXTURE_FRAME_V1',wrapped),'hex'));
+  perform public._audit_insert('weekly_source_off_rule_report_reference',gen_random_uuid()::text,'WEEKLY_SOURCE_REPORT_FIN_FIXTURE_BOUND',null,wrapped,
+    'Owner rollback A/B Report FIN fixture reference',actor);
+  return ref;
+end;
+$function$;
+
+create or replace function private.weekly_source_rule_report_fixture_finalise_v1(p_auth jsonb,p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare auth jsonb; frame jsonb; ref jsonb; n integer; clients uuid[]; stack text;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  get diagnostics stack=pg_context;
+  if stack !~ 'PL/pgSQL function (private\.)?weekly_source_rule_qualification_execute_v1\(jsonb\)' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_CONTROLLED_CALLER_REQUIRED' using errcode='42501'; end if;
+  auth:=private.weekly_source_rule_qualification_context_v1(null,(p_request->>'source_cycle_id')::uuid);
+  if auth is distinct from p_auth or auth->>'purpose' is distinct from 'SOURCE_FIXTURE_SETUP' then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_SCOPE_CHANGED' using errcode='40001'; end if;
+  select count(*),jsonb_agg(audit.after_json)->0 into n,frame from public.audit_events audit
+    where audit.object_type='weekly_source_off_rule_report_reference' and audit.action='WEEKLY_SOURCE_REPORT_FIN_FIXTURE_BOUND'
+      and audit.event_sequence_is_authoritative and audit.after_json->>'scope_id'=auth->>'scope_id'
+      and audit.after_json->>'transaction_id'=pg_current_xact_id()::text and audit.after_json->>'backend_pid'=pg_backend_pid()::text;
+  ref:=frame->'reference';
+  select array_agg(value::uuid order by value::uuid) into clients from jsonb_array_elements_text(auth#>'{fixture_manifest,client_ids}') value;
+  if n<>1 or frame->>'authorization_sha256' is distinct from auth->>'authorization_sha256' or frame->'operational_ready' is distinct from 'false'::jsonb
+    or frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_FIN_FIXTURE_FRAME_V1',frame-'frame_sha256'),'hex')
+    or ref->>'variant' not in ('A','B') or ref->>'source_cycle_id' is distinct from auth->>'source_cycle_id'
+    or ref->>'report_scope_id' is distinct from p_request->>'report_scope_id'
+    or ref->>'rule_set_version_id' is distinct from auth->>'rule_set_version_id' or ref->>'rule_set_values_sha256' is distinct from auth->>'rule_values_sha256'
+    or ref->>'native_request_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_FIN_FIXTURE_REQUEST_V1',p_request),'hex')
+    or frame->'source_cas' is distinct from private.weekly_source_bulk_source_cas_v1((auth->>'source_cycle_id')::uuid,clients) then
+    raise exception 'WEEKLY_SOURCE_REPORT_FIXTURE_REFERENCE_CHANGED' using errcode='40001'; end if;
+  return private.weekly_source_finalise_engine_v1(p_request,null::uuid,false,ref->>'variant');
+end;
+$function$;

@@ -1,0 +1,42 @@
+{
+  "sourceOnly": true,
+  "noDatabaseConnection": true,
+  "units": [
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "kind": "migration",
+      "closureSha256": "601493c1cda73cc21a177dfc834c6c68db36bc1f0b6cd185e5d7b96e241023c4",
+      "files": 1,
+      "statements": 1,
+      "atomicEnvelope": true,
+      "bodySha256": "f2383f31b668a683282d70491e1cd2a93a1e0053f3fd9fae70da970147fdf7e4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "kind": "repeatable",
+      "closureSha256": "72092595af3f3d46f8bc5b71be646243cf3782205ce40d5d72a377510307dadc",
+      "files": 53,
+      "statements": 166,
+      "atomicEnvelope": true,
+      "bodySha256": "2db1843cfa6338e3f3d9d816d91192ee2d1ba1cf42bb830a097a4c24897b6a8c"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+      "kind": "repeatable",
+      "closureSha256": "87387bd2ae8e5510ce06ac2ad21d13209eaea4b8f481743f2741049fb5c5888b",
+      "files": 6,
+      "statements": 19,
+      "atomicEnvelope": true,
+      "bodySha256": "0ba01bdd6ad4d19ec8d9cf62a6ff51a27376f49a24a4aab1f660329a1f3918d2"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "kind": "repeatable",
+      "closureSha256": "fefc51941ebb29609bcd71fbd22893f7ace769927571e21978443d3613853903",
+      "files": 32,
+      "statements": 222,
+      "atomicEnvelope": true,
+      "bodySha256": "66d9b9d8eed9baecfdd0687474db0990615df347557b7204f23f95c38870bb09"
+    }
+  ]
+}

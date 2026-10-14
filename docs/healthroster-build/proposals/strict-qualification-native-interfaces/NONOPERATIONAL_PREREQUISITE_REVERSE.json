@@ -1,0 +1,27 @@
+{
+  "source_only": true,
+  "no_operational_v2_slot": true,
+  "original_native_gate_census_and_next_prerequisite_retained": true,
+  "no_third_install": true,
+  "no_runtime_acceptance": true,
+  "proofs": [
+    {
+      "file": "same-installed-prerequisite-evidence.mjs",
+      "input_sha256": "6ef63b264d2e907dd52a6b7ff4aa2a619c8025948eadae42d944a86c6b6abd29",
+      "output_sha256": "911a68902f37f6e3003cc5905d9b35590a387a2430e9820080385765c58d7ecc",
+      "reverse_hunk_matches_entire_input_definition": true
+    },
+    {
+      "file": "NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "input_sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+      "output_sha256": "c0c7b32a56ad4974759932c38214691888d3bd4a8d5400838ceb24943cde110d",
+      "reverse_hunk_matches_entire_input_definition": true
+    },
+    {
+      "file": "10_complete_bulk_test_scope.sqlinc",
+      "input_sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "output_sha256": "3d33792023c4dc6a8a9aeb24ae00f844d704ca6611383a3081fd36207d03b288",
+      "reverse_hunk_matches_entire_input_definition": true
+    }
+  ]
+}

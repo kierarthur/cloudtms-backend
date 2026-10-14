@@ -1,0 +1,377 @@
+{
+  "schema_version": "PROTECTED_SOURCE_OPERATIONAL_GATE_FORWARD_OWNER_DELTA_V1",
+  "inputs": [
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_SCOPE.sqlinc",
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746",
+      "bytes": 19844
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/prerequisite-evidence.mjs",
+      "sha256": "03537b6683c687364c2c72a57db876887223cce0853e14c0b96bb187b2d8bf69",
+      "bytes": 19857
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/QUALIFICATION_R2_READER.sqlinc",
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15",
+      "bytes": 10132
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/CAPABILITY_OWNERS.sqlinc",
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66",
+      "bytes": 14636
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/05_complete_existing_activation.sqlinc",
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+      "bytes": 20106
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/03_complete_cas_admission.sqlinc",
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342",
+      "bytes": 2028
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/04_complete_non_self_bill_admission.sqlinc",
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "bytes": 2234
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/06_complete_selection.sqlinc",
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+      "bytes": 8378
+    },
+    {
+      "path": "../healthroster-v2-backend-13102026/supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "bytes": 18312
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_17_prepare_family.sqlinc",
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be",
+      "bytes": 28806
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_18_prepare_action.sqlinc",
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5",
+      "bytes": 13428
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_19_action_context.sqlinc",
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11",
+      "bytes": 24978
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/12_complete_20_stage_request.sqlinc",
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254",
+      "bytes": 55130
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification/09_complete_managed_release.mjs",
+      "sha256": "e8091382bdac0c9eec34dee4300e6aee8494637dc48098e90154d85dcb7cdc1c",
+      "bytes": 33466
+    },
+    {
+      "path": "../healthroster-v2-backend-13102026/scripts/cloudtms-db-release.mjs",
+      "sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "bytes": 25506
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/source-equivalence.mjs",
+      "sha256": "2fcd53a51abaae7bca954caf5425175877d8c196607f30537ac04d88b73d3ae2",
+      "bytes": 11289
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/operational-evidence.mjs",
+      "sha256": "28bd7952f0a6f2866578de4949c2215698a5e9c72b85f2456b01fd7626ec115c",
+      "bytes": 17619
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/setup-evidence.mjs",
+      "sha256": "0df0d93c9b54d41e9c8869aae394967afb907fff5c93403ff04f6466a8c32145",
+      "bytes": 5188
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-qualification-operational-gate/prerequisite-evidence.mjs",
+      "sha256": "6ef63b264d2e907dd52a6b7ff4aa2a619c8025948eadae42d944a86c6b6abd29",
+      "bytes": 17250
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311
+    },
+    {
+      "path": "docs/healthroster-build/proposals/protected-source-capability/generated/08_complete_bulk_command.sqlinc",
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf",
+      "bytes": 14792
+    },
+    {
+      "path": "../healthroster-v2-backend-13102026/broker/src/weekly-source/routes.js",
+      "sha256": "9c177ca5e5ef8666edb1e82fad61483c460045b7c1a3adf2d710149096fe59da",
+      "bytes": 56824
+    },
+    {
+      "path": "../healthroster-v2-backend-13102026/broker/src/index.js",
+      "sha256": "a1cb181fa8588813637598873606438e6dd0a10ab57d286a210a253c63fd6a86",
+      "bytes": 8947784
+    }
+  ],
+  "proofs": [
+    {
+      "path": "01_complete_qualification_scope.sqlinc",
+      "input_sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746",
+      "output_sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "delta": "Both advisory lock predicates additionally bind the current database OID. Existing root-owned turn PID binding retained."
+    },
+    {
+      "path": "03_complete_operational_release_reader.sqlinc",
+      "input_sha256": "7ef145df5f53e588e72e94bb3b9b312d132a8721280c0aea455614cf0b45abb4",
+      "output_sha256": "cb5225c22f36ad0e94a730d94443be6ecfd6c6a15e530c88d44c4292d36a5008",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "  if count_rows<>1 or not private.weekly_exceptional_json_keys_exact_v1(q,array[",
+          "after": "  if count_rows<>1 then raise exception 'WEEKLY_SOURCE_PROTECTED_OPERATIONAL_GATES_REQUIRED' using errcode='55000'; end if;\n  return private.weekly_source_protected_operational_certificate_assert_v1(q,p_group_id,p_from,p_to,p_expected_sha256);\n  -- The original V1-only validator remains unreachable evidence below. It\n  -- cannot admit native-only or pending certificates into an operational path.\n  if count_rows<>1 or not private.weekly_exceptional_json_keys_exact_v1(q,array["
+        }
+      ]
+    },
+    {
+      "path": "04_complete_capability_receipt.sqlinc",
+      "input_sha256": "18be35bd30fa7f1fa0d114e672ac941a93245d841d2e3b4fda7c859c857090c5",
+      "output_sha256": "d06b2e9384230206a08c19dea6ff95f631e3ccfb96742ee2c084a49b071364d8",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "  if q is distinct from receipt->'protected_capability_qualification' or q->>'release_id' is distinct from a.feature_release_id then",
+          "after": "  if q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'\n    or q->>'phase' is distinct from 'ALL_PRE_SWITCH_GATES_QUALIFIED'\n    or q is distinct from receipt->'protected_capability_qualification' or q->>'release_id' is distinct from a.feature_release_id then"
+        }
+      ]
+    },
+    {
+      "path": "05_complete_bulk_readiness.sqlinc",
+      "input_sha256": "04a69d25d8368ffa2f36b1842ecdf645426891ca53a7a960bab014238c103c61",
+      "output_sha256": "6825bea312c58819bd21d91eeed69ddb0b33214fc704fd0c1d558ed20b8f0b53",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "  return q->'capabilities' @> '[\"BULK_SIGNED\"]'::jsonb;",
+          "after": "  return coalesce(q->>'schema_version'='WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'\n    and q->>'phase'='ALL_PRE_SWITCH_GATES_QUALIFIED' and q->'capabilities' @> '[\"BULK_SIGNED\"]'::jsonb,false);"
+        }
+      ]
+    },
+    {
+      "path": "06_complete_automatic_readiness.sqlinc",
+      "input_sha256": "41b86498f88e0abf7919bc22aea7a7a68c028c1548b868b628d872bfec8e56f0",
+      "output_sha256": "a71d94d207666f3feaf9e2e2a6b05ee696127105c7c86ca368a6895bb8a032ed",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "  if not(q->'capabilities' @> '[\"AUTOMATIC_RECONCILE\"]'::jsonb) then return false; end if;",
+          "after": "  if q->>'schema_version' is distinct from 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1'\n    or q->>'phase' is distinct from 'ALL_PRE_SWITCH_GATES_QUALIFIED'\n    or not(q->'capabilities' @> '[\"AUTOMATIC_RECONCILE\"]'::jsonb) then return false; end if;"
+        }
+      ]
+    },
+    {
+      "path": "07_complete_existing_feature_setup.sqlinc",
+      "input_sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+      "output_sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "begin\n  perform private._weekly_source_settings_assert_request_v1",
+          "after": "begin\n  if p_request ? 'qualification_action' then\n    return private.weekly_source_protected_test_setup_atomic_v1(p_request);\n  end if;\n  perform private._weekly_source_settings_assert_request_v1"
+        },
+        {
+          "before": "    if v_assignment.feature_request_sha256<>v_hash then raise exception 'WEEKLY_SOURCE_RULE_REQUEST_REUSED' using errcode='22023'; end if;",
+          "after": "    if v_assignment.feature_request_sha256<>v_hash then raise exception 'WEEKLY_SOURCE_RULE_REQUEST_REUSED' using errcode='22023'; end if;\n    if v_assignment.feature_enabled and v_assignment.feature_receipt_json ? 'protected_capability_qualification' then\n      perform private.weekly_source_protected_operational_certificate_assert_v1(\n        v_assignment.feature_receipt_json->'protected_capability_qualification',v_group_id,v_from,v_assignment.effective_to_week_ending,\n        v_assignment.feature_receipt_json#>>'{protected_capability_qualification,qualification_sha256}');\n    end if;"
+        },
+        {
+          "before": "      v_assignment.effective_to_week_ending,p_request->>'protected_capability_qualification_sha256');",
+          "after": "      v_assignment.effective_to_week_ending,p_request->>'protected_capability_qualification_sha256');\n    perform private.weekly_source_protected_operational_certificate_assert_v1(v_qualification,v_group_id,v_from,\n      v_assignment.effective_to_week_ending,p_request->>'protected_capability_qualification_sha256');"
+        }
+      ]
+    },
+    {
+      "path": "09_complete_actor_non_self_bill_admission.sqlinc",
+      "input_sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+      "output_sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "p_client_id uuid,p_contract_id uuid,p_work_date date,p_cycle_id uuid",
+          "after": "p_client_id uuid,p_contract_id uuid,p_work_date date,p_cycle_id uuid,p_actor_user_id uuid,p_work_event_id uuid"
+        },
+        {
+          "before": "    exception when sqlstate '42501' or sqlstate '55000' then return null;\n    end;",
+          "after": "    exception when sqlstate '42501' or sqlstate '55000' then\n      if p_work_event_id is null then return null; end if;\n      begin qualification:=private.weekly_source_protected_test_scope_assert_v1(c.id,p_actor_user_id,null,p_work_event_id);\n      exception when sqlstate '42501' or sqlstate '55000' then return null; end;\n      if not exists(select 1 from jsonb_array_elements(qualification#>'{original_census,original_items}') item\n        where item->>'client_id'=p_client_id::text and item->>'contract_id'=p_contract_id::text\n          and item->>'work_date'=p_work_date::text and item->>'work_event_id'=p_work_event_id::text) then return null; end if;\n    end;"
+        }
+      ]
+    },
+    {
+      "path": "10_complete_actor_bulk_selection.sqlinc",
+      "input_sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+      "output_sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_bulk_source_cas_assert_v1(v_cycle.id,v_clients)",
+          "after": "private.weekly_source_bulk_source_cas_assert_v1(v_cycle.id,v_clients,p_actor_user_id)"
+        }
+      ]
+    },
+    {
+      "path": "11_complete_actor_own_stage.sqlinc",
+      "input_sha256": "bf0a348d394e62b9a40260fd6319227045daa8498907844a7631e38c7adf27aa",
+      "output_sha256": "a27df9e9ab43f8b832641b82c14e1e40b19cb1996f5d61d6a8c7fe6af34725e8",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id,v_clients)",
+          "after": "private.weekly_source_bulk_source_cas_assert_v1(p_cycle_id,v_clients,p_actor_id)"
+        }
+      ]
+    },
+    {
+      "path": "12_complete_actor_17_prepare_family.sqlinc",
+      "input_sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be",
+      "output_sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_protected_non_self_bill_mode_v1(v_client_id,v_contract_id,v_work_date,v_cycle.id)",
+          "after": "private.weekly_source_protected_non_self_bill_mode_v1(v_client_id,v_contract_id,v_work_date,v_cycle.id,v_actor_user_id,v_work_event_id)"
+        }
+      ]
+    },
+    {
+      "path": "12_complete_actor_18_prepare_action.sqlinc",
+      "input_sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5",
+      "output_sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_protected_non_self_bill_mode_v1(v_contract.client_id,v_contract.id,v_event.work_date,v_cycle.id)",
+          "after": "private.weekly_source_protected_non_self_bill_mode_v1(v_contract.client_id,v_contract.id,v_event.work_date,v_cycle.id,v_actor,v_event.id)"
+        }
+      ]
+    },
+    {
+      "path": "12_complete_actor_19_action_context.sqlinc",
+      "input_sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11",
+      "output_sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_protected_non_self_bill_mode_v1(v_contract.client_id,v_contract.id,v_event.work_date,v_cycle.id)",
+          "after": "private.weekly_source_protected_non_self_bill_mode_v1(v_contract.client_id,v_contract.id,v_event.work_date,v_cycle.id,v_actor,v_event.id)"
+        }
+      ]
+    },
+    {
+      "path": "12_complete_actor_20_stage_request.sqlinc",
+      "input_sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254",
+      "output_sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "private.weekly_source_protected_non_self_bill_mode_v1(v_client_id,v_family.contract_id,v_work_date,v_cycle.id)",
+          "after": "private.weekly_source_protected_non_self_bill_mode_v1(v_client_id,v_family.contract_id,v_work_date,v_cycle.id,v_actor_user_id,v_work_event_id)"
+        }
+      ]
+    },
+    {
+      "path": "14_complete_managed_release.mjs",
+      "input_sha256": "e8091382bdac0c9eec34dee4300e6aee8494637dc48098e90154d85dcb7cdc1c",
+      "output_sha256": "f1bcaa5fdd9bf11f3cc027867b980311403fad723a9e11cbbced8c776dd0fe14",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "import { buildPrerequisiteQualification, assertManagedPrerequisiteEvidence, proveCommittedSources, installedQualificationCatalogueEvidence } from './weekly-source-protected-prerequisite-evidence.mjs';",
+          "after": "import { buildPrerequisiteQualification, assertManagedPrerequisiteEvidence, proveCommittedSources, installedQualificationCatalogueEvidence } from './weekly-source-protected-prerequisite-evidence.mjs';\nimport { assertManagedOperationalEvidence } from './weekly-source-protected-operational-evidence.mjs';\nimport { buildTestSetupAuthorization } from './weekly-source-protected-test-setup-evidence.mjs';"
+        },
+        {
+          "before": "preapply, verify, protectedCapabilityJourneys = [], log",
+          "after": "preapply, verify, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], log"
+        },
+        {
+          "before": "        if (journey.phase==='ROLLBACK_PREREQUISITE') {",
+          "after": "        if (journey.phase==='FULL_OPERATIONAL') {\n          if (!journey.qualification || journey.qualification.release_id!==context.releaseId\n            || journey.qualification.git_commit!==context.gitCommit || journey.qualification.contract_sha256!==context.expectedHash)\n            throw Error('OPERATIONAL_MANAGED_SCOPE_INVALID');\n          return journey.qualification;\n        }\n        if (journey.phase==='ROLLBACK_PREREQUISITE') {"
+        },
+        {
+          "before": "    assertManagedPrerequisiteEvidence(context,verified.evidence??{},root);",
+          "after": "    const qualifications=verified.evidence?.weekly_source_protected_capability_qualifications??[];\n    assertManagedPrerequisiteEvidence(context,{weekly_source_protected_capability_qualifications:qualifications.filter(\n      q=>q.schema_version==='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2')},root);\n    assertManagedOperationalEvidence(context,{weekly_source_protected_capability_qualifications:qualifications.filter(\n      q=>q.schema_version!=='WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2')},root);\n    if (!Array.isArray(protectedTestSetupAuthorizations)) throw Error('TEST_SETUP_INPUT_INVALID');\n    if (protectedTestSetupAuthorizations.length) {\n      if (verified.evidence?.weekly_source_protected_test_setup_authorizations!==undefined) throw Error('TEST_SETUP_EVIDENCE_REPLACEMENT_REFUSED');\n      const authorizations=protectedTestSetupAuthorizations.map(input=>buildTestSetupAuthorization({...context,mode},input,qualifications));\n      for (const auth of authorizations) {\n        const actual=JSON.parse(await execute('select private.weekly_source_protected_qualification_census_v1('\n          +literal(auth.source_cycle_id)+'::uuid)::text'));\n        if (domainHash('TEST_SETUP_ACTUAL_CENSUS',actual)!==domainHash('TEST_SETUP_ACTUAL_CENSUS',auth.original_census))\n          throw Error('TEST_SETUP_NATIVE_CENSUS_CHANGED');\n      }\n      verified.evidence={...(verified.evidence??{}),weekly_source_protected_test_setup_authorizations:authorizations};\n    }\n    for (const q of qualifications.filter(q=>q.schema_version==='WEEKLY_SOURCE_PROTECTED_CAPABILITY_OPERATIONAL_QUALIFICATION_V1')) {\n      const native=q.native_execution_qualification,closure=q.test_setup_closure;\n      const recorded=JSON.parse(await execute('select jsonb_build_object('+literal('release_id')+',r.release_id,'+\n        literal('source_commit')+',r.git_commit,'+literal('contract_sha256')+',r.installed_contract_sha256,'+\n        literal('catalogue_sha256')+',r.evidence_json#>>'+literal('{weekly_source_protected_qualification_catalogue,jsonb_sha256}')+\n        ')::text from private.cloudtms_database_releases r where r.release_id='+literal(native.release_id)+\n        ' and r.status='+literal('VERIFIED')+' and r.completed_at_utc is not null and r.installed_contract_sha256=r.repository_contract_sha256'));\n      if (!recorded || recorded.source_commit!==native.git_commit || recorded.contract_sha256!==context.expectedHash\n        || recorded.catalogue_sha256!==verified.evidence.weekly_source_protected_qualification_catalogue.jsonb_sha256)\n        throw Error('OPERATIONAL_RECORDED_EXECUTION_CHANGED');\n      const actual=JSON.parse(await execute('select jsonb_build_object('+literal('id')+',a.id,'+literal('after')+',a.after_json,'+\n        literal('sha256')+',encode(private.weekly_source_sha256_jsonb_v1('+literal('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED_V1')+\n        ',a.after_json),'+literal('hex')+'))::text from public.audit_events a where a.id='+literal(closure.closure_audit_id)+\n        '::uuid and a.object_type='+literal('weekly_source_protected_test_journey')+' and a.object_id_text='+literal(closure.scope_id)+\n        ' and a.action='+literal('WEEKLY_SOURCE_TEST_JOURNEY_CLOSED')+' and a.event_sequence_is_authoritative'));\n      const {closure_audit_id,closure_audit_sha256,...after}=closure;\n      if (!actual || actual.id!==closure_audit_id || actual.sha256!==closure_audit_sha256\n        || domainHash('ACTUAL_TEST_SETUP_CLOSURE',actual.after)!==domainHash('ACTUAL_TEST_SETUP_CLOSURE',after))\n        throw Error('OPERATIONAL_ACTUAL_SETUP_CLOSURE_REQUIRED');\n    }"
+        },
+        {
+          "before": "    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'",
+          "after": "    if (protectedTestSetupAuthorizations.length) {\n      const old=JSON.parse(await execute('select coalesce(evidence_json->'+literal('weekly_source_protected_test_setup_authorizations')+','+\n        literal('null')+'::jsonb)::text from private.cloudtms_database_releases where release_id='+literal(context.releaseId)));\n      if (old!==null && domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',old)!==domainHash('REPLAY_TEST_SETUP_AUTHORIZATIONS',\n        verified.evidence.weekly_source_protected_test_setup_authorizations)) throw Error('TEST_SETUP_EVIDENCE_REPLACEMENT_REFUSED');\n    }\n    await execute(`begin;${assertWriterSql}${identitySql(context)}\n      update private.cloudtms_database_releases r set status='VERIFIED'"
+        }
+      ]
+    },
+    {
+      "path": "15_complete_current_release_caller.mjs",
+      "input_sha256": "18ab9a5094e1a9473886500157b717612bb8cd5452ff5564e9137ebe238eac65",
+      "output_sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "#!/usr/bin/env node\n",
+          "after": "#!/usr/bin/env node\nimport {loadCommittedPrerequisiteJourneys} from './weekly-source-protected-prerequisite-evidence.mjs';\nimport {loadOperationalJourneys} from './weekly-source-protected-operational-evidence.mjs';\nimport {loadTestSetupInputs} from './weekly-source-protected-test-setup-evidence.mjs';\n"
+        },
+        {
+          "before": "      preapply: runBankingPayCatalogPreapply,",
+          "after": "      preapply: runBankingPayCatalogPreapply,\n      protectedCapabilityJourneys:[...loadCommittedPrerequisiteJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),\n        ...loadOperationalJourneys(repoRoot,release,{...releaseVerifierContext,mode,expectedHash})],\n      protectedTestSetupAuthorizations:loadTestSetupInputs(repoRoot,release,{...releaseVerifierContext,mode,expectedHash}),"
+        }
+      ]
+    },
+    {
+      "path": "16_complete_bulk_command_presentation.sqlinc",
+      "input_sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf",
+      "output_sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "    return jsonb_build_object('ok',true,'mode','PREVIEW')||private.weekly_source_protect_all_signed_selection_v1(v_cycle_id,v_actor,null);",
+          "after": "    v_selection:=private.weekly_source_protect_all_signed_selection_v1(v_cycle_id,v_actor,null);\n    if not private.weekly_source_bulk_producer_ready_v1(v_cycle_id) then\n      v_context:=private.weekly_source_protected_test_scope_assert_v1(v_cycle_id,v_actor,null,null);\n      return jsonb_build_object('ok',true,'mode','PREVIEW','qualification',jsonb_build_object(\n        'contract','WEEKLY_SOURCE_TEST_JOURNEY_PRESENTATION_V1','scope_id',v_context->>'scope_id',\n        'scope_sha256',v_context->>'scope_sha256','expires_at_utc',v_context->>'expires_at_utc',\n        'source_cycle_id',v_cycle_id,'actor_user_id',v_actor,'operational_ready',false,\n        'allowed_action','PROTECT_ALL_SIGNED'))||v_selection;\n    end if;\n    return jsonb_build_object('ok',true,'mode','PREVIEW')||v_selection;"
+        }
+      ]
+    },
+    {
+      "path": "17_complete_current_routes.js",
+      "input_sha256": "9c177ca5e5ef8666edb1e82fad61483c460045b7c1a3adf2d710149096fe59da",
+      "output_sha256": "4b5a0bbaaa7ed42af5873991ef5d13183a74e3f12a45e482b350b278568f32b8",
+      "reverse_hunk_matches_entire_input_definition": true,
+      "hunks": [
+        {
+          "before": "  ...PROTECTED_ACTIONS,",
+          "after": "  ...PROTECTED_ACTIONS, 'PROTECT_ALL_SIGNED',"
+        },
+        {
+          "before": "  if (PROTECTED_ACTIONS.has(action)) {",
+          "after": "  if (action === 'PROTECT_ALL_SIGNED') {\n    if (typeof dependencies.orchestrateProtectedBulk !== 'function') {\n      fail('WEEKLY_SOURCE_BULK_PRODUCER_UNAVAILABLE', 'Approved hours cannot be changed right now.', 503);\n    }\n    // The closed native selection either proves operational readiness or the\n    // exact TEST fixture lease. No browser capability/strategy is forwarded.\n    return jsonResponse(200, await dependencies.orchestrateProtectedBulk({\n      request: payload, actor: user, env, ctx,\n    }));\n  }\n  if (PROTECTED_ACTIONS.has(action)) {"
+        }
+      ]
+    }
+  ],
+  "new_private_signatures": [
+    "private.weekly_source_qualification_closed_object_v1(jsonb,text[])",
+    "private.weekly_source_protected_operational_certificate_assert_v1(jsonb,uuid,date,date,text)",
+    "private.weekly_source_protected_execution_tree_assert_v2(jsonb,text,text)",
+    "private.weekly_source_protected_test_authorization_v1(uuid)",
+    "private.weekly_source_protected_test_scope_assert_v1(uuid,uuid,uuid[],uuid)",
+    "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+    "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[],uuid)",
+    "private.weekly_source_protected_non_self_bill_mode_v1(uuid,uuid,date,uuid,uuid,uuid)"
+  ],
+  "new_public_rpcs": 0,
+  "new_service_grants": 0,
+  "new_tables": 0,
+  "new_columns": 0,
+  "operational_certificate_required": true,
+  "prerequisite_certificate_operational": false,
+  "qualification_scope_cross_session_capability": "BULK_SIGNED_ONLY",
+  "automatic_positive_held": true,
+  "source_only": true,
+  "native_acceptance": false
+}

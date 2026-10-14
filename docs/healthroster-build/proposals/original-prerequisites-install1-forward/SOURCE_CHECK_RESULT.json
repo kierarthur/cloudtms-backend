@@ -1,0 +1,360 @@
+{
+  "schema_version": "ORIGINAL_PREREQUISITES_INSTALL1_SOURCE_CHECK_V1",
+  "status": "FULL_SOURCE_PACKET_REVIEW_READY_ROOT_FINAL_NATIVE_MONEY_REPORT_SEAL_AND_REAL_GATES_HELD",
+  "source_only": true,
+  "source_input_commit": "d4b62cb15159d0afb02cfebf8c1e034c68c26550",
+  "exact_current_root_commit": "a63455e878391cb3ee9732165e58c0db517f48a7",
+  "source_tests_pass": 13,
+  "source_tests_fail": 0,
+  "javascript_syntax_files": 3,
+  "sql_source_parser": [
+    {
+      "file": "docs/healthroster-build/proposals/original-prerequisites-install1-forward/ACTUAL37_PREDECESSOR_DEFINITIONS.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/original-prerequisites-install1-forward/ROOT_A634_COMPLETE_PREDECESSOR_DEFINITIONS.sqlinc",
+      "statements": 12,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/01_cap_original_functions_02_source_cas.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/02_cap_original_functions_03_capability_owners.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/03_cap_original_functions_04_original_clients.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/06_cap_original_functions_06_complete_selection.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+      "statements": 5,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+      "statements": 3,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "statements": 2,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "statements": 4,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/CAP_CONSTRAINT_ONE_TIME_MIGRATION.sqlinc",
+      "statements": 1,
+      "meta": 0,
+      "source_parser_only": true
+    },
+    {
+      "file": "supabase/support/healthroster_original_prerequisites_install1_forward/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+      "statements": 0,
+      "meta": 51,
+      "source_parser_only": true
+    }
+  ],
+  "complete_ordered_support_components": 51,
+  "final_distinct_semantic_definitions": 38,
+  "source39_key_count": 39,
+  "full_current_lineage_and_native_next_block_equal": true,
+  "original_absent83_present_in_exact_root": 83,
+  "unresolved_external_absent83": 0,
+  "source_reverse_actual37_symbols": 2440,
+  "source_reverse_exact_root_symbols": 2616,
+  "root_current_c1_later_complete_override_required": true,
+  "final_registry_acl_root_owned": true,
+  "whole_packet_credential_scan": "PASS",
+  "prior_frozen98_and_reviewed27_saved_and_committed_preserved": true,
+  "no_docs_sql_include": true,
+  "one_time_constraint_separate": true,
+  "independent_critic": false,
+  "postgresql_compile": false,
+  "actual_database_lab_runtime_native_acceptance": false,
+  "secrets_printed": false
+}

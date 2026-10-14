@@ -1,0 +1,18 @@
+create or replace function private.weekly_source_automatic_reconcile_capability_assert_v1(p_cycle_id uuid)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_ready boolean;
+begin
+  if to_regprocedure('private.weekly_source_automatic_reconcile_producer_ready_v1(uuid)') is null
+    or to_regprocedure('private.weekly_source_automatic_reconcile_delta_assert_v1(uuid,uuid)') is null then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_automatic_reconcile_producer_ready_v1($1)' into v_ready using p_cycle_id;
+  if v_ready is distinct from true then
+    begin
+      perform private.weekly_source_protected_qualification_assert_v1(null,p_cycle_id,null,'AUTOMATIC_RECONCILE');
+    exception when sqlstate '42501' or sqlstate '55000' then
+      raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000';
+    end;
+  end if;
+end;
+$function$;
