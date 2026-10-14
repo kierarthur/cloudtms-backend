@@ -1,0 +1,235 @@
+{
+  "status": "BOUNDED_INDEPENDENT_SOURCE_AND_IN_MEMORY_CALLER_REVIEW",
+  "source_only": true,
+  "native": false,
+  "SQL_executed": false,
+  "generators_executed": false,
+  "another_lane_edited": false,
+  "commits": [
+    "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+    "de90ab2134aca782a0f4b56154585fad65a81f12"
+  ],
+  "source_files": 32,
+  "pins": [
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/COMPLETE_CURRENT_REVERSE.json",
+      "bytes": 4615,
+      "sha256": "d2b34381ece6e55f94de41122649655723c7114264b3886af798de33c77a721a"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/README.md",
+      "bytes": 853,
+      "sha256": "45e9b745854a2d00b37ea0cde1ffb2bac9c042459b4e8cea5e882d6eb33fab4c"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/SOURCE_INPUTS.json",
+      "bytes": 1106,
+      "sha256": "caf18eb271fbdf7314293ff9d628e9662ef50bdf302e808dc86cee1fb5f21c35"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/SOURCE_MANIFEST.json",
+      "bytes": 1678,
+      "sha256": "90613aca6b3b6da1c1b5fa3837bc66dafee7f4e0597052a4aad6466c0d2d3e54"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/paid-match-question.sqlinc",
+      "bytes": 6388,
+      "sha256": "4ea6f553ce20082f9f941a303869643c0cc2011cdcf97f03c7b34a629ce87aa2"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/scopes.report-d10.sqlinc",
+      "bytes": 18701,
+      "sha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/workspace-acl.sqlinc",
+      "bytes": 307,
+      "sha256": "b224a8cab75c1b57e86702f4f0440f998d7674c53237a134d09172beefc96661"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/forward/workspace.report-d10-paid-match.sqlinc",
+      "bytes": 130958,
+      "sha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/reference/workspace.current-root-before.sqlinc",
+      "bytes": 117953,
+      "sha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/proposals/office-report-d10-paid-match-union-20261014/reference/workspace.report-d10-before.sqlinc",
+      "bytes": 129458,
+      "sha256": "e46d0fc92985d330fcf01d4464a327f169c98b33d99da8965443a52bc23fd9ef"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/root-office-workspace-union-source-20261014/SHA256_MANIFEST.json",
+      "bytes": 253,
+      "sha256": "719c34895366423065079a99e4c4a2a4d22e5872a923ecd2c5a0aff4abbc1fdf"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/root-office-workspace-union-source-20261014/SOURCE_CHECKS.json",
+      "bytes": 2300,
+      "sha256": "e850ee1077f573f23e778405818d921fbd2445729c7e9936e344db500e21c5b1"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "docs/healthroster-build/root-office-workspace-union-source-20261014/UNIT_TEST_OUTPUT.txt",
+      "bytes": 1132,
+      "sha256": "505aa87e86cc21d015377f03343afb97a58e6664065b695ee21eccd733459358"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "scripts/healthroster-owner-source-compose.mjs",
+      "bytes": 2179,
+      "sha256": "11bf448f16fb4569972dd72d822db74c7127c9ee92071e18be54051533cbae35"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "scripts/healthroster-prepare-office-workspace-union.mjs",
+      "bytes": 6687,
+      "sha256": "98ca9a1e163fd3f5a9370c2db39745d28121f58dbd82958471ce2ccd94b0053c"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "tests/healthroster-office-workspace-union.test.mjs",
+      "bytes": 4119,
+      "sha256": "37b4564c1ba2e6a9a897a82aa2a25d68fb15695475cc001616caa1cd293151e9"
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "path": "tests/healthroster-owner-source-compose.test.mjs",
+      "bytes": 1978,
+      "sha256": "d3c0f2c6922079fa9b96c503fab575b81d27eb7a00f8c0f44a651617ba7afdac"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/PAID_CALLER_FUNCTION_REVERSE.json",
+      "bytes": 4237,
+      "sha256": "e44714ca36c708c4a56860155150bcc5d7bb616ad0af3cecba553bba3e2f9bcd"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/PAID_CALLER_WHOLE_REVERSE.json",
+      "bytes": 13294,
+      "sha256": "c91eaea551df625d3fb54dd6a98ef2c7e4dcf3684d644e971010798cf4c9f5cf"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/PAID_NATIVE_WHOLE_REVERSE.json",
+      "bytes": 11214,
+      "sha256": "77a3c6e062cd9af0458fd808a8b6c6e4f8df5b0548049b771555415a4c9a4062"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/README.md",
+      "bytes": 757,
+      "sha256": "4644f29c299165676088d175b5436030e74c17d8c2423ecc05af9c2d432f1aaf"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/SOURCE_MANIFEST.json",
+      "bytes": 1614,
+      "sha256": "95d6dfeae931ec3a8da9e8b9b420999b0dde73ee828cf9a7bbe182a5bfd708e6"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/SOURCE_PINS.json",
+      "bytes": 766,
+      "sha256": "2b09ffa0b7e555dadd0190b84d9efde1bc66e4336a2c3fae303048da3b9e529c"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/forward/import-workspace.jsinc",
+      "bytes": 165012,
+      "sha256": "0ade9730da19455b83f95a20c48cff2b80f770329a2e560ee5ba1f011400e27a"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/forward/workspace-actions.jsinc",
+      "bytes": 131648,
+      "sha256": "acdb3e89f6eebf410eaa52b1d1a8597e92c8bf06dc3288afefc0447eae34c656"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/reference/workspace-actions.native-r254-before.jsinc",
+      "bytes": 120475,
+      "sha256": "fb1d4adef3bf19dd4aec1f6cfe99026855ac642e9b6c45d470796962cca17a73"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/proposals/office-paid-native-caller-union-20261014/reference/workspace-actions.paid-native-before-guard.jsinc",
+      "bytes": 130299,
+      "sha256": "a6392fa3f93f3f55b786e2bae225ae2e93f33a6c7adffef66f7fb55eed954c96"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/root-office-paid-caller-union-source-20261014/PREPARE_UNION_SOURCE.mjs.txt",
+      "bytes": 8686,
+      "sha256": "5cb01ef1452c5b5f2fb2040ff707abff6d36d70247fbd94a9f54b9cb8dac921d"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/root-office-paid-caller-union-source-20261014/SHA256_MANIFEST.json",
+      "bytes": 387,
+      "sha256": "92c84e8d000648b3f90f6c1f630e01badb4576df56f0fc632b40c691bae75ba5"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/root-office-paid-caller-union-source-20261014/SOURCE_CHECKS.json",
+      "bytes": 1746,
+      "sha256": "e948995292db05b316375e43ef63d9afba5b7a996ab6c5b3ec6ac3dbfb7a0af6"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "docs/healthroster-build/root-office-paid-caller-union-source-20261014/UNIT_TEST_OUTPUT.txt",
+      "bytes": 906,
+      "sha256": "8552323341eeef04ca9a1b4370409170c6d2ba2e3215155cb458d7c742b03da0"
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "path": "tests/healthroster-office-paid-native-caller-union.test.mjs",
+      "bytes": 9289,
+      "sha256": "dcc7702c6238ca2268bb5aacae5b8bba4d2cd01118531ac9fc6ee4cacd00bfda"
+    }
+  ],
+  "adaptations": [
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "file": "tests/healthroster-owner-source-compose.test.mjs",
+      "original_sha256": "d3c0f2c6922079fa9b96c503fab575b81d27eb7a00f8c0f44a651617ba7afdac",
+      "harness_source_sha256": "f0bfb5cef5a68237f9f7f356ca3006273305d60a8e175adbb7366d44321fb1e5",
+      "changes": "ESM imports injected as exact native bindings; repository locator fixed to virtual immutable Git source view. Test assertions and business/host modules unchanged."
+    },
+    {
+      "commit": "58a2c5026c6f727c1112e8cdbe01df5ebf823caf",
+      "file": "tests/healthroster-office-workspace-union.test.mjs",
+      "original_sha256": "37b4564c1ba2e6a9a897a82aa2a25d68fb15695475cc001616caa1cd293151e9",
+      "harness_source_sha256": "a0234c3b2df4a6893513b6be9af1b2de3ba0ee5d0b6be1b9b8dab00c98f92190",
+      "changes": "ESM imports injected as exact native bindings; repository locator fixed to virtual immutable Git source view. Test assertions and business/host modules unchanged."
+    },
+    {
+      "commit": "de90ab2134aca782a0f4b56154585fad65a81f12",
+      "file": "tests/healthroster-office-paid-native-caller-union.test.mjs",
+      "original_sha256": "dcc7702c6238ca2268bb5aacae5b8bba4d2cd01118531ac9fc6ee4cacd00bfda",
+      "harness_source_sha256": "43e92ee612191d01db7e64c09b81fb565b7aae70d6baee491df0756bef7e9ac3",
+      "changes": "ESM imports injected as exact native bindings; repository locator fixed to virtual immutable Git source view. Test assertions and business/host modules unchanged."
+    }
+  ],
+  "office_main": {
+    "commit": "2d15d121ac888a2e2a076dc7a2c4be85f9958556",
+    "path": "js/main.js",
+    "sha256": "d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847"
+  }
+}
