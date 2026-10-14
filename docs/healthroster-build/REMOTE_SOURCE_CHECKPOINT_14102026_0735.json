@@ -1,0 +1,41 @@
+{
+  "schema": "HEALTHROSTER_REMOTE_SOURCE_CHECKPOINT_V1",
+  "observed_at_utc": "2026-10-14T07:35:38Z",
+  "source_only": true,
+  "method": "fresh ordinary git ls-remote via approved GitHub SSH",
+  "backend": {
+    "test": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+    "install1_branch": "codex/healthroster-install1-14102026",
+    "install1_head": "807ffce239f86f9f1e104221e4b9400343ed19d2",
+    "install2_branch": "codex/healthroster-install2-14102026",
+    "install2_head": "87b9908370d238d1af4da910b97018d19a3fd033"
+  },
+  "office": {
+    "main": "413cea9b35975c6ccac0b084327ef109b05c1c48",
+    "feature_branch": "codex/healthroster-v2-office-13102026",
+    "feature_head": "f2de35ec8a376a814aefab1db2d7cf099b888784"
+  },
+  "mytms": {
+    "main": "6413f17693105c8699b52450de881237dfe524fa",
+    "feature_branch": "codex/healthroster-v2-mytms-13102026",
+    "feature_head": "8e17d185087f577a80ed53373d39df2e5e081911",
+    "before_testflight": "Fresh main integration and app gates still required immediately before build"
+  },
+  "banking_permitted_install_record": {
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/TEST_INSTALLS.md",
+    "read_scope": "Only TEST_INSTALLS.md and FIRST_INSTALL_CANDIDATE.md contents",
+    "first_install": "COMPLETE",
+    "installed_backend": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+    "switch_on_f17": "NOT_RECORDED",
+    "business_acceptance": "NOT_RUN; authenticated smoke qualified SKIPPED"
+  },
+  "fin4_source_critic": {
+    "actual_root": "87b9908370d238d1af4da910b97018d19a3fd033",
+    "verdict": "SOURCE_ACCEPTED; four absent loop-record accesses corrected in late complete owner",
+    "native_sql_compilation_and_rebill": "HOLD"
+  },
+  "healthroster_installations": 0,
+  "native_calls": 0,
+  "feature_activation": false,
+  "final_part_b_signoff": false
+}
